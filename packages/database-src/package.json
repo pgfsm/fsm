@@ -1,0 +1,11 @@
+{
+  "name": "fsm-database-sql",
+  "version": "1.0.0",
+  "description": "This package is used for the main PostgreSQL files for the FSM project.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Niraj Kashyap",
+  "license": "MIT"
+}
