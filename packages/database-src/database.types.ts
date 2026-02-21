@@ -421,6 +421,12 @@ export type Database = {
             }
             Returns: number[]
           }
+      build_nested_json_recursive: {
+        Args: {
+          paths: string[]
+        }
+        Returns: Json
+      }
       create: {
         Args: {
           queue_name: string
@@ -442,11 +448,45 @@ export type Database = {
             }
             Returns: number[]
           }
+      deprecated_sanitize_to_ltree: {
+        Args: {
+          input_text: string
+        }
+        Returns: unknown
+      }
       drop_queue: {
         Args: {
           queue_name: string
         }
         Returns: boolean
+      }
+      get_proper_ancestors: {
+        Args: {
+          state_path_ltree: string
+          to_state_path_ltree: string
+        }
+        Returns: string[]
+      }
+      get_proper_ancestors_ltree: {
+        Args: {
+          state_path_ltree: unknown
+          to_state_path_ltree: unknown
+        }
+        Returns: unknown[]
+      }
+      jsonb_all_paths: {
+        Args: {
+          j: Json
+          prefix?: string
+        }
+        Returns: string[]
+      }
+      jsonb_deep_merge: {
+        Args: {
+          a: Json
+          b: Json
+        }
+        Returns: Json
       }
       lca: {
         Args: {
@@ -572,6 +612,18 @@ export type Database = {
         }
         Returns: number
       }
+      path_string_to_jsonb: {
+        Args: {
+          path: string
+        }
+        Returns: Json
+      }
+      path_to_jsonb: {
+        Args: {
+          parts: string[]
+        }
+        Returns: Json
+      }
       pg_advisory_unlock:
         | {
             Args: {
@@ -620,6 +672,30 @@ export type Database = {
         }
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
+      remove_hashtag_from_text: {
+        Args: {
+          input_text: string
+        }
+        Returns: string
+      }
+      sanitize_text_array_to_ltree_array: {
+        Args: {
+          input_array: string[]
+        }
+        Returns: unknown[]
+      }
+      sanitize_text_array_to_ltree_text_array: {
+        Args: {
+          input_array: string[]
+        }
+        Returns: string[]
+      }
+      sanitize_to_ltree: {
+        Args: {
+          input_text: string
+        }
+        Returns: unknown
+      }
       send: {
         Args: {
           queue_name: string
@@ -635,6 +711,28 @@ export type Database = {
           vt_offset: number
         }
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
+      }
+      sql_lca_for_transition: {
+        Args: {
+          transition: Json
+        }
+        Returns: unknown
+      }
+      sql_lca_from_array: {
+        Args: {
+          paths: unknown[]
+        }
+        Returns: unknown
+      }
+      test_jsonb_roundtrip: {
+        Args: {
+          input_jsonb: Json
+        }
+        Returns: {
+          original: Json
+          reconstructed: Json
+          paths: string[]
+        }[]
       }
       text2ltree: {
         Args: {
