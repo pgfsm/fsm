@@ -460,6 +460,38 @@ export type Database = {
         }
         Returns: boolean
       }
+      fsm_get_all_initial_nodes_for_compound_nodes: {
+        Args: {
+          root_id: string
+          input_fsm_name: string
+          input_fsm_version: string
+        }
+        Returns: unknown[]
+      }
+      fsm_get_all_state_nodes_v1: {
+        Args: {
+          p_state_paths: string[]
+          p_fsm_name: string
+          p_fsm_version: string
+        }
+        Returns: string[]
+      }
+      fsm_get_initial_state_nodes_v1: {
+        Args: {
+          p_fsm_name: string
+          p_fsm_version: string
+          p_state_path: unknown
+        }
+        Returns: string[]
+      }
+      fsm_get_initial_state_nodes_with_ancestors_v1: {
+        Args: {
+          p_fsm_name: string
+          p_fsm_version: string
+          p_state_path: unknown
+        }
+        Returns: string[]
+      }
       get_proper_ancestors: {
         Args: {
           state_path_ltree: string
@@ -686,6 +718,14 @@ export type Database = {
           input_text: string
         }
         Returns: string
+      }
+      resolvestatevalue_v1: {
+        Args: {
+          input_json: Json
+          input_fsm_name: string
+          input_fsm_version: string
+        }
+        Returns: Json
       }
       sanitize_text_array_to_ltree_array: {
         Args: {
