@@ -24,6 +24,9 @@ PostgreSQL is a powerful relational database with advanced procedural capabiliti
 
 This repository is organized as a monorepo, containing multiple packages and components for building and integrating finite state machines across different environments.
 
+- **`packages/`**: Directory for shared libraries or reusable packages.
+- **`apps/`**: Directory for standalone applications.
+
 We use [proto](https://moonrepo.dev/docs/proto/overview) to manage multiple programming languages and their versions within the repo. This ensures consistent development environments and smooth collaboration, regardless of whether you are working with SQL, JavaScript/Node.js, Python, or other supported languages.
 
 **Key points:**
