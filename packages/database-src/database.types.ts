@@ -498,6 +498,15 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
       }
+      load_fsm_from_json: {
+        Args: {
+          json_input: Json
+          root_node_text: string
+          fsm_name: string
+          fsm_version: string
+        }
+        Returns: undefined
+      }
       lquery_in: {
         Args: {
           "": unknown
