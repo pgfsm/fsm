@@ -1,0 +1,36 @@
+{
+    "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+    "deno.path": "${env:HOME}/.proto/shims/deno",
+    "deno.enable": true,
+    "deno.enablePaths":["apps/fsm-core", "packages/fsm-compiler", "packages/xstate-compiler","apps/**"],
+    "deno.codeLens.test": true,
+    "deno.codeLens.testArgs" : [
+        "--allow-all",
+        "--unstable-detect-cjs",
+        "--unstable-sloppy-imports",
+        "--env-file=${workspaceFolder}/.env"
+    ],
+    
+    "deno.suggest.imports.autoDiscover": true,
+    "deno.codeLens.implementations": true,
+    "deno.codeLens.references": true,
+    "deno.codeLens.referencesAllFunctions": true,
+
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.reportStyleChecksAsWarnings": false, // used to throw errors instead of warnings
+    
+    
+    "chat.promptFiles": true,
+    "chat.promptFilesLocations": {
+        "deno": true
+    },
+    "chat.mcp.discovery.enabled": {
+        "claude-desktop": false,
+        "windsurf": false,
+        "cursor-global": false,
+        "cursor-workspace": false
+    },
+    "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+    "pgsql.copilot.enable": true
+
+}

@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "statelyai.stately-vscode",
+    "dbaeumer.vscode-eslint",
+    "firsttris.vscode-jest-runner",
+    "hediet.vscode-drawio",
+    "mushan.vscode-paste-image",
+    "yzhang.dictionary-completion",
+    "yzhang.markdown-all-in-one",
+    "denoland.vscode-deno"
+  ]
+}
