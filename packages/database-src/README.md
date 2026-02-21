@@ -26,6 +26,16 @@ The following npm scripts are available for managing Supabase and PostgreSQL mig
 - `npm run supabase:stop`: Stops the Supabase instance.
 
 
+## Important Notes / Migration Patch
+
+The migration file `20250602124504_pgmq.sql` is manually added to the migration folder. This patch is required to be run before any other SQL scripts when creating or migrating the PostgreSQL database. It ensures necessary setup or fixes are applied prior to other migrations.
+
+Always verify that `20250602124504_pgmq.sql` is executed first during the migration process.
+
+> **Note:** All force migration files are added manually in sequence as needed. These files will not follow the naming convention like `declarative_update`, and are intended for specific patching or forced migration requirements.
+
+
+
 ### Node Version Management
 The Node.js version is managed by `.prototools`, which is created using the command:
 
