@@ -7,5 +7,14 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Niraj Kashyap",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.97.0",
+    "dotenv": "^16.5.0",
+    "dotenv-cli": "^8.0.0",
+    "supabase": "2.19",
+    "tsx": "^4.19.4",
+    "uuid": "^11.1.0",
+    "xstate": "^5.28.0"
+  }
 }
