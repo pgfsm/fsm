@@ -272,12 +272,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      fsm_states: {
+        Row: {
+          computed_state_id_ltree: unknown
+          computed_state_key_ltree: unknown
+          context: Json | null
+          data: Json | null
+          description: string | null
+          entry: Json | null
+          exit: Json | null
+          fsm_name: string | null
+          fsm_on: Json | null
+          fsm_order: number | null
+          fsm_version: string | null
+          history: string | null
+          id: string
+          initial: Json | null
+          invoke: Json | null
+          key: string
+          parent_node: string | null
+          state_id_with_fsm_name_and_fsm_version: string
+          states: Json | null
+          transitions: Json | null
+          type: Database["public"]["Enums"]["fsm_state_type"]
+        }
+        Insert: {
+          computed_state_id_ltree: unknown
+          computed_state_key_ltree: unknown
+          context?: Json | null
+          data?: Json | null
+          description?: string | null
+          entry?: Json | null
+          exit?: Json | null
+          fsm_name?: string | null
+          fsm_on?: Json | null
+          fsm_order?: number | null
+          fsm_version?: string | null
+          history?: string | null
+          id: string
+          initial?: Json | null
+          invoke?: Json | null
+          key: string
+          parent_node?: string | null
+          state_id_with_fsm_name_and_fsm_version: string
+          states?: Json | null
+          transitions?: Json | null
+          type: Database["public"]["Enums"]["fsm_state_type"]
+        }
+        Update: {
+          computed_state_id_ltree?: unknown
+          computed_state_key_ltree?: unknown
+          context?: Json | null
+          data?: Json | null
+          description?: string | null
+          entry?: Json | null
+          exit?: Json | null
+          fsm_name?: string | null
+          fsm_on?: Json | null
+          fsm_order?: number | null
+          fsm_version?: string | null
+          history?: string | null
+          id?: string
+          initial?: Json | null
+          invoke?: Json | null
+          key?: string
+          parent_node?: string | null
+          state_id_with_fsm_name_and_fsm_version?: string
+          states?: Json | null
+          transitions?: Json | null
+          type?: Database["public"]["Enums"]["fsm_state_type"]
+        }
+        Relationships: []
+      }
+      fsm_transitions: {
+        Row: {
+          actions: Json | null
+          computed_sanitized_source_ltree: unknown
+          computed_sanitized_target_ltree_array: unknown[] | null
+          computed_transition_domain_lca: string | null
+          cond: Json | null
+          event_type: string
+          fsm_name: string | null
+          fsm_version: string | null
+          id: number
+          reenter: boolean | null
+          source: string
+          target: string[] | null
+        }
+        Insert: {
+          actions?: Json | null
+          computed_sanitized_source_ltree: unknown
+          computed_sanitized_target_ltree_array?: unknown[] | null
+          computed_transition_domain_lca?: string | null
+          cond?: Json | null
+          event_type: string
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: number
+          reenter?: boolean | null
+          source: string
+          target?: string[] | null
+        }
+        Update: {
+          actions?: Json | null
+          computed_sanitized_source_ltree?: unknown
+          computed_sanitized_target_ltree_array?: unknown[] | null
+          computed_transition_domain_lca?: string | null
+          cond?: Json | null
+          event_type?: string
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: number
+          reenter?: boolean | null
+          source?: string
+          target?: string[] | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      _ltree_compress: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      _ltree_gist_options: {
+        Args: {
+          "": unknown
+        }
+        Returns: undefined
+      }
       archive:
         | {
             Args: {
@@ -320,9 +448,129 @@ export type Database = {
         }
         Returns: boolean
       }
+      lca: {
+        Args: {
+          "": unknown[]
+        }
+        Returns: unknown
+      }
       list_queues: {
         Args: Record<PropertyKey, never>
         Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
+      }
+      lquery_in: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      lquery_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      lquery_recv: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      lquery_send: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      ltree_compress: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_decompress: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_gist_in: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_gist_options: {
+        Args: {
+          "": unknown
+        }
+        Returns: undefined
+      }
+      ltree_gist_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_in: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_recv: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltree_send: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      ltree2text: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      ltxtq_in: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltxtq_out: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltxtq_recv: {
+        Args: {
+          "": unknown
+        }
+        Returns: unknown
+      }
+      ltxtq_send: {
+        Args: {
+          "": unknown
+        }
+        Returns: string
+      }
+      nlevel: {
+        Args: {
+          "": unknown
+        }
+        Returns: number
       }
       pg_advisory_unlock:
         | {
@@ -388,9 +636,15 @@ export type Database = {
         }
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
+      text2ltree: {
+        Args: {
+          "": string
+        }
+        Returns: unknown
+      }
     }
     Enums: {
-      [_ in never]: never
+      fsm_state_type: "atomic" | "compound" | "parallel" | "final" | "history"
     }
     CompositeTypes: {
       [_ in never]: never
