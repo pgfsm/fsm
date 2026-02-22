@@ -5,6 +5,22 @@ This project is a PostgreSQL extension for FSM (Finite State Machine).
 ### About
 The extension provides custom functionality to support FSM operations directly within a PostgreSQL database environment.
 
+
+### Getting Started
+
+1. **Initialize pgrx:**
+	 - Follow the instructions in `pgrx-help.md` to initialize pgrx for your desired PostgreSQL version. For example:
+		 ```sh
+		 cargo pgrx init --pg15 'download'
+		 ```
+	 - The `download` option allows pgrx to automatically set up PostgreSQL for you.
+
+2. **Create a new extension:**
+	 - Use the following command to scaffold a new extension:
+		 ```sh
+		 cargo pgrx new fsm_core
+		 ```
+
 ### Technology
 - **Language:** Rust
 - **Toolchain:** [cargo-pgrx](https://github.com/pgcentralfoundation/pgrx) (Rust toolchain for building PostgreSQL extensions)
