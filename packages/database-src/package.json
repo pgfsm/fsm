@@ -16,6 +16,8 @@
     "supabase:db:migrate": "supabase migration up",
     "supabase:docker:volume:clean": "VOLUME=$(docker volume ls -q --filter label=com.supabase.cli.project=database-src); if [ -n \"$VOLUME\" ]; then docker volume rm $VOLUME; else echo 'No matching docker volume to remove.'; fi",
     "supabase:gen:types": "supabase gen types typescript --local > database.types.ts",
+    "supabase:db:addfakeusers": "tsx createFakeUser.ts",
+    "supabase:db:deletefakeusers": "tsx deleteFakeUser.ts",
     "supabase:restart:with:diff": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types"
   },
   "author": "Niraj Kashyap",
