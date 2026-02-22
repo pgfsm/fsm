@@ -1,6 +1,8 @@
 comment = 'fsm_core:  Created by Niraj'
 default_version = '@CARGO_VERSION@'
 module_pathname = 'fsm_core'
+schema = 'fsm_core'
 relocatable = false
 superuser = true
 trusted = false
+requires = 'ltree, pgmq'
