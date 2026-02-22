@@ -21,6 +21,30 @@ The extension provides custom functionality to support FSM operations directly w
 		 cargo pgrx new fsm_core
 		 ```
 
+
+### Daily Development Workflow
+
+To run and test your extension during development:
+
+1. **Start the extension in a development environment:**
+	```sh
+	cargo pgrx run
+	```
+	This command launches a local PostgreSQL instance with your extension loaded.
+
+2. **Load the extension in psql:**
+	Connect to the running database using `psql` and execute:
+	```sql
+	CREATE EXTENSION fsm_core;
+	SELECT hello_fsm_core();
+	```
+	- `CREATE EXTENSION fsm_core;` loads your extension.
+	- `SELECT hello_fsm_core();` runs a sample function provided by the extension.
+
+Refer to your extension's source code for more available functions and usage examples.
+
+
+
 ### Technology
 - **Language:** Rust
 - **Toolchain:** [cargo-pgrx](https://github.com/pgcentralfoundation/pgrx) (Rust toolchain for building PostgreSQL extensions)
