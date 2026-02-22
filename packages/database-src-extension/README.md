@@ -7,7 +7,7 @@ The extension provides custom functionality to support FSM operations directly w
 
 ### Technology
 - **Language:** Rust
-- **Toolchain:** [cargo-pgrx](https://github.com/pgcentralfoundation/cargo-pgrx) (Rust toolchain for building PostgreSQL extensions)
+- **Toolchain:** [cargo-pgrx](https://github.com/pgcentralfoundation/pgrx) (Rust toolchain for building PostgreSQL extensions)
 
 ---
 For more details on building and using this extension, refer to the official cargo-pgrx documentation and the project source code.
