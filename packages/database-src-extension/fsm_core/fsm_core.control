@@ -1,4 +1,4 @@
-comment = 'fsm_core:  Created by pgrx'
+comment = 'fsm_core:  Created by Niraj'
 default_version = '@CARGO_VERSION@'
 module_pathname = 'fsm_core'
 relocatable = false
