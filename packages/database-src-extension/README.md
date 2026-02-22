@@ -24,6 +24,47 @@ The extension provides custom functionality to support FSM operations directly w
 
 ### Daily Development Workflow
 
+#### Prerequisites
+
+Before starting the extension in a development environment, ensure the following PostgreSQL extensions are available:
+
+1. **Dependencies:**
+	- `fsm_core` depends on the `ltree` and `pgmq` extensions.
+2. **ltree:**
+	- `ltree` is available on most PostgreSQL servers as a built-in extension. You can usually install it with:
+	  ```sql
+	  CREATE EXTENSION ltree;
+	  ```
+3. **pgmq:**
+	- `pgmq` is not installed by default. There are several ways to install it:
+
+	  - **a. Install via the `pgxn` CLI:**
+	    Use the [PGXN client](https://pgxn.github.io/pgxnclient/) to install `pgmq` directly:
+	    ```sh
+	    pgxn install pgmq
+	    ```
+
+	  - **b. Clone and build from source:**
+	    Clone the `pgmq` repository, build it, and place the resulting files into your PostgreSQL extension directory. See the [pgmq GitHub repo](https://github.com/tembo-io/pgmq) for build instructions.
+
+	  - **c. Download and install via SQL (Recommended for this project):**
+		1. Download the `pgmq` SQL file from the [pgmq releases page](https://github.com/tembo-io/pgmq/releases), or use the provided shell script to automate this process.
+		2. **Automated download (recommended):**
+			 - Use the `download_pgmq.sh` script provided in the `fsm_core` directory to download the required `pgmq.sql` file for a specific version.
+			 - The script takes the desired pgmq version as an argument (e.g., `v1.11.0`).
+			 - It will download the SQL file from the official pgmq GitHub repository and place it in the `sql` folder next to `fsm_core--1.0-base-pgmq-v1.11.0.sql`.
+			 - Example usage:
+				 ```sh
+				 ./download_pgmq.sh --PGMQ_VERSION "v1.11.0"
+				 ```
+			 - This will download:
+				 https://github.com/pgmq/pgmq/blob/v1.11.0/pgmq-extension/sql/pgmq.sql
+				 and save it as `fsm_core--1.0-base-pgmq-v1.11.0` in the `sql` directory.
+			 
+	 
+
+---
+
 To run and test your extension during development:
 
 1. **Start the extension in a development environment:**
