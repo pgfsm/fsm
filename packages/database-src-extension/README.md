@@ -135,16 +135,21 @@ To run and test your extension during development:
 	```sh
 	cargo pgrx run
 	```
-	This command launches a local PostgreSQL instance with your extension loaded.
+	This command launches a local PostgreSQL instance with your extension installed and gives you a `psql` session. You can verify the extension is available by running:
+	```sql
+	SELECT * FROM pg_extension;
+	SELECT * FROM pg_available_extension_versions WHERE name = 'fsm_core';
+	```
 
 2. **Load the extension in psql:**
-	Connect to the running database using `psql` and execute:
 	```sql
-	CREATE EXTENSION fsm_core;
+	CREATE EXTENSION fsm_core CASCADE;
 	SELECT hello_fsm_core();
+	SELECT fsm_core.hello('BOB');
 	```
-	- `CREATE EXTENSION fsm_core;` loads your extension.
-	- `SELECT hello_fsm_core();` runs a sample function provided by the extension.
+	- `CREATE EXTENSION fsm_core CASCADE;` loads your extension and, with CASCADE, will also load any extensions required by your SQL file (such as `ltree` and `pgmq`).
+	- `SELECT hello_fsm_core();` runs a sample function provided by the extension, implemented in Rust.
+	- `SELECT fsm_core.hello('BOB');` runs a sample function provided by the extension, implemented in SQL.
 
 Refer to your extension's source code for more available functions and usage examples.
 
@@ -166,3 +171,8 @@ proto install rust --pin local
 ```
 
 This ensures consistent Rust versioning across development environments.
+
+
+
+
+cargo pgrx package --pg-config /Users/nirajmadanmohan.kashyap/.pgrx/15.16/pgrx-install/bin/pg_config --package fsm_core

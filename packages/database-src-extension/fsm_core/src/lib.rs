@@ -6,6 +6,10 @@ use pgrx::prelude::*;
 fn hello_fsm_core() -> &'static str {
     "Hello, fsm_core"
 }
+// extension_sql_file!("../sql/fsm_core--1.0.sql", name = "fsm_core_sql", requires = [hello_fsm_core]);
+
+// extension_sql_file!("../sql/fsm_core--1.0.sql");
+extension_sql_file!("../sql/fsm_core--1.0.sql", name = "fsm_core_1_0_sql");
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]

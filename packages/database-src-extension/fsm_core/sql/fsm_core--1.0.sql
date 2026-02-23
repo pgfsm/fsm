@@ -15,3 +15,10 @@ BEGIN
     END IF;
 END
 $$;
+
+CREATE FUNCTION fsm_core.hello(input_text TEXT)
+RETURNS void AS $$
+BEGIN
+    RAISE NOTICE 'Hello, %!', input_text;
+END;
+$$ LANGUAGE plpgsql;
