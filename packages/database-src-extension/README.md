@@ -91,11 +91,22 @@ Before starting the extension in a development environment, ensure the following
 3. **pgmq:**
 	- `pgmq` is not installed by default. There are several ways to install it:
 
-	  - **a. Install via the `pgxn` CLI:**
-	    Use the [PGXN client](https://pgxn.github.io/pgxnclient/) to install `pgmq` directly:
-	    ```sh
-	    pgxn install pgmq
-	    ```
+	- **a. Install via the `pgxn` CLI:**
+		See the detailed instructions in the `fsm_core_dependency/README.md` file for installing the `pgxn` CLI and using it to install extensions like `pgmq`.
+
+		Alternatively, you can use `uvx` to run `pgxnclient` directly from your Python environment:
+
+		**Examples:**
+		```sh
+		# Download the pgmq extension package
+		uvx pgxnclient download pgmq
+
+		# Show help for install command
+		uvx pgxnclient install --help
+
+		# Install pgmq extension specifying the pg_config path
+		uvx pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config"
+		```
 
 	  - **b. Clone and build from source:**
 	    Clone the `pgmq` repository, build it, and place the resulting files into your PostgreSQL extension directory. See the [pgmq GitHub repo](https://github.com/tembo-io/pgmq) for build instructions.
