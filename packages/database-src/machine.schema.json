@@ -8,10 +8,23 @@
         "type": {
           "type": "string",
           "description": "The action type"
+        },
+        "actionName": {
+          "type": "string",
+          "description": "Required only when type = xstate.raise"
         }
       },
       "additionalProperties": true,
-      "required": ["type"]
+      "required": ["type"],
+      "if": {
+        "properties": {
+          "type": { "const": "xstate.raise" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "required": ["actionName"]
+      }
     },
     "baseStateNode": {
       "type": "object",
