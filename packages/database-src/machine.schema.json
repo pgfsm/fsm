@@ -265,6 +265,11 @@
         },
         "src": {
           "type": "string"
+        },
+        "fsmType":{
+          "type": "string",
+          "default": "promise",
+          "enum": ["childFSM", "promise"]
         }
       },
       "required": ["type", "id", "src"],
