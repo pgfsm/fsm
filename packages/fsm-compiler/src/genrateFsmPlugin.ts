@@ -19,11 +19,11 @@ async function genrateFsmPluginFromFolder(
     const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
 
     // 1.1 Call fn to get all actions and guards from json file
-    const { actions, guards } = getActionsAndGuardsFromFsmJson(fsmData);
+    const { actions, guards, delays, actors } = getActionsAndGuardsFromFsmJson(fsmData);
 
     // 2. Call fn to generate folders/files for each language
-    await generateLanguageFolders(absFolderPath, 'typescript', actions, guards);
-    await generateLanguageFolders(absFolderPath, 'python', actions, guards);
+    await generateLanguageFolders(absFolderPath, 'typescript', actions, guards, delays, actors);
+    await generateLanguageFolders(absFolderPath, 'python', actions, guards, delays, actors);
 
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
@@ -33,10 +33,12 @@ async function genrateFsmPluginFromFolder(
     }
   }
 // Helper: Extract actions and guards from FSM JSON
-function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guards: string[] } {
-  // Recursively traverse the FSM JSON to collect all action and guard names
+function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guards: string[]; delays: string[]; actors: string[] } {
+  // Recursively traverse the FSM JSON to collect all action, guard, delay, and actor names
   const actionsSet = new Set<string>();
   const guardsSet = new Set<string>();
+  const delaysSet = new Set<string>();
+  const actorsSet = new Set<string>();
 
   function visitState(state: any) {
     // Collect actions from entry/exit arrays
@@ -59,7 +61,7 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guar
       }
     }
 
-    // Collect actions and guards from transitions (in 'on' and 'transitions')
+    // Collect actions, guards, delays from transitions (in 'on' and 'transitions')
     if (state.on && typeof state.on === 'object') {
       for (const eventKey of Object.keys(state.on)) {
         const transitions = state.on[eventKey];
@@ -75,19 +77,13 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guar
                 }
               }
             }
-
-            // cond: not using for now.
-            // if (transition.cond) {
-            //   if (typeof transition.cond === 'string') {
-            //     guardsSet.add(transition.cond);
-            //   } else if (transition.cond && typeof transition.cond === 'object' && typeof transition.cond.type === 'string') {
-            //     guardsSet.add(transition.cond.type);
-            //   }
-            // }
-
             // Guards
             if (transition.guard && typeof transition.guard === 'string') {
               guardsSet.add(transition.guard);
+            }
+            // Delays
+            if (transition.delay && typeof transition.delay === 'string') {
+              delaysSet.add(transition.delay);
             }
           }
         }
@@ -105,19 +101,22 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guar
             }
           }
         }
-
-        // cond: not using for now.
-        // if (transition.cond) {
-        //   if (typeof transition.cond === 'string') {
-        //     guardsSet.add(transition.cond);
-        //   } else if (transition.cond && typeof transition.cond === 'object' && typeof transition.cond.type === 'string') {
-        //     guardsSet.add(transition.cond.type);
-        //   }
-        // }
-
         // Guards
         if (transition.guard && typeof transition.guard === 'string') {
           guardsSet.add(transition.guard);
+        }
+        // Delays
+        if (transition.delay && typeof transition.delay === 'string') {
+          delaysSet.add(transition.delay);
+        }
+      }
+    }
+
+    // Collect actors from invoke
+    if (Array.isArray(state.invoke)) {
+      for (const inv of state.invoke) {
+        if (inv && typeof inv.src === 'string') {
+          actorsSet.add(inv.src);
         }
       }
     }
@@ -134,6 +133,8 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guar
   return {
     actions: Array.from(actionsSet).filter(Boolean),
     guards: Array.from(guardsSet).filter(Boolean),
+    delays: Array.from(delaysSet).filter(Boolean),
+    actors: Array.from(actorsSet).filter(Boolean),
   };
 }
 
@@ -143,17 +144,25 @@ async function generateLanguageFolders(
   basePath: string,
   lang: 'typescript' | 'python',
   actions: string[],
-  guards: string[]
+  guards: string[],
+  delays: string[],
+  actors: string[]
 ) {
   // 2.1 Create folders
   const actionsDir = `${basePath}/${lang}/actions`;
   const guardsDir = `${basePath}/${lang}/guards`;
+  const delaysDir = `${basePath}/${lang}/delays`;
+  const actorsDir = `${basePath}/${lang}/actors`;
   await Deno.mkdir(actionsDir, { recursive: true });
   await Deno.mkdir(guardsDir, { recursive: true });
+  await Deno.mkdir(delaysDir, { recursive: true });
+  await Deno.mkdir(actorsDir, { recursive: true });
 
-  // 2.2 Create a single index file for actions and guards in each folder
+  // 2.2 Create a single index file for actions, guards, delays, actors in each folder
   let actionsIndexContent = '';
   let guardsIndexContent = '';
+  let delaysIndexContent = '';
+  let actorsIndexContent = '';
 
   for (const action of actions) {
     actionsIndexContent +=
@@ -169,10 +178,28 @@ async function generateLanguageFolders(
         : `# Guard: ${guard}\ndef ${guard}(context, event):\n    # TODO: implement\n    return True\n\n`;
   }
 
+  for (const delay of delays) {
+    delaysIndexContent +=
+      lang === 'typescript'
+        ? `// Delay: ${delay}\nexport function ${delay}() {\n  // TODO: implement delay logic\n}\n\n`
+        : `# Delay: ${delay}\ndef ${delay}():\n    # TODO: implement delay logic\n    pass\n\n`;
+  }
+
+  for (const actor of actors) {
+    actorsIndexContent +=
+      lang === 'typescript'
+        ? `// Actor: ${actor}\nexport function ${actor}(context: any, event: any) {\n  // TODO: implement actor logic\n}\n\n`
+        : `# Actor: ${actor}\ndef ${actor}(context, event):\n    # TODO: implement actor logic\n    pass\n\n`;
+  }
+
   const actionsIndexFile = lang === 'typescript' ? `${actionsDir}/index.ts` : `${actionsDir}/index.py`;
   const guardsIndexFile = lang === 'typescript' ? `${guardsDir}/index.ts` : `${guardsDir}/index.py`;
+  const delaysIndexFile = lang === 'typescript' ? `${delaysDir}/index.ts` : `${delaysDir}/index.py`;
+  const actorsIndexFile = lang === 'typescript' ? `${actorsDir}/index.ts` : `${actorsDir}/index.py`;
   await Deno.writeTextFile(actionsIndexFile, actionsIndexContent);
   await Deno.writeTextFile(guardsIndexFile, guardsIndexContent);
+  await Deno.writeTextFile(delaysIndexFile, delaysIndexContent);
+  await Deno.writeTextFile(actorsIndexFile, actorsIndexContent);
 }
 
 }
