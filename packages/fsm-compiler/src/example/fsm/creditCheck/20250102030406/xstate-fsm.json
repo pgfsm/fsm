@@ -1131,7 +1131,9 @@
                 "xstate.done.actor.0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates": [
                   {
                     "actions": [
-                      "generateInterestRatesSuccess"
+                      {
+                        "type": "generateInterestRatesSuccess"
+                      }
                     ],
                     "target": [
                       "#allWorkflowStepDone"
@@ -1145,7 +1147,9 @@
               "transitions": [
                 {
                   "actions": [
-                    "generateInterestRatesSuccess"
+                    {
+                      "type": "generateInterestRatesSuccess"
+                    }
                   ],
                   "target": [
                     "#allWorkflowStepDone"
