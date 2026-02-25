@@ -27,9 +27,7 @@
       "on": {
         "xstate.done.actor.0.vitalscheck.CheckVitals": [
           {
-            "actions": [
-              null
-            ],
+            "actions": [],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
@@ -37,9 +35,7 @@
         ],
         "xstate.done.actor.1.vitalscheck.CheckVitals": [
           {
-            "actions": [
-              null
-            ],
+            "actions": [],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
@@ -47,9 +43,7 @@
         ],
         "xstate.done.actor.2.vitalscheck.CheckVitals": [
           {
-            "actions": [
-              null
-            ],
+            "actions": [],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
@@ -57,9 +51,7 @@
         ],
         "xstate.done.actor.3.vitalscheck.CheckVitals": [
           {
-            "actions": [
-              null
-            ],
+            "actions": [],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"
@@ -68,33 +60,25 @@
       },
       "transitions": [
         {
-          "actions": [
-            null
-          ],
+          "actions": [],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
         },
         {
-          "actions": [
-            null
-          ],
+          "actions": [],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
         },
         {
-          "actions": [
-            null
-          ],
+          "actions": [],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
         },
         {
-          "actions": [
-            null
-          ],
+          "actions": [],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"

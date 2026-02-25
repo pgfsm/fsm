@@ -911,7 +911,7 @@
                   "#(machine).creditCheck.Entering Information"
                 ],
                 "actions": [
-                  
+                  null
                 ],
                 "source": "#(machine).creditCheck.CheckingCreditScores",
                 "reenter": false,
@@ -935,7 +935,7 @@
                 "#(machine).creditCheck.Entering Information"
               ],
               "actions": [
-                
+                null
               ],
               "source": "#(machine).creditCheck.CheckingCreditScores",
               "reenter": false,

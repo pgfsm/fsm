@@ -69,9 +69,7 @@
       "on": {
         "xstate.done.actor.0.checkcarvitals.DoCarVitalChecks": [
           {
-            "actions": [
-              null
-            ],
+            "actions": [],
             "target": [
               "#checkcarvitals.CheckContinueVitalChecks"
             ],
@@ -83,9 +81,7 @@
       },
       "transitions": [
         {
-          "actions": [
-            null
-          ],
+          "actions": [],
           "target": [
             "#checkcarvitals.CheckContinueVitalChecks"
           ],
@@ -168,9 +164,7 @@
     "CarTurnedOffEvent": [
       {
         "description": "",
-        "actions": [
-          null
-        ],
+        "actions": [],
         "target": [
           "#checkcarvitals.WhenCarIsOn"
         ],
@@ -183,9 +177,7 @@
   "transitions": [
     {
       "description": "",
-      "actions": [
-        null
-      ],
+      "actions": [],
       "target": [
         "#checkcarvitals.WhenCarIsOn"
       ],

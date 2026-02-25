@@ -1,6 +1,90 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
+/**
+ * Removes all null values from any 'actions' array in the FSM JSON object.
+ * Uses an iterative approach to avoid recursion depth issues.
+ * @param obj The FSM JSON object
+ * @returns A new object with nulls removed from actions arrays
+ */
+function removeNullActions(obj: any): any {
+  // Deep clone the object to avoid mutating the original
+  const clone = JSON.parse(JSON.stringify(obj));
+
+  function visitState(state: any) {
+    // Remove nulls from entry/exit arrays if present
+    if (Array.isArray(state.entry)) {
+      state.entry = state.entry.filter((a: any) => a !== null);
+    }
+    if (Array.isArray(state.exit)) {
+      state.exit = state.exit.filter((a: any) => a !== null);
+    }
+
+    // Remove nulls from actions in transitions (in 'on' and 'transitions')
+    if (state.on && typeof state.on === "object") {
+      for (const eventKey of Object.keys(state.on)) {
+        const transitions = state.on[eventKey];
+        if (Array.isArray(transitions)) {
+          for (const transition of transitions) {
+            if (Array.isArray(transition.actions)) {
+              transition.actions = transition.actions.filter((a: any) => a !== null);
+            }
+          }
+        }
+      }
+    }
+    if (Array.isArray(state.transitions)) {
+      for (const transition of state.transitions) {
+        if (Array.isArray(transition.actions)) {
+          transition.actions = transition.actions.filter((a: any) => a !== null);
+        }
+      }
+    }
+
+    // Recursively visit substates
+    if (state.states && typeof state.states === "object") {
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
+    }
+  }
+
+  // Top-level actions in root (rare, but possible)
+  if (Array.isArray(clone.actions)) {
+    clone.actions = clone.actions.filter((a: any) => a !== null);
+  }
+
+  // Remove nulls from actions in root transitions
+  if (clone.on && typeof clone.on === "object") {
+    for (const eventKey of Object.keys(clone.on)) {
+      const transitions = clone.on[eventKey];
+      if (Array.isArray(transitions)) {
+        for (const transition of transitions) {
+          if (Array.isArray(transition.actions)) {
+            transition.actions = transition.actions.filter((a: any) => a !== null);
+          }
+        }
+      }
+    }
+  }
+  if (Array.isArray(clone.transitions)) {
+    for (const transition of clone.transitions) {
+      if (Array.isArray(transition.actions)) {
+        transition.actions = transition.actions.filter((a: any) => a !== null);
+      }
+    }
+  }
+
+  // Visit all states recursively
+  if (clone.states && typeof clone.states === "object") {
+    for (const stateKey of Object.keys(clone.states)) {
+      visitState(clone.states[stateKey]);
+    }
+  }
+
+  return clone;
+}
+
 async function deleteFsmJSONFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
@@ -10,12 +94,13 @@ async function deleteFsmJSONFromFolder(
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
 ) {
   try {
+    await Deno.remove(`${absFolderPath}/xstate-fsm.json`);
     await Deno.remove(`${absFolderPath}/fsm.json`);
-    console.log(`Deleted fsm.json from ${absFolderPath}/fsm.json`);
+    console.log(`Deleted xstate-fsm.json and fsm.json from ${absFolderPath}`);
     
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}, nothing to delete`);
+      console.log(`fsm.json or xstate-fsm.json is missing in ${absFolderPath}/${dirEntryName}, nothing to delete`);
     } else {
       console.error(`Failed to delete ${absFolderPath}/fsm.json:`, err);
     }
@@ -25,7 +110,8 @@ async function deleteFsmJSONFromFolder(
 
 export async function deleteFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
@@ -42,7 +128,7 @@ export async function deleteFsmJSONFromFolders(
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     
     if (dirEntry.isDirectory) {
-      if (dirEntry.name === "promise" || dirEntry.name === "sharedFSM") {
+      if (skipDirs.includes(dirEntry.name)) {
         continue;
       }
   
@@ -91,9 +177,16 @@ async function generateFsmJSONFromFolder(
       typeof machineConfig.config === "object" &&
       typeof machineConfig.toJSON === "function"
     ) {
-      const jsonOutput = JSON.stringify(machineConfig.toJSON(), null, 2);
+      const xstateFsmJSON = machineConfig.toJSON();
+      const jsonOutput = JSON.stringify(xstateFsmJSON, null, 2);
       writeFileSync(`${absFolderPath}/xstate-fsm.json`, jsonOutput);
       console.log(`Wrote new xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
+      // todo - remove null from all actions from xstateFsmJSON before writing fsm.json
+      const fsmJSON = removeNullActions(xstateFsmJSON);
+      writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
+      console.log(`Wrote new fsm.json to ${absFolderPath}/fsm.json`);
+
+      
       
     } else {
       console.error(`Export in ${createMachinePath} is not a valid xstate machine config`);
