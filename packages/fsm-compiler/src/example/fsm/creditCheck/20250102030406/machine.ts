@@ -342,7 +342,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                 src: "generateInterestRates",
                 onDone: [
                   {
-                    actions: 'generateInterestRatesSuccess',
+                    actions: [{ type: 'generateInterestRatesSuccess' }],
                     target: "#allWorkflowStepDone",
                   },
                 ],
