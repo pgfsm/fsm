@@ -68,12 +68,14 @@ export const creditCheckMachine = createMachine({
             src: "verifyCredentials",
             onDone: {
               target: "CheckingCreditScores",
-              actions: ["assignSSN", "assignFirstName", "assignLastName"],
+              actions: [
+                { type: "assignSSN" }, { type: "assignFirstName" }, { type: "assignLastName" }
+              ],
             },
             onError: [
               {
                 target: "Entering Information",
-                actions: ["assignErrorMessage"],
+                actions: [{ type: "assignErrorMessage" }],
               },
             ],
           },
@@ -96,7 +98,7 @@ export const creditCheckMachine = createMachine({
                     id: "equiGavinDBActor",
                     onDone: [
                       {
-                        actions: ["assignEquiGavinScore"],
+                        actions: [{ type: "assignEquiGavinScore" }],
                         target: "FetchingComplete",
                         guard: "equiGavinReportFound",
                       },
@@ -125,7 +127,7 @@ export const creditCheckMachine = createMachine({
                     id: "equiGavinFetchActor",
                     onDone: [
                       {
-                        actions: ["assignEquiGavinScoreFetch"],
+                        actions: [{ type: "assignEquiGavinScoreFetch" }],
                         target: "FetchingComplete",
                       },
                     ],
@@ -154,7 +156,7 @@ export const creditCheckMachine = createMachine({
                     id: "gavUnionDBActor",
                     onDone: [
                       {
-                        actions: ["assignGavUnionScore"],
+                        actions: [{ type: "assignGavUnionScore" }],
                         target: "FetchingComplete",
                         guard: "gavUnionReportFound",
                       },
@@ -183,7 +185,7 @@ export const creditCheckMachine = createMachine({
                     id: "gavUnionFetchActor",
                     onDone: [
                       {
-                        actions: ["assignGavUnionScoreFetch"],
+                        actions: [{ type: "assignGavUnionScoreFetch" }],
                         target: "FetchingComplete",
                       },
                     ],
@@ -212,7 +214,7 @@ export const creditCheckMachine = createMachine({
                     id: "gavperianCheckActor",
                     onDone: [
                       {
-                        actions: ["assignGavperianScore"],
+                        actions: [{ type: "assignGavperianScore" }],
                         target: "FetchingComplete",
                         guard: "gavperianReportFound",
                       },
@@ -241,7 +243,7 @@ export const creditCheckMachine = createMachine({
                     id: "checkGavPerianActor",
                     onDone: [
                       {
-                        actions: ["assignGavperianScoreFetch"],
+                        actions: [{ type: "assignGavperianScoreFetch" }],
                         target: "FetchingComplete",
                       },
                     ],
@@ -301,14 +303,14 @@ export const creditCheckMachine = createMachine({
                 src: "generateInterestRates",
                 onDone: [
                   {
-                    actions: ["assignInterestRateOptions"],
+                    actions: [{ type: "assignInterestRateOptions" }],
                     target: "RatesProvided",
                   },
                 ],
               },
             },
             RatesProvided: {
-              entry: ["emailUser", "emailSalesTeam"],
+              entry: [{ type: "emailUser" }, { type: "emailSalesTeam" }],
               type: "final",
             },
           },
