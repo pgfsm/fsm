@@ -35,8 +35,10 @@ dotenv.config({ path: "./../../.env" });
   // const outputFSM = await deleteFsmJSONFromFolders(fsmfolderPath, "fsm");
 
   
-  const skipSharedFSMDirs = ["vitalsWorkflow"];
-  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  // const skipSharedFSMDirs = ["vitalsWorkflow"];
+  // const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  const skipSharedFSMDirs = [];
+  const skipFSMDirs = [];
   const outputSharedFSM = await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFSM", skipSharedFSMDirs);
   const outputFSM = await generateFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
 
