@@ -8,23 +8,10 @@
         "type": {
           "type": "string",
           "description": "The action type"
-        },
-        "actionName": {
-          "type": "string",
-          "description": "Required only when type = xstate.raise"
         }
       },
       "additionalProperties": true,
-      "required": ["type"],
-      "if": {
-        "properties": {
-          "type": { "const": "xstate.raise" }
-        },
-        "required": ["type"]
-      },
-      "then": {
-        "required": ["actionName"]
-      }
+      "required": ["type"]
     },
     "baseStateNode": {
       "type": "object",
@@ -35,10 +22,6 @@
         "key": {
           "type": "string"
         },
-        "type": {
-          "type": "string",
-          "enum": ["atomic", "compound", "parallel", "final", "history"]
-        },
         "order": {
           "$ref": "#/$defs/order"
         },
@@ -47,7 +30,7 @@
           "description": "The description of the state node, in Markdown"
         }
       },
-      "required": ["id", "key", "type"]
+      "required": ["id", "key"]
     },
     "compoundStateNode": {
       "allOf": [
@@ -56,8 +39,8 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "compound"
+              
+              "const": "compound"
             },
             "entry": {
               "type": "array",
@@ -95,8 +78,8 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "parallel"
+             
+              "const": "parallel"
             },
             "entry": {
               "type": "array",
@@ -131,8 +114,8 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "atomic"
+              
+              "const": "atomic"
             },
             "entry": {
               "type": "array",
@@ -164,12 +147,11 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "history"
+              
+              "const": "history"
             },
             "history": {
-              "type": "string",
-              "enum": ["shallow", "deep"]
+              "type": "boolean"
             }
           },
           "required": ["history"]
@@ -183,8 +165,8 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "final"
+              
+              "const": "final"
             },
             "data": {
               "type": "object"
