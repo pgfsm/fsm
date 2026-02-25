@@ -22,6 +22,10 @@
         "key": {
           "type": "string"
         },
+        "type": {
+          "type": "string",
+          "enum": ["atomic", "compound", "parallel", "final", "history"]
+        },
         "order": {
           "$ref": "#/$defs/order"
         },
@@ -30,7 +34,7 @@
           "description": "The description of the state node, in Markdown"
         }
       },
-      "required": ["id", "key"]
+      "required": ["id", "key", "type"]
     },
     "compoundStateNode": {
       "allOf": [
@@ -39,8 +43,8 @@
           "type": "object",
           "properties": {
             "type": {
-              
-              "const": "compound"
+              "type": "string",
+              "pattern": "compound"
             },
             "entry": {
               "type": "array",
@@ -78,8 +82,8 @@
           "type": "object",
           "properties": {
             "type": {
-             
-              "const": "parallel"
+              "type": "string",
+              "pattern": "parallel"
             },
             "entry": {
               "type": "array",
@@ -114,8 +118,8 @@
           "type": "object",
           "properties": {
             "type": {
-              
-              "const": "atomic"
+              "type": "string",
+              "pattern": "atomic"
             },
             "entry": {
               "type": "array",
@@ -147,11 +151,12 @@
           "type": "object",
           "properties": {
             "type": {
-              
-              "const": "history"
+              "type": "string",
+              "pattern": "history"
             },
             "history": {
-              "type": "boolean"
+              "type": "string",
+              "enum": ["shallow", "deep"]
             }
           },
           "required": ["history"]
@@ -165,8 +170,8 @@
           "type": "object",
           "properties": {
             "type": {
-              
-              "const": "final"
+              "type": "string",
+              "pattern": "final"
             },
             "data": {
               "type": "object"
