@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { genrateFsmJSONFromFolders, deleteFsmJSONFromFolders } from './genrateFsmJSON.ts';
+import { generateFsmJSONFromFolders, deleteFsmJSONFromFolders } from './generateFsmJSON.ts';
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: "./../../.env" });
@@ -34,8 +34,11 @@ dotenv.config({ path: "./../../.env" });
   // const outputSharedFSM = await deleteFsmJSONFromFolders(sharedFSMfolderPath, "sharedFSM");
   // const outputFSM = await deleteFsmJSONFromFolders(fsmfolderPath, "fsm");
 
-  const outputSharedFSM = await genrateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFSM");
-  const outputFSM = await genrateFsmJSONFromFolders(fsmfolderPath, "fsm");
+  
+  const skipSharedFSMDirs = ["vitalsWorkflow"];
+  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  const outputSharedFSM = await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFSM", skipSharedFSMDirs);
+  const outputFSM = await generateFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
 
 
   // console.log("✅ All workflows inserted successfully");

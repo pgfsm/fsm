@@ -68,7 +68,7 @@ export async function deleteFsmJSONFromFolders(
 }
 
 
-async function genrateFsmJSONFromFolder(
+async function generateFsmJSONFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
   folderPath: string,
@@ -109,9 +109,10 @@ async function genrateFsmJSONFromFolder(
 }
 
 
-export async function genrateFsmJSONFromFolders(
+export async function generateFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
@@ -127,26 +128,23 @@ export async function genrateFsmJSONFromFolders(
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
-      if (dirEntry.name === "promise" || dirEntry.name === "sharedFSM") {
+      if (skipDirs.includes(dirEntry.name)) {
         continue;
       }
-  
 
       const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
 
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
-          if (subEntry.isDirectory) {
-            // check if subEntry name matches timestamp pattern YYYYMMDDHHMMSS
-            const timestampPattern = /^\d{14}$/;
-            if (timestampPattern.test(subEntry.name)) {
-             
-              await genrateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
-            }else {
-              console.log(`Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`);
-            }
+        if (subEntry.isDirectory) {
+          // check if subEntry name matches timestamp pattern YYYYMMDDHHMMSS
+          const timestampPattern = /^\d{14}$/;
+          if (timestampPattern.test(subEntry.name)) {
+            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
+          } else {
+            console.log(`Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`);
           }
         }
-
+      }
     }
   }
 }
