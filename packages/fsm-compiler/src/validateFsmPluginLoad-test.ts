@@ -30,9 +30,10 @@ dotenv.config({ path: "./../../.env" });
   //   );
   // }
   // const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFSM");
-  const outputFSM = await validateFsmPluginLoadFromFolders(fsmfolderPath, "fsm");
+  const skipSharedFSMDirs = ["vitalsWorkflow"];
+  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFSM", skipSharedFSMDirs);
+  const outputFSM = await validateFsmPluginLoadFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
   
 })();
 

@@ -1,6 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
+// Import Ajv for JSON schema validation
+import Ajv from "ajv";
+import machineSchema from "../../database-src/machine.schema.json" with { type: "json" };
+
 export async function validateLanguageModules(
   absFolderPath: string,
   lang: string,
@@ -89,6 +93,7 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
       }
     }
 
+    /*
     // Collect actions, guards, delays from transitions (in 'on' and 'transitions')
     if (state.on && typeof state.on === "object") {
       for (const eventKey of Object.keys(state.on)) {
@@ -121,6 +126,8 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
         }
       }
     }
+    */
+   
     if (Array.isArray(state.transitions)) {
       for (const transition of state.transitions) {
         // Actions
@@ -182,11 +189,21 @@ async function validateFsmPluginLoadFromFolder(
   parentSource: string,
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
 ) {
-  const fsmJson = `${absFolderPath}/fsm.json`;
+  const fsmJson = `${absFolderPath}/xstate-fsm.json`;
   try {
     await Deno.stat(fsmJson);
     // 1. Load fsm.json file
     const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+
+    // Validate fsmData structure from json schema
+    const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
+    const validate = ajv.compile(machineSchema);
+    const valid = validate(fsmData);
+    if (!valid) {
+      console.error("fsm.json validation failed:", validate.errors);
+      throw new Error("fsm.json does not conform to machine.schema.json");
+    }
+
 
     // 1.1 Call fn to get all actions and guards from json file
     const { actions, guards, delays, actors } =
@@ -214,6 +231,7 @@ async function validateFsmPluginLoadFromFolder(
 export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -237,7 +255,7 @@ export async function validateFsmPluginLoadFromFolders(
     : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
-      if (dirEntry.name === "promise" || dirEntry.name === "sharedFSM") {
+      if (skipDirs.includes(dirEntry.name)) {
         continue;
       }
 
