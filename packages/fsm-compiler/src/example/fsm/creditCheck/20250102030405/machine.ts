@@ -291,7 +291,7 @@ export const creditCheckMachine = createMachine({
                 id: "scoreDeterminationActor",
                 onDone: [
                   {
-                    actions: ["assignMiddleScore", "saveCreditProfile"],
+                    actions: [ { type: "assignMiddleScore" }, { type: "saveCreditProfile" }  ],
                     target: "FetchingRates",
                   },
                 ],

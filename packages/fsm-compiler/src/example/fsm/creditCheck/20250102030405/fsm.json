@@ -979,8 +979,12 @@
                 "xstate.done.actor.scoreDeterminationActor": [
                   {
                     "actions": [
-                      "assignMiddleScore",
-                      "saveCreditProfile"
+                      {
+                        "type": "assignMiddleScore"
+                      },
+                      {
+                        "type": "saveCreditProfile"
+                      }
                     ],
                     "target": [
                       "#(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates"
@@ -994,8 +998,12 @@
               "transitions": [
                 {
                   "actions": [
-                    "assignMiddleScore",
-                    "saveCreditProfile"
+                    {
+                      "type": "assignMiddleScore"
+                    },
+                    {
+                      "type": "saveCreditProfile"
+                    }
                   ],
                   "target": [
                     "#(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates"
