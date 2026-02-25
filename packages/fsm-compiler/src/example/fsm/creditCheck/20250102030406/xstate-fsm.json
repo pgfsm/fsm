@@ -87,7 +87,9 @@
                   "#(machine).creditCheck.CheckingCreditScores"
                 ],
                 "actions": [
-                  "verifyCredentialsSuccess"
+                  {
+                    "type": "verifyCredentialsSuccess"
+                  }
                 ],
                 "source": "#(machine).creditCheck.Verifying Credentials",
                 "reenter": false,
@@ -100,7 +102,7 @@
                   "#(machine).creditCheck.Entering Information"
                 ],
                 "actions": [
-                  null
+                  
                 ],
                 "source": "#(machine).creditCheck.Verifying Credentials",
                 "reenter": false,
@@ -140,7 +142,9 @@
                 "#(machine).creditCheck.CheckingCreditScores"
               ],
               "actions": [
-                "verifyCredentialsSuccess"
+                {
+                  "type": "verifyCredentialsSuccess"
+                }
               ],
               "source": "#(machine).creditCheck.Verifying Credentials",
               "reenter": false,
@@ -151,7 +155,7 @@
                 "#(machine).creditCheck.Entering Information"
               ],
               "actions": [
-                null
+                
               ],
               "source": "#(machine).creditCheck.Verifying Credentials",
               "reenter": false,
@@ -248,7 +252,9 @@
                     "xstate.done.actor.0.(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.CheckingForExistingReport": [
                       {
                         "actions": [
-                          "equiGavinDBActorSuccess"
+                          {
+                            "type": "equiGavinDBActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.FetchingComplete"
@@ -282,7 +288,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "equiGavinDBActorSuccess"
+                        {
+                          "type": "equiGavinDBActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.FetchingComplete"
@@ -369,7 +377,9 @@
                     "xstate.done.actor.0.FetchingReportMagicIDatequiGavinFetchActor": [
                       {
                         "actions": [
-                          "equiGavinFetchActorSuccess"
+                          {
+                            "type": "equiGavinFetchActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.FetchingComplete"
@@ -394,7 +404,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "equiGavinFetchActorSuccess"
+                        {
+                          "type": "equiGavinFetchActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.FetchingComplete"
@@ -492,7 +504,9 @@
                     "xstate.done.actor.0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.CheckingForExistingReport": [
                       {
                         "actions": [
-                          "gavUnionDBActorSuccess"
+                          {
+                            "type": "gavUnionDBActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingComplete"
@@ -526,7 +540,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "gavUnionDBActorSuccess"
+                        {
+                          "type": "gavUnionDBActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingComplete"
@@ -606,7 +622,9 @@
                     "xstate.done.actor.0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingReport": [
                       {
                         "actions": [
-                          "gavUnionFetchActorSuccess"
+                          {
+                            "type": "gavUnionFetchActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingComplete"
@@ -631,7 +649,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "gavUnionFetchActorSuccess"
+                        {
+                          "type": "gavUnionFetchActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingComplete"
@@ -725,7 +745,9 @@
                     "xstate.done.actor.0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.CheckingForExistingReport": [
                       {
                         "actions": [
-                          "gavperianCheckActorSuccess"
+                          {
+                            "type": "gavperianCheckActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingComplete"
@@ -759,7 +781,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "gavperianCheckActorSuccess"
+                        {
+                          "type": "gavperianCheckActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingComplete"
@@ -846,7 +870,9 @@
                     "xstate.done.actor.0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingReport": [
                       {
                         "actions": [
-                          "checkGavPerianActorSuccess"
+                          {
+                            "type": "checkGavPerianActorSuccess"
+                          }
                         ],
                         "target": [
                           "#(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingComplete"
@@ -871,7 +897,9 @@
                   "transitions": [
                     {
                       "actions": [
-                        "checkGavPerianActorSuccess"
+                        {
+                          "type": "checkGavPerianActorSuccess"
+                        }
                       ],
                       "target": [
                         "#(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingComplete"
@@ -963,7 +991,7 @@
                   "#(machine).creditCheck.Entering Information"
                 ],
                 "actions": [
-                  null
+                  
                 ],
                 "source": "#(machine).creditCheck.CheckingCreditScores",
                 "reenter": false,
@@ -995,7 +1023,7 @@
                 "#(machine).creditCheck.Entering Information"
               ],
               "actions": [
-                null
+                
               ],
               "source": "#(machine).creditCheck.CheckingCreditScores",
               "reenter": false,
@@ -1045,7 +1073,7 @@
                 "xstate.done.actor.0.(machine).creditCheck.DeterminingInterestRateOptions.DeterminingMiddleScore": [
                   {
                     "actions": [
-                      null,
+                      
                       {
                         "type": "saveCreditProfile"
                       }
@@ -1062,7 +1090,7 @@
               "transitions": [
                 {
                   "actions": [
-                    null,
+                    
                     {
                       "type": "saveCreditProfile"
                     }
@@ -1237,7 +1265,9 @@
           "#allWorkflowStepDone"
         ],
         "actions": [
-          "rootInterpreterIdSuccess"
+          {
+            "type": "rootInterpreterIdSuccess"
+          }
         ],
         "source": "#(machine)",
         "reenter": false,
@@ -1250,7 +1280,9 @@
           "#allWorkflowStepDone"
         ],
         "actions": [
-          "rootInterpreterIdError"
+          {
+            "type": "rootInterpreterIdError"
+          }
         ],
         "source": "#(machine)",
         "reenter": false,
@@ -1290,7 +1322,9 @@
         "#allWorkflowStepDone"
       ],
       "actions": [
-        "rootInterpreterIdSuccess"
+        {
+          "type": "rootInterpreterIdSuccess"
+        }
       ],
       "source": "#(machine)",
       "reenter": false,
@@ -1301,7 +1335,9 @@
         "#allWorkflowStepDone"
       ],
       "actions": [
-        "rootInterpreterIdError"
+        {
+          "type": "rootInterpreterIdError"
+        }
       ],
       "source": "#(machine)",
       "reenter": false,

@@ -20,11 +20,11 @@ export const CreditCheckMachineMachineConfig = createMachine({
     // id: "rootInterpreterId",
     onDone: {
       target: "#allWorkflowStepDone",
-      actions:'rootInterpreterIdSuccess',
+      actions:[ { type : "rootInterpreterIdSuccess" } ],
     },
     onError: {
       target: "#allWorkflowStepDone",
-      actions: 'rootInterpreterIdError',
+      actions: [ { type: "rootInterpreterIdError" } ],
     },
   },
   after: {
@@ -56,7 +56,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
             src: "verifyCredentials",
             onDone: {
               target: "CheckingCreditScores",
-              actions: 'verifyCredentialsSuccess',
+              actions: [{ type: 'verifyCredentialsSuccess' }],
             },
             onError: [
               {
@@ -110,7 +110,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "equiGavinDBActor",
                     onDone: [
                       {
-                        actions: 'equiGavinDBActorSuccess',
+                        actions: [{ type: 'equiGavinDBActorSuccess' }],
                         target: "FetchingComplete",
                         // guard: "equiGavinReportFound",
                       },
@@ -147,7 +147,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "equiGavinFetchActor",
                     onDone: [
                       {
-                        actions: 'equiGavinFetchActorSuccess',
+                        actions: [{ type: 'equiGavinFetchActorSuccess' }],
                         target: "FetchingComplete",
                       },
                     ],
@@ -177,7 +177,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "gavUnionDBActor",
                     onDone: [
                       {
-                        actions: 'gavUnionDBActorSuccess',
+                        actions: [{ type: 'gavUnionDBActorSuccess' }],
                         target: "FetchingComplete",
                         // guard: "gavUnionReportFound",
                       },
@@ -208,7 +208,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "gavUnionFetchActor",
                     onDone: [
                       {
-                        actions: 'gavUnionFetchActorSuccess',
+                        actions: [{ type: 'gavUnionFetchActorSuccess' }],
                         target: "FetchingComplete",
                       },
                     ],
@@ -239,7 +239,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "gavperianCheckActor",
                     onDone: [
                       {
-                        actions: 'gavperianCheckActorSuccess',
+                        actions: [{ type: 'gavperianCheckActorSuccess' }],
                         target: "FetchingComplete",
                         // guard: "gavperianReportFound",
                       },
@@ -275,7 +275,7 @@ export const CreditCheckMachineMachineConfig = createMachine({
                     // id: "checkGavPerianActor",
                     onDone: [
                       {
-                        actions: 'checkGavPerianActorSuccess',
+                        actions: [{ type: 'checkGavPerianActorSuccess' }],
                         target: "FetchingComplete",
                       },
                     ],
