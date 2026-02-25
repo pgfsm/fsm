@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
-import machineSchema from "../../database-src/machine.schema.json" with { type: "json" };
+import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
 
 export async function validateLanguageModules(
   absFolderPath: string,
@@ -189,7 +189,7 @@ async function validateFsmPluginLoadFromFolder(
   parentSource: string,
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
 ) {
-  const fsmJson = `${absFolderPath}/xstate-fsm.json`;
+  const fsmJson = `${absFolderPath}/fsm.json`;
   try {
     await Deno.stat(fsmJson);
     // 1. Load fsm.json file
