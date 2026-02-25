@@ -92,8 +92,8 @@ async function generateFsmJSONFromFolder(
       typeof machineConfig.toJSON === "function"
     ) {
       const jsonOutput = JSON.stringify(machineConfig.toJSON(), null, 2);
-      writeFileSync(`${absFolderPath}/fsm.json`, jsonOutput);
-      console.log(`Wrote new fsm.json to ${absFolderPath}/fsm.json`);
+      writeFileSync(`${absFolderPath}/xstate-fsm.json`, jsonOutput);
+      console.log(`Wrote new xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
       
     } else {
       console.error(`Export in ${createMachinePath} is not a valid xstate machine config`);
