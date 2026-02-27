@@ -201,7 +201,7 @@ async function validateFsmPluginLoadFromFolder(
     const valid = validate(fsmData);
     if (!valid) {
       console.error("fsm.json validation failed:", validate.errors);
-      throw new Error("fsm.json does not conform to machine.schema.json");
+      throw new Error("fsm.json does not conform to fsm.machine.schema.json");
     }
 
 
