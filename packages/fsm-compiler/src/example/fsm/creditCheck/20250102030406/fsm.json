@@ -201,7 +201,9 @@
             {
               "src": "verifyCredentials",
               "type": "xstate.invoke",
-              "id": "0.(machine).creditCheck.Verifying Credentials"
+              "id": "0.(machine).creditCheck.Verifying Credentials",
+              "fsmType": "promise",
+              "fsmVersion": "20250102030406"
             }
           ],
           "tags": []
@@ -325,7 +327,9 @@
                     {
                       "src": "checkReportsTable",
                       "type": "xstate.invoke",
-                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.CheckingForExistingReport"
+                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingEquiGavin.CheckingForExistingReport",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -428,7 +432,9 @@
                     {
                       "src": "checkBureau",
                       "type": "xstate.invoke",
-                      "id": "0.FetchingReportMagicIDatequiGavinFetchActor"
+                      "id": "0.FetchingReportMagicIDatequiGavinFetchActor",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -573,7 +579,9 @@
                     {
                       "src": "checkReportsTable",
                       "type": "xstate.invoke",
-                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.CheckingForExistingReport"
+                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.CheckingForExistingReport",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -673,7 +681,9 @@
                     {
                       "src": "checkBureau",
                       "type": "xstate.invoke",
-                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingReport"
+                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavUnion.FetchingReport",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -818,7 +828,9 @@
                     {
                       "src": "checkReportsTable",
                       "type": "xstate.invoke",
-                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.CheckingForExistingReport"
+                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.CheckingForExistingReport",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -921,7 +933,9 @@
                     {
                       "src": "checkBureau",
                       "type": "xstate.invoke",
-                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingReport"
+                      "id": "0.(machine).creditCheck.CheckingCreditScores.CheckingGavperian.FetchingReport",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030406"
                     }
                   ],
                   "tags": []
@@ -1029,7 +1043,9 @@
             {
               "src": "CheckingCreditScores3parallel",
               "type": "xstate.invoke",
-              "id": "0.(machine).creditCheck.CheckingCreditScores"
+              "id": "0.(machine).creditCheck.CheckingCreditScores",
+              "fsmType": "promise",
+              "fsmVersion": "20250102030406"
             }
           ],
           "description": "Kick off a series of requests to the 3 American Credit Bureaus and await their results",
@@ -1100,7 +1116,9 @@
                 {
                   "src": "determineMiddleScore",
                   "type": "xstate.invoke",
-                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.DeterminingMiddleScore"
+                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.DeterminingMiddleScore",
+                  "fsmType": "promise",
+                  "fsmVersion": "20250102030406"
                 }
               ],
               "tags": []
@@ -1156,7 +1174,9 @@
                 {
                   "src": "generateInterestRates",
                   "type": "xstate.invoke",
-                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates"
+                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates",
+                  "fsmType": "promise",
+                  "fsmVersion": "20250102030406"
                 }
               ],
               "tags": []
@@ -1381,7 +1401,9 @@
     {
       "src": "fetchInterestRateOptions",
       "type": "xstate.invoke",
-      "id": "0.(machine)"
+      "id": "0.(machine)",
+      "fsmType": "promise",
+      "fsmVersion": "20250102030406"
     }
   ],
   "tags": []

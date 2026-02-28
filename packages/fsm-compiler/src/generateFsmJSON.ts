@@ -153,6 +153,75 @@ export async function deleteFsmJSONFromFolders(
   }
 }
 
+/**
+ * Iterates through all invoke entries in the FSM JSON, adds missing fsmType and fsmVersion, and returns full JSON and child actor info array.
+ * @param fsmJSON The FSM JSON object
+ * @param parentFsmVersion The parent FSM version to use for missing fsmVersion
+ * @returns { fulljson, childActorsInfo }
+ */
+export function addMissingFsmTypeToInvokeActor(fsmJSON: any, parentFsmVersion: string): { fulljson: any, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
+  // Deep clone to avoid mutating original
+  const clone = JSON.parse(JSON.stringify(fsmJSON));
+  const childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> = [];
+
+  function visitState(state: any) {
+    if (Array.isArray(state.invoke)) {
+      for (const invokeObj of state.invoke) {
+        // Only process if src exists
+        if (invokeObj && typeof invokeObj.src === 'string') {
+          // Add missing fsmType
+          if (!('fsmType' in invokeObj)) {
+            invokeObj.fsmType = 'promise';
+          }
+          // Add missing fsmVersion
+          if (!('fsmVersion' in invokeObj)) {
+            invokeObj.fsmVersion = parentFsmVersion;
+          }
+          childActorsInfo.push({
+            child_actor_src: invokeObj.src,
+            child_actor_fsmType: invokeObj.fsmType,
+            child_actor_fsmVersion: invokeObj.fsmVersion
+          });
+        }
+      }
+    }
+    // Recursively visit substates
+    if (state.states && typeof state.states === 'object') {
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
+    }
+  }
+
+  // Visit all states recursively
+  if (clone.states && typeof clone.states === 'object') {
+    for (const stateKey of Object.keys(clone.states)) {
+      visitState(clone.states[stateKey]);
+    }
+  }
+
+  // Also check root-level invoke (rare, but possible)
+  if (Array.isArray(clone.invoke)) {
+    for (const invokeObj of clone.invoke) {
+      if (invokeObj && typeof invokeObj.src === 'string') {
+        if (!('fsmType' in invokeObj)) {
+          invokeObj.fsmType = 'promise';
+        }
+        if (!('fsmVersion' in invokeObj)) {
+          invokeObj.fsmVersion = parentFsmVersion;
+        }
+        childActorsInfo.push({
+          child_actor_src: invokeObj.src,
+          child_actor_fsmType: invokeObj.fsmType,
+          child_actor_fsmVersion: invokeObj.fsmVersion
+        });
+      }
+    }
+  }
+
+  return { fulljson: clone, childActorsInfo };
+}
+
 
 async function generateFsmJSONFromFolder(
   dirEntryName: string,
@@ -182,9 +251,16 @@ async function generateFsmJSONFromFolder(
       writeFileSync(`${absFolderPath}/xstate-fsm.json`, jsonOutput);
       console.log(`Wrote new xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
       // todo - remove null from all actions from xstateFsmJSON before writing fsm.json
-      const fsmJSON = removeNullActions(xstateFsmJSON);
+      const xstateJSONWithoutNull = removeNullActions(xstateFsmJSON);
+      // Add version and workflow_type to fsmJSON and collect child actor info
+      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActor(xstateJSONWithoutNull, dirEntryNameVersion);
       writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
       console.log(`Wrote new fsm.json to ${absFolderPath}/fsm.json`);
+      // Optionally log child actor info
+      if (childActorsInfo.length > 0) {
+        console.log('Child actor info:', childActorsInfo);
+      }
+
 
       
       

@@ -91,22 +91,30 @@
         {
           "src": "checkTirePressure",
           "type": "xstate.invoke",
-          "id": "0.vitalscheck.CheckVitals"
+          "id": "0.vitalscheck.CheckVitals",
+          "fsmType": "promise",
+          "fsmVersion": "20251212100552"
         },
         {
           "src": "checkOilPressure",
           "type": "xstate.invoke",
-          "id": "1.vitalscheck.CheckVitals"
+          "id": "1.vitalscheck.CheckVitals",
+          "fsmType": "promise",
+          "fsmVersion": "20251212100552"
         },
         {
           "src": "checkCoolantLevel",
           "type": "xstate.invoke",
-          "id": "2.vitalscheck.CheckVitals"
+          "id": "2.vitalscheck.CheckVitals",
+          "fsmType": "promise",
+          "fsmVersion": "20251212100552"
         },
         {
           "src": "checkBattery",
           "type": "xstate.invoke",
-          "id": "3.vitalscheck.CheckVitals"
+          "id": "3.vitalscheck.CheckVitals",
+          "fsmType": "promise",
+          "fsmVersion": "20251212100552"
         }
       ],
       "tags": []

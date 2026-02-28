@@ -83,7 +83,9 @@
         {
           "src": "fetchTasks",
           "type": "xstate.invoke",
-          "id": "0.task.loading"
+          "id": "0.task.loading",
+          "fsmType": "promise",
+          "fsmVersion": "20251212120452"
         }
       ],
       "tags": []
@@ -197,7 +199,9 @@
         {
           "src": "updateTask",
           "type": "xstate.invoke",
-          "id": "0.task.updating"
+          "id": "0.task.updating",
+          "fsmType": "promise",
+          "fsmVersion": "20251212120452"
         }
       ],
       "tags": []

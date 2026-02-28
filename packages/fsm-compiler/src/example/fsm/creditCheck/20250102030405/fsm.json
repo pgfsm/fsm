@@ -159,7 +159,9 @@
             {
               "src": "verifyCredentials",
               "type": "xstate.invoke",
-              "id": "0.(machine).creditCheck.Verifying Credentials"
+              "id": "0.(machine).creditCheck.Verifying Credentials",
+              "fsmType": "promise",
+              "fsmVersion": "20250102030405"
             }
           ],
           "tags": []
@@ -281,7 +283,9 @@
                     {
                       "src": "checkReportsTable",
                       "id": "equiGavinDBActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -381,7 +385,9 @@
                     {
                       "src": "checkBureau",
                       "id": "equiGavinFetchActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -520,7 +526,9 @@
                     {
                       "src": "checkReportsTable",
                       "id": "gavUnionDBActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -620,7 +628,9 @@
                     {
                       "src": "checkBureau",
                       "id": "gavUnionFetchActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -759,7 +769,9 @@
                     {
                       "src": "checkReportsTable",
                       "id": "gavperianCheckActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -859,7 +871,9 @@
                     {
                       "src": "checkBureau",
                       "id": "checkGavPerianActor",
-                      "type": "xstate.invoke"
+                      "type": "xstate.invoke",
+                      "fsmType": "promise",
+                      "fsmVersion": "20250102030405"
                     }
                   ],
                   "tags": []
@@ -1016,7 +1030,9 @@
                 {
                   "src": "determineMiddleScore",
                   "id": "scoreDeterminationActor",
-                  "type": "xstate.invoke"
+                  "type": "xstate.invoke",
+                  "fsmType": "promise",
+                  "fsmVersion": "20250102030405"
                 }
               ],
               "tags": []
@@ -1072,7 +1088,9 @@
                 {
                   "src": "generateInterestRates",
                   "type": "xstate.invoke",
-                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates"
+                  "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates",
+                  "fsmType": "promise",
+                  "fsmVersion": "20250102030405"
                 }
               ],
               "tags": []
