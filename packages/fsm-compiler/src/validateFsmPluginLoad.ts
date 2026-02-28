@@ -25,7 +25,7 @@ export async function validateLanguageModules(
   delays: string[],
   actors: string[],
 ) {
-  const failedMethods: { method: string; moduleType: string }[] = [];
+  const failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
   // Plugin folders
   const moduleTypes = [
     { type: "actions", names: actions },
@@ -34,19 +34,28 @@ export async function validateLanguageModules(
     { type: "actors", names: actors },
   ];
 
+  // Store loaded modules for each type
+  const modules: Record<string, any> = {
+    actions: null,
+    guards: null,
+    delays: null,
+    actors: null,
+  };
+
   for (const modType of moduleTypes) {
     const modDir = `${absFolderPath}/${lang}/${modType.type}`;
     const modulePath = `${modDir}/index.ts`;
     try {
       // Dynamic import of index.ts
       const mod = await import(modulePath);
+      modules[modType.type] = mod;
       for (const name of modType.names) {
         // Check for method implementation
         if (typeof mod[name] !== "function") {
           console.log(
             `${modType.type} does not export '${name}' as a function.`,
           );
-          failedMethods.push({ method: name, moduleType: modType.type });
+          failedMethods.push({ method: name, moduleType: modType.type, modulePath: modulePath });
         } else {
           console.log(
             `${modType.type} exports '${name}' as a function.`,
@@ -58,13 +67,20 @@ export async function validateLanguageModules(
         `Failed to import module for ${modType.type} from ${modulePath}:`,
         err,
       );
+      modules[modType.type] = null;
       // If module import fails, all methods in this moduleType are considered failed
       for (const name of modType.names) {
-        failedMethods.push({ method: name, moduleType: modType.type });
+        failedMethods.push({ method: name, moduleType: modType.type, modulePath: modulePath });
       }
     }
   }
-  return failedMethods;
+  return {
+    actions: modules.actions,
+    guards: modules.guards,
+    delays: modules.delays,
+    actors: modules.actors,
+    failedMethods,
+  };
 }
 
 // Helper: Extract actions and guards from FSM JSON
@@ -209,6 +225,7 @@ async function validateFsmPluginLoadFromFolder(
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
   let fsmfsmModuleVerified = false;
+  let resultValidateLanguageModules;
   let fsmfailedMethods: { method: string; moduleType: string }[] = [];
   let requiredChildActors: string[] = [];
   let actions: string[] = [];
@@ -239,7 +256,7 @@ async function validateFsmPluginLoadFromFolder(
     actors = result.actors;
     requiredChildActors = [...actors];
 
-    fsmfailedMethods = await validateLanguageModules(
+    resultValidateLanguageModules  = await validateLanguageModules(
       absFolderPath,
       "typescript",
       actions,
@@ -248,7 +265,7 @@ async function validateFsmPluginLoadFromFolder(
       actors,
     );
 
-    fsmfsmModuleVerified = fsmfailedMethods.length === 0;
+    fsmfsmModuleVerified = resultValidateLanguageModules.failedMethods.length === 0;
 
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
@@ -262,7 +279,7 @@ async function validateFsmPluginLoadFromFolder(
     fsmJsonPresent,
     fsmJsonFollowSchema,
     fsmfsmModuleVerified,
-    fsmfailedMethods,
+    resultValidateLanguageModules,
     requiredChildActors,
   };
 }
