@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { genrateFsmPluginFromFolders } from './genrateFsmPlugin.ts';
+import { generateFsmPluginFromFolders } from './generateFsmPlugin.ts';
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: "./../../.env" });
@@ -31,8 +31,8 @@ dotenv.config({ path: "./../../.env" });
   // }
   // const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const outputSharedFSM = await genrateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFSM");
-  const outputFSM = await genrateFsmPluginFromFolders(fsmfolderPath, "fsm");
+  const outputSharedFSM = await generateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFSM");
+  const outputFSM = await generateFsmPluginFromFolders(fsmfolderPath, "fsm");
   // console.log("✅ All workflows inserted successfully");
 })();
 

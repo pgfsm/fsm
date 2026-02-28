@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 
 
 
-async function genrateFsmPluginFromFolder(
+async function generateFsmPluginFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
   folderPath: string,
@@ -205,7 +205,7 @@ async function generateLanguageFolders(
 }
 
 
-export async function genrateFsmPluginFromFolders(
+export async function generateFsmPluginFromFolders(
   folderPath: string,
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
 ) {
@@ -236,7 +236,7 @@ export async function genrateFsmPluginFromFolders(
             const timestampPattern = /^\d{14}$/;
             if (timestampPattern.test(subEntry.name)) {
              
-              await genrateFsmPluginFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
+              await generateFsmPluginFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
             }else {
               console.log(`Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`);
             }
