@@ -5,6 +5,18 @@ import { writeFileSync } from "node:fs";
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
 
+
+// validators.ts
+export const isFunction = (v: unknown): v is Function =>
+  typeof v === "function"
+
+export const hasArity =
+  (n: number) =>
+  (fn: unknown): boolean =>
+    isFunction(fn) && fn.length === n
+
+
+
 export async function validateLanguageModules(
   absFolderPath: string,
   lang: string,
@@ -13,6 +25,7 @@ export async function validateLanguageModules(
   delays: string[],
   actors: string[],
 ) {
+  const failedMethods: { method: string; moduleType: string }[] = [];
   // Plugin folders
   const moduleTypes = [
     { type: "actions", names: actions },
@@ -20,10 +33,7 @@ export async function validateLanguageModules(
     { type: "delays", names: delays },
     { type: "actors", names: actors },
   ];
-  const ctx: PluginContext = {
-    log: console.log,
-    config: {},
-  };
+
   for (const modType of moduleTypes) {
     const modDir = `${absFolderPath}/${lang}/${modType.type}`;
     const modulePath = `${modDir}/index.ts`;
@@ -36,6 +46,7 @@ export async function validateLanguageModules(
           console.log(
             `${modType.type} does not export '${name}' as a function.`,
           );
+          failedMethods.push({ method: name, moduleType: modType.type });
         } else {
           console.log(
             `${modType.type} exports '${name}' as a function.`,
@@ -47,8 +58,13 @@ export async function validateLanguageModules(
         `Failed to import module for ${modType.type} from ${modulePath}:`,
         err,
       );
+      // If module import fails, all methods in this moduleType are considered failed
+      for (const name of modType.names) {
+        failedMethods.push({ method: name, moduleType: modType.type });
+      }
     }
   }
+  return failedMethods;
 }
 
 // Helper: Extract actions and guards from FSM JSON
@@ -190,8 +206,19 @@ async function validateFsmPluginLoadFromFolder(
   workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
+  let fsmJsonPresent = false;
+  let fsmJsonFollowSchema = false;
+  let fsmfsmModuleVerified = false;
+  let fsmfailedMethods: { method: string; moduleType: string }[] = [];
+  let requiredChildActors: string[] = [];
+  let actions: string[] = [];
+  let guards: string[] = [];
+  let delays: string[] = [];
+  let actors: string[] = [];
+
   try {
     await Deno.stat(fsmJson);
+    fsmJsonPresent = true;
     // 1. Load fsm.json file
     const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
 
@@ -199,19 +226,20 @@ async function validateFsmPluginLoadFromFolder(
     const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
     const validate = ajv.compile(machineSchema);
     const valid = validate(fsmData);
+    fsmJsonFollowSchema = !!valid;
     if (!valid) {
       console.error("fsm.json validation failed:", validate.errors);
-      throw new Error("fsm.json does not conform to fsm.machine.schema.json");
     }
 
-
     // 1.1 Call fn to get all actions and guards from json file
-    const { actions, guards, delays, actors } =
-      getActionsAndGuardsFromFsmJson(fsmData);
+    const result = getActionsAndGuardsFromFsmJson(fsmData);
+    actions = result.actions;
+    guards = result.guards;
+    delays = result.delays;
+    actors = result.actors;
+    requiredChildActors = [...actors];
 
-    // 2. load the generated modules for each language and check if all actions/guards are exported correctly
-
-    await validateLanguageModules(
+    fsmfailedMethods = await validateLanguageModules(
       absFolderPath,
       "typescript",
       actions,
@@ -219,13 +247,24 @@ async function validateFsmPluginLoadFromFolder(
       delays,
       actors,
     );
+
+    fsmfsmModuleVerified = fsmfailedMethods.length === 0;
+
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}`);
+      fsmJsonPresent = false;
     } else {
       console.error(`Failed to import or process ${fsmJson}:`, err);
     }
   }
+
+  return {
+    fsmJsonPresent,
+    fsmJsonFollowSchema,
+    fsmfsmModuleVerified,
+    fsmfailedMethods,
+    requiredChildActors,
+  };
 }
 
 export async function validateFsmPluginLoadFromFolders(
@@ -266,13 +305,17 @@ export async function validateFsmPluginLoadFromFolders(
           // check if subEntry name matches timestamp pattern YYYYMMDDHHMMSS
           const timestampPattern = /^\d{14}$/;
           if (timestampPattern.test(subEntry.name)) {
-            await validateFsmPluginLoadFromFolder(
+            const folderResult = await validateFsmPluginLoadFromFolder(
               dirEntry.name,
               subEntry.name,
               folderPath,
               `${fsmDirPath}/${subEntry.name}`,
               dirEntry.name,
               workflow_type,
+            );
+            console.log(
+              `Validation result for ${dirEntry.name}/${subEntry.name}:`,
+              folderResult,
             );
           } else {
             console.log(
