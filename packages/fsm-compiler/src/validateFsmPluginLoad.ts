@@ -23,15 +23,17 @@ export async function validateLanguageModules(
   actions: string[],
   guards: string[],
   delays: string[],
-  actors: string[],
+  actors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   const failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
   // Plugin folders
+  // Filter actors to only those with fsmType === 'promise'
+  const filteredActors = actors.filter(a => a.fsmType === 'promise').map(a => a.src);
   const moduleTypes = [
     { type: "actions", names: actions },
     { type: "guards", names: guards },
     { type: "delays", names: delays },
-    { type: "actors", names: actors },
+    { type: "actors", names: filteredActors },
   ];
 
   // Store loaded modules for each type
@@ -88,13 +90,13 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
   actions: string[];
   guards: string[];
   delays: string[];
-  actors: string[];
+  actors: { src: string; fsmType?: string; fsmVersion?: string }[];
 } {
   // Recursively traverse the FSM JSON to collect all action, guard, delay, and actor names
   const actionsSet = new Set<string>();
   const guardsSet = new Set<string>();
   const delaysSet = new Set<string>();
-  const actorsSet = new Set<string>();
+  const actorsArr: { src: string; fsmType?: string; fsmVersion?: string }[] = [];
 
   function visitState(state: any) {
     // Collect actions from entry/exit arrays
@@ -191,7 +193,11 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
     if (Array.isArray(state.invoke)) {
       for (const inv of state.invoke) {
         if (inv && typeof inv.src === "string") {
-          actorsSet.add(inv.src);
+          actorsArr.push({
+            src: inv.src,
+            fsmType: inv.fsmType,
+            fsmVersion: inv.fsmVersion,
+          });
         }
       }
     }
@@ -209,7 +215,7 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
     actions: Array.from(actionsSet).filter(Boolean),
     guards: Array.from(guardsSet).filter(Boolean),
     delays: Array.from(delaysSet).filter(Boolean),
-    actors: Array.from(actorsSet).filter(Boolean),
+    actors: actorsArr,
   };
 }
 
@@ -309,6 +315,8 @@ export async function validateFsmPluginLoadFromFolders(
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
+
+  const allFolderResults = [];  
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {
@@ -334,12 +342,30 @@ export async function validateFsmPluginLoadFromFolders(
               `Validation result for ${dirEntry.name}/${subEntry.name}:`,
               folderResult,
             );
+            const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  (actor.fsmVersion + "/" + actor.src));
+            allFolderResults.push({
+              folder: `${dirEntry.name}/${subEntry.name}`,
+              result: folderResult,
+              dependentActors: dependentActors,
+            });
           } else {
             console.log(
               `Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`,
             );
           }
         }
+      }
+    }
+  }
+  console.log("All folder validation results:", allFolderResults);
+  // iterate over allFolderResults and check if dependentActors has any src that is not present as a folder in allFolderResults. If so, log an error with the missing dependency and the folder that requires it.
+  const allFolders = allFolderResults.map(r => r.folder);
+  for (const folderResult of allFolderResults) {
+    for (const dependency of folderResult.dependentActors) {
+      if (!allFolders.includes(dependency)) {
+        console.error(
+          `Missing dependency: ${dependency} required by ${folderResult.folder}`,
+        );
       }
     }
   }
