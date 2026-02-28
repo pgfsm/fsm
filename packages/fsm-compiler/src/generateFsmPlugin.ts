@@ -1,37 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
-
-
-async function generateFsmPluginFromFolder(
-  dirEntryName: string,
-  dirEntryNameVersion: string,
-  folderPath: string,
-  absFolderPath: string,
-  parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
-) {
-  
-  const fsmJson = `${absFolderPath}/fsm.json`;
-  try {
-    await Deno.stat(fsmJson);
-    // 1. Load fsm.json file
-    const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
-
-    // 1.1 Call fn to get all actions and guards from json file
-    const { actions, guards, delays, actors } = getActionsAndGuardsFromFsmJson(fsmData);
-
-    // 2. Call fn to generate folders/files for each language
-    await generateLanguageFolders(absFolderPath, 'typescript', actions, guards, delays, actors);
-    await generateLanguageFolders(absFolderPath, 'python', actions, guards, delays, actors);
-
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}`);
-    } else {
-      console.error(`Failed to import or process ${fsmJson}:`, err);
-    }
-  }
 // Helper: Extract actions and guards from FSM JSON
 function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guards: string[]; delays: string[]; actors: string[] } {
   // Recursively traverse the FSM JSON to collect all action, guard, delay, and actor names
@@ -202,12 +171,45 @@ async function generateLanguageFolders(
   await Deno.writeTextFile(actorsIndexFile, actorsIndexContent);
 }
 
+
+async function generateFsmPluginFromFolder(
+  dirEntryName: string,
+  dirEntryNameVersion: string,
+  folderPath: string,
+  absFolderPath: string,
+  parentSource: string,
+  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+) {
+  
+  const fsmJson = `${absFolderPath}/fsm.json`;
+  try {
+    await Deno.stat(fsmJson);
+    // 1. Load fsm.json file
+    const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+
+    // 1.1 Call fn to get all actions and guards from json file
+    const { actions, guards, delays, actors } = getActionsAndGuardsFromFsmJson(fsmData);
+
+    // 2. Call fn to generate folders/files for each language
+    await generateLanguageFolders(absFolderPath, 'typescript', actions, guards, delays, actors);
+    await generateLanguageFolders(absFolderPath, 'python', actions, guards, delays, actors);
+
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) {
+      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}`);
+    } else {
+      console.error(`Failed to import or process ${fsmJson}:`, err);
+    }
+  }
+
+
 }
 
 
 export async function generateFsmPluginFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
@@ -223,7 +225,7 @@ export async function generateFsmPluginFromFolders(
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
-      if (dirEntry.name === "promise" || dirEntry.name === "sharedFSM") {
+      if (skipDirs.includes(dirEntry.name)) {
         continue;
       }
   
