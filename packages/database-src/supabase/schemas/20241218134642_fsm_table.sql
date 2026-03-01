@@ -1,17 +1,16 @@
--- Enable the extension
-CREATE EXTENSION IF NOT EXISTS ltree;
-
 -- FSM state table
-DROP TABLE IF EXISTS fsm_transitions CASCADE;
-DROP TABLE IF EXISTS fsm_states CASCADE;
+-- DROP TABLE IF EXISTS fsm_core.fsm_transitions CASCADE;
+-- DROP TABLE IF EXISTS fsm_core.fsm_states CASCADE;
 
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fsm_state_type') THEN
-        CREATE TYPE fsm_state_type AS ENUM ('atomic', 'compound', 'parallel', 'final', 'history');
-    END IF;
-END$$;
+-- DO $$ BEGIN
+--     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'fsm_state_type') THEN
+--         CREATE TYPE fsm_state_type AS ENUM ('atomic', 'compound', 'parallel', 'final', 'history');
+--     END IF;
+-- END$$;
 
-CREATE TABLE fsm_states (
+CREATE TYPE fsm_core.fsm_state_type AS ENUM ('atomic', 'compound', 'parallel', 'final', 'history');
+
+CREATE TABLE fsm_core.fsm_states (
   state_id_with_fsm_name_and_fsm_version TEXT PRIMARY KEY,                -- Unique state node id (required)
   
   id TEXT NOT NULL,                   -- state node id (required)
@@ -22,7 +21,7 @@ CREATE TABLE fsm_states (
 
   parent_node TEXT,                     -- Parent state node id (optional, null for root) 
 
-  type fsm_state_type NOT NULL,       -- State node type: atomic, compound, parallel, final, history (required)
+  type fsm_core.fsm_state_type NOT NULL,       -- State node type: atomic, compound, parallel, final, history (required)
   description TEXT,                   -- Markdown description (optional)
   fsm_order INTEGER,                      -- Order (optional)
 
@@ -45,7 +44,7 @@ CREATE TABLE fsm_states (
 );
 
 
-CREATE TABLE fsm_transitions (
+CREATE TABLE fsm_core.fsm_transitions (
     id SERIAL PRIMARY KEY,
     
     actions JSONB,                 -- Array of action objects (required)
