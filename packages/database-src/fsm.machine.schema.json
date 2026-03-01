@@ -277,7 +277,7 @@
           "description": "The version of the FSM being invoked, required if fsmType is 'fsm' or 'sharedPromise'"
         }
       },
-      "required": ["type", "id", "src"],
+      "required": ["type", "id", "src", "fsmType", "fsmVersion"],
       "additionalProperties": false
     },
     "invokeArray": {
