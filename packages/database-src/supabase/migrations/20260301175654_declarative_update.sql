@@ -1,113 +1,9 @@
--- this function returns all initial state nodes reachable from the given state node,
--- including handling nested compound and parallel states
-CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_v1(
-    p_fsm_name text,
-    p_fsm_version text,
-    p_state_path ltree
-)
-RETURNS text[] LANGUAGE plpgsql AS
-$$
-DECLARE
-    results text[];
-BEGIN
-    WITH RECURSIVE traverse(node_path) AS (
-        -- Base case
-        SELECT p_state_path
+set check_function_bodies = off;
 
-        UNION ALL
-
-        -- Recursive step: handle compound and parallel in one recursive query
-        SELECT
-            CASE
-                WHEN s.type = 'compound'
-                     AND s.initial->'target'->>0 IS NOT NULL
-                THEN fsm_core.sanitize_text_to_ltree(s.initial->'target'->>0)::ltree
-
-                WHEN s.type = 'parallel'
-                     AND s.states IS NOT NULL
-                THEN (t.node_path::text || '.' || fsm_core.sanitize_text_to_ltree(c.value->>'key')::text)::ltree
-
-                ELSE NULL
-            END AS next_path
-        FROM traverse t
-        JOIN fsm_core.fsm_states s
-          ON s.computed_state_key_ltree = t.node_path
-         AND s.fsm_name = p_fsm_name
-         AND s.fsm_version = p_fsm_version
-        LEFT JOIN LATERAL jsonb_each(s.states) c
-          ON s.type = 'parallel'
-        WHERE (s.type = 'compound' AND s.initial->'target'->>0 IS NOT NULL)
-           OR (s.type = 'parallel' AND s.states IS NOT NULL)
-    )
-    SELECT array_agg(DISTINCT node_path::text)
-    INTO results
-    FROM traverse
-    WHERE node_path IS NOT NULL;
-
-    RETURN results;
-END;
-$$;
-
--- SELECT fsm_core.fsm_get_initial_state_nodes_v1('creditCheck', 'v1', 'machine.creditCheck');
-
--- SELECT fsm_core.fsm_get_initial_state_nodes_v1('creditCheck', 'v1', 'machine.creditCheck.CheckingCreditScores');
-
--- SELECT fsm_core.fsm_get_initial_state_nodes_v1('creditCheck', 'v1', 'machine.creditCheck.CheckingCreditScores.CheckingGavperian');
-
--- SELECT fsm_core.fsm_get_initial_state_nodes_v1('creditCheck', 'v1', 'machine.creditCheck.CheckingCreditScores.CheckingGavperian.CheckingForExistingReport');
-
-
--- Returns all initial state nodes and their proper ancestors up to (but not including) the given state node
-CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_with_ancestors_v1(
-    p_fsm_name text,
-    p_fsm_version text,
-    p_state_path ltree
-)
-RETURNS text[] LANGUAGE plpgsql AS
-$$
-DECLARE
-    initial_nodes text[];
-    all_nodes text[] := ARRAY[]::text[];
-    node text;
-    ancestors text[];
-BEGIN
-    -- Get initial state nodes
-    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v1(p_fsm_name, p_fsm_version, p_state_path);
-
-    -- Add initial nodes to result
-    IF initial_nodes IS NOT NULL THEN
-        all_nodes := initial_nodes;
-        -- For each initial node, add its proper ancestors up to p_state_path
-        FOREACH node IN ARRAY initial_nodes LOOP
-            ancestors := fsm_core.get_proper_ancestors(node, p_state_path::text);
-            IF ancestors IS NOT NULL THEN
-                all_nodes := all_nodes || ancestors;
-            END IF;
-        END LOOP;
-    END IF;
-
-    -- Remove duplicates
-    SELECT array_agg(DISTINCT n) INTO all_nodes FROM unnest(all_nodes) AS n;
-
-    RETURN COALESCE(all_nodes, ARRAY[]::text[]);
-END;
-$$;
-
--- Example usage:
--- SELECT fsm_core.fsm_get_initial_state_nodes_with_ancestors_v1('creditCheck', 'v1', 'machine.creditCheck');
-
--- SELECT fsm_core.fsm_get_initial_state_nodes_with_ancestors_v1('creditCheck', 'v1', 'machine.creditCheck.CheckingCreditScores.CheckingGavperian');
-
-
--- Returns all state nodes from fsm_core.fsm_states for the given paths, fsm_name, and fsm_version
--- Enhanced: Iterates through all nodes, handles compound/parallel, collects initial state nodes with ancestors
-
-CREATE OR REPLACE FUNCTION fsm_core.fsm_get_all_state_nodes_v1(
-    p_state_paths text[],
-    p_fsm_name text,
-    p_fsm_version text
-)
-RETURNS text[] AS $$
+CREATE OR REPLACE FUNCTION fsm_core.fsm_get_all_state_nodes_v1(p_state_paths text[], p_fsm_name text, p_fsm_version text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     node_rec RECORD;
     child_rec RECORD;
@@ -204,70 +100,92 @@ BEGIN
     RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v1] ResultNodeset: %', resultNodeset;
     RETURN COALESCE(resultNodeset, ARRAY[]::text[]);
 END;
-$$ LANGUAGE plpgsql;
+$function$
+;
 
+CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_v1(p_fsm_name text, p_fsm_version text, p_state_path ltree)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    results text[];
+BEGIN
+    WITH RECURSIVE traverse(node_path) AS (
+        -- Base case
+        SELECT p_state_path
 
--- SELECT fsm_core.fsm_get_all_state_nodes_v1(
---     ARRAY[
---     'machine',
---     'machine.creditCheck',
---     'machine.creditCheck.Verifying_Credentials' 
---     ], 
---     'creditCheck', 
---     '20250102030405');
+        UNION ALL
 
+        -- Recursive step: handle compound and parallel in one recursive query
+        SELECT
+            CASE
+                WHEN s.type = 'compound'
+                     AND s.initial->'target'->>0 IS NOT NULL
+                THEN fsm_core.sanitize_text_to_ltree(s.initial->'target'->>0)::ltree
 
--- SELECT fsm_core.fsm_get_all_state_nodes_v1(
---     ARRAY[
---     'machine',
---     'machine.creditCheck',
---     'machine.creditCheck.CheckingCreditScores',
---     'machine.creditCheck.CheckingCreditScores.CheckingGavperian',
---     'machine.creditCheck.CheckingCreditScores.CheckingGavperian.CheckingForExistingReport'    
---     ], 
---     'creditCheck', 
---     '20250102030405');
+                WHEN s.type = 'parallel'
+                     AND s.states IS NOT NULL
+                THEN (t.node_path::text || '.' || fsm_core.sanitize_text_to_ltree(c.value->>'key')::text)::ltree
 
--- SELECT jsonb_all_paths(
---     '{
-    
---         "creditCheck" : {
---             "CheckingCreditScores": {
-                
---                 "CheckingGavperian": "CheckingForExistingReport"
---             }
---         }
-    
---     }'::jsonb,
---     '');
+                ELSE NULL
+            END AS next_path
+        FROM traverse t
+        JOIN fsm_core.fsm_states s
+          ON s.computed_state_key_ltree = t.node_path
+         AND s.fsm_name = p_fsm_name
+         AND s.fsm_version = p_fsm_version
+        LEFT JOIN LATERAL jsonb_each(s.states) c
+          ON s.type = 'parallel'
+        WHERE (s.type = 'compound' AND s.initial->'target'->>0 IS NOT NULL)
+           OR (s.type = 'parallel' AND s.states IS NOT NULL)
+    )
+    SELECT array_agg(DISTINCT node_path::text)
+    INTO results
+    FROM traverse
+    WHERE node_path IS NOT NULL;
 
+    RETURN results;
+END;
+$function$
+;
 
+CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_with_ancestors_v1(p_fsm_name text, p_fsm_version text, p_state_path ltree)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    initial_nodes text[];
+    all_nodes text[] := ARRAY[]::text[];
+    node text;
+    ancestors text[];
+BEGIN
+    -- Get initial state nodes
+    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v1(p_fsm_name, p_fsm_version, p_state_path);
 
+    -- Add initial nodes to result
+    IF initial_nodes IS NOT NULL THEN
+        all_nodes := initial_nodes;
+        -- For each initial node, add its proper ancestors up to p_state_path
+        FOREACH node IN ARRAY initial_nodes LOOP
+            ancestors := fsm_core.get_proper_ancestors(node, p_state_path::text);
+            IF ancestors IS NOT NULL THEN
+                all_nodes := all_nodes || ancestors;
+            END IF;
+        END LOOP;
+    END IF;
 
--- select fsm_core.fsm_get_all_state_nodes_v1(ARRAY[
---     'fp.p1',
---     'fp.p1.s1',
---     'fp.p1.s1.p2',
---     'fp.p1.s1.p2.s4',
---     'fp.p1.s2',
---     'fp.p1.s2.p4',
---     'fp.p1.s2.p4.s8'
--- ], 'fpTest', 'v1');
+    -- Remove duplicates
+    SELECT array_agg(DISTINCT n) INTO all_nodes FROM unnest(all_nodes) AS n;
 
--- select fsm_core.fsm_get_all_state_nodes_v1(ARRAY[
---     'machine'
--- ], 'creditCheck', '20250102030405');
+    RETURN COALESCE(all_nodes, ARRAY[]::text[]);
+END;
+$function$
+;
 
-
-
--- Returns all state nodes for all paths in a JSONB object using jsonb_all_paths and fsm_get_all_state_nodes
-
-CREATE OR REPLACE FUNCTION fsm_core.resolve_state_value_v1(
-    input_json JSONB,
-    input_fsm_name TEXT,
-    input_fsm_version TEXT
-)
-RETURNS JSONB AS $$
+CREATE OR REPLACE FUNCTION fsm_core.resolve_state_value_v1(input_json jsonb, input_fsm_name text, input_fsm_version text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     root_node text;
     all_paths TEXT[];
@@ -324,19 +242,7 @@ BEGIN
 
     RETURN result_json;
 END;
-$$ LANGUAGE plpgsql;
+$function$
+;
 
--- Example usage:
--- SELECT fsm_core.resolve_state_value_v1('{"p1":{"s1":{"p2":"s4"},"s2":{"p4":"s8"}}}'::jsonb, 'machineTest', 'v1');
-
-
-
--- SELECT fsm_core.resolve_state_value_v1('{}'::jsonb, 'creditCheck', 'v3');
-
--- SELECT fsm_core.resolve_state_value_v1('""'::jsonb, 'creditCheck', 'v3');
-
--- SELECT fsm_core.resolve_state_value_v1(null::jsonb, 'creditCheck', 'v3');
-
--- SELECT fsm_core.resolve_state_value_v1('{"creditCheck": "Entering_Information"}'::jsonb, 'creditCheck', 'v3');
--- SELECT fsm_core.resolve_state_value_v1('{"creditCheck": "Verifying_Credentials"}'::jsonb, 'creditCheck', 'v3');
 
