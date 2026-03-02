@@ -151,6 +151,12 @@ To run and test your extension during development:
 	- `SELECT hello_fsm_core();` runs a sample function provided by the extension, implemented in Rust.
 	- `SELECT fsm_core.hello('BOB');` runs a sample function provided by the extension, implemented in SQL.
 
+3. **Package the extension**
+   
+   	```sh
+    cargo pgrx package --pg-config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config" 
+	```
+
 Refer to your extension's source code for more available functions and usage examples.
 
 
