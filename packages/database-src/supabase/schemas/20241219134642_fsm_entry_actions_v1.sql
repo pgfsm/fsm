@@ -121,7 +121,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 -- testing for inintal transition entry actions
 -- SELECT fsm_core.get_entry_actions_v1(ARRAY[
 --     'machine'
--- ], 'creditCheckNiraj', 'v3');
+-- ], 'creditCheck', 'v3');
 
 
 CREATE TYPE fsm_core.descendant_states_result_v1 AS (
@@ -275,7 +275,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Example usage:
--- SELECT fsm_core.get_descendant_states_for_entry_v1('machine.creditCheck.CheckingCreditScores', 'creditCheckNiraj', 'v1');
+-- SELECT fsm_core.get_descendant_states_for_entry_v1('machine.creditCheck.CheckingCreditScores', 'creditCheck', 'v1');
 
 
 -- Custom type to return both arrays
