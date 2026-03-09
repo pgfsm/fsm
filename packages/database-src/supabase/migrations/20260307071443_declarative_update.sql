@@ -147,7 +147,7 @@ BEGIN
             
 
             -- Get ancestors for s and domain
-            ancestors := get_proper_ancestors(sanitized_effective_target_state::TEXT, transition_domain_lca::TEXT);
+            ancestors := fsm_core.get_proper_ancestors(sanitized_effective_target_state::TEXT, transition_domain_lca::TEXT);
 
             -- If domain is parallel, append domain to ancestors
             IF domain_type = 'parallel' THEN
@@ -383,7 +383,7 @@ BEGIN
             --         );
             --     }
 
-            ancestors := get_proper_ancestors(sanitized_initial_state_ltree::TEXT, state_record.computed_state_key_ltree::TEXT); 
+            ancestors := fsm_core.get_proper_ancestors(sanitized_initial_state_ltree::TEXT, state_record.computed_state_key_ltree::TEXT); 
             ancestors_result := fsm_core.get_ancestor_states_for_entry_v1(
                 ancestors,
                 NULL,
