@@ -104,12 +104,12 @@ ARRAY['machine', 'machine.creditCheck', 'machine.creditCheck.Entering_Informatio
 'v1'
 );
 
-SELECT array_agg(t) INTO all_transition_records FROM fsm_core.select_all_transitions_v1(
-'Submit', 
-ARRAY['machine', 'machine.creditCheck', 'machine.creditCheck.Entering_Information']::TEXT[],
-'creditCheck', 
-'v1'
-) t;
+-- SELECT array_agg(t) INTO all_transition_records FROM fsm_core.select_all_transitions_v1(
+-- 'Submit', 
+-- ARRAY['machine', 'machine.creditCheck', 'machine.creditCheck.Entering_Information']::TEXT[],
+-- 'creditCheck', 
+-- 'v1'
+-- ) t;
 
 
 -- this should be simulated in application layer, we can call fsm_core.select_transitions_with_guard_eval_v1 function to get the valid transitions based on guard evaluation, 
