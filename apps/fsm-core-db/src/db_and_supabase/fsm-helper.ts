@@ -1,5 +1,6 @@
 import type { Database } from "../database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
+export type { DBDeps } from "./custom-type.ts";
 
 /**
  * Archives and updates fsm instance state by calling the SQL function archive_event_from_fsm_type_worker.

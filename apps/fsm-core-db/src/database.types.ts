@@ -1,6 +1,6 @@
 import { MergeDeep } from "type-fest";
-import { Database as DatabaseGenerated } from "../../packages/database-src/database.types.ts";
-import { Json as JsonGenerated } from "../../packages/database-src/database.types.ts";
+import { Database as DatabaseGenerated } from "../../../packages/database-src/database.types.ts";
+import { Json as JsonGenerated } from "../../../packages/database-src/database.types.ts";
 
 export type Json = JsonGenerated;
 export type Database = DatabaseGenerated;
