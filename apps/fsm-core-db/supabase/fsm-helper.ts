@@ -1,21 +1,10 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../database.types.ts';
-
-
-
-export interface DBDeps {
-  useSupabase: boolean;
-  supabase: SupabaseClient;
-  db: any; // Replace with actual DB client type, e.g., PGClient
-  // If using drizzle, you might want to specify the type accordingly
-}
-
-
+import type { Database } from "../database.types.ts";
+import type { DBDeps } from "./custom-type.ts";
 
 /**
  * Archives and updates fsm instance state by calling the SQL function archive_event_from_fsm_type_worker.
  * Handles removing/cancelling schedule and promise queue events, sending new events, and updating fsm instance data.
- **/
+ */
 export async function archive_event_from_fsm_type_worker(
   deps: DBDeps,
   remove_from_current_fsm_instance_queue_id: string,
@@ -29,42 +18,50 @@ export async function archive_event_from_fsm_type_worker(
   fsm_instance_data_save_fsm_status: any,
   fsm_instance_data_save_fsm_state: any,
   fsm_instance_data_save_fsm_context: any,
-  fsm_instance_data_save_fsm_xstate_state: any
+  fsm_instance_data_save_fsm_xstate_state: any,
 ): Promise<any> {
   // Normalize inputs to avoid sending NULL/undefined as SQL identifiers
-  const rpcQueueId = remove_from_current_fsm_instance_queue_id && remove_from_current_fsm_instance_queue_id !== ''
+  const rpcQueueId = remove_from_current_fsm_instance_queue_id &&
+      remove_from_current_fsm_instance_queue_id !== ""
     ? remove_from_current_fsm_instance_queue_id
     : null;
 
-  const safeRemoveSchedule = Array.isArray(remove_schedule_queue_msg_ids) ? remove_schedule_queue_msg_ids : remove_schedule_queue_msg_ids ?? null;
-  const safeRemovePromise = Array.isArray(remove_promise_queue_msg_ids) ? remove_promise_queue_msg_ids : remove_promise_queue_msg_ids ?? null;
+  const safeRemoveSchedule = Array.isArray(remove_schedule_queue_msg_ids)
+    ? remove_schedule_queue_msg_ids
+    : remove_schedule_queue_msg_ids ?? null;
+  const safeRemovePromise = Array.isArray(remove_promise_queue_msg_ids)
+    ? remove_promise_queue_msg_ids
+    : remove_promise_queue_msg_ids ?? null;
   const safeInputSchedule = input_schedule_queue_data ?? null;
   const safeInputPromise = input_promise_queue_data ?? null;
   const safeTotalSchedule = total_schedule_queue_data ?? null;
   const safeTotalPromise = total_promise_queue_data ?? null;
 
-  const { data, error } = await deps.supabase.rpc('archive_event_from_fsm_type_worker', {
-    remove_from_current_fsm_instance_queue_id: rpcQueueId,
-    remove_current_queue_msg_id: remove_current_queue_msg_id,
+  const { data, error } = await deps.supabase.rpc(
+    "archive_event_from_fsm_type_worker",
+    {
+      remove_from_current_fsm_instance_queue_id: rpcQueueId,
+      remove_current_queue_msg_id: remove_current_queue_msg_id,
 
-    to_be_removed_schedule_queue_msg_ids: safeRemoveSchedule,
-    to_be_removed_promise_queue_msg_ids: safeRemovePromise,
+      to_be_removed_schedule_queue_msg_ids: safeRemoveSchedule,
+      to_be_removed_promise_queue_msg_ids: safeRemovePromise,
 
-    to_be_added_schedule_queue_data: safeInputSchedule,
-    to_be_added_promise_queue_data: safeInputPromise,
-    
-    input_total_schedule_queue_data: safeTotalSchedule,
-    input_total_promise_queue_data: safeTotalPromise,
+      to_be_added_schedule_queue_data: safeInputSchedule,
+      to_be_added_promise_queue_data: safeInputPromise,
 
-    fsm_instance_data_save_fsm_status: fsm_instance_data_save_fsm_status,
-    fsm_instance_data_save_fsm_state: fsm_instance_data_save_fsm_state,
-    fsm_instance_data_save_fsm_context: fsm_instance_data_save_fsm_context,
-    fsm_instance_data_save_fsm_xstate_state: fsm_instance_data_save_fsm_xstate_state
-  });
+      input_total_schedule_queue_data: safeTotalSchedule,
+      input_total_promise_queue_data: safeTotalPromise,
+
+      fsm_instance_data_save_fsm_status: fsm_instance_data_save_fsm_status,
+      fsm_instance_data_save_fsm_state: fsm_instance_data_save_fsm_state,
+      fsm_instance_data_save_fsm_context: fsm_instance_data_save_fsm_context,
+      fsm_instance_data_save_fsm_xstate_state:
+        fsm_instance_data_save_fsm_xstate_state,
+    },
+  );
   if (error) throw error;
   return data;
 }
-
 
 /**
  * Archives and updates promise event state by calling the SQL function archive_event_from_fsm_promise_type_worker.
@@ -77,26 +74,28 @@ export async function archive_event_from_fsm_promise_type_worker(
   send_to_parent_queue_id: string,
   send_event_name_to_parent_queue_id: string,
   event_output: object,
-  event_status: string = 'completed',
+  event_status: string = "completed",
   event_duration: number | null = null,
   event_finished_at: string | null = null,
 ): Promise<any> {
-  const { data, error } = await deps.supabase.rpc('archive_event_from_fsm_promise_type_worker', {
-    promise_queue_name,
-    queue_msg_id,
-    send_to_parent_queue_id,
-    send_event_name_to_parent_queue_id,
-    event_output,
-    event_status,
-    event_duration,
-    event_finished_at
-  });
+  const { data, error } = await deps.supabase.rpc(
+    "archive_event_from_fsm_promise_type_worker",
+    {
+      promise_queue_name,
+      queue_msg_id,
+      send_to_parent_queue_id,
+      send_event_name_to_parent_queue_id,
+      event_output,
+      event_status,
+      event_duration,
+      event_finished_at,
+    },
+  );
   if (error) throw error;
   return data;
 }
 
-
-// TODO:  
+// TODO:
 /**
  * Fetches all data from workflow_instance table for a given id.
  * @param deps - DBDeps containing either supabase or drizzle client
@@ -105,20 +104,19 @@ export async function archive_event_from_fsm_promise_type_worker(
  */
 export async function getFSMData(
   deps: DBDeps,
-  id: string
+  id: string,
 ): Promise<Database["public"]["Tables"]["fsm_instance"]["Row"] | null> {
   const { data, error } = await deps.supabase
-    .from('fsm_instance')
-    .select('*')
-    .eq('id', id)
+    .from("fsm_instance")
+    .select("*")
+    .eq("id", id)
     .limit(1);
   if (error) {
-    console.error('Error fetching fsm_instance (supabase):', error);
+    console.error("Error fetching fsm_instance (supabase):", error);
     return null;
   }
   return data?.[0] ?? null;
 }
-
 
 /**
  * Resolves state value for a given input JSON, FSM name, and FSM version.
@@ -133,12 +131,12 @@ export async function resolveStateValue(
   deps: DBDeps,
   input_json: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<{ json: unknown; all_nodes: string[] } | null> {
-  const { data, error } = await deps.supabase.rpc('resolve_state_value_v2', {
+  const { data, error } = await deps.supabase.rpc("resolve_state_value_v2", {
     input_json,
     input_fsm_name: fsm_name,
-    input_fsm_version: fsm_version
+    input_fsm_version: fsm_version,
   });
   if (error) throw error;
   if (!data) return null;
@@ -147,14 +145,21 @@ export async function resolveStateValue(
   return data;
 }
 
-
 export async function getFSMDataAndResolveStateValue(
   deps: DBDeps,
-  id: string
-): Promise<{ fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"]; resolved_state_value: unknown } | null> {
-  const { data, error } = await deps.supabase.rpc('get_fsm_data_resolve_state_value_v2', {
-    input_fsm_id: id
-  });
+  id: string,
+): Promise<
+  {
+    fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"];
+    resolved_state_value: unknown;
+  } | null
+> {
+  const { data, error } = await deps.supabase.rpc(
+    "get_fsm_data_resolve_state_value_v2",
+    {
+      input_fsm_id: id,
+    },
+  );
   if (error) throw error;
   // Supabase returns the JSONB result directly as data
   if (!data) return null;
@@ -179,7 +184,7 @@ export async function sendFSMEvent(
   input_event_source: unknown,
   input_delay: number = 0,
   input_event_name?: string,
-  input_fsm_instance_id?: string
+  input_fsm_instance_id?: string,
 ): Promise<{
   event_data: unknown;
   fsm_instance_queue_name: string;
@@ -187,15 +192,18 @@ export async function sendFSMEvent(
   fsm_instance_queue_event_logs_id: string;
 }> {
   if (!input_fsm_instance_id) {
-    throw new Error('input_fsm_instance_id is required');
+    throw new Error("input_fsm_instance_id is required");
   }
-  const { data, error } = await deps.supabase.rpc('send_event_to_queue_with_event_logs_v2', {
-    input_msg,
-    input_event_source,
-    input_event_name,
-    input_event_delay: input_delay,
-    input_fsm_instance_id,
-  });
+  const { data, error } = await deps.supabase.rpc(
+    "send_event_to_queue_with_event_logs_v2",
+    {
+      input_msg,
+      input_event_source,
+      input_event_name,
+      input_event_delay: input_delay,
+      input_fsm_instance_id,
+    },
+  );
   if (error) throw error;
   // Supabase returns an array of rows, but this function only returns one row
   return data;
@@ -220,7 +228,7 @@ export async function performMicrostep(
   event_name: string,
   state_value_node_set: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<{
   updated_state_value_node_set: string[];
   updated_state_value: unknown;
@@ -229,12 +237,12 @@ export async function performMicrostep(
   initial_actions: unknown;
   transition_actions: unknown;
 }> {
-  const { data, error } = await deps.supabase.rpc('microstep_v2', {
+  const { data, error } = await deps.supabase.rpc("microstep_v2", {
     transition_record: transition_record ?? null,
     event_name,
     state_value_node_set: state_value_node_set,
     fsm_name_param: fsm_name,
-    fsm_version_param: fsm_version
+    fsm_version_param: fsm_version,
   });
   if (error) throw error;
   return data ?? {
@@ -247,8 +255,8 @@ export async function performMicrostep(
   };
 }
 
-// TODO: 
-// add fn with name: selectTransitions that will call select_all_transitions 
+// TODO:
+// add fn with name: selectTransitions that will call select_all_transitions
 /**
  * Fetches all transitions for a given event, FSM name, and version by calling the SQL function select_all_transitions.
  * @param deps - DBDeps for database access
@@ -262,16 +270,14 @@ export async function selectTransitions(
   event_name: string,
   source_state_value_set: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<any[]> {
-  const { data, error } = await deps.supabase.rpc('select_all_transitions', {
+  const { data, error } = await deps.supabase.rpc("select_all_transitions", {
     event_name,
-    p_state_value : source_state_value_set,
+    p_state_value: source_state_value_set,
     fsm_name_param: fsm_name,
     fsm_version_param: fsm_version,
   });
   if (error) throw error;
   return data ?? [];
 }
-
-

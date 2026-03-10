@@ -1,19 +1,10 @@
-import type { Database } from '../database.types.ts';
-
-
-
-export interface DBDeps {
-  useSupabase: boolean;
-  db: any; // Replace with actual DB client type, e.g., PGClient
-  // If using drizzle, you might want to specify the type accordingly
-}
-
-
+import type { Database } from "../database.types.ts";
+import type { DBDeps } from "./custom-type.ts";
 
 /**
  * Archives and updates fsm instance state by calling the SQL function archive_event_from_fsm_type_worker.
  * Handles removing/cancelling schedule and promise queue events, sending new events, and updating fsm instance data.
- **/
+ */
 export async function archive_event_from_fsm_type_worker(
   deps: DBDeps,
   remove_from_current_fsm_instance_queue_id: string,
@@ -27,15 +18,20 @@ export async function archive_event_from_fsm_type_worker(
   fsm_instance_data_save_fsm_status: any,
   fsm_instance_data_save_fsm_state: any,
   fsm_instance_data_save_fsm_context: any,
-  fsm_instance_data_save_fsm_xstate_state: any
+  fsm_instance_data_save_fsm_xstate_state: any,
 ): Promise<any> {
   // Normalize inputs to avoid sending NULL/undefined as SQL identifiers
-  const rpcQueueId = remove_from_current_fsm_instance_queue_id && remove_from_current_fsm_instance_queue_id !== ''
+  const rpcQueueId = remove_from_current_fsm_instance_queue_id &&
+      remove_from_current_fsm_instance_queue_id !== ""
     ? remove_from_current_fsm_instance_queue_id
     : null;
 
-  const safeRemoveSchedule = Array.isArray(remove_schedule_queue_msg_ids) ? remove_schedule_queue_msg_ids : remove_schedule_queue_msg_ids ?? null;
-  const safeRemovePromise = Array.isArray(remove_promise_queue_msg_ids) ? remove_promise_queue_msg_ids : remove_promise_queue_msg_ids ?? null;
+  const safeRemoveSchedule = Array.isArray(remove_schedule_queue_msg_ids)
+    ? remove_schedule_queue_msg_ids
+    : (remove_schedule_queue_msg_ids ?? null);
+  const safeRemovePromise = Array.isArray(remove_promise_queue_msg_ids)
+    ? remove_promise_queue_msg_ids
+    : (remove_promise_queue_msg_ids ?? null);
   const safeInputSchedule = input_schedule_queue_data ?? null;
   const safeInputPromise = input_promise_queue_data ?? null;
   const safeTotalSchedule = total_schedule_queue_data ?? null;
@@ -58,13 +54,12 @@ export async function archive_event_from_fsm_type_worker(
       JSON.stringify(fsm_instance_data_save_fsm_status),
       JSON.stringify(fsm_instance_data_save_fsm_state),
       JSON.stringify(fsm_instance_data_save_fsm_context),
-      JSON.stringify(fsm_instance_data_save_fsm_xstate_state)
-    ]
+      JSON.stringify(fsm_instance_data_save_fsm_xstate_state),
+    ],
   );
   // The function returns a single row with a jsonb result
   return res.rows?.[0] ?? null;
 }
-
 
 /**
  * Archives and updates promise event state by calling the SQL function archive_event_from_fsm_promise_type_worker.
@@ -77,7 +72,7 @@ export async function archive_event_from_fsm_promise_type_worker(
   send_to_parent_queue_id: string,
   send_event_name_to_parent_queue_id: string,
   event_output: object,
-  event_status: string = 'completed',
+  event_status: string = "completed",
   event_duration: number | null = null,
   event_finished_at: string | null = null,
 ): Promise<any> {
@@ -94,14 +89,13 @@ export async function archive_event_from_fsm_promise_type_worker(
       JSON.stringify(event_output),
       event_status,
       event_duration,
-      event_finished_at
-    ]
+      event_finished_at,
+    ],
   );
   return res.rows?.[0] ?? null;
 }
 
-
-// TODO:  
+// TODO:
 /**
  * Fetches all data from workflow_instance table for a given id.
  * @param deps - DBDeps containing either supabase or drizzle client
@@ -110,17 +104,16 @@ export async function archive_event_from_fsm_promise_type_worker(
  */
 export async function getFSMData(
   deps: DBDeps,
-  id: string
+  id: string,
 ): Promise<Database["public"]["Tables"]["fsm_instance"]["Row"] | null> {
   const result = await deps.db.execute(
-    `SELECT * FROM fsm_instance WHERE id = '${id}' LIMIT 1;`
+    `SELECT * FROM fsm_instance WHERE id = '${id}' LIMIT 1;`,
   );
   if (Array.isArray(result.rows) && result.rows.length > 0) {
     return result.rows[0] ?? null;
   }
   return null;
 }
-
 
 /**
  * Resolves state value for a given input JSON, FSM name, and FSM version.
@@ -135,27 +128,31 @@ export async function resolveStateValue(
   deps: DBDeps,
   input_json: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<{ json: unknown; all_nodes: string[] } | null> {
   // For direct SQL, use parameterized query for safety
   const res = await deps.db.execute(
     `SELECT public.resolve_state_value_v2($1::jsonb, $2::text, $3::text) AS result;`,
-    [input_json, fsm_name, fsm_version]
+    [input_json, fsm_name, fsm_version],
   );
   if (!res.rows || res.rows.length === 0) return null;
   // The result is in res.rows[0].result as a JSON object
   return res.rows[0]?.result ?? null;
 }
 
-
 export async function getFSMDataAndResolveStateValue(
   deps: DBDeps,
-  id: string
-): Promise<{ fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"]; resolved_state_value: unknown } | null> {
+  id: string,
+): Promise<
+  {
+    fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"];
+    resolved_state_value: unknown;
+  } | null
+> {
   // For direct SQL, call the function with the id
   const res = await deps.db.execute(
     `SELECT public.get_fsm_data_resolve_state_value_v2($1) AS result;`,
-    [id]
+    [id],
   );
   if (!res.rows || res.rows.length === 0) return null;
   // The result is in res.rows[0].result as a JSON object
@@ -178,7 +175,7 @@ export async function sendFSMEvent(
   input_event_source: unknown,
   input_delay: number = 0,
   input_event_name?: string,
-  input_fsm_instance_id?: string
+  input_fsm_instance_id?: string,
 ): Promise<{
   event_data: unknown;
   fsm_instance_queue_name: string;
@@ -186,14 +183,27 @@ export async function sendFSMEvent(
   fsm_instance_queue_event_logs_id: string;
 }> {
   if (!input_fsm_instance_id) {
-    throw new Error('input_fsm_instance_id is required');
+    throw new Error("input_fsm_instance_id is required");
   }
   // For direct SQL, use parameterized query for safety
   const res = await deps.db.execute(
     `SELECT * FROM public.send_event_to_queue_with_event_logs_v2($1::jsonb, $2::jsonb, $3::text, $4::integer, $5::uuid);`,
-    [input_msg, input_event_source, input_event_name, input_delay, input_fsm_instance_id]
+    [
+      input_msg,
+      input_event_source,
+      input_event_name,
+      input_delay,
+      input_fsm_instance_id,
+    ],
   );
-  return res.rows?.[0] ?? { event_data: null, fsm_instance_queue_name: '', fsm_instance_queue_msg_id: 0, fsm_instance_queue_event_logs_id: '' };
+  return (
+    res.rows?.[0] ?? {
+      event_data: null,
+      fsm_instance_queue_name: "",
+      fsm_instance_queue_msg_id: 0,
+      fsm_instance_queue_event_logs_id: "",
+    }
+  );
 }
 
 // add fn microstep_v2
@@ -215,7 +225,7 @@ export async function performMicrostep(
   event_name: string,
   state_value_node_set: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<{
   updated_state_value_node_set: string[];
   updated_state_value: unknown;
@@ -227,20 +237,29 @@ export async function performMicrostep(
   // For direct SQL, use parameterized query for safety
   const res = await deps.db.execute(
     `SELECT * FROM public.microstep_v2($1::jsonb, $2::text, $3::jsonb, $4::text, $5::text);`,
-    [, transition_record ?? null, event_name, state_value_node_set, fsm_name, fsm_version]
+    [
+      ,
+      transition_record ?? null,
+      event_name,
+      state_value_node_set,
+      fsm_name,
+      fsm_version,
+    ],
   );
-  return res.rows?.[0] ?? {
-    updated_state_value_node_set: [],
-    updated_state_value: null,
-    exit_actions: null,
-    entry_actions: null,
-    initial_actions: null,
-    transition_actions: null,
-  };
+  return (
+    res.rows?.[0] ?? {
+      updated_state_value_node_set: [],
+      updated_state_value: null,
+      exit_actions: null,
+      entry_actions: null,
+      initial_actions: null,
+      transition_actions: null,
+    }
+  );
 }
 
-// TODO: 
-// add fn with name: selectTransitions that will call select_all_transitions 
+// TODO:
+// add fn with name: selectTransitions that will call select_all_transitions
 /**
  * Fetches all transitions for a given event, FSM name, and version by calling the SQL function select_all_transitions.
  * @param deps - DBDeps for database access
@@ -254,14 +273,12 @@ export async function selectTransitions(
   event_name: string,
   source_state_value_set: unknown,
   fsm_name: string,
-  fsm_version: string
+  fsm_version: string,
 ): Promise<any[]> {
   // For direct SQL, use parameterized query for safety
   const res = await deps.db.execute(
     `SELECT * FROM public.select_all_transitions($1::text, $2::jsonb, $3::text, $4::text);`,
-    [event_name, source_state_value_set, fsm_name, fsm_version]
+    [event_name, source_state_value_set, fsm_name, fsm_version],
   );
   return res.rows ?? [];
 }
-
-
