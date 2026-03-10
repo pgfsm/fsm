@@ -275,20 +275,20 @@ $$ LANGUAGE plpgsql;
 
 
 -- -- initialTransition transition test
-SELECT fsm_core.fsm_worker_v2(
-'initialTransition_event', 
-'{}'::jsonb, 
-'creditCheck', 
-'v2'
-);
+-- SELECT fsm_core.fsm_worker_v2(
+-- 'initialTransition_event', 
+-- '{}'::jsonb, 
+-- 'creditCheck', 
+-- 'v2'
+-- );
 
--- -- -- -- Submit
-SELECT fsm_core.fsm_worker_v2(
-'Submit', 
-'{"creditCheck": "Entering Information"}'::jsonb, 
-'creditCheck', 
-'v3'
-);
+-- -- -- -- -- Submit
+-- SELECT fsm_core.fsm_worker_v2(
+-- 'Submit', 
+-- '{"creditCheck": "Entering Information"}'::jsonb, 
+-- 'creditCheck', 
+-- 'v3'
+-- );
 
 -- -- -- xstate.done.actor.0.(machine).creditCheck.Verifying Credentials
 -- SELECT fsm_core.fsm_worker_v2(
