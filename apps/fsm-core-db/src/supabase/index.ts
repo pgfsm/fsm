@@ -1,5 +1,4 @@
-// Expose all methods from db implementation
-export * from "./db.ts";
+// Expose all methods from supabase implementation
 export * from "./queue.ts";
 export * from "./fsm-helper.ts";
 export * from "./custom-type.ts";
