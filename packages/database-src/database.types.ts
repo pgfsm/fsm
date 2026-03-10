@@ -427,7 +427,7 @@ export type Database = {
       }
       list_queues: {
         Args: Record<PropertyKey, never>
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
       }
       load_fsm_state_from_json_v1: {
         Args: {
@@ -541,7 +541,7 @@ export type Database = {
         Args: {
           queue_name: string
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       purge_queue: {
         Args: {
@@ -555,7 +555,7 @@ export type Database = {
           vt: number
           qty: number
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       remove_hashtag_from_text: {
         Args: {
@@ -667,7 +667,7 @@ export type Database = {
           message_id: number
           vt_offset: number
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       sql_lca_for_transition: {
         Args: {
@@ -727,6 +727,244 @@ export type Database = {
       descendant_states_result_v2: {
         descendant_states_to_enter: string[] | null
         descendant_states_for_default_entry: string[] | null
+      }
+    }
+  }
+  pgmq: {
+    Tables: {
+      meta: {
+        Row: {
+          created_at: string
+          is_partitioned: boolean
+          is_unlogged: boolean
+          queue_name: string
+        }
+        Insert: {
+          created_at?: string
+          is_partitioned: boolean
+          is_unlogged: boolean
+          queue_name: string
+        }
+        Update: {
+          created_at?: string
+          is_partitioned?: boolean
+          is_unlogged?: boolean
+          queue_name?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      _belongs_to_pgmq: {
+        Args: {
+          table_name: string
+        }
+        Returns: boolean
+      }
+      _ensure_pg_partman_installed: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      _get_partition_col: {
+        Args: {
+          partition_interval: string
+        }
+        Returns: string
+      }
+      _get_pg_partman_major_version: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      _get_pg_partman_schema: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      archive:
+        | {
+            Args: {
+              queue_name: string
+              msg_id: number
+            }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              queue_name: string
+              msg_ids: number[]
+            }
+            Returns: number[]
+          }
+      convert_archive_partitioned: {
+        Args: {
+          table_name: string
+          partition_interval?: string
+          retention_interval?: string
+          leading_partition?: number
+        }
+        Returns: undefined
+      }
+      create: {
+        Args: {
+          queue_name: string
+        }
+        Returns: undefined
+      }
+      create_non_partitioned: {
+        Args: {
+          queue_name: string
+        }
+        Returns: undefined
+      }
+      create_partitioned: {
+        Args: {
+          queue_name: string
+          partition_interval?: string
+          retention_interval?: string
+        }
+        Returns: undefined
+      }
+      create_unlogged: {
+        Args: {
+          queue_name: string
+        }
+        Returns: undefined
+      }
+      delete:
+        | {
+            Args: {
+              queue_name: string
+              msg_id: number
+            }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              queue_name: string
+              msg_ids: number[]
+            }
+            Returns: number[]
+          }
+      detach_archive: {
+        Args: {
+          queue_name: string
+        }
+        Returns: undefined
+      }
+      drop_queue: {
+        Args: {
+          queue_name: string
+        }
+        Returns: boolean
+      }
+      format_table_name: {
+        Args: {
+          queue_name: string
+          prefix: string
+        }
+        Returns: string
+      }
+      list_queues: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
+      }
+      metrics: {
+        Args: {
+          queue_name: string
+        }
+        Returns: Database["pgmq"]["CompositeTypes"]["metrics_result"]
+      }
+      metrics_all: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["pgmq"]["CompositeTypes"]["metrics_result"][]
+      }
+      pop: {
+        Args: {
+          queue_name: string
+        }
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
+      }
+      purge_queue: {
+        Args: {
+          queue_name: string
+        }
+        Returns: number
+      }
+      read: {
+        Args: {
+          queue_name: string
+          vt: number
+          qty: number
+        }
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
+      }
+      read_with_poll: {
+        Args: {
+          queue_name: string
+          vt: number
+          qty: number
+          max_poll_seconds?: number
+          poll_interval_ms?: number
+        }
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
+      }
+      send: {
+        Args: {
+          queue_name: string
+          msg: Json
+          delay?: number
+        }
+        Returns: number[]
+      }
+      send_batch: {
+        Args: {
+          queue_name: string
+          msgs: Json[]
+          delay?: number
+        }
+        Returns: number[]
+      }
+      set_vt: {
+        Args: {
+          queue_name: string
+          msg_id: number
+          vt: number
+        }
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
+      }
+      validate_queue_name: {
+        Args: {
+          queue_name: string
+        }
+        Returns: undefined
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      message_record: {
+        msg_id: number | null
+        read_ct: number | null
+        enqueued_at: string | null
+        vt: string | null
+        message: Json | null
+      }
+      metrics_result: {
+        queue_name: string | null
+        queue_length: number | null
+        newest_msg_age_sec: number | null
+        oldest_msg_age_sec: number | null
+        total_messages: number | null
+        scrape_time: string | null
+      }
+      queue_record: {
+        queue_name: string | null
+        is_partitioned: boolean | null
+        is_unlogged: boolean | null
+        created_at: string | null
       }
     }
   }
@@ -800,7 +1038,7 @@ export type Database = {
       }
       list_queues: {
         Args: Record<PropertyKey, never>
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
       }
       lquery_in: {
         Args: {
@@ -920,7 +1158,7 @@ export type Database = {
         Args: {
           queue_name: string
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       purge_queue: {
         Args: {
@@ -934,7 +1172,7 @@ export type Database = {
           vt: number
           qty: number
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       send: {
         Args: {
@@ -950,7 +1188,7 @@ export type Database = {
           message_id: number
           vt_offset: number
         }
-        Returns: unknown[]
+        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       test_event_transition_for_exit_v2: {
         Args: {
