@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+import { isVersionFolderName } from "./util.ts";
 
 
 
@@ -63,13 +64,11 @@ export async function loadFsmJSONFromFolders(
 
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
-            // check if subEntry name matches timestamp pattern YYYYMMDDHHMMSS
-            const timestampPattern = /^\d{14}$/;
-            if (timestampPattern.test(subEntry.name)) {
+            if (isVersionFolderName(subEntry.name)) {
              
               await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
             }else {
-              console.log(`Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`);
+              console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
             }
           }
         }

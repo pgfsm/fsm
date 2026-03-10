@@ -4,6 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
+import { isVersionFolderName } from "./util.ts";
 
 
 // validators.ts
@@ -327,9 +328,7 @@ export async function validateFsmPluginLoadFromFolders(
 
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
-          // check if subEntry name matches timestamp pattern YYYYMMDDHHMMSS
-          const timestampPattern = /^\d{14}$/;
-          if (timestampPattern.test(subEntry.name)) {
+          if (isVersionFolderName(subEntry.name)) {
             const folderResult = await validateFsmPluginLoadFromFolder(
               dirEntry.name,
               subEntry.name,
@@ -350,7 +349,7 @@ export async function validateFsmPluginLoadFromFolders(
             });
           } else {
             console.log(
-              `Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`,
+              `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
             );
           }
         }
