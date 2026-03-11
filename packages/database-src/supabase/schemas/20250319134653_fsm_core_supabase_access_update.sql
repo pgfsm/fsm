@@ -1,0 +1,7 @@
+GRANT USAGE ON SCHEMA fsm_core TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA fsm_core TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA fsm_core TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA fsm_core TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA fsm_core GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA fsm_core GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA fsm_core GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
