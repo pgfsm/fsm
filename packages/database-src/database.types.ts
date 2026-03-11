@@ -9,6 +9,245 @@ export type Json =
 export type Database = {
   fsm_core: {
     Tables: {
+      fsm_instance: {
+        Row: {
+          childrens: Json | null
+          ended_at: string | null
+          fsm_instance_context: Json | null
+          fsm_instance_error: Json | null
+          fsm_instance_output: Json | null
+          fsm_instance_state: Json | null
+          fsm_instance_status: Json | null
+          fsm_instance_xstate_state: Json | null
+          fsm_name: string | null
+          fsm_version: string | null
+          id: string
+          parent: string | null
+          started_at: string | null
+          total_promise_queue_data: Json | null
+          total_schedule_queue_data: Json | null
+        }
+        Insert: {
+          childrens?: Json | null
+          ended_at?: string | null
+          fsm_instance_context?: Json | null
+          fsm_instance_error?: Json | null
+          fsm_instance_output?: Json | null
+          fsm_instance_state?: Json | null
+          fsm_instance_status?: Json | null
+          fsm_instance_xstate_state?: Json | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: string
+          parent?: string | null
+          started_at?: string | null
+          total_promise_queue_data?: Json | null
+          total_schedule_queue_data?: Json | null
+        }
+        Update: {
+          childrens?: Json | null
+          ended_at?: string | null
+          fsm_instance_context?: Json | null
+          fsm_instance_error?: Json | null
+          fsm_instance_output?: Json | null
+          fsm_instance_state?: Json | null
+          fsm_instance_status?: Json | null
+          fsm_instance_xstate_state?: Json | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: string
+          parent?: string | null
+          started_at?: string | null
+          total_promise_queue_data?: Json | null
+          total_schedule_queue_data?: Json | null
+        }
+        Relationships: []
+      }
+      fsm_instance_lock: {
+        Row: {
+          expires_at: string | null
+          fsm_instance_id: string
+          locked: boolean | null
+          locked_at: string | null
+          locked_by: string | null
+        }
+        Insert: {
+          expires_at?: string | null
+          fsm_instance_id: string
+          locked?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+        }
+        Update: {
+          expires_at?: string | null
+          fsm_instance_id?: string
+          locked?: boolean | null
+          locked_at?: string | null
+          locked_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fsm_instance_lock_fsm_instance_id_fkey"
+            columns: ["fsm_instance_id"]
+            isOneToOne: true
+            referencedRelation: "fsm_instance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fsm_instance_queue_event_logs: {
+        Row: {
+          error_message: string | null
+          event_data: Json | null
+          event_duration: number | null
+          event_finished_at: string | null
+          event_name: string | null
+          event_output: Json | null
+          event_source: Json | null
+          event_started_at: string | null
+          event_status: string | null
+          fsm_instance_id: string | null
+          fsm_instance_queue_msg_id: number | null
+          id: string
+        }
+        Insert: {
+          error_message?: string | null
+          event_data?: Json | null
+          event_duration?: number | null
+          event_finished_at?: string | null
+          event_name?: string | null
+          event_output?: Json | null
+          event_source?: Json | null
+          event_started_at?: string | null
+          event_status?: string | null
+          fsm_instance_id?: string | null
+          fsm_instance_queue_msg_id?: number | null
+          id?: string
+        }
+        Update: {
+          error_message?: string | null
+          event_data?: Json | null
+          event_duration?: number | null
+          event_finished_at?: string | null
+          event_name?: string | null
+          event_output?: Json | null
+          event_source?: Json | null
+          event_started_at?: string | null
+          event_status?: string | null
+          fsm_instance_id?: string | null
+          fsm_instance_queue_msg_id?: number | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fsm_instance_queue_event_logs_fsm_instance_id_fkey"
+            columns: ["fsm_instance_id"]
+            isOneToOne: false
+            referencedRelation: "fsm_instance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fsm_instance_transitions_auth: {
+        Row: {
+          fsm_instance_event_type: string | null
+          fsm_instance_id: string | null
+          fsm_name: string | null
+          fsm_version: string | null
+          groups: Json[] | null
+          id: string
+          meta_info: Json | null
+          module_tag: Json | null
+          users: Json[] | null
+        }
+        Insert: {
+          fsm_instance_event_type?: string | null
+          fsm_instance_id?: string | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          groups?: Json[] | null
+          id?: string
+          meta_info?: Json | null
+          module_tag?: Json | null
+          users?: Json[] | null
+        }
+        Update: {
+          fsm_instance_event_type?: string | null
+          fsm_instance_id?: string | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          groups?: Json[] | null
+          id?: string
+          meta_info?: Json | null
+          module_tag?: Json | null
+          users?: Json[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fsm_instance_transitions_auth_fsm_instance_id_fkey"
+            columns: ["fsm_instance_id"]
+            isOneToOne: false
+            referencedRelation: "fsm_instance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fsm_promise_queue_event_logs: {
+        Row: {
+          error_message: string | null
+          event_duration: number | null
+          event_finished_at: string | null
+          event_input: Json | null
+          event_name: string | null
+          event_output: Json | null
+          event_started_at: string | null
+          event_status: string | null
+          id: string
+          promise_queue_msg_id: number | null
+          promise_queue_name: string | null
+          send_to_parent_queue_id: string | null
+          send_to_parent_queue_id_msg_id: string | null
+        }
+        Insert: {
+          error_message?: string | null
+          event_duration?: number | null
+          event_finished_at?: string | null
+          event_input?: Json | null
+          event_name?: string | null
+          event_output?: Json | null
+          event_started_at?: string | null
+          event_status?: string | null
+          id?: string
+          promise_queue_msg_id?: number | null
+          promise_queue_name?: string | null
+          send_to_parent_queue_id?: string | null
+          send_to_parent_queue_id_msg_id?: string | null
+        }
+        Update: {
+          error_message?: string | null
+          event_duration?: number | null
+          event_finished_at?: string | null
+          event_input?: Json | null
+          event_name?: string | null
+          event_output?: Json | null
+          event_started_at?: string | null
+          event_status?: string | null
+          id?: string
+          promise_queue_msg_id?: number | null
+          promise_queue_name?: string | null
+          send_to_parent_queue_id?: string | null
+          send_to_parent_queue_id_msg_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fsm_promise_queue_event_logs_send_to_parent_queue_id_fkey"
+            columns: ["send_to_parent_queue_id"]
+            isOneToOne: false
+            referencedRelation: "fsm_instance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fsm_states: {
         Row: {
           computed_state_id_ltree: unknown
@@ -146,9 +385,46 @@ export type Database = {
             }
             Returns: number[]
           }
+      archive_event_from_fsm_promise_type_worker: {
+        Args: {
+          promise_queue_name: string
+          queue_msg_id: number
+          send_to_parent_queue_id: string
+          send_event_name_to_parent_queue_id: string
+          event_output: Json
+          event_status?: string
+          event_duration?: number
+          event_finished_at?: string
+        }
+        Returns: Json
+      }
+      archive_event_from_fsm_type_worker: {
+        Args: {
+          remove_from_current_fsm_instance_queue_id: string
+          remove_current_queue_msg_id: number
+          to_be_removed_schedule_queue_msg_ids: Json
+          to_be_removed_promise_queue_msg_ids: Json
+          to_be_added_schedule_queue_data: Json
+          to_be_added_promise_queue_data: Json
+          input_total_schedule_queue_data: Json
+          input_total_promise_queue_data: Json
+          fsm_instance_data_save_fsm_status: Json
+          fsm_instance_data_save_fsm_state: Json
+          fsm_instance_data_save_fsm_context: Json
+          fsm_instance_data_save_fsm_xstate_state: Json
+        }
+        Returns: Json
+      }
       build_nested_json_recursive: {
         Args: {
           paths: string[]
+        }
+        Returns: Json
+      }
+      cancel_event_for_fsm_promise_type_worker: {
+        Args: {
+          promise_type_worker_name: string
+          queue_msg_id: number
         }
         Returns: Json
       }
@@ -221,6 +497,14 @@ export type Database = {
           queue_name: string
         }
         Returns: undefined
+      }
+      create_fsm_instance_from_name: {
+        Args: {
+          input_fsm_name: string
+          input_fsm_version: string
+          create_pgmq_queue?: boolean
+        }
+        Returns: Json
       }
       delete:
         | {
@@ -465,6 +749,13 @@ export type Database = {
         }
         Returns: Json
       }
+      lock_fsm_instance: {
+        Args: {
+          p_fsm_instance_id: string
+          p_locked_by: string
+        }
+        Returns: boolean
+      }
       macrostep_v1: {
         Args: {
           event_name: string
@@ -661,6 +952,25 @@ export type Database = {
         }
         Returns: number[]
       }
+      send_event_to_fsm_promise_queue_from_fsm_instance_id: {
+        Args: {
+          event_name: string
+          event_input: Json
+          promise_queue_name: string
+          from_source_fsm_instance_id: string
+        }
+        Returns: Json
+      }
+      send_event_to_queue_with_event_logs_v2: {
+        Args: {
+          input_msg: Json
+          input_event_source: Json
+          input_event_name?: string
+          input_event_delay?: number
+          input_fsm_instance_id?: string
+        }
+        Returns: Json
+      }
       set_vt: {
         Args: {
           queue_name: string
@@ -706,6 +1016,12 @@ export type Database = {
           reconstructed: Json
           paths: string[]
         }[]
+      }
+      unlock_fsm_instance: {
+        Args: {
+          p_fsm_instance_id: string
+        }
+        Returns: boolean
       }
     }
     Enums: {
