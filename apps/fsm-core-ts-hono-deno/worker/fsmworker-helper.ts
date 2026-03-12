@@ -1,0 +1,341 @@
+import type { Database } from "../../../apps/fsm-core-db/src/database.types.ts";
+
+import type { DBDeps } from "../../../apps/fsm-core-db/src/custom-type.ts";
+
+import {
+  performMicrostep,
+  selectTransitions,
+} from "../../../apps/fsm-core-db/src/fsm-helper.ts";
+
+/**
+ * Splits the input array into two arrays based on matching event types.
+ * @param total The source array of objects with an event property.
+ * @param tobeRemoved The array of event type strings to match.
+ * @returns A tuple: [newTotal, removed]
+ */
+export function splitByEventTypes<T extends { event: { type: string } }>(
+  total: T[],
+  tobeRemoved: string[],
+): [T[], T[]] {
+  const newTotal: T[] = [];
+  const removed: T[] = [];
+  for (const item of total) {
+    if (tobeRemoved.includes(item.event.type)) {
+      removed.push(item);
+    } else {
+      newTotal.push(item);
+    }
+  }
+  return [newTotal, removed];
+}
+
+/**
+ * Splits the input array into two arrays based on matching event.send_event_name_to_parent_queue_id.
+ * @param total The source array of objects with an event property.
+ * @param tobeRemoved The array of strings to match against send_event_name_to_parent_queue_id.
+ * @returns A tuple: [newTotal, removed]
+ */
+export function splitBySendEventName<
+  T extends { event: { send_event_name_to_parent_queue_id: string } },
+>(
+  total: T[],
+  tobeRemoved: string[],
+): [T[], T[]] {
+  const newTotal: T[] = [];
+  const removed: T[] = [];
+  for (const item of total) {
+    if (tobeRemoved.includes(item.event.send_event_name_to_parent_queue_id)) {
+      removed.push(item);
+    } else {
+      newTotal.push(item);
+    }
+  }
+  return [newTotal, removed];
+}
+
+// Helper function to process a message for a given queue
+// This function should be pure and reusable for different message processing logic
+//
+// @param deps - DBDeps for database access
+// @param queueName - The name of the queue
+// @param msg - The message object to process
+// @returns Promise<void>
+// Helper: run an action implementation from an actions module.
+export async function runActionImplementation(
+  actionKind: "exit" | "transition" | "entry",
+  action: any,
+  actionsModule: any,
+  current_context: any,
+  meta: { deps: DBDeps; queueName: string; msg: any },
+): Promise<any> {
+  console.log(`Running ${actionKind} action:`, action);
+  try {
+    const actionName = action.type || action.action_type || action.name;
+    if (actionsModule && typeof actionsModule[actionName] === "function") {
+      const result = await actionsModule[actionName](
+        current_context,
+        action.params || {},
+        meta,
+      );
+      if (typeof result !== "undefined") {
+        return result;
+      } else {
+        return current_context;
+      }
+    }
+  } catch (err) {
+    console.error(`Error executing ${actionKind} action implementation:`, err);
+  }
+  return current_context;
+}
+
+// Main function to process a message for a given queue
+export async function macrostep_v2(
+  deps: DBDeps,
+  queueName: string,
+  msg: Database["pgmq"]["CompositeTypes"]["message_record"],
+  fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"],
+  resolved_state_value: unknown,
+  fsm_name: string,
+  fsm_version: number,
+  actionsModule?: any,
+  delayModule?: any,
+): Promise<void> {
+  // Simulate work (replace with real logic)
+  await new Promise<void>((resolve) => setTimeout(resolve, 500));
+
+  const eventData = msg.message as any;
+  const eventType = eventData.type;
+  const eventPayload = { ...eventData };
+
+  const macroSaveFnPayload = {
+    remove_from_current_fsm_instance_queue_id: queueName,
+    remove_current_queue_msg_id: msg.msg_id,
+    remove_schedule_queue_msg_ids: [] as any,
+    remove_promise_queue_msg_ids: [] as any,
+    new_schedule_queue_data: [] as any,
+    new_promise_queue_data: [] as any,
+    total_schedule_queue_data: [] as any,
+    total_promise_queue_data: [] as any,
+    fsm_instance_data_save_fsm_status: {},
+    fsm_instance_data_save_fsm_state: {},
+    fsm_instance_data_save_fsm_context: {},
+    fsm_instance_data_save_fsm_error: {},
+    fsm_instance_data_save_fsm_output: {},
+    fsm_instance_data_save_fsm_xstate_state: {},
+  };
+
+  let nextState = {};
+
+  let current_context = fsm_instance_row?.fsm_instance_context;
+  // pass cuurent_context to all actions and update its value after every action execution
+  let total_schedule_queue_data = fsm_instance_row?.total_schedule_queue_data ||
+    [] as any;
+  let total_promise_queue_data = fsm_instance_row?.total_promise_queue_data ||
+    [] as any;
+
+  let remove_schedule_queue_msg_ids_xstate = [] as any;
+  let remove_promise_queue_msg_ids_xstate = [] as any;
+  let new_schedule_queue_data = [] as any;
+  let new_promise_queue_data = [] as any;
+
+  let selectedTransition;
+  if (eventType === "initialTransition_event") {
+    selectedTransition = null;
+  } else {
+    let allTransitions = await selectTransitions(
+      deps,
+      eventType,
+      resolved_state_value.all_nodes,
+      fsm_name,
+      fsm_version.toString(),
+    );
+    if (!allTransitions || allTransitions.length === 0) {
+      console.error("No transitions found for the given FSM name and version.");
+      // TODO check if eventType is xstate.error.actor  we may want to pust FSM to error state
+      // stateUtils.ts > code 1676 to 1685 for reference on how to handle xstate.error.actor event
+      return;
+    } else if (allTransitions.length === 1) {
+      selectedTransition = allTransitions[0];
+    } else {
+      // iterate through all transitions and check if cond column is string and value is true add it into selectedTransitions
+      let filteredTransitions;
+      // approach 1: evaluate cond column here
+      filteredTransitions = allTransitions.filter((transition) => {
+        if (typeof transition.cond === "string") {
+          return transition.cond === "true";
+        } else if (
+          typeof transition.cond === "object" && transition.cond !== null
+        ) {
+          // if cond type is json object parse it and check it has type key call key function here with rest of arguments
+          const condObj = transition.cond as any;
+          if (condObj.type) {
+            let eval_result = false;
+            // call condition function here with rest of arguments
+            const eval_fn_name = condObj.type;
+            // call eval_fn_name with condObj as argument
+            eval_result = eval_fn_name(condObj);
+            return eval_result;
+          } else {
+            console.error(
+              "Condition object does not have a type key:",
+              condObj,
+            );
+            return false;
+          }
+        } else {
+          console.error(
+            "Condition is neither string nor object:",
+            transition.cond,
+          );
+          return false;
+        }
+      });
+      // approach 2: consider guard is not used in fsm.
+      // filteredTransitions = allTransitions
+
+      if (filteredTransitions.length === 0) {
+        console.error(
+          "No valid transitions found for the given event and state.",
+        );
+        return;
+      } else if (filteredTransitions.length > 1) {
+        console.error(
+          "Multiple valid transitions found for the given event and state. Ambiguous transition.",
+        );
+        return;
+      } else {
+        console.log("Selected Transition:", filteredTransitions[0]);
+        selectedTransition = filteredTransitions[0];
+      }
+    }
+  }
+
+  const microstepResult = await performMicrostep(
+    deps,
+    selectedTransition,
+    eventType,
+    resolved_state_value.all_nodes,
+    fsm_name,
+    fsm_version.toString(),
+  );
+
+  const exit_actions = microstepResult.exit_actions || [];
+  for (const action of exit_actions) {
+    // find actions implementations and execute fn
+    // do comapre based on type or action_type
+    // example  // type === xstate.raise or action_type === raise
+    if (action.type === "xstate.raise") { // TODO: update action_type
+      remove_schedule_queue_msg_ids_xstate.push(action);
+    } else if (action.type === "xstate.invoke") { //
+      // this is equivalent to xstate.stopChild from worker-helper.ts
+      remove_promise_queue_msg_ids_xstate.push(action);
+    } else {
+      // fsm events - try to execute implementation from actionsModule
+      current_context = await runActionImplementation(
+        "exit",
+        action,
+        actionsModule,
+        current_context,
+        { deps, queueName, msg },
+      );
+    }
+  }
+  const transition_actions = microstepResult.transition_actions || [];
+  for (const action of transition_actions) {
+    // find actions implementations and execute fn
+    // action_type === invoke or type === xstate.invoke
+    current_context = await runActionImplementation(
+      "transition",
+      action,
+      actionsModule,
+      current_context,
+      { deps, queueName, msg },
+    );
+  }
+
+  const entry_actions = microstepResult.entry_actions || [];
+  for (const action of entry_actions) {
+    // find actions implementations and execute fn
+    // do comapre based on type or  action_type
+    // example  // type === xstate.raise or action_type === raise
+    if (action.type === "xstate.raise") { //
+      // update macroSaveFnPayload for new schedule queue data
+      const delay = action.params?.delay || 5000000;
+      new_schedule_queue_data.push({
+        ...action,
+        "delay": delay,
+        "type": action.type,
+      });
+    } else if (action.type === "xstate.invoke") {
+      // this is equivalent to xstate.spawnChild from worker-helper.ts
+      new_promise_queue_data.push({ ...action, "type": action.type });
+    } else {
+      // fsm events - try to execute implementation from actionsModule
+      current_context = await runActionImplementation(
+        "entry",
+        action,
+        actionsModule,
+        current_context,
+        { deps, queueName, msg },
+      );
+    }
+  }
+
+  // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
+  remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
+    .filter((item: any) => item !== msg.message?.type);
+
+  // get both removed and new_total_schedule_queue_data
+  // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);
+
+  // macroSaveFnPayload.remove_schedule_queue_msg_ids = remove_schedule_queue_msg_ids;
+  // macroSaveFnPayload.total_schedule_queue_data = new_total_schedule_queue_data;
+  // macroSaveFnPayload.new_schedule_queue_data = new_schedule_queue_data;
+
+  macroSaveFnPayload.remove_schedule_queue_msg_ids =
+    remove_schedule_queue_msg_ids_xstate;
+  macroSaveFnPayload.new_schedule_queue_data = new_schedule_queue_data;
+  macroSaveFnPayload.total_schedule_queue_data = total_schedule_queue_data;
+
+  // cancle ivnoke of previous state's children ( PATCH )
+  // const [new_total_promise_queue_data, remove_promise_queue_msg_ids] =  splitBySendEventName(total_promise_queue_data, remove_promise_queue_msg_ids_xstate);
+
+  // // remove current promise event from total_promise_queue_data if it is executing xstate.done.actor or xstate.error.actor events
+  // let removeEventName;
+  // removeEventName = eventType.replace("xstate.done.actor.", "");
+  // removeEventName = removeEventName.replace("xstate.error.actor.", "");
+  // const update_new_total_promise_queue_data = new_total_promise_queue_data.filter((item)=> item.event.send_event_name_to_parent_queue_id !== removeEventName);
+
+  // macroSaveFnPayload.remove_promise_queue_msg_ids = remove_promise_queue_msg_ids;
+  // macroSaveFnPayload.total_promise_queue_data = update_new_total_promise_queue_data;
+  // macroSaveFnPayload.new_promise_queue_data = new_promise_queue_data;
+
+  macroSaveFnPayload.remove_promise_queue_msg_ids =
+    remove_promise_queue_msg_ids_xstate;
+  macroSaveFnPayload.new_promise_queue_data = new_promise_queue_data;
+  macroSaveFnPayload.total_promise_queue_data = total_promise_queue_data;
+
+  macroSaveFnPayload.fsm_instance_data_save_fsm_context = nextState?.context ||
+    {};
+
+  // BUG fixed microstepResult.updated_state_value will return json value with 'machine' as root key of object.
+  // while in xstate it will return state value without 'machine' as root key of object.
+  // example: microstepResult.updated_state_value = { machine: { creditCheck: 'Verifying_Credentials' } }
+  // while xstate nextState.value = { creditCheck: 'Verifying_Credentials' }
+  // so while returing state value from microstepResult we need to remove 'machine' root key to make it compatible with xstate state value.
+  macroSaveFnPayload.fsm_instance_data_save_fsm_state = microstepResult
+    .updated_state_value?.machine;
+
+  macroSaveFnPayload.fsm_instance_data_save_fsm_status = "active"; // "active" | "done" | "error" | "stopped"
+  macroSaveFnPayload.fsm_instance_data_save_fsm_error = nextState?.error;
+  macroSaveFnPayload.fsm_instance_data_save_fsm_output = nextState?.output;
+
+  macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state = nextState;
+
+  macroSaveFnPayload.exit_actions = exit_actions;
+  macroSaveFnPayload.transition_actions = transition_actions;
+  macroSaveFnPayload.entry_actions = entry_actions;
+
+  return macroSaveFnPayload;
+}
