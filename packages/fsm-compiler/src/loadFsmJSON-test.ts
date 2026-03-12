@@ -1,6 +1,9 @@
 import dotenv from "dotenv";
 import { loadFsmJSONFromFolders } from './loadFsmJSON.ts';
 import { createClient } from "@supabase/supabase-js";
+import {
+  pool as db,
+} from "../../../apps/fsm-core-db/src/pg-client.ts";
 
 dotenv.config({ path: "./../../.env" });
 
@@ -31,8 +34,17 @@ dotenv.config({ path: "./../../.env" });
   }
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  await loadFsmJSONFromFolders(sharedFSMfolderPath, "sharedFSM");
-  await loadFsmJSONFromFolders(fsmfolderPath, "fsm");
+  const deps = {
+    db: db,
+    useSupabase: false,
+    supabase: supabase,
+  };
+
+  const skipSharedFSMDirs = ["vitalsWorkflow"];
+  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+
+  const outputSharedFSM = await loadFsmJSONFromFolders(sharedFSMfolderPath, "sharedfsm", skipSharedFSMDirs, deps);
+  const outputFSM = await loadFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs, deps);
   console.log("✅ All workflows inserted successfully");
 })();
 
