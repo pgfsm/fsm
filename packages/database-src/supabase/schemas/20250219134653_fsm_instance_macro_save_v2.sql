@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION fsm_core.cancel_event_for_fsm_promise_type_worker(
+CREATE OR REPLACE FUNCTION fsm_core.cancel_event_for_fsm_promise_type_worker_v2(
     promise_type_worker_name text,
     queue_msg_id bigint
 ) 
@@ -10,7 +10,8 @@ DECLARE
 BEGIN
    --  1. Remove queue_msg_id from the promise_type_worker_name queue using PGMQ
    -- IF promise_type_worker_name IS NOT NULL AND promise_type_worker_name <> '' AND queue_msg_id IS NOT NULL THEN
-       archive_result := pgmq.archive(queue_name := promise_type_worker_name, message_id := queue_msg_id);
+    
+       archive_result := pgmq.archive(queue_name := promise_type_worker_name, msg_id := queue_msg_id);
    -- ELSE
    --    archive_result := false;
    -- END IF;
@@ -48,10 +49,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- SELECT fsm_core.cancel_event_for_fsm_promise_type_worker('verifyCredentials', 1::BIGINT);
+-- SELECT fsm_core.cancel_event_for_fsm_promise_type_worker_v2('verifyCredentials', 1::BIGINT);
 
  -- single spanChild
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id(
+CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
     event_name text, 
     event_input jsonb,
     promise_queue_name text,
@@ -66,6 +67,7 @@ BEGIN
     -- 1. If queue name is present, ensure queue exists (meta check could be added)
     IF NOT queue_exists THEN
         -- IF promise_queue_name IS NOT NULL AND promise_queue_name <> '' THEN
+            -- PERFORM fsm_core.create(queue_name := promise_queue_name);
             PERFORM pgmq.create(queue_name := promise_queue_name);
             start_promise_worker := true;
         -- END IF;
@@ -122,7 +124,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- select fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id(
+-- select fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
 --     'verifyCredentials',
 --     jsonb_build_object('userId', '123'),
 --     'verifyCredentials',
@@ -168,9 +170,9 @@ $$ LANGUAGE plpgsql;
 -- ]
 
 
--- DROP FUNCTION  if EXISTS fsm_core.archive_event_from_fsm_type_worker;
+-- DROP FUNCTION  if EXISTS fsm_core.archive_event_from_fsm_type_worker_v2;
 -- macro save fn
-CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker(
+CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(
   remove_from_current_fsm_instance_queue_id text, 
   remove_current_queue_msg_id bigint,
   to_be_removed_schedule_queue_msg_ids jsonb,
@@ -347,7 +349,7 @@ BEGIN
             
             
             -- IF remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' AND schedule_queue_message->>'type' IS NOT NULL AND schedule_queue_message->>'type' <> '' THEN
-                PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, message_id := (schedule_queue_entry->>'type')::bigint);
+                PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := (schedule_queue_entry->>'type')::bigint);
                 confirmed_removed_schedule_queue_data_success := array_append(confirmed_removed_schedule_queue_data_success, schedule_queue_entry);
             -- END IF;
         END LOOP;
@@ -395,7 +397,7 @@ BEGIN
         FOR i IN 0 .. jsonb_array_length(to_be_added_promise_queue_data)-1 LOOP
             to_be_added_promise_queue_data_entry := to_be_added_promise_queue_data->i;
             -- IF (to_be_added_promise_queue_data_entry->>'src') IS NOT NULL AND (to_be_added_promise_queue_data_entry->>'src') <> '' THEN
-                output_promise_result := fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id(
+                output_promise_result := fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
                     to_be_added_promise_queue_data_entry->>'id', -- type can be also used here 
                     to_be_added_promise_queue_data_entry->'input',
                     to_be_added_promise_queue_data_entry->>'src',
@@ -411,7 +413,7 @@ BEGIN
     END IF;
 
     -- 7. Update fsm_instance (pseudo-code, adjust as needed)
-    UPDATE fsm_instance
+    UPDATE fsm_core.fsm_instance
     SET
         total_schedule_queue_data = new_total_schedule_queue_data,
         total_promise_queue_data = new_total_promise_queue_data,
@@ -422,7 +424,7 @@ BEGIN
     WHERE id = remove_from_current_fsm_instance_queue_id::uuid;
 
     -- 8. All above macro steps are completed so remove current queue_msg_id from current_workflow_queue_id  
-    PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, message_id := remove_current_queue_msg_id::bigint);
+    PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id::bigint);
 
 
     RETURN jsonb_build_object(

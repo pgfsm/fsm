@@ -374,18 +374,18 @@ export type Database = {
         | {
             Args: {
               queue_name: string
-              message_id: number
+              msg_id: number
             }
             Returns: boolean
           }
         | {
             Args: {
               queue_name: string
-              message_ids: number[]
+              msg_ids: number[]
             }
             Returns: number[]
           }
-      archive_event_from_fsm_promise_type_worker: {
+      archive_event_from_fsm_promise_type_worker_v2: {
         Args: {
           promise_queue_name: string
           queue_msg_id: number
@@ -398,7 +398,7 @@ export type Database = {
         }
         Returns: Json
       }
-      archive_event_from_fsm_type_worker: {
+      archive_event_from_fsm_type_worker_v2: {
         Args: {
           remove_from_current_fsm_instance_queue_id: string
           remove_current_queue_msg_id: number
@@ -421,7 +421,7 @@ export type Database = {
         }
         Returns: Json
       }
-      cancel_event_for_fsm_promise_type_worker: {
+      cancel_event_for_fsm_promise_type_worker_v2: {
         Args: {
           promise_type_worker_name: string
           queue_msg_id: number
@@ -498,7 +498,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      create_fsm_instance_from_name: {
+      create_fsm_instance_from_name_v2: {
         Args: {
           input_fsm_name: string
           input_fsm_version: string
@@ -510,14 +510,14 @@ export type Database = {
         | {
             Args: {
               queue_name: string
-              message_id: number
+              msg_id: number
             }
             Returns: boolean
           }
         | {
             Args: {
               queue_name: string
-              message_ids: number[]
+              msg_ids: number[]
             }
             Returns: number[]
           }
@@ -656,6 +656,12 @@ export type Database = {
           p_state_paths: string[]
           p_fsm_name: string
           p_fsm_version: string
+        }
+        Returns: Json
+      }
+      get_fsm_data_resolve_state_value_v2: {
+        Args: {
+          input_fsm_id: string
         }
         Returns: Json
       }
@@ -952,7 +958,7 @@ export type Database = {
         }
         Returns: number[]
       }
-      send_event_to_fsm_promise_queue_from_fsm_instance_id: {
+      send_event_to_fsm_promise_queue_from_fsm_instance_id_v2: {
         Args: {
           event_name: string
           event_input: Json
@@ -974,7 +980,7 @@ export type Database = {
       set_vt: {
         Args: {
           queue_name: string
-          message_id: number
+          msg_id: number
           vt_offset: number
         }
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]

@@ -34,8 +34,8 @@ BEGIN
         RAISE EXCEPTION 'Failed to send event to queue %', fsm_instance_queue_name;
     END IF;
 
-    -- Insert into fsm_instance_queue_event_logs and get id
-    INSERT INTO fsm_instance_queue_event_logs (
+    -- Insert into fsm_core.fsm_instance_queue_event_logs and get id
+    INSERT INTO fsm_core.fsm_instance_queue_event_logs (
         fsm_instance_id,
         event_name,
         event_data,
@@ -69,11 +69,11 @@ $$ LANGUAGE plpgsql;
 
 
 
--- Function: fsm_core.create_fsm_instance_from_name
+-- Function: fsm_core.create_fsm_instance_from_name_v2
 -- Purpose: Given a fsm_name, create a fsm_instance and related fsm_instance_transitions_auth entries from the latest fsm_transitions and its auths.
 
 
-CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name(
+CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(
     input_fsm_name text,
     input_fsm_version TEXT,
     create_pgmq_queue boolean DEFAULT false
@@ -99,7 +99,7 @@ BEGIN
     VALUES (input_fsm_name, input_fsm_version)
     RETURNING id INTO fsm_instance_id;
 
-    -- 3. Insert all transitions into fsm_instance_transitions_auth
+    -- 3. Insert all transitions into fsm_core.fsm_instance_transitions_auth
     INSERT INTO fsm_core.fsm_instance_transitions_auth (
         fsm_name, fsm_version, fsm_instance_id, fsm_instance_event_type, users, groups, module_tag, meta_info
     )

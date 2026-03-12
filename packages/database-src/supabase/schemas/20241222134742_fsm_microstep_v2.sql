@@ -26,7 +26,7 @@ DECLARE
 	exit_actions JSONB;
 	entry_actions JSONB;
 	initial_actions JSONB;
-	result JSONB;
+	result_json JSONB;
 BEGIN
 	RAISE NOTICE 'fsm_core.microstep_v2 called with event_name=%, fsm_name=%, fsm_version=%', event_name, fsm_name_param, fsm_version_param;
 	
@@ -76,7 +76,7 @@ BEGIN
 	RAISE NOTICE 'updated_state_nodes_jsonb: %', updated_state_nodes_jsonb;
 
 	-- 5. Return result as JSONB
-	result := jsonb_build_object(
+	result_json := jsonb_build_object(
 		'updated_state_value_node_set', updated_state_nodes,
 		'updated_state_value', updated_state_nodes_jsonb,
 		'exit_actions', exit_result->'exit_actions',
@@ -84,7 +84,7 @@ BEGIN
 		'initial_actions', entry_result->'initial_actions_for_common_states',
 		'transition_actions', transition_actions
 	);
-	RAISE NOTICE 'fsm_core.microstep_v2 result: %', result;
-	RETURN result;
+	RAISE NOTICE 'fsm_core.microstep_v2 result: %', result_json;
+	RETURN result_json;
 END;
 $$ LANGUAGE plpgsql;

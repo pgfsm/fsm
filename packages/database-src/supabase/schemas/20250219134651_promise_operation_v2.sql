@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_promise_type_worker(
+CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_promise_type_worker_v2(
     promise_queue_name text,
     queue_msg_id bigint,
     send_to_parent_queue_id uuid,
@@ -18,7 +18,7 @@ send_to_parent_queue_id_output_msg_id bigint;
 send_to_parent_queue_id_event_output jsonb;
 BEGIN
     -- 1. Remove event from queue
-    promise_archive_result := pgmq.archive(queue_name := promise_queue_name, message_id := queue_msg_id);
+    promise_archive_result := pgmq.archive(queue_name := promise_queue_name, msg_id := queue_msg_id);
 
     -- for now pushing into parent queue and assuming it will be empty so it event will be first in queue ( on top of queue)
     -- send_to_parent_queue_id_event_output := event_output
@@ -89,7 +89,7 @@ $$ LANGUAGE plpgsql;
 
 
 
--- SELECT pgmq.archive_event_from_fsm_promise_type_worker(
+-- SELECT pgmq.archive_event_from_fsm_promise_type_worker_v2(
 --   'verifyCredentials',
 --   1,
 --   'd88bbbf6-1083-4ec8-8e53-a8add4f69e72',
