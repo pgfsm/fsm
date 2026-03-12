@@ -1,0 +1,7 @@
+{
+  "workspace": [
+    "apps/fsm-core-db",
+    "apps/fsm-core-ts-hono-deno",
+    "packages/fsm-compiler"
+  ]
+}
