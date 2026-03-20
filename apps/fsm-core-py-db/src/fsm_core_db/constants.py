@@ -1,0 +1,3 @@
+FSM_SCHEMA = "fsm_core"
+FSM_SCHEMA_FN_VERSION = "v2"
+QUEUE_SCHEMA = "pgmq"
