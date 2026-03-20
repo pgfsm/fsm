@@ -9,6 +9,24 @@ export type Json =
 export type Database = {
   fsm_core: {
     Tables: {
+      config_store: {
+        Row: {
+          config_name: string | null
+          config_value: Json
+          config_version: number
+        }
+        Insert: {
+          config_name?: string | null
+          config_value: Json
+          config_version?: never
+        }
+        Update: {
+          config_name?: string | null
+          config_value?: Json
+          config_version?: never
+        }
+        Relationships: []
+      }
       fsm_instance: {
         Row: {
           childrens: Json | null
@@ -191,6 +209,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fsm_json: {
+        Row: {
+          fsm_json: Json | null
+          fsm_name: string | null
+          fsm_version: string | null
+          id: number
+        }
+        Insert: {
+          fsm_json?: Json | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: number
+        }
+        Update: {
+          fsm_json?: Json | null
+          fsm_name?: string | null
+          fsm_version?: string | null
+          id?: number
+        }
+        Relationships: []
       }
       fsm_promise_queue_event_logs: {
         Row: {
@@ -701,6 +740,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      json_matches_schema: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: boolean
+      }
       jsonb_all_paths: {
         Args: {
           j: Json
@@ -715,9 +761,38 @@ export type Database = {
         }
         Returns: Json
       }
+      jsonb_matches_schema: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: boolean
+      }
+      jsonschema_is_valid: {
+        Args: {
+          schema: Json
+        }
+        Returns: boolean
+      }
+      jsonschema_validation_errors: {
+        Args: {
+          schema: Json
+          instance: Json
+        }
+        Returns: string[]
+      }
       list_queues: {
         Args: Record<PropertyKey, never>
         Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
+      }
+      load_fsm_from_json_v2: {
+        Args: {
+          json_input: Json
+          root_node_text: string
+          input_fsm_name: string
+          input_fsm_version: string
+        }
+        Returns: Json
       }
       load_fsm_state_from_json_v1: {
         Args: {

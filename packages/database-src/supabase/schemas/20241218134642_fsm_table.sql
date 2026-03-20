@@ -1,3 +1,14 @@
+
+
+CREATE TABLE fsm_core.fsm_json (
+    id SERIAL PRIMARY KEY,
+    fsm_name TEXT,
+    fsm_version TEXT,
+    fsm_json JSON
+);
+
+
+
 -- FSM state table
 -- DROP TABLE IF EXISTS fsm_core.fsm_transitions CASCADE;
 -- DROP TABLE IF EXISTS fsm_core.fsm_states CASCADE;

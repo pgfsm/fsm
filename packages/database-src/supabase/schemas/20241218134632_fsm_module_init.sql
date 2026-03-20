@@ -20,4 +20,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- note pg_jsonschema EXTENSION need schmea so using fsm_core and creating EXTENSION here
+CREATE EXTENSION IF NOT EXISTS pg_jsonschema WITH SCHEMA fsm_core VERSION '0.3.3';
+
 
