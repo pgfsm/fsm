@@ -1,11 +1,15 @@
+from pathlib import Path
 from typing import Literal, Optional
 from pydantic import AnyHttpUrl, AnyUrl, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Root .env is 4 levels up from this file (apps/fsm-core-py-fastapi/app/config.py)
+_ROOT_ENV = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ROOT_ENV),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
