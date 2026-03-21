@@ -5,8 +5,8 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - fsm-core-db/src/fsm-instance (createFSMInstanceFromName, sendFSMEvent)
- *   - fsm-core-db/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
+ *   - fsm-core-db-ts/src/fsm-instance (createFSMInstanceFromName, sendFSMEvent)
+ *   - fsm-core-db-ts/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
  *   - worker/fsmworker (startFSMWorker)
  *   - middlewares/supabase (getSupabase)
  */
@@ -26,12 +26,12 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("../../../fsm-core-db/src/fsm-instance.ts", () => ({
+vi.mock("../../../fsm-core-db-ts/src/fsm-instance.ts", () => ({
   createFSMInstanceFromName: vi.fn(),
   sendFSMEvent: vi.fn(),
 }));
 
-vi.mock("../../../fsm-core-db/src/fsm-instance-lock.ts", () => ({
+vi.mock("../../../fsm-core-db-ts/src/fsm-instance-lock.ts", () => ({
   tryFSMDBLock: vi.fn().mockResolvedValue(true),
   releaseFSMDBLock: vi.fn(),
 }));

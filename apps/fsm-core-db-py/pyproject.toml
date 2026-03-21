@@ -1,7 +1,7 @@
 [project]
 name = "fsm-core-py-db"
 version = "0.1.0"
-description = "Python PostgreSQL client for FSM Core — mirrors fsm-core-db"
+description = "Python PostgreSQL client for FSM Core — mirrors fsm-core-db-ts"
 requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.29.0",

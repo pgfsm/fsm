@@ -5,7 +5,7 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - fsm-core-db/src/queue (pgmqQueueExists)
+ *   - fsm-core-db-ts/src/queue (pgmqQueueExists)
  *   - worker/fsmpromiseworker (startFSMPromiseWorker)
  *   - middlewares/supabase (getSupabase)
  *
@@ -28,7 +28,7 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("../../../fsm-core-db/src/queue.ts", () => ({
+vi.mock("../../../fsm-core-db-ts/src/queue.ts", () => ({
   pgmqQueueExists: vi.fn(),
 }));
 

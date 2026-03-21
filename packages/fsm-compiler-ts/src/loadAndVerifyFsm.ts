@@ -1,5 +1,5 @@
 import { isVersionFolderName } from "./util.ts";
-import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db/src/fsm-helper.ts";
+import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 
 export interface FsmLoadResult {

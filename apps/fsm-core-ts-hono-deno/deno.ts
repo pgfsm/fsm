@@ -1,6 +1,6 @@
 import app from "./app.ts";
 import env from "./env.ts";
-// import { pool  } from "../fsm-core-db/src/pg-client.ts";
+// import { pool  } from "../fsm-core-db-ts/src/pg-client.ts";
 
 // app.route("/", (c) => {
 //   return c.json({ message: "Hello World" });

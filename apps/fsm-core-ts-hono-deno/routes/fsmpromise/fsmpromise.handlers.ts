@@ -4,7 +4,7 @@ import * as HttpStatusPhrases from "stoker/http-status-phrases.ts";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
 
-// import { pool as db } from "../../../fsm-core-db/src/pg-client.ts";
+// import { pool as db } from "../../../fsm-core-db-ts/src/pg-client.ts";
 
 import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 
