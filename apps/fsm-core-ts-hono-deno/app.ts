@@ -8,6 +8,15 @@ const FSM_EXAMPLE_FOLDER = new URL(
   "../fsm-core-example/fsm",
   import.meta.url,
 ).pathname;
+const FSM_WORKFLOW_TYPE = "fsm" as const;
+const FSM_SKIP_DIRS: string[] = [];
+const FSM_SHARED_EXAMPLE_FOLDER = new URL(
+  "../fsm-core-example/sharedFSM",
+  import.meta.url,
+).pathname;
+const FSM_SHARED_WORKFLOW_TYPE = "sharedfsm" as const;
+const FSM_SHARED_SKIP_DIRS: string[] = [];
+
 
 const host = new Hono();
 
@@ -18,7 +27,12 @@ const pool = new Pool({
 
 const urlPathPrefix = "/embedded"; // Adjust this if your FSM router is mounted at a different path
 // Build the FSM router; pass createFsmApp so FSMs are loaded + verified on startup
-const fsmRouter = createApp(pool, urlPathPrefix, createFsmApp(FSM_EXAMPLE_FOLDER));
+const fsmRouter = createApp(
+  pool,
+  urlPathPrefix,
+  createFsmApp(FSM_EXAMPLE_FOLDER, FSM_WORKFLOW_TYPE, FSM_SKIP_DIRS),
+  createFsmApp(FSM_SHARED_EXAMPLE_FOLDER, FSM_SHARED_WORKFLOW_TYPE, FSM_SHARED_SKIP_DIRS),
+);
 
 // Mount it wherever you need
 host.route(urlPathPrefix, fsmRouter);

@@ -238,7 +238,7 @@ export async function validateFsmPluginLoadFromFolder(
   let actions: string[] = [];
   let guards: string[] = [];
   let delays: string[] = [];
-  let actors: string[] = [];
+  let actors: any[] = [];
 
   try {
     await Deno.stat(fsmJson);

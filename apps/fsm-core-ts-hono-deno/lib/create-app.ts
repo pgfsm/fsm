@@ -35,6 +35,7 @@ export default function createApp(
   pool?: Pool,
   basePath = "",
   createFsmApp?: (deps: { db: Pool }) => Promise<unknown>,
+  createSharedFsmApp?: (deps: { db: Pool }) => Promise<unknown>,
 ) {
   const app = createRouter();
 
@@ -51,12 +52,19 @@ export default function createApp(
     console.error("Database error event:", err);
   });
 
-  if (createFsmApp && pool) {
-    pool.connect().then((client) => {
+  if ((createFsmApp || createSharedFsmApp) && pool) {
+    pool.connect().then(async (client) => {
       client.release();
-      createFsmApp({ db: pool }).catch((err) => {
-        console.error("createFsmApp startup error:", err);
-      });
+      if (createFsmApp) {
+        await createFsmApp({ db: pool }).catch((err) => {
+          console.error("createFsmApp startup error:", err);
+        });
+      }
+      if (createSharedFsmApp) {
+        await createSharedFsmApp({ db: pool }).catch((err) => {
+          console.error("createSharedFsmApp startup error:", err);
+        });
+      }
     }).catch((err) => {
       console.error("Pool connect error during FSM startup:", err);
     });
