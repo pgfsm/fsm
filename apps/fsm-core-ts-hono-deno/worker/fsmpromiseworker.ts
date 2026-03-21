@@ -1,10 +1,10 @@
-import type { Database } from "../../../apps/fsm-core-db/src/database.types.ts";
+import type { Database } from "../../fsm-core-db-ts/src/database.types.ts";
 
-import type { DBDeps } from "../../../apps/fsm-core-db/src/custom-type.ts";
+import type { DBDeps } from "../../fsm-core-db-ts/src/custom-type.ts";
 
 import {
   readMessage,
-} from "../../../apps/fsm-core-db/src/queue.ts";
+} from "../../fsm-core-db-ts/src/queue.ts";
 
 import { processFSMPromiseQueueMessage } from "./fsmpromiseworker-helper.ts";
 

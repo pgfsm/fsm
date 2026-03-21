@@ -36,7 +36,7 @@ vi.mock("../../worker/fsmpromiseworker.ts", () => ({
   startFSMPromiseWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { pgmqQueueExists } from "../../../fsm-core-db/src/queue.ts";
+import { pgmqQueueExists } from "../../../fsm-core-db-ts/src/queue.ts";
 import { startFSMPromiseWorker } from "../../worker/fsmpromiseworker.ts";
 import { createRouter } from "../../lib/create-app.ts";
 import { activePromiseLocks } from "./fsmpromise.handlers.ts";

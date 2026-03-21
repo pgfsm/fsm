@@ -43,8 +43,8 @@ vi.mock("../../worker/fsmworker.ts", () => ({
   startFSMWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { isFSMInstancePresent } from "../../../fsm-core-db/src/fsm-instance.ts";
-import { tryFSMDBLock } from "../../../fsm-core-db/src/fsm-instance-lock.ts";
+import { isFSMInstancePresent } from "../../../fsm-core-db-ts/src/fsm-instance.ts";
+import { tryFSMDBLock } from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
 import { createRouter } from "../../lib/create-app.ts";
 // activeFSMLocks is shared between fsm and fsmworker handlers
 import { activeFSMLocks } from "../fsm/fsm.handlers.ts";

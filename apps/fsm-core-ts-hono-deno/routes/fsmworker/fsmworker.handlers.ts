@@ -14,8 +14,8 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 import {
   releaseFSMDBLock,
   tryFSMDBLock,
-} from "../../../fsm-core-db/src/fsm-instance-lock.ts";
-import { isFSMInstancePresent } from "../../../fsm-core-db/src/fsm-instance.ts";
+} from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
+import { isFSMInstancePresent } from "../../../fsm-core-db-ts/src/fsm-instance.ts";
 
 import { startFSMWorker } from "../../worker/fsmworker.ts";
 

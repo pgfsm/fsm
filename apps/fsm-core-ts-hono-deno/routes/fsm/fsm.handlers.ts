@@ -13,16 +13,16 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { startFSMWorker } from "../../worker/fsmworker.ts";
 
-import type { Database } from "../../../fsm-core-db/src/database.types.ts";
-import { DBDeps } from "../../../fsm-core-db/src/custom-type.ts";
+import type { Database } from "../../../fsm-core-db-ts/src/database.types.ts";
+import { DBDeps } from "../../../fsm-core-db-ts/src/custom-type.ts";
 import {
   releaseFSMDBLock,
   tryFSMDBLock,
-} from "../../../fsm-core-db/src/fsm-instance-lock.ts";
+} from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
 import {
   createFSMInstanceFromName,
   sendFSMEvent,
-} from "../../../fsm-core-db/src/fsm-instance.ts";
+} from "../../../fsm-core-db-ts/src/fsm-instance.ts";
 
 export const activeFSMLocks: Record<string, boolean> = {};
 

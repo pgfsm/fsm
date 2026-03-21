@@ -42,8 +42,9 @@ Built with `pgrx` — see the package README for build instructions.
 ```
 apps/
   fsm-core-ts-hono-deno/   # Main REST API (Hono + Deno)
-  fsm-core-db-drizzle/     # Drizzle ORM database helpers
-  fsm-core-db/             # Raw pg client helpers
+  fsm-core-db-ts/          # Raw pg client helpers (TypeScript)
+  fsm-core-db-py/          # Raw pg client helpers (Python)
+  fsm-core-db-drizzle/     # [IGNORE] Drizzle ORM experiment for fsm-core-db-ts — not used for active work
   fsm-core-example/        # Example FSM definitions (credit check, car vitals, etc.)
 packages/
   database-src/            # PostgreSQL migrations + Supabase config
@@ -63,7 +64,7 @@ packages/
 - `stoker-src/` — OpenAPI helper utilities
 
 ### Database Layer
-- Drizzle ORM for type-safe queries
+> Note: `fsm-core-db-drizzle` is a Drizzle ORM experiment for `fsm-core-db-ts` — ignore it for all work.
 - `fsm-instance.ts` — create instances, manage state, archive events
 - `fsm-helper.ts` — load states/transitions from JSON, DB queries
 - `fsm-instance-lock.ts` — advisory lock concurrency control
@@ -77,7 +78,7 @@ FSMs are versioned JSON files in `apps/fsm-core-example/fsm/`. Each FSM folder (
 
 ### Key Dependencies
 - **Hono** with `@hono/zod-openapi` — REST framework + type-safe routes
-- **Drizzle ORM 0.45.1** — database access
+- **Drizzle ORM 0.45.1** — database access (only in `fsm-core-db-drizzle`, which is ignored)
 - **XState 5** — FSM definition format
 - **Zod** — runtime validation
 - **pgmq** — PostgreSQL message queue (for worker execution model)

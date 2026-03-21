@@ -43,8 +43,8 @@ vi.mock("../../worker/fsmworker.ts", () => ({
 import {
   createFSMInstanceFromName,
   sendFSMEvent,
-} from "../../../fsm-core-db/src/fsm-instance.ts";
-import { tryFSMDBLock } from "../../../fsm-core-db/src/fsm-instance-lock.ts";
+} from "../../../fsm-core-db-ts/src/fsm-instance.ts";
+import { tryFSMDBLock } from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeFSMLocks } from "./fsm.handlers.ts";
 import router from "./fsm.index.ts";
