@@ -11,6 +11,7 @@ MICROSTEP_FN = f"{FSM_SCHEMA}.microstep_{_V}"
 SELECT_TRANSITIONS_FN = f"{FSM_SCHEMA}.select_all_transitions_{_V}"
 LOAD_FSM_STATE_FN = f"{FSM_SCHEMA}.load_fsm_state_from_json_{_V}"
 LOAD_FSM_TRANSITION_FN = f"{FSM_SCHEMA}.load_fsm_transition_from_json_{_V}"
+LOAD_FSM_FROM_JSON_FN = f"{FSM_SCHEMA}.load_fsm_from_json_{_V}"
 RESOLVE_STATE_VALUE_FN = f"{FSM_SCHEMA}.resolve_state_value_{_V}"
 
 
@@ -96,6 +97,29 @@ async def load_fsm_transition_from_json(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(sql, fsm_name, fsm_version, to_jsonb_param(transition_json))
     return dict(row) if row else None
+
+
+async def load_fsm_from_json_v2(
+    pool: asyncpg.Pool,
+    fsm_name: str,
+    fsm_version: str,
+    fsm_json: Any,
+    root_node_text: Optional[str] = None,
+) -> Optional[dict]:
+    """Calls fsm_core.load_fsm_from_json_v2 — orchestrates state + transition load with schema validation and caching."""
+    sql = f"""
+        SELECT {LOAD_FSM_FROM_JSON_FN}(
+            $1::jsonb, $2::text, $3::text, $4::text
+        ) AS result;
+    """
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            sql, to_jsonb_param(fsm_json), root_node_text, fsm_name, fsm_version
+        )
+    if row and row["result"] is not None:
+        result = row["result"]
+        return dict(result) if hasattr(result, "keys") else result
+    return None
 
 
 async def resolve_state_value(

@@ -7,6 +7,7 @@ from .fsm_helper import (
     perform_microstep,
     load_fsm_state_from_json,
     load_fsm_transition_from_json,
+    load_fsm_from_json_v2,
     resolve_state_value,
 )
 from .fsm_instance import (
@@ -38,6 +39,7 @@ __all__ = [
     "perform_microstep",
     "load_fsm_state_from_json",
     "load_fsm_transition_from_json",
+    "load_fsm_from_json_v2",
     "resolve_state_value",
     # fsm_instance
     "is_fsm_instance_present",

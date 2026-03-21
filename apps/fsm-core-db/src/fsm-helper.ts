@@ -85,6 +85,32 @@ export async function loadFsmTransitionFromJsonV2(
   }
 }
 
+export async function loadFsmFromJsonV2(
+  deps: DBDeps,
+  json_input: unknown,
+  root_node_text: string | null,
+  fsm_name: string,
+  fsm_version: string,
+): Promise<unknown> {
+  try {
+    const LOAD_FSM_FROM_JSON_FN = `${FSM_SCHEMA}.load_fsm_from_json_${FSM_SCHEMA_FN_VERSION}`;
+    const text = `
+      SELECT ${LOAD_FSM_FROM_JSON_FN}(
+        $1::jsonb,
+        $2::text,
+        $3::text,
+        $4::text
+      ) AS result;
+    `;
+    const values = [toJsonbParam(json_input), root_node_text, fsm_name, fsm_version];
+    const res = await deps.db.query<{ result: unknown }>(text, values);
+    return res.rows?.[0]?.result ?? null;
+  } catch (err) {
+    console.error("Error in loadFsmFromJsonV2:", err);
+    throw new Error("Failed to load FSM from JSON", { cause: err });
+  }
+}
+
 /**
  * Resolves state value for a given input JSON, FSM name, and FSM version.
  * Calls resolve_state_value_v2 SQL function and returns the result.

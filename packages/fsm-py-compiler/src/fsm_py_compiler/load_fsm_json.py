@@ -21,7 +21,7 @@ from typing import Optional
 
 import asyncpg
 
-from fsm_core_db import load_fsm_state_from_json, load_fsm_transition_from_json
+from fsm_core_db import load_fsm_from_json_v2
 
 from .util import is_version_folder_name
 
@@ -119,32 +119,22 @@ async def _load_single(
 
     root_node_text = fsm_data.get("key") or fsm_data.get("id") or fsm_name
 
-    state_ok = False
-    transition_ok = False
+    load_ok = False
     error: Optional[str] = None
 
     try:
-        await load_fsm_state_from_json(pool, fsm_name, fsm_version, fsm_data)
-        state_ok = True
-        logger.info(f"{label}: states loaded")
+        await load_fsm_from_json_v2(pool, fsm_name, fsm_version, fsm_data, root_node_text)
+        load_ok = True
+        logger.info(f"{label}: states and transitions loaded")
     except Exception as exc:
-        error = f"state load failed: {exc}"
+        error = f"load failed: {exc}"
         logger.error(f"{label}: {error}")
-
-    if state_ok:
-        try:
-            await load_fsm_transition_from_json(pool, fsm_name, fsm_version, fsm_data)
-            transition_ok = True
-            logger.info(f"{label}: transitions loaded")
-        except Exception as exc:
-            error = f"transition load failed: {exc}"
-            logger.error(f"{label}: {error}")
 
     return LoadResult(
         fsm_name=fsm_name,
         fsm_version=fsm_version,
         fsm_json_path=str(fsm_json_path),
-        state_load_ok=state_ok,
-        transition_load_ok=transition_ok,
+        state_load_ok=load_ok,
+        transition_load_ok=load_ok,
         error=error,
     )

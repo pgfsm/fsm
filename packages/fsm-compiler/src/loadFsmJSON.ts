@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import { isVersionFolderName } from "./util.ts";
-import { loadFsmStateFromJsonV2, loadFsmTransitionFromJsonV2 } from "../../../apps/fsm-core-db/src/fsm-helper.ts";
+import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db/src/fsm-helper.ts";
 
 
 async function loadFsmJSONFromFolder(
@@ -24,8 +24,7 @@ async function loadFsmJSONFromFolder(
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
     const rootNodeText = null;
-    const fsmStateResult = await loadFsmStateFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion);
-    const fsmTransitionResult = await loadFsmTransitionFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion);
+    const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion);
     
     
     
