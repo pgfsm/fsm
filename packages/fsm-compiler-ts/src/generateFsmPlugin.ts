@@ -193,7 +193,7 @@ async function generateFsmPluginFromFolder(
 
     // 2. Call fn to generate folders/files for each language
     await generateLanguageFolders(absFolderPath, 'typescript', actions, guards, delays, actors);
-    await generateLanguageFolders(absFolderPath, 'python', actions, guards, delays, actors);
+    // await generateLanguageFolders(absFolderPath, 'python', actions, guards, delays, actors);
 
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
