@@ -30,10 +30,7 @@ async function _loadAndVerifyFolder(
     const ok: boolean = result?.ok === true;
     const cached: boolean = result?.cached === true;
 
-    if (!ok) {
-      console.warn(`${label}: ~ loaded but not verified — result: ${JSON.stringify(result)}`);
-      return { fsmName, fsmVersion, ok, cached, pluginVerified: false };
-    }
+    
 
     // DB load succeeded — now validate plugin modules
     const pluginResult = await validateFsmPluginLoadFromFolder(

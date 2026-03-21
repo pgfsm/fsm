@@ -294,7 +294,7 @@ export async function validateFsmPluginLoadFromFolder(
 export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
-   skipDirs: string[] = []
+  skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -344,6 +344,9 @@ export async function validateFsmPluginLoadFromFolders(
             const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  (actor));
             allFolderResults.push({
               folder: `${dirEntry.name}/${subEntry.name}`,
+              fsmName: dirEntry.name,
+              fsmVersion: subEntry.name,
+              fsmType: workflow_type,
               result: folderResult,
               dependentActors: dependentActors,
             });
@@ -358,16 +361,26 @@ export async function validateFsmPluginLoadFromFolders(
   }
   console.log("All folder validation results:", allFolderResults);
   // iterate over allFolderResults and check if dependentActors has any src that is not present as a folder in allFolderResults. If so, log an error with the missing dependency and the folder that requires it.
-  const allFolders = allFolderResults.map(r => r.folder);
+  const allFolders = allFolderResults.map(r => ({
+    folder: r.folder,
+    fsmName: r.fsmName,
+    fsmVersion: r.fsmVersion,
+    fsmType: r.fsmType,
+  }));
   for (const folderResult of allFolderResults) {
     for (const dependency of folderResult.dependentActors) {
       // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string }
-      // Construct the expected folder path from dependency
-      const expectedFolderPath = dependency.fsmVersion 
-        ? `${dependency.src}/${dependency.fsmVersion}`
-        : dependency.src;
+      // Check if any folder object matches the dependency
+      const isDependencyFound = allFolders.some(folderObj => 
+        folderObj.fsmName === dependency.src &&
+        (folderObj.fsmVersion === dependency.fsmVersion) &&
+        (folderObj.fsmType === dependency.fsmType)
+      );
       
-      if (!allFolders.includes(expectedFolderPath)) {
+      if (!isDependencyFound) {
+        const expectedFolderPath = dependency.fsmVersion 
+          ? `${dependency.src}/${dependency.fsmVersion}`
+          : dependency.src;
         console.error(
           `Missing dependency: ${expectedFolderPath} required by ${folderResult.folder}`,
         );
