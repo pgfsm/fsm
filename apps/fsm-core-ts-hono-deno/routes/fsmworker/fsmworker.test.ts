@@ -1,215 +1,189 @@
 /* eslint-disable ts/ban-ts-comment */
+/**
+ * Tests for /fsmworker routes.
+ * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
+ * and NODE_ENV=test in .env.
+ *
+ * Mocked dependencies:
+ *   - fsm-core-db/src/fsm-instance (isFSMInstancePresent)
+ *   - fsm-core-db/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
+ *   - worker/fsmworker (startFSMWorker)
+ *   - middlewares/supabase (getSupabase)
+ *   - routes/fsm/fsm.handlers (activeFSMLocks — shared module-level state)
+ *
+ * Note: fsmworker.handlers imports activeFSMLocks from fsm.handlers to check
+ * for duplicate workers. Tests reset this state in beforeEach.
+ */
 import { testClient } from "hono/testing";
-import { execSync } from "node:child_process";
-import fs from "node:fs";
-import * as HttpStatusPhrases from "stoker/http-status-phrases";
 import {
-  afterAll,
-  beforeAll,
+  beforeEach,
   describe,
   expect,
-  expectTypeOf,
   it,
+  vi,
 } from "vitest";
-import { ZodIssueCode } from "zod";
 
-import env from "@/env";
-import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "@/lib/constants";
-import { createTestApp } from "@/lib/create-app";
+vi.mock("../../middlewares/supabase.ts", () => ({
+  getSupabase: vi.fn(() => null),
+  supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
+}));
 
-import router from "./fsmworker.index";
+vi.mock("../../../fsm-core-db/src/fsm-instance.ts", () => ({
+  isFSMInstancePresent: vi.fn(),
+  createFSMInstanceFromName: vi.fn(),
+  sendFSMEvent: vi.fn(),
+}));
 
-if (env.NODE_ENV !== "test") {
-  throw new Error("NODE_ENV must be 'test'");
+vi.mock("../../../fsm-core-db/src/fsm-instance-lock.ts", () => ({
+  tryFSMDBLock: vi.fn().mockResolvedValue(true),
+  releaseFSMDBLock: vi.fn(),
+}));
+
+vi.mock("../../worker/fsmworker.ts", () => ({
+  startFSMWorker: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { isFSMInstancePresent } from "../../../fsm-core-db/src/fsm-instance.ts";
+import { tryFSMDBLock } from "../../../fsm-core-db/src/fsm-instance-lock.ts";
+import { createRouter } from "../../lib/create-app.ts";
+// activeFSMLocks is shared between fsm and fsmworker handlers
+import { activeFSMLocks } from "../fsm/fsm.handlers.ts";
+import router from "./fsmworker.index.ts";
+
+function makeTestApp() {
+  const app = createRouter();
+  app.use("*", (c, next) => {
+    c.set("db", {} as never);
+    return next();
+  });
+  app.route("/", router);
+  return app;
 }
 
-const client = testClient(createTestApp(router));
+const client = testClient(makeTestApp());
 
-describe("fsmworker routes", () => {
-  beforeAll(async () => {
-    execSync("pnpm drizzle-kit push");
+// ─── GET /fsmworker ──────────────────────────────────────────────────────────
+
+describe("GET /fsmworker", () => {
+  beforeEach(() => {
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
   });
 
-  afterAll(async () => {
-    fs.rmSync("test.db", { force: true });
+  it("returns 200 with an empty data object when no workers are active", async () => {
+    const res = await client.fsmworker.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toHaveProperty("data");
+    expect(json.data).toEqual({});
   });
 
-  it("post /fsmworker validates the body when creating", async () => {
-    const response = await client.fsmworker.$post({
-      // @ts-expect-error
-      json: {
-        done: false,
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.REQUIRED);
-    }
+  it("reflects locks set via the shared activeFSMLocks object", async () => {
+    activeFSMLocks["some-queue-id"] = true;
+    const res = await client.fsmworker.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveProperty("some-queue-id", true);
+  });
+});
+
+// ─── POST /fsmworker ─────────────────────────────────────────────────────────
+
+describe("POST /fsmworker", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
   });
 
-  const id = 1;
-  const name = "Learn vitest";
-
-  it("post /fsmworker creates a task", async () => {
-    const response = await client.fsmworker.$post({
-      json: {
-        name,
-        done: false,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("get /fsmworker lists all fsmworker", async () => {
-    const response = await client.fsmworker.$get();
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expectTypeOf(json).toBeArray();
-      expect(json.length).toBe(1);
-    }
-  });
-
-  it("get /fsmworker/{id} validates the id param", async () => {
-    const response = await client.fsmworker[":id"].$get({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
-  });
-
-  it("get /fsmworker/{id} returns 404 when task not found", async () => {
-    const response = await client.fsmworker[":id"].$get({
-      param: {
-        id: 999,
-      },
-    });
-    expect(response.status).toBe(404);
-    if (response.status === 404) {
-      const json = await response.json();
-      expect(json.message).toBe(HttpStatusPhrases.NOT_FOUND);
-    }
-  });
-
-  it("get /fsmworker/{id} gets a single task", async () => {
-    const response = await client.fsmworker[":id"].$get({
-      param: {
-        id,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("patch /fsmworker/{id} validates the body when updating", async () => {
-    const response = await client.fsmworker[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {
-        name: "",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].code).toBe(ZodIssueCode.too_small);
-    }
-  });
-
-  it("patch /fsmworker/{id} validates the id param", async () => {
-    const response = await client.fsmworker[":id"].$patch({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
+  it("returns 422 when queue field is missing", async () => {
+    const res = await client.fsmworker.$post({
+      // @ts-expect-error — intentionally omitting required field
       json: {},
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("queue");
   });
 
-  it("patch /fsmworker/{id} validates empty body", async () => {
-    const response = await client.fsmworker[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {},
+  it("returns 500 with 'Invalid queue id' when the queue is not a known FSM instance", async () => {
+    vi.mocked(isFSMInstancePresent).mockResolvedValueOnce(null);
+
+    const res = await client.fsmworker.$post({
+      json: { queue: "unknown-instance-id" },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].code).toBe(ZOD_ERROR_CODES.INVALID_UPDATES);
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.NO_UPDATES);
-    }
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Invalid queue id");
   });
 
-  it("patch /fsmworker/{id} updates a single property of a task", async () => {
-    const response = await client.fsmworker[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {
-        done: true,
-      },
+  it("returns 500 when a worker for that queue is already in activeFSMLocks", async () => {
+    const queueId = "uuid-already-running";
+    activeFSMLocks[queueId] = true;
+
+    // isFSMInstancePresent would pass, but lock check should short-circuit
+    vi.mocked(isFSMInstancePresent).mockResolvedValueOnce({
+      fsm_instance_id: queueId,
+      fsm_name: "credit_check",
+      fsm_version: "v01",
+    } as never);
+
+    const res = await client.fsmworker.$post({
+      json: { queue: queueId },
     });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.done).toBe(true);
-    }
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("fsmworker already running");
   });
 
-  it("delete /fsmworker/{id} validates the id when deleting", async () => {
-    const response = await client.fsmworker[":id"].$delete({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
+  it("returns 500 when tryFSMDBLock returns false (lock already held elsewhere)", async () => {
+    const queueId = "uuid-lock-taken";
+    vi.mocked(isFSMInstancePresent).mockResolvedValueOnce({
+      fsm_instance_id: queueId,
+      fsm_name: "credit_check",
+      fsm_version: "v01",
+    } as never);
+    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(false);
+
+    const res = await client.fsmworker.$post({
+      json: { queue: queueId },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("fsmworker already running");
   });
 
-  it("delete /fsmworker/{id} removes a task", async () => {
-    const response = await client.fsmworker[":id"].$delete({
-      param: {
-        id,
-      },
+  it("returns 200 and registers the lock when worker starts successfully", async () => {
+    const queueId = "uuid-new-worker";
+    const mockFsmInstance = {
+      fsm_instance_id: queueId,
+      fsm_name: "credit_check",
+      fsm_version: "v01",
+    };
+    vi.mocked(isFSMInstancePresent).mockResolvedValueOnce(
+      mockFsmInstance as never,
+    );
+    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(true);
+
+    const res = await client.fsmworker.$post({
+      json: { queue: queueId },
     });
-    expect(response.status).toBe(204);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Handler returns {} on success
+    expect(json).toEqual({});
+    // Lock should be registered
+    expect(activeFSMLocks[queueId]).toBe(true);
+  });
+
+  it("returns 500 with 'Unexpected error' when isFSMInstancePresent throws", async () => {
+    vi.mocked(isFSMInstancePresent).mockRejectedValueOnce(
+      new Error("DB timeout"),
+    );
+
+    const res = await client.fsmworker.$post({
+      json: { queue: "some-queue-id" },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Unexpected error");
   });
 });

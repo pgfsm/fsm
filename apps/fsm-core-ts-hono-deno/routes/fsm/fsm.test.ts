@@ -1,215 +1,266 @@
 /* eslint-disable ts/ban-ts-comment */
+/**
+ * Tests for /fsm routes.
+ * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
+ * and NODE_ENV=test in .env.
+ *
+ * Mocked dependencies:
+ *   - fsm-core-db/src/fsm-instance (createFSMInstanceFromName, sendFSMEvent)
+ *   - fsm-core-db/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
+ *   - worker/fsmworker (startFSMWorker)
+ *   - middlewares/supabase (getSupabase)
+ */
 import { testClient } from "hono/testing";
-import { execSync } from "node:child_process";
-import fs from "node:fs";
-import * as HttpStatusPhrases from "stoker/http-status-phrases";
 import {
-  afterAll,
-  beforeAll,
+  afterEach,
+  beforeEach,
   describe,
   expect,
-  expectTypeOf,
   it,
+  vi,
 } from "vitest";
-import { ZodIssueCode } from "zod";
 
-import env from "@/env";
-import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "@/lib/constants";
-import { createTestApp } from "@/lib/create-app";
+// Module-level mocks must be declared before any imports that trigger them.
+vi.mock("../../middlewares/supabase.ts", () => ({
+  getSupabase: vi.fn(() => null),
+  supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
+}));
 
-import router from "./fsm.index";
+vi.mock("../../../fsm-core-db/src/fsm-instance.ts", () => ({
+  createFSMInstanceFromName: vi.fn(),
+  sendFSMEvent: vi.fn(),
+}));
 
-if (env.NODE_ENV !== "test") {
-  throw new Error("NODE_ENV must be 'test'");
+vi.mock("../../../fsm-core-db/src/fsm-instance-lock.ts", () => ({
+  tryFSMDBLock: vi.fn().mockResolvedValue(true),
+  releaseFSMDBLock: vi.fn(),
+}));
+
+vi.mock("../../worker/fsmworker.ts", () => ({
+  startFSMWorker: vi.fn().mockResolvedValue(undefined),
+}));
+
+import {
+  createFSMInstanceFromName,
+  sendFSMEvent,
+} from "../../../fsm-core-db/src/fsm-instance.ts";
+import { tryFSMDBLock } from "../../../fsm-core-db/src/fsm-instance-lock.ts";
+import { createRouter } from "../../lib/create-app.ts";
+import { activeFSMLocks } from "./fsm.handlers.ts";
+import router from "./fsm.index.ts";
+
+/** Minimal Hono app that injects a mock db into context. */
+function makeTestApp() {
+  const app = createRouter();
+  app.use("*", (c, next) => {
+    c.set("db", {} as never);
+    return next();
+  });
+  app.route("/", router);
+  return app;
 }
 
-const client = testClient(createTestApp(router));
+const client = testClient(makeTestApp());
 
-describe("fsm routes", () => {
-  beforeAll(async () => {
-    execSync("pnpm drizzle-kit push");
+// ─── GET /fsm ────────────────────────────────────────────────────────────────
+
+describe("GET /fsm", () => {
+  beforeEach(() => {
+    // Reset shared lock state before each test.
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
   });
 
-  afterAll(async () => {
-    fs.rmSync("test.db", { force: true });
+  it("returns 200 with an empty data object when no workers are active", async () => {
+    const res = await client.fsm.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toHaveProperty("data");
+    expect(json.data).toEqual({});
   });
 
-  it("post /fsm validates the body when creating", async () => {
-    const response = await client.fsm.$post({
+  it("reflects active locks that were added externally", async () => {
+    activeFSMLocks["test-instance-id"] = true;
+    const res = await client.fsm.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveProperty("test-instance-id", true);
+  });
+});
+
+// ─── POST /fsm ───────────────────────────────────────────────────────────────
+
+describe("POST /fsm", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+  });
+
+  it("returns 422 when fsm_name is missing", async () => {
+    const res = await client.fsm.$post({
+      // @ts-expect-error — intentionally omitting required field
+      json: { fsm_version: "v01" },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("fsm_name");
+  });
+
+  it("returns 422 when fsm_version is missing", async () => {
+    const res = await client.fsm.$post({
+      // @ts-expect-error — intentionally omitting required field
+      json: { fsm_name: "credit_check" },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("fsm_version");
+  });
+
+  it("returns 422 when body is empty", async () => {
+    const res = await client.fsm.$post({
       // @ts-expect-error
-      json: {
-        done: false,
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.REQUIRED);
-    }
-  });
-
-  const id = 1;
-  const name = "Learn vitest";
-
-  it("post /fsm creates a task", async () => {
-    const response = await client.fsm.$post({
-      json: {
-        name,
-        done: false,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("get /fsm lists all fsm", async () => {
-    const response = await client.fsm.$get();
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expectTypeOf(json).toBeArray();
-      expect(json.length).toBe(1);
-    }
-  });
-
-  it("get /fsm/{id} validates the id param", async () => {
-    const response = await client.fsm[":id"].$get({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
-  });
-
-  it("get /fsm/{id} returns 404 when task not found", async () => {
-    const response = await client.fsm[":id"].$get({
-      param: {
-        id: 999,
-      },
-    });
-    expect(response.status).toBe(404);
-    if (response.status === 404) {
-      const json = await response.json();
-      expect(json.message).toBe(HttpStatusPhrases.NOT_FOUND);
-    }
-  });
-
-  it("get /fsm/{id} gets a single task", async () => {
-    const response = await client.fsm[":id"].$get({
-      param: {
-        id,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("patch /fsm/{id} validates the body when updating", async () => {
-    const response = await client.fsm[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {
-        name: "",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].code).toBe(ZodIssueCode.too_small);
-    }
-  });
-
-  it("patch /fsm/{id} validates the id param", async () => {
-    const response = await client.fsm[":id"].$patch({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
       json: {},
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(422);
   });
 
-  it("patch /fsm/{id} validates empty body", async () => {
-    const response = await client.fsm[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {},
+  it("returns 200 with fsm instance data on successful creation", async () => {
+    const mockInstance = {
+      fsm_instance_id: "uuid-abc-123",
+      fsm_name: "credit_check",
+      fsm_version: "v01",
+    };
+    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
+    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(true);
+
+    const res = await client.fsm.$post({
+      json: { fsm_name: "credit_check", fsm_version: "v01" },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].code).toBe(ZOD_ERROR_CODES.INVALID_UPDATES);
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.NO_UPDATES);
-    }
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject(mockInstance);
   });
 
-  it("patch /fsm/{id} updates a single property of a task", async () => {
-    const response = await client.fsm[":id"].$patch({
-      param: {
-        id,
-      },
+  it("returns 500 when createFSMInstanceFromName returns null (creation failed)", async () => {
+    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(null);
+
+    const res = await client.fsm.$post({
+      json: { fsm_name: "credit_check", fsm_version: "v01" },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json).toHaveProperty("error", "fsm instance creation failed");
+  });
+
+  it("returns 500 when createFSMInstanceFromName returns an object without fsm_instance_id", async () => {
+    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce({} as never);
+
+    const res = await client.fsm.$post({
+      json: { fsm_name: "credit_check", fsm_version: "v01" },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json).toHaveProperty("error");
+  });
+
+  it("returns 500 with 'Unexpected error' when an exception is thrown", async () => {
+    vi.mocked(createFSMInstanceFromName).mockRejectedValueOnce(
+      new Error("DB connection failed"),
+    );
+
+    const res = await client.fsm.$post({
+      json: { fsm_name: "credit_check", fsm_version: "v01" },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Unexpected error");
+  });
+
+  it("does not add to activeFSMLocks when lock acquisition fails", async () => {
+    const mockInstance = { fsm_instance_id: "uuid-lock-fail", fsm_version: "v01" };
+    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
+    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(false);
+
+    await client.fsm.$post({
+      json: { fsm_name: "credit_check", fsm_version: "v01" },
+    });
+    // Worker should NOT be registered in active locks when lock fails
+    expect(activeFSMLocks["uuid-lock-fail"]).toBeUndefined();
+  });
+});
+
+// ─── POST /fsm/send ──────────────────────────────────────────────────────────
+
+describe("POST /fsm/send", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 422 when fsm_instance_id is missing", async () => {
+    const res = await client.fsm.send.$post({
+      // @ts-expect-error
+      json: { event_data: { type: "START" } },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("fsm_instance_id");
+  });
+
+  it("returns 422 when event_data is missing", async () => {
+    const res = await client.fsm.send.$post({
+      // @ts-expect-error
+      json: { fsm_instance_id: "uuid-abc-123" },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("event_data");
+  });
+
+  it("returns 422 when event_data.type is missing", async () => {
+    const res = await client.fsm.send.$post({
+      // @ts-expect-error
+      json: { fsm_instance_id: "uuid-abc-123", event_data: {} },
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it("returns 200 with data on successful event send", async () => {
+    const mockResult = { msg_id: "42" };
+    vi.mocked(sendFSMEvent).mockResolvedValueOnce(mockResult);
+
+    const res = await client.fsm.send.$post({
       json: {
-        done: true,
+        fsm_instance_id: "uuid-abc-123",
+        event_data: { type: "START" },
       },
     });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.done).toBe(true);
-    }
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toMatchObject(mockResult);
   });
 
-  it("delete /fsm/{id} validates the id when deleting", async () => {
-    const response = await client.fsm[":id"].$delete({
-      param: {
-        // @ts-expect-error
-        id: "wat",
+  it("accepts extra fields in event_data (passthrough schema)", async () => {
+    vi.mocked(sendFSMEvent).mockResolvedValueOnce({ msg_id: "1" });
+
+    const res = await client.fsm.send.$post({
+      json: {
+        fsm_instance_id: "uuid-abc-123",
+        event_data: { type: "APPROVE", payload: { amount: 5000 }, source: "api" },
       },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(200);
   });
 
-  it("delete /fsm/{id} removes a task", async () => {
-    const response = await client.fsm[":id"].$delete({
-      param: {
-        id,
+  it("returns 500 with 'Unexpected error' when sendFSMEvent throws", async () => {
+    vi.mocked(sendFSMEvent).mockRejectedValueOnce(new Error("queue error"));
+
+    const res = await client.fsm.send.$post({
+      json: {
+        fsm_instance_id: "uuid-abc-123",
+        event_data: { type: "START" },
       },
     });
-    expect(response.status).toBe(204);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Unexpected error");
   });
 });

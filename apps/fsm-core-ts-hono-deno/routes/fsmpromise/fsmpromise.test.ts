@@ -1,215 +1,157 @@
 /* eslint-disable ts/ban-ts-comment */
+/**
+ * Tests for /fsmpromise routes.
+ * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
+ * and NODE_ENV=test in .env.
+ *
+ * Mocked dependencies:
+ *   - fsm-core-db/src/queue (pgmqQueueExists)
+ *   - worker/fsmpromiseworker (startFSMPromiseWorker)
+ *   - middlewares/supabase (getSupabase)
+ *
+ * Note on handler behaviour:
+ *   - When PGMQ queue is missing → returns 200 with { error: "PGMQ queue does not exist" }
+ *     (not 404/500 — intentional design choice in the handler).
+ *   - When queue exists → returns 200 with success message and starts worker async.
+ */
 import { testClient } from "hono/testing";
-import { execSync } from "node:child_process";
-import fs from "node:fs";
-import * as HttpStatusPhrases from "stoker/http-status-phrases";
 import {
-  afterAll,
-  beforeAll,
+  beforeEach,
   describe,
   expect,
-  expectTypeOf,
   it,
+  vi,
 } from "vitest";
-import { ZodIssueCode } from "zod";
 
-import env from "@/env";
-import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "@/lib/constants";
-import { createTestApp } from "@/lib/create-app";
+vi.mock("../../middlewares/supabase.ts", () => ({
+  getSupabase: vi.fn(() => null),
+  supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
+}));
 
-import router from "./promise.index";
+vi.mock("../../../fsm-core-db/src/queue.ts", () => ({
+  pgmqQueueExists: vi.fn(),
+}));
 
-if (env.NODE_ENV !== "test") {
-  throw new Error("NODE_ENV must be 'test'");
+vi.mock("../../worker/fsmpromiseworker.ts", () => ({
+  startFSMPromiseWorker: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { pgmqQueueExists } from "../../../fsm-core-db/src/queue.ts";
+import { startFSMPromiseWorker } from "../../worker/fsmpromiseworker.ts";
+import { createRouter } from "../../lib/create-app.ts";
+import { activePromiseLocks } from "./fsmpromise.handlers.ts";
+import router from "./fsmpromise.index.ts";
+
+function makeTestApp() {
+  const app = createRouter();
+  app.use("*", (c, next) => {
+    c.set("db", {} as never);
+    return next();
+  });
+  app.route("/", router);
+  return app;
 }
 
-const client = testClient(createTestApp(router));
+const client = testClient(makeTestApp());
 
-describe("promise routes", () => {
-  beforeAll(async () => {
-    execSync("pnpm drizzle-kit push");
+// ─── GET /fsmpromise ─────────────────────────────────────────────────────────
+
+describe("GET /fsmpromise", () => {
+  beforeEach(() => {
+    Object.keys(activePromiseLocks).forEach((k) => delete activePromiseLocks[k]);
   });
 
-  afterAll(async () => {
-    fs.rmSync("test.db", { force: true });
+  it("returns 200 with an empty data object when no promise workers are active", async () => {
+    const res = await client.fsmpromise.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toHaveProperty("data");
+    expect(json.data).toEqual({});
+  });
+});
+
+// ─── POST /fsmpromise ────────────────────────────────────────────────────────
+
+describe("POST /fsmpromise", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(activePromiseLocks).forEach((k) => delete activePromiseLocks[k]);
   });
 
-  it("post /promise validates the body when creating", async () => {
-    const response = await client.promise.$post({
+  it("returns 422 when promise_name is missing", async () => {
+    const res = await client.fsmpromise.$post({
+      // @ts-expect-error — intentionally omitting required field
+      json: { promise_version: "v01" },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("promise_name");
+  });
+
+  it("returns 422 when promise_version is missing", async () => {
+    const res = await client.fsmpromise.$post({
+      // @ts-expect-error — intentionally omitting required field
+      json: { promise_name: "credit_promise" },
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("promise_version");
+  });
+
+  it("returns 422 when body is empty", async () => {
+    const res = await client.fsmpromise.$post({
       // @ts-expect-error
-      json: {
-        done: false,
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.REQUIRED);
-    }
-  });
-
-  const id = 1;
-  const name = "Learn vitest";
-
-  it("post /promise creates a task", async () => {
-    const response = await client.promise.$post({
-      json: {
-        name,
-        done: false,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("get /promise lists all promise", async () => {
-    const response = await client.promise.$get();
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expectTypeOf(json).toBeArray();
-      expect(json.length).toBe(1);
-    }
-  });
-
-  it("get /promise/{id} validates the id param", async () => {
-    const response = await client.promise[":id"].$get({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
-  });
-
-  it("get /promise/{id} returns 404 when task not found", async () => {
-    const response = await client.promise[":id"].$get({
-      param: {
-        id: 999,
-      },
-    });
-    expect(response.status).toBe(404);
-    if (response.status === 404) {
-      const json = await response.json();
-      expect(json.message).toBe(HttpStatusPhrases.NOT_FOUND);
-    }
-  });
-
-  it("get /promise/{id} gets a single task", async () => {
-    const response = await client.promise[":id"].$get({
-      param: {
-        id,
-      },
-    });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.name).toBe(name);
-      expect(json.done).toBe(false);
-    }
-  });
-
-  it("patch /promise/{id} validates the body when updating", async () => {
-    const response = await client.promise[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {
-        name: "",
-      },
-    });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("name");
-      expect(json.error.issues[0].code).toBe(ZodIssueCode.too_small);
-    }
-  });
-
-  it("patch /promise/{id} validates the id param", async () => {
-    const response = await client.promise[":id"].$patch({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
       json: {},
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(422);
   });
 
-  it("patch /promise/{id} validates empty body", async () => {
-    const response = await client.promise[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {},
+  it("returns 200 with error message when PGMQ queue does not exist (handler design)", async () => {
+    // Note: handler intentionally returns HTTP 200 even when the queue is missing.
+    vi.mocked(pgmqQueueExists).mockResolvedValueOnce(false);
+
+    const res = await client.fsmpromise.$post({
+      json: { promise_name: "credit_promise", promise_version: "v01" },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].code).toBe(ZOD_ERROR_CODES.INVALID_UPDATES);
-      expect(json.error.issues[0].message).toBe(ZOD_ERROR_MESSAGES.NO_UPDATES);
-    }
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.error).toBe("PGMQ queue does not exist");
   });
 
-  it("patch /promise/{id} updates a single property of a task", async () => {
-    const response = await client.promise[":id"].$patch({
-      param: {
-        id,
-      },
-      json: {
-        done: true,
-      },
+  it("does not start a worker when PGMQ queue does not exist", async () => {
+    vi.mocked(pgmqQueueExists).mockResolvedValueOnce(false);
+
+    await client.fsmpromise.$post({
+      json: { promise_name: "credit_promise", promise_version: "v01" },
     });
-    expect(response.status).toBe(200);
-    if (response.status === 200) {
-      const json = await response.json();
-      expect(json.done).toBe(true);
-    }
+    expect(startFSMPromiseWorker).not.toHaveBeenCalled();
   });
 
-  it("delete /promise/{id} validates the id when deleting", async () => {
-    const response = await client.promise[":id"].$delete({
-      param: {
-        // @ts-expect-error
-        id: "wat",
-      },
+  it("returns 200 with success data and starts worker when queue exists", async () => {
+    vi.mocked(pgmqQueueExists).mockResolvedValueOnce(true);
+
+    const res = await client.fsmpromise.$post({
+      json: { promise_name: "credit_promise", promise_version: "v01" },
     });
-    expect(response.status).toBe(422);
-    if (response.status === 422) {
-      const json = await response.json();
-      expect(json.error.issues[0].path[0]).toBe("id");
-      expect(json.error.issues[0].message).toBe(
-        ZOD_ERROR_MESSAGES.EXPECTED_NUMBER,
-      );
-    }
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toContain("credit_promise");
+    expect(startFSMPromiseWorker).toHaveBeenCalledWith(
+      expect.any(Object),      // deps
+      "credit_promise",
+      "credit_promise",
+      "v01",
+    );
   });
 
-  it("delete /promise/{id} removes a task", async () => {
-    const response = await client.promise[":id"].$delete({
-      param: {
-        id,
-      },
+  it("returns 500 with 'Unexpected error' when pgmqQueueExists throws", async () => {
+    vi.mocked(pgmqQueueExists).mockRejectedValueOnce(new Error("DB error"));
+
+    const res = await client.fsmpromise.$post({
+      json: { promise_name: "credit_promise", promise_version: "v01" },
     });
-    expect(response.status).toBe(204);
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Unexpected error");
   });
 });
