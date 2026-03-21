@@ -31,6 +31,7 @@
         "cursor-workspace": false
     },
     "github.copilot.chat.codeGeneration.useInstructionFiles": true,
-    "pgsql.copilot.enable": true
+    "pgsql.copilot.enable": true,
+    "claudeCode.useTerminal": true
 
 }
