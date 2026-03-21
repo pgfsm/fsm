@@ -161,7 +161,7 @@
               "type": "xstate.invoke",
               "id": "0.(machine).creditCheck.Verifying Credentials",
               "fsmType": "promise",
-              "fsmVersion": "20250102030405"
+              "fsmVersion": "v01"
             }
           ],
           "tags": []
@@ -285,7 +285,7 @@
                       "id": "equiGavinDBActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -387,7 +387,7 @@
                       "id": "equiGavinFetchActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -528,7 +528,7 @@
                       "id": "gavUnionDBActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -630,7 +630,7 @@
                       "id": "gavUnionFetchActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -771,7 +771,7 @@
                       "id": "gavperianCheckActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -873,7 +873,7 @@
                       "id": "checkGavPerianActor",
                       "type": "xstate.invoke",
                       "fsmType": "promise",
-                      "fsmVersion": "20250102030405"
+                      "fsmVersion": "v01"
                     }
                   ],
                   "tags": []
@@ -1032,7 +1032,7 @@
                   "id": "scoreDeterminationActor",
                   "type": "xstate.invoke",
                   "fsmType": "promise",
-                  "fsmVersion": "20250102030405"
+                  "fsmVersion": "v01"
                 }
               ],
               "tags": []
@@ -1090,7 +1090,7 @@
                   "type": "xstate.invoke",
                   "id": "0.(machine).creditCheck.DeterminingInterestRateOptions.FetchingRates",
                   "fsmType": "promise",
-                  "fsmVersion": "20250102030405"
+                  "fsmVersion": "v01"
                 }
               ],
               "tags": []

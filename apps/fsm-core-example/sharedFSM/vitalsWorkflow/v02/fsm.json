@@ -93,28 +93,28 @@
           "type": "xstate.invoke",
           "id": "0.vitalscheck.CheckVitals",
           "fsmType": "promise",
-          "fsmVersion": "20251212100552"
+          "fsmVersion": "v02"
         },
         {
           "src": "checkOilPressure",
           "type": "xstate.invoke",
           "id": "1.vitalscheck.CheckVitals",
           "fsmType": "promise",
-          "fsmVersion": "20251212100552"
+          "fsmVersion": "v02"
         },
         {
           "src": "checkCoolantLevel",
           "type": "xstate.invoke",
           "id": "2.vitalscheck.CheckVitals",
           "fsmType": "promise",
-          "fsmVersion": "20251212100552"
+          "fsmVersion": "v02"
         },
         {
           "src": "checkBattery",
           "type": "xstate.invoke",
           "id": "3.vitalscheck.CheckVitals",
           "fsmType": "promise",
-          "fsmVersion": "20251212100552"
+          "fsmVersion": "v02"
         }
       ],
       "tags": []
