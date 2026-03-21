@@ -13,6 +13,7 @@ dependencies = [
     "supabase>=2.5.0",
     "python-json-logger>=2.0.7",
     "fsm-core-py-db",
+    "fsm-py-compiler",
 ]
 
 [build-system]
@@ -24,6 +25,7 @@ packages = ["app"]
 
 [tool.uv.sources]
 fsm-core-py-db = { path = "../fsm-core-py-db", editable = true }
+fsm-py-compiler = { path = "../../packages/fsm-compiler-py", editable = true }
 
 [tool.uv]
 dev-dependencies = [

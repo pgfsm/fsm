@@ -220,7 +220,7 @@ function getActionsAndGuardsFromFsmJson(fsmData: any): {
   };
 }
 
-async function validateFsmPluginLoadFromFolder(
+export async function validateFsmPluginLoadFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
   folderPath: string,

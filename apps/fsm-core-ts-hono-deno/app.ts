@@ -1,7 +1,13 @@
 // apps/host/app.ts
 import { Hono } from "hono";
 import { Pool } from "pg";
-import createFsmApp from "../fsm-core-ts-hono-deno/lib/create-app.ts";
+import createApp from "../fsm-core-ts-hono-deno/lib/create-app.ts";
+import { createFsmApp } from "../../packages/fsm-compiler-ts/src/loadAndVerifyFsm.ts";
+
+const FSM_EXAMPLE_FOLDER = new URL(
+  "../fsm-core-example/fsm",
+  import.meta.url,
+).pathname;
 
 const host = new Hono();
 
@@ -11,12 +17,10 @@ const pool = new Pool({
 });
 
 const urlPathPrefix = "/embedded"; // Adjust this if your FSM router is mounted at a different path
-// Build the FSM router; you can also pass custom CORS origin/dbType flags
-const fsmRouter = createFsmApp(pool, urlPathPrefix);
+// Build the FSM router; pass createFsmApp so FSMs are loaded + verified on startup
+const fsmRouter = createApp(pool, urlPathPrefix, createFsmApp(FSM_EXAMPLE_FOLDER));
 
 // Mount it wherever you need
 host.route(urlPathPrefix, fsmRouter);
-
-
 
 export default host;

@@ -1,28 +1,38 @@
 """
 load_and_verify_fsm.py
 ~~~~~~~~~~~~~~~~~~~~~~
-Orchestrates FSM database loading + plugin validation in one pass.
+Orchestrates FSM database loading + plugin validation in one pass, per version.
 
-Steps:
-  1. Load FSM JSON into the database via ``load_fsm_json_from_folders``.
-  2. Run plugin validation via ``validate_fsm_plugin_from_folders``.
-  3. Log a combined status per FSM/version:
+For each <fsm_name>/<version>/fsm.json found:
+  1. Call ``load_fsm_from_json_v2`` to load into the database.
+  2. If load succeeded, call ``_validate_version`` to check plugin modules.
+  3. Log combined status:
 
-     - ``✓ loaded + verified``    — DB load succeeded AND plugin modules are complete.
-     - ``~ loaded, not verified`` — DB load succeeded but plugin validation failed/missing.
+     - ``✓ loaded + verified``    — DB load ok AND plugin modules complete.
+     - ``~ loaded, not verified`` — DB load ok BUT plugin validation failed.
      - ``✗ not loaded``           — DB load failed; plugin validation skipped.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import asyncpg
 
-from .load_fsm_json import load_fsm_json_from_folders, LoadResult
-from .validate_fsm_plugin import validate_fsm_plugin_from_folders, VersionValidationResult
+from fsm_core_db import load_fsm_from_json_v2
+
+from .load_fsm_json import LoadResult
+from .util import is_version_folder_name
+from .validate_fsm_plugin import (
+    VersionValidationResult,
+    _bundled_schema_path,
+    _load_schema,
+    _validate_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,66 +63,114 @@ async def load_and_verify_fsm_from_folders(
     schema_path: Optional[str] = None,
 ) -> list[LoadAndVerifyResult]:
     """
-    Load FSM definitions into the database then validate their plugin modules.
+    Walk ``folder_path`` for versioned FSM directories. For each version:
+      1. Load ``fsm.json`` into the database via ``load_fsm_from_json_v2``.
+      2. If load succeeded, run plugin validation via ``_validate_version``.
 
     Args:
         pool:          asyncpg connection pool (from fsm_core_db.create_pool).
         folder_path:   Root directory with ``<fsm_name>/<version>/fsm.json`` layout.
         workflow_type: Label for log messages (e.g. "fsm", "sharedFSM").
         skip_dirs:     FSM name directories to skip entirely.
-        schema_path:   Path to ``fsm.machine.schema.json`` for plugin validation.
-                       Falls back to the copy bundled inside this package.
+        schema_path:   Path to ``fsm.machine.schema.json``. Falls back to bundled copy.
 
     Returns:
         List of :class:`LoadAndVerifyResult`, one per version processed.
     """
-    # 1. Load FSM JSON into the database
-    load_results = await load_fsm_json_from_folders(pool, folder_path, workflow_type, skip_dirs)
+    skip_dirs = skip_dirs or []
+    base = Path(folder_path)
+    schema = _load_schema(schema_path or str(_bundled_schema_path()))
+    results: list[LoadAndVerifyResult] = []
 
-    # 2. Validate plugin modules (synchronous, walks the same folder tree)
-    verify_results = validate_fsm_plugin_from_folders(
-        folder_path, workflow_type, skip_dirs, schema_path
+    if not base.is_dir():
+        logger.error(f"folder_path does not exist or is not a directory: {folder_path}")
+        return results
+
+    for fsm_dir in sorted(base.iterdir()):
+        if not fsm_dir.is_dir() or fsm_dir.name in skip_dirs:
+            continue
+        for version_dir in sorted(fsm_dir.iterdir()):
+            if not version_dir.is_dir() or not is_version_folder_name(version_dir.name):
+                continue
+            fsm_json_path = version_dir / "fsm.json"
+            if not fsm_json_path.exists():
+                logger.warning(
+                    f"[{workflow_type}] {fsm_dir.name}/{version_dir.name}: fsm.json not found, skipping"
+                )
+                continue
+            entry = await _load_and_verify_single(
+                pool, fsm_dir.name, version_dir.name, fsm_json_path, version_dir, workflow_type, schema
+            )
+            results.append(entry)
+
+    return results
+
+
+async def _load_and_verify_single(
+    pool: asyncpg.Pool,
+    fsm_name: str,
+    fsm_version: str,
+    fsm_json_path: Path,
+    version_dir: Path,
+    workflow_type: str,
+    schema: Optional[dict],
+) -> LoadAndVerifyResult:
+    label = f"[{workflow_type}] {fsm_name}/{fsm_version}"
+
+    # ── 1. Parse fsm.json ────────────────────────────────────────────────────
+    try:
+        fsm_data = json.loads(fsm_json_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.error(f"{label}: ✗ not loaded — {exc}")
+        lr = LoadResult(
+            fsm_name=fsm_name,
+            fsm_version=fsm_version,
+            fsm_json_path=str(fsm_json_path),
+            state_load_ok=False,
+            transition_load_ok=False,
+            error=str(exc),
+        )
+        return LoadAndVerifyResult(fsm_name=fsm_name, fsm_version=fsm_version, load_result=lr, verify_result=None)
+
+    root_node_text: Optional[str] = fsm_data.get("key") or fsm_data.get("id") or fsm_name
+
+    # ── 2. Load into database ────────────────────────────────────────────────
+    load_ok = False
+    load_error: Optional[str] = None
+    try:
+        await load_fsm_from_json_v2(pool, fsm_name, fsm_version, fsm_data, root_node_text)
+        load_ok = True
+    except Exception as exc:
+        load_error = str(exc)
+        logger.error(f"{label}: ✗ not loaded — {exc}")
+
+    lr = LoadResult(
+        fsm_name=fsm_name,
+        fsm_version=fsm_version,
+        fsm_json_path=str(fsm_json_path),
+        state_load_ok=load_ok,
+        transition_load_ok=load_ok,
+        error=load_error,
     )
 
-    # Index verify results by (fsm_name, fsm_version) for O(1) lookup
-    verify_index: dict[tuple[str, str], VersionValidationResult] = {
-        (r.fsm_name, r.fsm_version): r for r in verify_results
-    }
+    if not load_ok:
+        return LoadAndVerifyResult(fsm_name=fsm_name, fsm_version=fsm_version, load_result=lr, verify_result=None)
 
-    combined: list[LoadAndVerifyResult] = []
-    for lr in load_results:
-        vr = verify_index.get((lr.fsm_name, lr.fsm_version))
-        entry = LoadAndVerifyResult(
-            fsm_name=lr.fsm_name,
-            fsm_version=lr.fsm_version,
-            load_result=lr,
-            verify_result=vr,
-        )
-        combined.append(entry)
-        _log_combined(entry, workflow_type)
+    # ── 3. Validate plugin modules (only if DB load succeeded) ───────────────
+    vr = _validate_version(fsm_name, version_dir, schema, workflow_type)
 
-    return combined
+    _log_combined_result(label, vr)
+    return LoadAndVerifyResult(fsm_name=fsm_name, fsm_version=fsm_version, load_result=lr, verify_result=vr)
 
 
-def _log_combined(result: LoadAndVerifyResult, workflow_type: str) -> None:
-    label = f"[{workflow_type}] {result.fsm_name}/{result.fsm_version}"
-
-    if result.loaded and result.verified:
+def _log_combined_result(label: str, vr: VersionValidationResult) -> None:
+    if vr.valid:
         logger.info(f"{label}: ✓ loaded + verified")
         return
 
-    if result.loaded:
-        logger.warning(f"{label}: ~ loaded, not verified")
-        vr = result.verify_result
-        if vr is None:
-            logger.warning(f"{label}  plugin validation did not run")
-            return
-        for err in vr.schema_errors:
-            logger.warning(f"{label}  schema: {err}")
-        for m in vr.modules:
-            if m.missing:
-                logger.warning(f"{label}  {m.module_kind}: missing implementations: {m.missing}")
-        return
-
-    lr = result.load_result
-    logger.error(f"{label}: ✗ not loaded — {lr.error or 'unknown error'}")
+    logger.warning(f"{label}: ~ loaded, not verified")
+    for err in vr.schema_errors:
+        logger.warning(f"{label}  schema: {err}")
+    for m in vr.modules:
+        if m.missing:
+            logger.warning(f"{label}  {m.module_kind}: missing implementations: {m.missing}")

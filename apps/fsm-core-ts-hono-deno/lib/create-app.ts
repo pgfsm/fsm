@@ -31,12 +31,15 @@ export function createRouter() {
   });
 }
 
-export default function createApp(pool?: Pool,basePath = "") {
+export default function createApp(
+  pool?: Pool,
+  basePath = "",
+  createFsmApp?: (deps: { db: Pool }) => Promise<unknown>,
+) {
   const app = createRouter();
 
   pool.on("connect", () => {
     console.log("Database on connect event");
-    
   });
   pool.on("acquire", () => {
     console.log("Database on acquired event");
@@ -47,6 +50,17 @@ export default function createApp(pool?: Pool,basePath = "") {
   pool.on("error", (err) => {
     console.error("Database error event:", err);
   });
+
+  if (createFsmApp && pool) {
+    pool.connect().then((client) => {
+      client.release();
+      createFsmApp({ db: pool }).catch((err) => {
+        console.error("createFsmApp startup error:", err);
+      });
+    }).catch((err) => {
+      console.error("Pool connect error during FSM startup:", err);
+    });
+  }
 
   // pool.connect().then(() => {
   //   console.log("Database connection established");
