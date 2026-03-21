@@ -341,7 +341,7 @@ export async function validateFsmPluginLoadFromFolders(
               `Validation result for ${dirEntry.name}/${subEntry.name}:`,
               folderResult,
             );
-            const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  (actor.fsmVersion + "/" + actor.src));
+            const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  (actor));
             allFolderResults.push({
               folder: `${dirEntry.name}/${subEntry.name}`,
               result: folderResult,
@@ -361,9 +361,15 @@ export async function validateFsmPluginLoadFromFolders(
   const allFolders = allFolderResults.map(r => r.folder);
   for (const folderResult of allFolderResults) {
     for (const dependency of folderResult.dependentActors) {
-      if (!allFolders.includes(dependency)) {
+      // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string }
+      // Construct the expected folder path from dependency
+      const expectedFolderPath = dependency.fsmVersion 
+        ? `${dependency.src}/${dependency.fsmVersion}`
+        : dependency.src;
+      
+      if (!allFolders.includes(expectedFolderPath)) {
         console.error(
-          `Missing dependency: ${dependency} required by ${folderResult.folder}`,
+          `Missing dependency: ${expectedFolderPath} required by ${folderResult.folder}`,
         );
       }
     }
