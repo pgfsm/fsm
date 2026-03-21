@@ -21,7 +21,7 @@ deno run --allow-all --env-file=.env --watch main.ts   # dev server (port 9999)
 deno test                                                # run tests
 ```
 
-### FSM Compiler (`packages/fsm-compiler/`)
+### FSM Compiler (`packages/fsm-compiler-ts/`)
 ```bash
 deno run --allow-all --watch src/main.ts   # dev mode
 ```
@@ -49,7 +49,8 @@ apps/
 packages/
   database-src/            # PostgreSQL migrations + Supabase config
   database-src-extension/  # Rust PostgreSQL extension (pgrx) using ltree + pgmq
-  fsm-compiler/            # JSON → database object compiler
+  fsm-compiler-ts/         # JSON → database object compiler (TypeScript)
+  fsm-compiler-py/         # JSON → database object compiler (Python)
 ```
 
 ### API Server Structure (`apps/fsm-core-ts-hono-deno/`)

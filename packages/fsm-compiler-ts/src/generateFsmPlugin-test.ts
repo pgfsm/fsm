@@ -8,9 +8,9 @@ dotenv.config({ path: "./../../.env" });
 
 (async () => {
   
-  // const folderPath = Deno.args[0] || Deno.cwd()+ "/packages/fsm-compiler/src/sampleFSMfromFolder";
-  const sharedFSMfolderPath = 'packages/fsm-compiler/src/example/sharedFSM';
-  const fsmfolderPath = 'packages/fsm-compiler/src/example/fsm';
+  // const folderPath = Deno.args[0] || Deno.cwd()+ "/packages/fsm-compiler-ts/src/sampleFSMfromFolder";
+  const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
+  const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
   // try {
   //   const stat = await Deno.stat(folderPath);
   //   if (!stat.isDirectory) {
