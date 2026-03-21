@@ -85,7 +85,7 @@
           "type": "xstate.invoke",
           "id": "0.task.loading",
           "fsmType": "promise",
-          "fsmVersion": "20251212120452"
+          "fsmVersion": "v01"
         }
       ],
       "tags": []
@@ -201,7 +201,7 @@
           "type": "xstate.invoke",
           "id": "0.task.updating",
           "fsmType": "promise",
-          "fsmVersion": "20251212120452"
+          "fsmVersion": "v01"
         }
       ],
       "tags": []
