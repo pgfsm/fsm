@@ -234,7 +234,7 @@ export async function validateFsmPluginLoadFromFolder(
   let fsmfsmModuleVerified = false;
   let resultValidateLanguageModules;
   let fsmfailedMethods: { method: string; moduleType: string }[] = [];
-  let requiredChildActors: string[] = [];
+  let requiredChildActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
   let delays: string[] = [];
@@ -294,7 +294,8 @@ export async function validateFsmPluginLoadFromFolder(
 export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
-  skipDirs: string[] = []
+  skipDirs: string[] = [],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -317,74 +318,85 @@ export async function validateFsmPluginLoadFromFolders(
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
 
-  const allFolderResults = [];  
-  for await (const dirEntry of Deno.readDir(absFolderPath)) {
-    if (dirEntry.isDirectory) {
-      if (skipDirs.includes(dirEntry.name)) {
-        continue;
+  const allFolderResults = [];
+  // check if absFolderPath exists and is a directory
+  try {
+    const stat = await Deno.stat(absFolderPath);
+    if (!stat.isDirectory) {
+      throw new Error(`Provided path '${absFolderPath}' is not a directory.`);
+    }
+    for await (const dirEntry of Deno.readDir(absFolderPath)) {
+      if (dirEntry.isDirectory) {
+        if (skipDirs.includes(dirEntry.name)) {
+          continue;
+        }
+
+        const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
+
+        for await (const subEntry of Deno.readDir(fsmDirPath)) {
+          if (subEntry.isDirectory) {
+            if (isVersionFolderName(subEntry.name)) {
+              const folderResult = await validateFsmPluginLoadFromFolder(
+                dirEntry.name,
+                subEntry.name,
+                folderPath,
+                `${fsmDirPath}/${subEntry.name}`,
+                dirEntry.name,
+                workflow_type,
+              );
+              console.log(
+                `Validation result for ${dirEntry.name}/${subEntry.name}:`,
+                folderResult,
+              );
+              const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  ({...actor, resolved: false}));
+              allFolderResults.push({
+                folder: `${dirEntry.name}/${subEntry.name}`,
+                src: dirEntry.name,
+                fsmVersion: subEntry.name,
+                fsmType: workflow_type,
+                result: folderResult,
+                dependentActors: dependentActors,
+              });
+            } else {
+              console.log(
+                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
+              );
+            }
+          }
+        }
       }
+    }
+    console.log("All folder validation results:", allFolderResults);
+    // iterate over allFolderResults and check if dependentActors has any src that is not present as a folder in allFolderResults. If so, log an error with the missing dependency and the folder that requires it.
+    if (workflow_type !== "sharedPromise") { 
+      
+      for (const folderResult of allFolderResults) {
+        for (const dependency of folderResult.dependentActors) {
+          // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string, resolved: boolean }
+          // Check if any folder object matches the dependency
+          const isDependencyFound = dependencyActors.some(folderObj =>
+            folderObj.src === dependency.src &&
+            (folderObj.fsmVersion === dependency.fsmVersion) &&
+            (folderObj.fsmType === dependency.fsmType)
+          );
 
-      const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
-
-      for await (const subEntry of Deno.readDir(fsmDirPath)) {
-        if (subEntry.isDirectory) {
-          if (isVersionFolderName(subEntry.name)) {
-            const folderResult = await validateFsmPluginLoadFromFolder(
-              dirEntry.name,
-              subEntry.name,
-              folderPath,
-              `${fsmDirPath}/${subEntry.name}`,
-              dirEntry.name,
-              workflow_type,
-            );
-            console.log(
-              `Validation result for ${dirEntry.name}/${subEntry.name}:`,
-              folderResult,
-            );
-            const dependentActors = folderResult.requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  (actor));
-            allFolderResults.push({
-              folder: `${dirEntry.name}/${subEntry.name}`,
-              fsmName: dirEntry.name,
-              fsmVersion: subEntry.name,
-              fsmType: workflow_type,
-              result: folderResult,
-              dependentActors: dependentActors,
-            });
+          if (isDependencyFound) {
+            dependency.resolved = true;
           } else {
-            console.log(
-              `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
+            const expectedFolderPath = dependency.fsmVersion
+              ? `${dependency.src}/${dependency.fsmVersion}`
+              : dependency.src;
+            console.error(
+              `Missing dependency: ${expectedFolderPath} required by ${folderResult.folder}`,
             );
           }
         }
       }
     }
-  }
-  console.log("All folder validation results:", allFolderResults);
-  // iterate over allFolderResults and check if dependentActors has any src that is not present as a folder in allFolderResults. If so, log an error with the missing dependency and the folder that requires it.
-  const allFolders = allFolderResults.map(r => ({
-    folder: r.folder,
-    fsmName: r.fsmName,
-    fsmVersion: r.fsmVersion,
-    fsmType: r.fsmType,
-  }));
-  for (const folderResult of allFolderResults) {
-    for (const dependency of folderResult.dependentActors) {
-      // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string }
-      // Check if any folder object matches the dependency
-      const isDependencyFound = allFolders.some(folderObj => 
-        folderObj.fsmName === dependency.src &&
-        (folderObj.fsmVersion === dependency.fsmVersion) &&
-        (folderObj.fsmType === dependency.fsmType)
-      );
-      
-      if (!isDependencyFound) {
-        const expectedFolderPath = dependency.fsmVersion 
-          ? `${dependency.src}/${dependency.fsmVersion}`
-          : dependency.src;
-        console.error(
-          `Missing dependency: ${expectedFolderPath} required by ${folderResult.folder}`,
-        );
-      }
-    }
-  }
+  } catch (err) {
+    // throw new Error(`Directory '${absFolderPath}' does not exist.`);
+    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+  }  
+  
+  return allFolderResults;
 }
