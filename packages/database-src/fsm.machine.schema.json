@@ -269,7 +269,7 @@
         "fsmType":{
           "type": "string",
           "default": "promise",
-          "enum": ["promise", "sharedPromise", "fsm"],
+          "enum": ["promise", "sharedPromise", "sharedFsm", "fsm"],
           "description": "The type of the invoked service. promise for a new promise, sharedPromise for an existing promise but shared with other FSMs, and fsm for another finite state machine."
         },
         "fsmVersion": {

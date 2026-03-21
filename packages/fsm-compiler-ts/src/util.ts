@@ -1,3 +1,5 @@
+export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
+
 /**
  * Checks if a string matches the date pattern YYYY-MM-DD-HH-MM.
  * @param name The string to test

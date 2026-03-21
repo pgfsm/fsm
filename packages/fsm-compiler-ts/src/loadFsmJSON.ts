@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName } from "./util.ts";
+import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
 
 
@@ -10,7 +10,7 @@ async function loadFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
   deps: any
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
@@ -47,7 +47,7 @@ async function loadFsmJSONFromFolder(
  */
 export async function loadFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
   skipDirs: string[] = [],
   deps: any
 ) {

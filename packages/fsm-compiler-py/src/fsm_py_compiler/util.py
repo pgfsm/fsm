@@ -1,5 +1,8 @@
 import re
 from datetime import datetime
+from typing import Literal
+
+WorkflowType = Literal["fsm", "sharedFsm", "sharedPromise", "promise"]
 
 
 def is_version_folder_name(name: str) -> bool:

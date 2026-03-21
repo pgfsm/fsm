@@ -32,7 +32,7 @@ dotenv.config({ path: "./../../.env" });
   // const supabase = createClient(supabaseUrl, supabaseKey);
   const skipSharedFSMDirs = ["vitalsWorkflow"];
   const skipFSMDirs = ["carVitals","taskMachineConfig"];
-  const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFSM", skipSharedFSMDirs);
+  const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs);
   const outputFSM = await validateFsmPluginLoadFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
   
 })();

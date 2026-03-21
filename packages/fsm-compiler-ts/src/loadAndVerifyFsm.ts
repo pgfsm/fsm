@@ -1,4 +1,4 @@
-import { isVersionFolderName } from "./util.ts";
+import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 
@@ -75,7 +75,7 @@ async function _loadAndVerifyFolder(
 export async function loadAndVerifyFsm(
   deps: any,
   folderPath: string,
-  workflowType: "fsm" | "childfsm" | "sharedfsm" | "promise" = "fsm",
+  workflowType: WorkflowType = "fsm",
   skipDirs: string[] = [],
 ): Promise<FsmLoadResult[]> {
   if (folderPath.startsWith(".")) {
@@ -119,7 +119,7 @@ export async function loadAndVerifyFsm(
  */
 export function createFsmApp(
   folderPath: string,
-  workflowType: "fsm" | "childfsm" | "sharedfsm" | "promise" = "fsm",
+  workflowType: WorkflowType = "fsm",
   skipDirs: string[] = [],
 ): (deps: any) => Promise<FsmLoadResult[]> {
   return (deps: any) => loadAndVerifyFsm(deps, folderPath, workflowType, skipDirs);

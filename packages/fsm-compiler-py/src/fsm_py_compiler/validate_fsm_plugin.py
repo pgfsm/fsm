@@ -31,7 +31,7 @@ import importlib.resources
 
 import jsonschema
 
-from .util import is_version_folder_name
+from .util import is_version_folder_name, WorkflowType
 from ._fsm_extractor import extract_symbols, FsmSymbols
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ class VersionValidationResult:
 
 def validate_fsm_plugin_from_folders(
     folder_path: str,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     skip_dirs: Optional[list[str]] = None,
     schema_path: Optional[str] = None,
 ) -> list[VersionValidationResult]:
@@ -144,7 +144,7 @@ def _validate_version(
     fsm_name: str,
     version_dir: Path,
     schema: Optional[dict],
-    workflow_type: str,
+    workflow_type: WorkflowType,
 ) -> VersionValidationResult:
     fsm_version = version_dir.name
     result = VersionValidationResult(fsm_name=fsm_name, fsm_version=fsm_version)

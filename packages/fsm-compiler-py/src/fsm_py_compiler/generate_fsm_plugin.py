@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .util import is_version_folder_name
+from .util import is_version_folder_name, WorkflowType
 from ._fsm_extractor import extract_symbols
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class GenerateResult:
 
 def generate_fsm_plugin_from_folders(
     folder_path: str,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     skip_dirs: Optional[list[str]] = None,
     overwrite: bool = False,
 ) -> list[GenerateResult]:
@@ -82,7 +82,7 @@ def generate_fsm_plugin_from_folders(
 def _generate_version(
     fsm_name: str,
     version_dir: Path,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     overwrite: bool,
 ) -> GenerateResult:
     fsm_version = version_dir.name

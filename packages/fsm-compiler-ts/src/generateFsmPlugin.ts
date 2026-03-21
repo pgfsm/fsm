@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName } from "./util.ts";
+import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 // Helper: Extract actions and guards from FSM JSON
 function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guards: string[]; delays: string[]; actors: string[] } {
@@ -179,7 +179,7 @@ async function generateFsmPluginFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: WorkflowType
 ) {
   
   const fsmJson = `${absFolderPath}/fsm.json`;
@@ -209,7 +209,7 @@ async function generateFsmPluginFromFolder(
 
 export async function generateFsmPluginFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {

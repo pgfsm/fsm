@@ -26,7 +26,7 @@ import asyncpg
 from fsm_core_db import load_fsm_from_json_v2
 
 from .load_fsm_json import LoadResult
-from .util import is_version_folder_name
+from .util import is_version_folder_name, WorkflowType
 from .validate_fsm_plugin import (
     VersionValidationResult,
     _bundled_schema_path,
@@ -58,7 +58,7 @@ class LoadAndVerifyResult:
 async def load_and_verify_fsm_from_folders(
     pool: asyncpg.Pool,
     folder_path: str,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     skip_dirs: Optional[list[str]] = None,
     schema_path: Optional[str] = None,
 ) -> list[LoadAndVerifyResult]:
@@ -112,7 +112,7 @@ async def _load_and_verify_single(
     fsm_version: str,
     fsm_json_path: Path,
     version_dir: Path,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     schema: Optional[dict],
 ) -> LoadAndVerifyResult:
     label = f"[{workflow_type}] {fsm_name}/{fsm_version}"

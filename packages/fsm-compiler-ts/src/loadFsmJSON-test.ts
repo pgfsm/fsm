@@ -43,7 +43,7 @@ dotenv.config({ path: "./../../.env" });
   const skipSharedFSMDirs = ["vitalsWorkflow"];
   const skipFSMDirs = ["carVitals","taskMachineConfig"];
 
-  const outputSharedFSM = await loadFsmJSONFromFolders(sharedFSMfolderPath, "sharedfsm", skipSharedFSMDirs, deps);
+  const outputSharedFSM = await loadFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, deps);
   const outputFSM = await loadFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs, deps);
   console.log("✅ All workflows inserted successfully");
 })();

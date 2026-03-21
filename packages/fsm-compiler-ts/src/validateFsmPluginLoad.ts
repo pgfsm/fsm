@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
-import { isVersionFolderName } from "./util.ts";
+import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 
 // validators.ts
@@ -226,7 +226,7 @@ export async function validateFsmPluginLoadFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
   let fsmJsonPresent = false;
@@ -293,7 +293,7 @@ export async function validateFsmPluginLoadFromFolder(
 
 export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
    skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {

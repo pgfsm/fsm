@@ -23,7 +23,7 @@ import asyncpg
 
 from fsm_core_db import load_fsm_from_json_v2
 
-from .util import is_version_folder_name
+from .util import is_version_folder_name, WorkflowType
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class LoadResult:
 async def load_fsm_json_from_folders(
     pool: asyncpg.Pool,
     folder_path: str,
-    workflow_type: str,
+    workflow_type: WorkflowType,
     skip_dirs: Optional[list[str]] = None,
 ) -> list[LoadResult]:
     """
@@ -101,7 +101,7 @@ async def _load_single(
     fsm_name: str,
     fsm_version: str,
     fsm_json_path: Path,
-    workflow_type: str,
+    workflow_type: WorkflowType,
 ) -> LoadResult:
     label = f"[{workflow_type}] {fsm_name}/{fsm_version}"
     try:

@@ -35,7 +35,7 @@ dotenv.config({ path: "./../../.env" });
   const skipFSMDirs = ["carVitals","taskMachineConfig"];
   // const skipSharedFSMDirs = [];
   // const skipFSMDirs = [];
-  const outputSharedFSM = await generateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFSM", skipSharedFSMDirs);
+  const outputSharedFSM = await generateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs);
   const outputFSM = await generateFsmPluginFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
   // console.log("✅ All workflows inserted successfully");
 })();

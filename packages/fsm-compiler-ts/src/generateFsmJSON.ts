@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName } from "./util.ts";
+import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
  * Removes all null values from any 'actions' array in the FSM JSON object.
@@ -92,7 +92,7 @@ async function deleteFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: WorkflowType
 ) {
   try {
     await Deno.remove(`${absFolderPath}/xstate-fsm.json`);
@@ -111,7 +111,7 @@ async function deleteFsmJSONFromFolder(
 
 export async function deleteFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
@@ -230,7 +230,7 @@ async function generateFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise"
+  workflow_type: WorkflowType
 ) {
   
   const createMachinePath = `${absFolderPath}/machine.ts`;
@@ -281,7 +281,7 @@ async function generateFsmJSONFromFolder(
 
 export async function generateFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: "fsm" | "childfsm" | "sharedfsm" | "promise",
+  workflow_type: WorkflowType,
   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {

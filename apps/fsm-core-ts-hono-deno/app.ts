@@ -14,7 +14,7 @@ const FSM_SHARED_EXAMPLE_FOLDER = new URL(
   "../fsm-core-example/sharedFSM",
   import.meta.url,
 ).pathname;
-const FSM_SHARED_WORKFLOW_TYPE = "sharedfsm" as const;
+const FSM_SHARED_WORKFLOW_TYPE = "sharedFsm" as const;
 const FSM_SHARED_SKIP_DIRS: string[] = [];
 
 

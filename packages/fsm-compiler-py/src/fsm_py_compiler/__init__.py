@@ -1,4 +1,4 @@
-from .util import is_version_folder_name, is_timestamp_folder_name, is_valid_date_folder_name
+from .util import is_version_folder_name, is_timestamp_folder_name, is_valid_date_folder_name, WorkflowType
 from .load_fsm_json import load_fsm_json_from_folders
 from .validate_fsm_plugin import validate_fsm_plugin_from_folders
 from .generate_fsm_plugin import generate_fsm_plugin_from_folders
@@ -9,6 +9,7 @@ __all__ = [
     "is_version_folder_name",
     "is_timestamp_folder_name",
     "is_valid_date_folder_name",
+    "WorkflowType",
     # loader
     "load_fsm_json_from_folders",
     # validator
