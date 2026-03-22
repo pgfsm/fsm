@@ -24,7 +24,7 @@ async function _loadAndVerifyFolder(
   try {
     await Deno.stat(fsmJsonPath);
     const fsmData = JSON.parse(await Deno.readTextFile(fsmJsonPath));
-    const rootNodeText: string | null = (fsmData?.key ?? fsmData?.id) || null;
+    const rootNodeText: string | null = null;
 
     const result = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion) as any;
     const ok: boolean = result?.ok === true;
