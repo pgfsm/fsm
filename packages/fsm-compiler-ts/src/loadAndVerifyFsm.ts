@@ -1,123 +1,195 @@
+import { v4 as uuidv4 } from "uuid";
+import { writeFileSync } from "node:fs";
+
+// Import Ajv for JSON schema validation
+import Ajv from "ajv";
+import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
-import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
+
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
+import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
+import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
 
-export interface FsmLoadResult {
-  fsmName: string;
-  fsmVersion: string;
-  ok: boolean;
-  cached: boolean;
-  pluginVerified?: boolean;
-  pluginFailedMethods?: { method: string; moduleType: string; modulePath: string }[];
-  error?: string;
-}
-
-async function _loadAndVerifyFolder(
-  fsmName: string,
-  fsmVersion: string,
-  absFolderPath: string,
-  workflowType: string,
-  deps: any,
-): Promise<FsmLoadResult> {
-  const fsmJsonPath = `${absFolderPath}/fsm.json`;
-  const label = `[${workflowType}] ${fsmName}/${fsmVersion}`;
-  try {
-    await Deno.stat(fsmJsonPath);
-    const fsmData = JSON.parse(await Deno.readTextFile(fsmJsonPath));
-    const rootNodeText: string | null = null;
-
-    const result = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion) as any;
-    const ok: boolean = result?.ok === true;
-    const cached: boolean = result?.cached === true;
-
-    
-
-    // DB load succeeded — now validate plugin modules
-    const pluginResult = await validateFsmPluginLoadFromFolder(
-      fsmName,
-      fsmVersion,
-      absFolderPath,
-      absFolderPath,
-      fsmName,
-      workflowType,
-    );
-    const pluginVerified: boolean = pluginResult.fsmfsmModuleVerified;
-    const pluginFailedMethods = pluginResult.resultValidateLanguageModules?.failedMethods ?? [];
-
-    if (pluginVerified) {
-      console.log(`${label}: ✓ loaded + verified${cached ? " (cached)" : ""}`);
-    } else {
-      console.warn(
-        `${label}: ~ loaded, plugin not verified — failed: ${JSON.stringify(pluginFailedMethods)}`,
-      );
-    }
-    return { fsmName, fsmVersion, ok, cached, pluginVerified, pluginFailedMethods };
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      console.log(`${label}: fsm.json not found, skipping`);
-      return { fsmName, fsmVersion, ok: false, cached: false, error: "fsm.json not found" };
-    }
-    console.error(`${label}: ✗ not loaded —`, err);
-    return { fsmName, fsmVersion, ok: false, cached: false, error: String(err) };
-  }
-}
-
-/**
- * Walks folderPath for <fsmName>/<version>/fsm.json trees, calls
- * load_fsm_from_json_v2 for each, and logs:
- *   ✓ loaded + verified   — DB fn returned ok=true
- *   ~ loaded, not verified — DB fn returned ok=false
- *   ✗ not loaded           — exception thrown
- */
-export async function loadAndVerifyFsm(
+export async function loadAndVerifyPromiseFromFolders(
   deps: any,
   folderPath: string,
-  workflowType: WorkflowType = "fsm",
+  workflow_type: WorkflowType,
   skipDirs: string[] = [],
-): Promise<FsmLoadResult[]> {
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+) {
   if (folderPath.startsWith(".")) {
-    throw new Error(`Invalid folder path: ${folderPath}. Paths cannot start with '.'`);
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
+    );
+  }
+  if (folderPath.endsWith("/")) {
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`,
+    );
+  }
+  if (folderPath.startsWith("/")) {
+    console.log(`Importing workflows from absolute path: ${folderPath}`);
+  } else {
+    console.log(
+      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
+    );
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
 
-  const results: FsmLoadResult[] = [];
-
-  for await (const dirEntry of Deno.readDir(absFolderPath)) {
-    if (!dirEntry.isDirectory || skipDirs.includes(dirEntry.name)) continue;
-
-    const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
-    for await (const subEntry of Deno.readDir(fsmDirPath)) {
-      if (!subEntry.isDirectory || !isVersionFolderName(subEntry.name)) continue;
-
-      const result = await _loadAndVerifyFolder(
-        dirEntry.name,
-        subEntry.name,
-        `${fsmDirPath}/${subEntry.name}`,
-        workflowType,
-        deps,
-      );
-      results.push(result);
+  const allFolderResults = [];
+  // check if absFolderPath exists and is a directory
+  try {
+    const stat = await Deno.stat(absFolderPath);
+    if (!stat.isDirectory) {
+      throw new Error(`Provided path '${absFolderPath}' is not a directory.`);
     }
-  }
+    for await (const dirEntry of Deno.readDir(absFolderPath)) {
+      if (dirEntry.isDirectory) {
+        if (skipDirs.includes(dirEntry.name)) {
+          continue;
+        }
 
-  const okCount = results.filter((r) => r.ok).length;
-  console.log(`[${workflowType}] Load + verify complete: ${okCount}/${results.length} FSMs loaded`);
-  return results;
+        const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
+
+        for await (const subEntry of Deno.readDir(fsmDirPath)) {
+          if (subEntry.isDirectory) {
+            if (isVersionFolderName(subEntry.name)) {
+              
+              const folderResult = await validatePromisePluginLoadFromFolder(
+                dirEntry.name,
+                subEntry.name,
+                folderPath,
+                `${fsmDirPath}/${subEntry.name}`,
+                dirEntry.name,
+                workflow_type,
+                dependencyActors
+              );
+              console.log(
+                `Validation result for ${dirEntry.name}/${subEntry.name}:`,
+                folderResult,
+              );
+              
+              allFolderResults.push(folderResult);
+            } else {
+              console.log(
+                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
+              );
+            }
+          }
+        }
+      }
+    }
+    console.log("All folder validation results:", allFolderResults);
+    
+  } catch (err) {
+    // throw new Error(`Directory '${absFolderPath}' does not exist.`);
+    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+  }  
+  
+  return allFolderResults;
 }
 
-/**
- * Returns a startup function that can be passed as the 3rd argument to createApp().
- * Binds folderPath and workflowType so the caller only needs to supply deps at runtime.
- *
- * @example
- *   createApp(pool, basePath, createFsmApp(FSM_EXAMPLE_FOLDER));
- */
-export function createFsmApp(
+export async function loadAndVerifyFsmFromFolders(
+  deps: any,
   folderPath: string,
-  workflowType: WorkflowType = "fsm",
+  workflow_type: WorkflowType,
   skipDirs: string[] = [],
-): (deps: any) => Promise<FsmLoadResult[]> {
-  return (deps: any) => loadAndVerifyFsm(deps, folderPath, workflowType, skipDirs);
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+) {
+  if (folderPath.startsWith(".")) {
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
+    );
+  }
+  if (folderPath.endsWith("/")) {
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`,
+    );
+  }
+  if (folderPath.startsWith("/")) {
+    console.log(`Importing workflows from absolute path: ${folderPath}`);
+  } else {
+    console.log(
+      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
+    );
+  }
+  const absFolderPath = folderPath.startsWith("/")
+    ? folderPath
+    : `${Deno.cwd()}/${folderPath}`;
+
+  const allFolderResults = [];
+  // check if absFolderPath exists and is a directory
+  try {
+    const stat = await Deno.stat(absFolderPath);
+    if (!stat.isDirectory) {
+      throw new Error(`Provided path '${absFolderPath}' is not a directory.`);
+    }
+    for await (const dirEntry of Deno.readDir(absFolderPath)) {
+      if (dirEntry.isDirectory) {
+        if (skipDirs.includes(dirEntry.name)) {
+          continue;
+        }
+
+        const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
+
+        for await (const subEntry of Deno.readDir(fsmDirPath)) {
+          if (subEntry.isDirectory) {
+            if (isVersionFolderName(subEntry.name)) {
+
+              const fsmJson = `${fsmDirPath}/${subEntry.name}/fsm.json`;
+              try {
+                await Deno.stat(fsmJson);
+                
+                // 1. Load fsm.json file
+                const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+
+                const rootNodeText = null;
+                const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, dirEntry.name, subEntry.name);
+                console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
+
+                const folderResult = await validateFsmPluginLoadFromFolder(
+                    fsmData, // should be from fsmResult 
+                    dirEntry.name,
+                    subEntry.name,
+                    folderPath,
+                    `${fsmDirPath}/${subEntry.name}`,
+                    dirEntry.name,
+                    workflow_type,
+                    dependencyActors
+                );
+
+                console.log(
+                  `Validation result for ${dirEntry.name}/${subEntry.name}:`,
+                  folderResult,
+                );
+                
+                allFolderResults.push({...folderResult, ...fsmResult});
+
+              } catch (err) {
+                if (err instanceof Deno.errors.NotFound) {
+                  console.log(`fsm.json is missing in ${absFolderPath}/${dirEntry.name}`);
+                } else {
+                  console.error(`Failed to import or process ${fsmJson}:`, err);
+                }
+              }  
+             
+            } else {
+              console.log(
+                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
+              );
+            }
+          }
+        }
+      }
+    }
+    console.log("All folder validation results:", allFolderResults);
+    
+  } catch (err) {
+    // throw new Error(`Directory '${absFolderPath}' does not exist.`);
+    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+  }  
+  
+  return allFolderResults;
 }

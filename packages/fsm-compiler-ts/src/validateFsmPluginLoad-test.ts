@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { validateFsmPluginLoadFromFolders } from './validateFsmPluginLoad.ts';
+import { validateFsmPluginLoadFromFolders, validatePromisePluginLoadFromFolders } from './validateFsmPluginLoad.ts';
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: "./../../.env" });
@@ -36,7 +36,7 @@ dotenv.config({ path: "./../../.env" });
   const skipSharedPromiseDirs = [""];
   const skipSharedFSMDirs = [""];
   const skipFSMDirs = ["",""];
-  const outputSharedPromise = await validateFsmPluginLoadFromFolders(sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
+  const outputSharedPromise = await validatePromisePluginLoadFromFolders(sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
   const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, outputSharedPromise);
   // pass pure array of outputSharedFSM and outputSharedPromise to validateFsmPluginLoadFromFolders to resolve dependencies for FSM plugins. 
   const outputFSM = await validateFsmPluginLoadFromFolders(fsmfolderPath, "fsm", skipFSMDirs, [...outputSharedPromise, ...outputSharedFSM]);
