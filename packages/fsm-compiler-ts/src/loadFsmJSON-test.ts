@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { loadFsmJSONFromFolders } from './loadFsmJSON.ts';
 import { createClient } from "@supabase/supabase-js";
+import { Pool } from "pg";
 import {
   pool as db,
 } from "../../../apps/fsm-core-db-ts/src/pg-client.ts";
@@ -34,14 +35,20 @@ dotenv.config({ path: "./../../.env" });
   }
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  const pool = new Pool({
+    connectionString: Deno.env.get("DATABASE_URL"),
+  });
+
   const deps = {
-    db: db,
+    db: pool, // Use the pg Pool for database operations
     useSupabase: false,
     supabase: supabase,
   };
 
-  const skipSharedFSMDirs = ["vitalsWorkflow"];
-  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  // const skipSharedFSMDirs = ["vitalsWorkflow"];
+  // const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  const skipSharedFSMDirs = [""];
+  const skipFSMDirs = ["",""];
 
   const outputSharedFSM = await loadFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, deps);
   const outputFSM = await loadFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs, deps);

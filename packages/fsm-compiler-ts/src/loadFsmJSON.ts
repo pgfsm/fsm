@@ -25,8 +25,8 @@ async function loadFsmJSONFromFolder(
     const fsmVersion = dirEntryNameVersion;
     const rootNodeText = null;
     const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion);
-    
-    
+    console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
+    return fsmResult;
     
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
@@ -71,17 +71,20 @@ export async function loadFsmJSONFromFolders(
   
 
       const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
-
+      const folderResults = [];
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
              
-              await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type, deps);
+              const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type, deps);
+              folderResults.push(folderResult);
+              console.log(`Successfully loaded FSM from ${fsmDirPath}/${subEntry.name}`);
             }else {
               console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
             }
           }
-        }
+      }
+      
 
     }
   }
