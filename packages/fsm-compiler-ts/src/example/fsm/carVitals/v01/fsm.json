@@ -147,12 +147,12 @@
       ],
       "entry": [
         {
-          "type": "xstate.raise"
+          "type": "xstateraise"
         }
       ],
       "exit": [
         {
-          "type": "xstate.cancel"
+          "type": "xstatecancel"
         }
       ],
       "order": 3,
