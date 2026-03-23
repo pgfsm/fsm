@@ -58,7 +58,7 @@ Deno.test("validateFsmPluginLoadFromFolder - returns defaults when fsm.json fail
   assertEquals(result.moduleVerified, false);
   assertEquals(result.failedMethods, []);
   assertEquals(result.requiredChildActors, []);
-  assertEquals(result.dependentActors, []);
+  assertEquals(result.externalActors, []);
   assertEquals(result.resultValidateLanguageModules, undefined);
   assertEquals(result.fsmName, "testFsm");
   assertEquals(result.fsmVersion, "v01");

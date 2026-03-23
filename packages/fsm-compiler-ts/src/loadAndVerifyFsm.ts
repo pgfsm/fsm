@@ -15,7 +15,7 @@ export async function loadAndVerifyPromiseFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -64,7 +64,7 @@ export async function loadAndVerifyPromiseFromFolders(
                 `${fsmDirPath}/${subEntry.name}`,
                 dirEntry.name,
                 workflow_type,
-                dependencyActors
+                availableActors
               );
               console.log(
                 `Validation result for ${dirEntry.name}/${subEntry.name}:`,
@@ -96,7 +96,7 @@ export async function loadAndVerifyFsmFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -157,7 +157,7 @@ export async function loadAndVerifyFsmFromFolders(
                     `${fsmDirPath}/${subEntry.name}`,
                     dirEntry.name,
                     workflow_type,
-                    dependencyActors
+                    availableActors
                 );
 
                 console.log(

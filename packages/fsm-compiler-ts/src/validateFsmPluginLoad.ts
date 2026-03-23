@@ -225,14 +225,14 @@ export async function validatePromisePluginLoadFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflow_type: WorkflowType,
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
   let resultValidateLanguageModules;
   let moduleVerified = false;
   let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
-  let dependentActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
+  let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
  
   console.warn(`Skipping plugin validation for sharedPromise ${dirEntryName}/${dirEntryNameVersion} since it is only used as a dependency and not directly invoked.`);
@@ -276,7 +276,7 @@ export async function validatePromisePluginLoadFromFolder(
     resultValidateLanguageModules,
     failedMethods,
     requiredChildActors,
-    dependentActors,
+    externalActors,
   };
 }
 
@@ -284,7 +284,7 @@ export async function validatePromisePluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -333,7 +333,7 @@ export async function validatePromisePluginLoadFromFolders(
                 `${fsmDirPath}/${subEntry.name}`,
                 dirEntry.name,
                 workflow_type,
-                dependencyActors
+                availableActors
               );
               console.log(
                 `Validation result for ${dirEntry.name}/${subEntry.name}:`,
@@ -368,14 +368,14 @@ export async function validateFsmPluginLoadFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflow_type: WorkflowType,
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = true;
   let fsmJsonFollowSchema = false;
   let resultValidateLanguageModules;
   let moduleVerified = false;
   let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
-  let dependentActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
+  let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
@@ -400,7 +400,7 @@ export async function validateFsmPluginLoadFromFolder(
       resultValidateLanguageModules,
       failedMethods,
       requiredChildActors,
-      dependentActors,
+      externalActors,
     };
   }
 
@@ -411,7 +411,7 @@ export async function validateFsmPluginLoadFromFolder(
   delays = result.delays;
   actors = result.actors;
   requiredChildActors = [...actors];
-  dependentActors = requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  ({...actor, resolved: false}));
+  externalActors = requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  ({...actor, resolved: false}));
 
   const outputValidateLanguageModules  = await validateLanguageModules(
     absFolderPath,
@@ -424,10 +424,10 @@ export async function validateFsmPluginLoadFromFolder(
   failedMethods = outputValidateLanguageModules.failedMethods;
   resultValidateLanguageModules = outputValidateLanguageModules.modules;
 
-  for (const dependency of dependentActors) {
+  for (const dependency of externalActors) {
     // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string, resolved: boolean }
     // Check if any folder object matches the dependency
-    const isDependencyFound = dependencyActors.some(folderObj =>
+    const isDependencyFound = availableActors.some(folderObj =>
       folderObj.src === dependency.src &&
       (folderObj.fsmVersion === dependency.fsmVersion) &&
       (folderObj.fsmType === dependency.fsmType)
@@ -463,7 +463,7 @@ export async function validateFsmPluginLoadFromFolder(
     resultValidateLanguageModules,
     failedMethods,
     requiredChildActors,
-    dependentActors,
+    externalActors,
   };
 }
 
@@ -471,7 +471,7 @@ export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -528,7 +528,7 @@ export async function validateFsmPluginLoadFromFolders(
                     `${fsmDirPath}/${subEntry.name}`,
                     dirEntry.name,
                     workflow_type,
-                    dependencyActors
+                    availableActors
                 );
 
                 console.log(
