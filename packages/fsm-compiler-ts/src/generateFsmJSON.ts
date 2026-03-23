@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+import Ajv from "ajv";
+import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
@@ -162,7 +164,8 @@ async function generateFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: WorkflowType
+  workflow_type: WorkflowType,
+  showRecommendation: boolean = false,
 ) {
   
   const createMachinePath = `${absFolderPath}/machine.ts`;
@@ -194,6 +197,20 @@ async function generateFsmJSONFromFolder(
         console.log('Child actor info:', childActorsInfo);
       }
 
+      if (showRecommendation) {
+        const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
+        const validate = ajv.compile(machineSchema);
+        const valid = validate(fsmJSON);
+        if (!valid) {
+          console.warn(`[recommendation] fsm.json schema issues in ${absFolderPath}/fsm.json:`);
+          for (const err of validate.errors ?? []) {
+            console.warn(`  - ${err.instancePath || "/"} ${err.message} (${JSON.stringify(err.params)})`);
+          }
+        } else {
+          console.log(`[recommendation] fsm.json passes schema validation ✓`);
+        }
+      }
+
 
       
       
@@ -214,7 +231,8 @@ async function generateFsmJSONFromFolder(
 export async function generateFsmJSONFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
-  skipDirs: string[] = []
+  skipDirs: string[] = [],
+  showRecommendation: boolean = false,
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
@@ -239,7 +257,7 @@ export async function generateFsmJSONFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
           if (isVersionFolderName(subEntry.name)) {
-            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
+            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type, showRecommendation);
           } else {
             console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
           }

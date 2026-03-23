@@ -13,8 +13,8 @@ import type { WorkflowType } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
   string: ["workflow-type"],
-  boolean: ["help"],
-  alias: { h: "help", w: "workflow-type" },
+  boolean: ["help", "show-recommendation"],
+  alias: { h: "help", w: "workflow-type", r: "show-recommendation" },
 });
 
 const [command, folder] = args._ as string[];
@@ -27,7 +27,7 @@ USAGE
   deno run --allow-all src/cli/index.ts <command> <folder> [options]
 
 COMMANDS
-  generate <folder>                         Generate fsm.json from machine.ts files
+  generate <folder> [-r]                    Generate fsm.json from machine.ts files
   generate-plugin <folder>                  Generate TypeScript plugin stubs from fsm.json
   clean <folder>                            Delete generated fsm.json / xstate-fsm.json files
   validate <folder> -w <type>               Validate plugin load for an FSM folder
@@ -39,6 +39,7 @@ WORKFLOW TYPES
 
 OPTIONS
   -w, --workflow-type <type>  Workflow type (required for validate, load, load-and-verify)
+  -r, --show-recommendation   Validate generated fsm.json against schema and show errors
   -h, --help                  Show this help message
 
 EXAMPLES
@@ -77,7 +78,7 @@ async function buildDeps() {
 try {
   switch (command) {
     case "generate":
-      await generateFsmJSONFromFolders(folder, "fsm");
+      await generateFsmJSONFromFolders(folder, "fsm", [], args["show-recommendation"]);
       break;
     case "generate-plugin":
       await generateFsmPluginFromFolders(folder, "fsm");
