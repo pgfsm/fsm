@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { Pool } from "pg";
 import createApp from "../fsm-core-ts-hono-deno/lib/create-app.ts";
-import { createFsmApp } from "../../packages/fsm-compiler-ts/src/loadAndVerifyFsm.ts";
+import { loadAndVerifyFsmFromFolders } from "../../packages/fsm-compiler-ts/src/index.ts";
 
 const FSM_EXAMPLE_FOLDER = new URL(
   "../fsm-core-example/fsm",
@@ -30,8 +30,8 @@ const urlPathPrefix = "/embedded"; // Adjust this if your FSM router is mounted 
 const fsmRouter = createApp(
   pool,
   urlPathPrefix,
-  createFsmApp(FSM_EXAMPLE_FOLDER, FSM_WORKFLOW_TYPE, FSM_SKIP_DIRS),
-  createFsmApp(FSM_SHARED_EXAMPLE_FOLDER, FSM_SHARED_WORKFLOW_TYPE, FSM_SHARED_SKIP_DIRS),
+  (deps) => loadAndVerifyFsmFromFolders(deps, FSM_EXAMPLE_FOLDER, FSM_WORKFLOW_TYPE, FSM_SKIP_DIRS),
+  (deps) => loadAndVerifyFsmFromFolders(deps, FSM_SHARED_EXAMPLE_FOLDER, FSM_SHARED_WORKFLOW_TYPE, FSM_SHARED_SKIP_DIRS),
 );
 
 // Mount it wherever you need
