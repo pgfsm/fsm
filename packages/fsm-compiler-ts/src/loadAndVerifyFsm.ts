@@ -15,7 +15,7 @@ export async function loadAndVerifyPromiseFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -96,7 +96,7 @@ export async function loadAndVerifyFsmFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(

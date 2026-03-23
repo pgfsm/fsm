@@ -1,6 +1,21 @@
 import type { Schema } from "hono";
 import { cors } from "hono/cors";
 import { Pool } from "pg";
+import {
+  loadAndVerifyFsmFromFolders,
+  loadAndVerifyPromiseFromFolders,
+} from "../../../packages/fsm-compiler-ts/src/index.ts";
+
+export type FsmFolderConfig = {
+  folderPath: string;
+  skipDirs?: string[];
+};
+
+export type FsmStartupConfig = {
+  sharedPromise?: FsmFolderConfig;
+  sharedFsm?: FsmFolderConfig;
+  fsm?: FsmFolderConfig;
+};
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { requestId } from "hono/request-id";
@@ -34,8 +49,7 @@ export function createRouter() {
 export default function createApp(
   pool?: Pool,
   basePath = "",
-  createFsmApp?: (deps: { db: Pool }) => Promise<unknown>,
-  createSharedFsmApp?: (deps: { db: Pool }) => Promise<unknown>,
+  fsmConfig?: FsmStartupConfig,
 ) {
   const app = createRouter();
 
@@ -44,26 +58,44 @@ export default function createApp(
   });
   pool.on("acquire", () => {
     console.log("Database on acquired event");
-    // console.log("number of clients in the pool:", pool.totalCount);
-    // console.log("number of idle clients in the pool:", pool.idleCount);
-    // console.log("number of waiting requests in the pool:", pool.waitingCount);
   });
   pool.on("error", (err) => {
     console.error("Database error event:", err);
   });
 
-  if ((createFsmApp || createSharedFsmApp) && pool) {
+  if (fsmConfig && pool) {
     pool.connect().then(async (client) => {
       client.release();
-      if (createFsmApp) {
-        await createFsmApp({ db: pool }).catch((err) => {
-          console.error("createFsmApp startup error:", err);
-        });
-      }
-      if (createSharedFsmApp) {
-        await createSharedFsmApp({ db: pool }).catch((err) => {
-          console.error("createSharedFsmApp startup error:", err);
-        });
+      const deps = { db: pool };
+
+      const outputSharedPromise = fsmConfig.sharedPromise
+        ? await loadAndVerifyPromiseFromFolders(
+            deps,
+            fsmConfig.sharedPromise.folderPath,
+            "sharedPromise",
+            fsmConfig.sharedPromise.skipDirs ?? [],
+            [],
+          )
+        : [];
+
+      const outputSharedFsm = fsmConfig.sharedFsm
+        ? await loadAndVerifyFsmFromFolders(
+            deps,
+            fsmConfig.sharedFsm.folderPath,
+            "sharedFsm",
+            fsmConfig.sharedFsm.skipDirs ?? [],
+            outputSharedPromise,
+          )
+        : [];
+
+      if (fsmConfig.fsm) {
+        await loadAndVerifyFsmFromFolders(
+          deps,
+          fsmConfig.fsm.folderPath,
+          "fsm",
+          fsmConfig.fsm.skipDirs ?? [],
+          [...outputSharedPromise, ...outputSharedFsm],
+        );
       }
     }).catch((err) => {
       console.error("Pool connect error during FSM startup:", err);

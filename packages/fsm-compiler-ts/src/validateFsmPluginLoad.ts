@@ -225,7 +225,7 @@ export async function validatePromisePluginLoadFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflow_type: WorkflowType,
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
@@ -284,7 +284,7 @@ export async function validatePromisePluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -368,7 +368,7 @@ export async function validateFsmPluginLoadFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflow_type: WorkflowType,
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = true;
   let fsmJsonFollowSchema = false;
@@ -471,7 +471,7 @@ export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string, resolved: boolean }[] = [],
+  dependencyActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
