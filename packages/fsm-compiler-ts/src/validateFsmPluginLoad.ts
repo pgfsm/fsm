@@ -389,6 +389,19 @@ export async function validateFsmPluginLoadFromFolder(
   fsmJsonFollowSchema = !!valid;
   if (!valid) {
     console.error("fsm.json validation failed:", validate.errors);
+    return {
+      src: dirEntryName,
+      fsmName: dirEntryName,
+      fsmVersion: dirEntryNameVersion,
+      fsmType: workflow_type,
+      fsmJsonPresent,
+      fsmJsonFollowSchema,
+      moduleVerified,
+      resultValidateLanguageModules,
+      failedMethods,
+      requiredChildActors,
+      dependentActors,
+    };
   }
 
   // 1.1 Call fn to get all actions and guards from json file

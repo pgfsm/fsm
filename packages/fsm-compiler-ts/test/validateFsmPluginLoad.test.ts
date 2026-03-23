@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { hasArity, isFunction } from "../src/validateFsmPluginLoad.ts";
+import { hasArity, isFunction, validateFsmPluginLoadFromFolder } from "../src/validateFsmPluginLoad.ts";
 
 // isFunction
 Deno.test("isFunction - returns true for functions", () => {
@@ -36,4 +36,31 @@ Deno.test("hasArity - returns false for non-functions", () => {
   assertEquals(hasArity(1)(42), false);
   assertEquals(hasArity(0)(null), false);
   assertEquals(hasArity(2)("string"), false);
+});
+
+// validateFsmPluginLoadFromFolder - early return on schema failure
+Deno.test("validateFsmPluginLoadFromFolder - returns defaults when fsm.json fails schema", async () => {
+  const invalidFsmData = { not: "a valid fsm" };
+
+  const result = await validateFsmPluginLoadFromFolder(
+    invalidFsmData,
+    "testFsm",
+    "v01",
+    "some/folder",
+    "/tmp/nonexistent",
+    "testFsm",
+    "fsm",
+    [],
+  );
+
+  assertEquals(result.fsmJsonPresent, true);
+  assertEquals(result.fsmJsonFollowSchema, false);
+  assertEquals(result.moduleVerified, false);
+  assertEquals(result.failedMethods, []);
+  assertEquals(result.requiredChildActors, []);
+  assertEquals(result.dependentActors, []);
+  assertEquals(result.resultValidateLanguageModules, undefined);
+  assertEquals(result.fsmName, "testFsm");
+  assertEquals(result.fsmVersion, "v01");
+  assertEquals(result.fsmType, "fsm");
 });
