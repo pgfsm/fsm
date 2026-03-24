@@ -32,7 +32,7 @@
             ],
             "actions": [
               {
-                "type": "assignTasks-update"
+                "type": "assignTasksupdate"
               }
             ],
             "source": "#task.loading",
@@ -63,7 +63,7 @@
           ],
           "actions": [
             {
-              "type": "assignTasks-update"
+              "type": "assignTasksupdate"
             }
           ],
           "source": "#task.loading",

@@ -31,7 +31,7 @@
               "#task.idle"
             ],
             "actions": [
-              "assignTasks-update"
+              "assignTasksupdate"
             ],
             "source": "#task.loading",
             "reenter": false,
@@ -58,7 +58,7 @@
             "#task.idle"
           ],
           "actions": [
-            "assignTasks-update"
+            "assignTasksupdate"
           ],
           "source": "#task.loading",
           "reenter": false,
