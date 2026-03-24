@@ -1,0 +1,158 @@
+{
+  "id": "vitalscheck",
+  "key": "vitalscheck",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#vitalscheck.CheckVitals"
+    ],
+    "source": "#vitalscheck",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "CheckVitals": {
+      "id": "vitalscheck.CheckVitals",
+      "key": "CheckVitals",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#vitalscheck.CheckVitals",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              "assignTirePressure"
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.1.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              "assignOilPressure"
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.2.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              "assignCoolantLevel"
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.3.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              "assignBattery"
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "actions": [
+            "assignTirePressure"
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            "assignOilPressure"
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            "assignCoolantLevel"
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            "assignBattery"
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [
+        {
+          "src": "checkTirePressure",
+          "type": "xstate.invoke",
+          "id": "0.vitalscheck.CheckVitals"
+        },
+        {
+          "src": "checkOilPressure",
+          "type": "xstate.invoke",
+          "id": "1.vitalscheck.CheckVitals"
+        },
+        {
+          "src": "checkCoolantLevel",
+          "type": "xstate.invoke",
+          "id": "2.vitalscheck.CheckVitals"
+        },
+        {
+          "src": "checkBattery",
+          "type": "xstate.invoke",
+          "id": "3.vitalscheck.CheckVitals"
+        }
+      ],
+      "tags": []
+    },
+    "VitalsChecked": {
+      "id": "vitalscheck.VitalsChecked",
+      "key": "VitalsChecked",
+      "type": "final",
+      "initial": {
+        "target": [],
+        "source": "#vitalscheck.VitalsChecked",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

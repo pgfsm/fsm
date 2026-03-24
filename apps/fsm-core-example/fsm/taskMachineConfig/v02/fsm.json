@@ -1,0 +1,259 @@
+{
+  "id": "task",
+  "key": "task",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#task.loading"
+    ],
+    "source": "#task",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "loading": {
+      "id": "task.loading",
+      "key": "loading",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#task.loading",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.task.loading": [
+          {
+            "target": [
+              "#task.idle"
+            ],
+            "actions": [
+              "assignTasks-update"
+            ],
+            "source": "#task.loading",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.task.loading"
+          }
+        ],
+        "xstate.error.actor.0.task.loading": [
+          {
+            "target": [
+              "#task.failure"
+            ],
+            "actions": [
+              "assignError"
+            ],
+            "source": "#task.loading",
+            "reenter": false,
+            "eventType": "xstate.error.actor.0.task.loading"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#task.idle"
+          ],
+          "actions": [
+            "assignTasks-update"
+          ],
+          "source": "#task.loading",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.task.loading"
+        },
+        {
+          "target": [
+            "#task.failure"
+          ],
+          "actions": [
+            "assignError"
+          ],
+          "source": "#task.loading",
+          "reenter": false,
+          "eventType": "xstate.error.actor.0.task.loading"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [
+        {
+          "src": "fetchTasks",
+          "type": "xstate.invoke",
+          "id": "0.task.loading",
+          "fsmType": "promise",
+          "fsmVersion": "v02"
+        }
+      ],
+      "tags": []
+    },
+    "idle": {
+      "id": "task.idle",
+      "key": "idle",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#task.idle",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "UPDATE_TASK": [
+          {
+            "target": [
+              "#task.updating"
+            ],
+            "actions": [],
+            "source": "#task.idle",
+            "reenter": false,
+            "eventType": "UPDATE_TASK"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#task.updating"
+          ],
+          "actions": [],
+          "source": "#task.idle",
+          "reenter": false,
+          "eventType": "UPDATE_TASK"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [],
+      "tags": []
+    },
+    "updating": {
+      "id": "task.updating",
+      "key": "updating",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#task.updating",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.task.updating": [
+          {
+            "target": [
+              "#task.loading"
+            ],
+            "actions": [],
+            "source": "#task.updating",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.task.updating"
+          }
+        ],
+        "xstate.error.actor.0.task.updating": [
+          {
+            "target": [
+              "#task.failure"
+            ],
+            "actions": [
+              "assignError"
+            ],
+            "source": "#task.updating",
+            "reenter": false,
+            "eventType": "xstate.error.actor.0.task.updating"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#task.loading"
+          ],
+          "actions": [],
+          "source": "#task.updating",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.task.updating"
+        },
+        {
+          "target": [
+            "#task.failure"
+          ],
+          "actions": [
+            "assignError"
+          ],
+          "source": "#task.updating",
+          "reenter": false,
+          "eventType": "xstate.error.actor.0.task.updating"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 3,
+      "invoke": [
+        {
+          "src": "updateTask",
+          "type": "xstate.invoke",
+          "id": "0.task.updating",
+          "fsmType": "promise",
+          "fsmVersion": "v02"
+        }
+      ],
+      "tags": []
+    },
+    "failure": {
+      "id": "task.failure",
+      "key": "failure",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#task.failure",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "RETRY": [
+          {
+            "target": [
+              "#task.loading"
+            ],
+            "actions": [],
+            "source": "#task.failure",
+            "reenter": false,
+            "eventType": "RETRY"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#task.loading"
+          ],
+          "actions": [],
+          "source": "#task.failure",
+          "reenter": false,
+          "eventType": "RETRY"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 4,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

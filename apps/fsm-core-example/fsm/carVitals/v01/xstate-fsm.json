@@ -1,0 +1,202 @@
+{
+  "id": "checkcarvitals",
+  "key": "checkcarvitals",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#checkcarvitals.WhenCarIsOn"
+    ],
+    "source": "#checkcarvitals",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "WhenCarIsOn": {
+      "id": "checkcarvitals.WhenCarIsOn",
+      "key": "WhenCarIsOn",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#checkcarvitals.WhenCarIsOn",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "CarTurnedOnEvent": [
+          {
+            "target": [
+              "#checkcarvitals.DoCarVitalChecks"
+            ],
+            "actions": [],
+            "source": "#checkcarvitals.WhenCarIsOn",
+            "reenter": false,
+            "eventType": "CarTurnedOnEvent"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#checkcarvitals.DoCarVitalChecks"
+          ],
+          "actions": [],
+          "source": "#checkcarvitals.WhenCarIsOn",
+          "reenter": false,
+          "eventType": "CarTurnedOnEvent"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    },
+    "DoCarVitalChecks": {
+      "id": "checkcarvitals.DoCarVitalChecks",
+      "key": "DoCarVitalChecks",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#checkcarvitals.DoCarVitalChecks",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.checkcarvitals.DoCarVitalChecks": [
+          {
+            "actions": [
+              null
+            ],
+            "target": [
+              "#checkcarvitals.CheckContinueVitalChecks"
+            ],
+            "source": "#checkcarvitals.DoCarVitalChecks",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.checkcarvitals.DoCarVitalChecks"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "actions": [
+            null
+          ],
+          "target": [
+            "#checkcarvitals.CheckContinueVitalChecks"
+          ],
+          "source": "#checkcarvitals.DoCarVitalChecks",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.checkcarvitals.DoCarVitalChecks"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [
+        {
+          "fsmType": "sharedFsm",
+          "childFSMVersion": "v01",
+          "src": "vitalsWorkflow",
+          "type": "xstate.invoke",
+          "id": "0.checkcarvitals.DoCarVitalChecks"
+        }
+      ],
+      "description": "",
+      "tags": []
+    },
+    "CheckContinueVitalChecks": {
+      "id": "checkcarvitals.CheckContinueVitalChecks",
+      "key": "CheckContinueVitalChecks",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#checkcarvitals.CheckContinueVitalChecks",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks": [
+          {
+            "target": [
+              "#checkcarvitals.DoCarVitalChecks"
+            ],
+            "event": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks",
+            "delay": 1000,
+            "actions": [],
+            "source": "#checkcarvitals.CheckContinueVitalChecks",
+            "reenter": false,
+            "eventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#checkcarvitals.DoCarVitalChecks"
+          ],
+          "event": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks",
+          "delay": 1000,
+          "actions": [],
+          "source": "#checkcarvitals.CheckContinueVitalChecks",
+          "reenter": false,
+          "eventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel"
+        }
+      ],
+      "order": 3,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {
+    "CarTurnedOffEvent": [
+      {
+        "description": "",
+        "actions": [
+          null
+        ],
+        "target": [
+          "#checkcarvitals.WhenCarIsOn"
+        ],
+        "source": "#checkcarvitals",
+        "reenter": false,
+        "eventType": "CarTurnedOffEvent"
+      }
+    ]
+  },
+  "transitions": [
+    {
+      "description": "",
+      "actions": [
+        null
+      ],
+      "target": [
+        "#checkcarvitals.WhenCarIsOn"
+      ],
+      "source": "#checkcarvitals",
+      "reenter": false,
+      "eventType": "CarTurnedOffEvent"
+    }
+  ],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}
