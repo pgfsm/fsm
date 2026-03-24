@@ -17,7 +17,7 @@ const taskMachineConfig = createMachine({
         src: 'fetchTasks',
         onDone: {
           target: 'idle',
-          actions: 'assignTasks-update',
+          actions: 'assignTasksupdate',
         },
         onError: {
           target: 'failure',
