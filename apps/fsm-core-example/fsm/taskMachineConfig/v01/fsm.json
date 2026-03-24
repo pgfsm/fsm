@@ -31,7 +31,9 @@
               "#task.idle"
             ],
             "actions": [
-              "assignTasks"
+              {
+                "type": "assignTasks"
+              }
             ],
             "source": "#task.loading",
             "reenter": false,
@@ -44,7 +46,9 @@
               "#task.failure"
             ],
             "actions": [
-              "assignError"
+              {
+                "type": "assignError"
+              }
             ],
             "source": "#task.loading",
             "reenter": false,
@@ -58,7 +62,9 @@
             "#task.idle"
           ],
           "actions": [
-            "assignTasks"
+            {
+              "type": "assignTasks"
+            }
           ],
           "source": "#task.loading",
           "reenter": false,
@@ -69,7 +75,9 @@
             "#task.failure"
           ],
           "actions": [
-            "assignError"
+            {
+              "type": "assignError"
+            }
           ],
           "source": "#task.loading",
           "reenter": false,
@@ -162,7 +170,9 @@
               "#task.failure"
             ],
             "actions": [
-              "assignError"
+              {
+                "type": "assignError"
+              }
             ],
             "source": "#task.updating",
             "reenter": false,
@@ -185,7 +195,9 @@
             "#task.failure"
           ],
           "actions": [
-            "assignError"
+            {
+              "type": "assignError"
+            }
           ],
           "source": "#task.updating",
           "reenter": false,

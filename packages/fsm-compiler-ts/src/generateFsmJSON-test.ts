@@ -3,8 +3,10 @@ import { generateFsmJSONFromFolders } from './generateFsmJSON.ts';
 
 dotenv.config({ path: "./../../.env" });
 
-const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
-const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
+// const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
+// const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
+const sharedFSMfolderPath = 'apps/fsm-core-example/sharedFSM';
+const fsmfolderPath = 'apps/fsm-core-example/fsm';
 
 (async () => {
   console.log("=== generateFsmJSON tests ===\n");
