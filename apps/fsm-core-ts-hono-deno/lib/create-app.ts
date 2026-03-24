@@ -46,7 +46,7 @@ export function createRouter() {
   });
 }
 
-export default function createApp(
+export default async function createApp(
   pool?: Pool,
   basePath = "",
   fsmConfig?: FsmStartupConfig,
@@ -64,51 +64,40 @@ export default function createApp(
   });
 
   if (fsmConfig && pool) {
-    pool.connect().then(async (client) => {
-      client.release();
-      const deps = { db: pool };
+    const client = await pool.connect();
+    client.release();
+    const deps = { db: pool };
 
-      const outputSharedPromise = fsmConfig.sharedPromise
-        ? await loadAndVerifyPromiseFromFolders(
-            deps,
-            fsmConfig.sharedPromise.folderPath,
-            "sharedPromise",
-            fsmConfig.sharedPromise.skipDirs ?? [],
-            [],
-          )
-        : [];
-
-      const outputSharedFsm = fsmConfig.sharedFsm
-        ? await loadAndVerifyFsmFromFolders(
-            deps,
-            fsmConfig.sharedFsm.folderPath,
-            "sharedFsm",
-            fsmConfig.sharedFsm.skipDirs ?? [],
-            outputSharedPromise,
-          )
-        : [];
-
-      if (fsmConfig.fsm) {
-        await loadAndVerifyFsmFromFolders(
+    const outputSharedPromise = fsmConfig.sharedPromise
+      ? await loadAndVerifyPromiseFromFolders(
           deps,
-          fsmConfig.fsm.folderPath,
-          "fsm",
-          fsmConfig.fsm.skipDirs ?? [],
-          [...outputSharedPromise, ...outputSharedFsm],
-        );
-      }
-    }).catch((err) => {
-      console.error("Pool connect error during FSM startup:", err);
-    });
-  }
+          fsmConfig.sharedPromise.folderPath,
+          "sharedPromise",
+          fsmConfig.sharedPromise.skipDirs ?? [],
+          [],
+        )
+      : [];
 
-  // pool.connect().then(() => {
-  //   console.log("Database connection established");
-  //   app.set("db",pool)
-     
-  // }).catch((err) => {
-  //   console.error("Database connection error:", err);
-  // });
+    const outputSharedFsm = fsmConfig.sharedFsm
+      ? await loadAndVerifyFsmFromFolders(
+          deps,
+          fsmConfig.sharedFsm.folderPath,
+          "sharedFsm",
+          fsmConfig.sharedFsm.skipDirs ?? [],
+          outputSharedPromise,
+        )
+      : [];
+
+    if (fsmConfig.fsm) {
+      await loadAndVerifyFsmFromFolders(
+        deps,
+        fsmConfig.fsm.folderPath,
+        "fsm",
+        fsmConfig.fsm.skipDirs ?? [],
+        [...outputSharedPromise, ...outputSharedFsm],
+      );
+    }
+  }
 
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
   app.use("*", async (c, next) => {
@@ -121,7 +110,6 @@ export default function createApp(
   if (env.DB_TYPE === "supabase") {
     app.use("*", supabaseMiddleware());
   } else if (env.DB_TYPE === "postgres") {
-    // Attach the db connection to the context for all routes
     if (pool) {
       app.use("*", (c, next) => {
         c.set("db", pool);
@@ -130,7 +118,6 @@ export default function createApp(
     }
   } else if (env.DB_TYPE === "supabase_and_postgres") {
     app.use("*", supabaseMiddleware());
-    // Attach the db connection to the context for all routes
     if (pool) {
       app.use("*", (c, next) => {
         c.set("db", pool);
@@ -153,7 +140,7 @@ export default function createApp(
     app.route("/", route);
   });
 
-  configureOpenAPI(app,basePath);
+  configureOpenAPI(app, basePath);
 
   return app;
 }

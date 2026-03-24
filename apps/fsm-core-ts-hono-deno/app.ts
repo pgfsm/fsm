@@ -9,7 +9,7 @@ const pool = new Pool({
 
 const urlPathPrefix = "/embedded";
 
-const fsmRouter = createApp(pool, urlPathPrefix, {
+const fsmRouter = await createApp(pool, urlPathPrefix, {
   sharedPromise: {
     folderPath: new URL("../fsm-core-example/sharedPromise", import.meta.url).pathname,
     skipDirs: [],
