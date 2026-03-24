@@ -1,15 +1,64 @@
-import { assign, createMachine, fromPromise, createActor, log } from 'xstate';
+import { assign, createMachine, fromPromise } from 'xstate';
 
-async function delay(ms: number, errorProbability: number = 0): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < errorProbability) {
-        reject({ type: 'ServiceNotAvailable' });
-      } else {
-        resolve();
-      }
-    }, ms);
-  });
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function checkTirePressure() {
+  console.log('Starting checkTirePressure');
+  await delay(1000);
+  console.log('Completed checkTirePressure');
+  return { value: 100 };
+}
+
+async function checkOilPressure() {
+  console.log('Starting checkOilPressure');
+  await delay(1500);
+  console.log('Completed checkOilPressure');
+  return { value: 100 };
+}
+
+async function checkCoolantLevel() {
+  console.log('Starting checkCoolantLevel');
+  await delay(500);
+  console.log('Completed checkCoolantLevel');
+  return { value: 100 };
+}
+
+async function checkBattery() {
+  console.log('Starting checkBattery');
+  await delay(1200);
+  console.log('Completed checkBattery');
+  return { value: 100 };
+}
+
+function assignTirePressure({ event }: { event: any }) {
+  return { tirePressure: event.output };
+}
+
+function assignOilPressure({ event }: { event: any }) {
+  return { oilPressure: event.output };
+}
+
+function assignCoolantLevel({ event }: { event: any }) {
+  return { coolantLevel: event.output };
+}
+
+function assignBattery({ event }: { event: any }) {
+  return { battery: event.output };
+}
+
+function allVitalsAvailable({ context }: { context: any }) {
+  return !!(
+    context.tirePressure &&
+    context.oilPressure &&
+    context.coolantLevel &&
+    context.battery
+  );
+}
+
+function outputContext({ context }: { context: any }) {
+  return context;
 }
 
 const vitalsWorkflow = createMachine(
@@ -28,85 +77,49 @@ const vitalsWorkflow = createMachine(
         invoke: [
           {
             src: 'checkTirePressure',
-            onDone: {
-              actions: assign({
-                tirePressure: ({ event }) => event.output
-              })
-            }
+            onDone: { actions: 'assignTirePressure' }
           },
           {
             src: 'checkOilPressure',
-            onDone: {
-              actions: assign({
-                oilPressure: ({ event }) => event.output
-              })
-            }
+            onDone: { actions: 'assignOilPressure' }
           },
           {
             src: 'checkCoolantLevel',
-            onDone: {
-              actions: assign({
-                coolantLevel: ({ event }) => event.output
-              })
-            }
+            onDone: { actions: 'assignCoolantLevel' }
           },
           {
             src: 'checkBattery',
-            onDone: {
-              actions: assign({
-                battery: ({ event }) => event.output
-              })
-            }
+            onDone: { actions: 'assignBattery' }
           }
         ],
         always: {
-          guard: ({ context }) => {
-            return !!(
-              context.tirePressure &&
-              context.oilPressure &&
-              context.coolantLevel &&
-              context.battery
-            );
-          },
+          guard: 'allVitalsAvailable',
           target: 'VitalsChecked'
         }
       },
       VitalsChecked: {
         type: 'final',
-        output: ({ context }) => context
+        output: outputContext
       }
     }
   },
   {
+    actions: {
+      assignTirePressure: assign(assignTirePressure),
+      assignOilPressure: assign(assignOilPressure),
+      assignCoolantLevel: assign(assignCoolantLevel),
+      assignBattery: assign(assignBattery),
+    },
     actors: {
-      checkTirePressure: fromPromise(async () => {
-        console.log('Starting checkTirePressure');
-        await delay(1000);
-        console.log('Completed checkTirePressure');
-        return { value: 100 };
-      }),
-      checkOilPressure: fromPromise(async () => {
-        console.log('Starting checkOilPressure');
-        await delay(1500);
-        console.log('Completed checkOilPressure');
-        return { value: 100 };
-      }),
-      checkCoolantLevel: fromPromise(async () => {
-        console.log('Starting checkCoolantLevel');
-        await delay(500);
-        console.log('Completed checkCoolantLevel');
-        return { value: 100 };
-      }),
-      checkBattery: fromPromise(async () => {
-        console.log('Starting checkBattery');
-        await delay(1200);
-        console.log('Completed checkBattery');
-        return { value: 100 };
-      })
-    }
+      checkTirePressure: fromPromise(checkTirePressure),
+      checkOilPressure: fromPromise(checkOilPressure),
+      checkCoolantLevel: fromPromise(checkCoolantLevel),
+      checkBattery: fromPromise(checkBattery),
+    },
+    guards: {
+      allVitalsAvailable,
+    },
   }
 );
 
-
 export default vitalsWorkflow;
-
