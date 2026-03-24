@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { addMissingFsmTypeToInvokeActor, generateFsmJSONFromFolders } from "../src/generateFsmJSON.ts";
+import { addMissingFsmTypeToInvokeActor, generateFsmJSONFromFolders, normalizeActionsToObjects } from "../src/generateFsmJSON.ts";
 
 // --- addMissingFsmTypeToInvokeActor unit tests ---
 
@@ -77,6 +77,94 @@ Deno.test("addMissingFsmTypeToInvokeActor - does not mutate original", () => {
   const original = JSON.stringify(fsmJSON);
   addMissingFsmTypeToInvokeActor(fsmJSON, "v01");
   assertEquals(JSON.stringify(fsmJSON), original);
+});
+
+// --- normalizeActionsToObjects unit tests ---
+
+Deno.test("normalizeActionsToObjects - converts string entry/exit actions to { type }", () => {
+  const input = {
+    states: {
+      idle: {
+        entry: ["doEnter", "doAlso"],
+        exit: ["doExit"],
+      },
+    },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.states.idle.entry, [{ type: "doEnter" }, { type: "doAlso" }]);
+  assertEquals(result.states.idle.exit, [{ type: "doExit" }]);
+});
+
+Deno.test("normalizeActionsToObjects - converts string actions in on-transitions", () => {
+  const input = {
+    states: {
+      idle: {
+        on: {
+          NEXT: [{ actions: ["assignFoo", "assignBar"], eventType: "NEXT", source: "idle", target: ["active"] }],
+        },
+      },
+    },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.states.idle.on.NEXT[0].actions, [{ type: "assignFoo" }, { type: "assignBar" }]);
+});
+
+Deno.test("normalizeActionsToObjects - converts string actions in transitions array", () => {
+  const input = {
+    states: {
+      idle: {
+        transitions: [{ actions: ["doSomething"], eventType: "GO", source: "idle", target: ["done"] }],
+      },
+    },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.states.idle.transitions[0].actions, [{ type: "doSomething" }]);
+});
+
+Deno.test("normalizeActionsToObjects - converts string actions in initial transition", () => {
+  const input = {
+    initial: { actions: ["initAction"], source: "root", target: ["idle"] },
+    states: { idle: {} },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.initial.actions, [{ type: "initAction" }]);
+});
+
+Deno.test("normalizeActionsToObjects - leaves existing actionObjects unchanged", () => {
+  const input = {
+    states: {
+      idle: {
+        entry: [{ type: "alreadyObject", extra: true }],
+      },
+    },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.states.idle.entry, [{ type: "alreadyObject", extra: true }]);
+});
+
+Deno.test("normalizeActionsToObjects - handles nested states recursively", () => {
+  const input = {
+    states: {
+      outer: {
+        states: {
+          inner: {
+            entry: ["nestedAction"],
+          },
+        },
+      },
+    },
+  };
+  const result = normalizeActionsToObjects(input);
+  assertEquals(result.states.outer.states.inner.entry, [{ type: "nestedAction" }]);
+});
+
+Deno.test("normalizeActionsToObjects - does not mutate original", () => {
+  const input = {
+    states: { idle: { entry: ["doEnter"] } },
+  };
+  const original = JSON.stringify(input);
+  normalizeActionsToObjects(input);
+  assertEquals(JSON.stringify(input), original);
 });
 
 // --- generateFsmJSONFromFolders integration tests ---

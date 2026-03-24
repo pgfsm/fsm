@@ -5,13 +5,12 @@ import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with {
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
- * Removes all null values from any 'actions' array in the FSM JSON object.
- * Uses an iterative approach to avoid recursion depth issues.
+ * Pure function — returns a new FSM JSON object with all null values removed
+ * from every actions/entry/exit array. Does not mutate the input.
  * @param obj The FSM JSON object
  * @returns A new object with nulls removed from actions arrays
  */
 function removeNullActions(obj: any): any {
-  // Deep clone the object to avoid mutating the original
   const clone = JSON.parse(JSON.stringify(obj));
 
   function visitState(state: any) {
@@ -89,13 +88,117 @@ function removeNullActions(obj: any): any {
 }
 
 /**
- * Iterates through all invoke entries in the FSM JSON, adds missing fsmType and fsmVersion, and returns full JSON and child actor info array.
+ * Pure function — returns a new FSM JSON with every plain string action
+ * converted to an actionObject `{ type: string }` in all entry/exit arrays
+ * and transition actions arrays. Does not mutate the input.
+ * @param obj The FSM JSON object
+ * @returns A new object with all string actions replaced by { type: string }
+ */
+export function normalizeActionsToObjects(obj: any): any {
+  const clone = JSON.parse(JSON.stringify(obj));
+
+  function toActionObject(a: any): any {
+    return typeof a === "string" ? { type: a } : a;
+  }
+
+  function normalizeActionArray(arr: any[]): any[] {
+    return arr.map(toActionObject);
+  }
+
+  function visitState(state: any) {
+    if (Array.isArray(state.entry)) {
+      state.entry = normalizeActionArray(state.entry);
+    }
+    if (Array.isArray(state.exit)) {
+      state.exit = normalizeActionArray(state.exit);
+    }
+
+    // initial transition actions
+    if (state.initial && Array.isArray(state.initial.actions)) {
+      state.initial.actions = normalizeActionArray(state.initial.actions);
+    }
+
+    if (state.on && typeof state.on === "object") {
+      for (const eventKey of Object.keys(state.on)) {
+        const transitions = state.on[eventKey];
+        if (Array.isArray(transitions)) {
+          for (const transition of transitions) {
+            if (Array.isArray(transition.actions)) {
+              transition.actions = normalizeActionArray(transition.actions);
+            }
+          }
+        }
+      }
+    }
+    if (Array.isArray(state.transitions)) {
+      for (const transition of state.transitions) {
+        if (Array.isArray(transition.actions)) {
+          transition.actions = normalizeActionArray(transition.actions);
+        }
+      }
+    }
+
+    // Recursively visit substates
+    if (state.states && typeof state.states === "object") {
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
+    }
+  }
+
+  // Root-level entry/exit
+  if (Array.isArray(clone.entry)) {
+    clone.entry = normalizeActionArray(clone.entry);
+  }
+  if (Array.isArray(clone.exit)) {
+    clone.exit = normalizeActionArray(clone.exit);
+  }
+
+  // Root initial transition actions
+  if (clone.initial && Array.isArray(clone.initial.actions)) {
+    clone.initial.actions = normalizeActionArray(clone.initial.actions);
+  }
+
+  // Root on transitions
+  if (clone.on && typeof clone.on === "object") {
+    for (const eventKey of Object.keys(clone.on)) {
+      const transitions = clone.on[eventKey];
+      if (Array.isArray(transitions)) {
+        for (const transition of transitions) {
+          if (Array.isArray(transition.actions)) {
+            transition.actions = normalizeActionArray(transition.actions);
+          }
+        }
+      }
+    }
+  }
+  if (Array.isArray(clone.transitions)) {
+    for (const transition of clone.transitions) {
+      if (Array.isArray(transition.actions)) {
+        transition.actions = normalizeActionArray(transition.actions);
+      }
+    }
+  }
+
+  // Visit all states recursively
+  if (clone.states && typeof clone.states === "object") {
+    for (const stateKey of Object.keys(clone.states)) {
+      visitState(clone.states[stateKey]);
+    }
+  }
+
+  return clone;
+}
+
+/**
+ * Pure function — returns a new FSM JSON with missing fsmType/fsmVersion added
+ * to every invoke entry, plus a flat list of all child actor metadata.
+ * Does not mutate the input.
  * @param fsmJSON The FSM JSON object
- * @param parentFsmVersion The parent FSM version to use for missing fsmVersion
+ * @param parentFsmVersion Fallback fsmVersion applied when invoke entry has none
  * @returns { fulljson, childActorsInfo }
  */
 export function addMissingFsmTypeToInvokeActor(fsmJSON: any, parentFsmVersion: string): { fulljson: any, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
-  // Deep clone to avoid mutating original
   const clone = JSON.parse(JSON.stringify(fsmJSON));
   const childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> = [];
 
@@ -182,21 +285,28 @@ async function generateFsmJSONFromFolder(
       typeof machineConfig.config === "object" &&
       typeof machineConfig.toJSON === "function"
     ) {
+      // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON = machineConfig.toJSON();
-      const jsonOutput = JSON.stringify(xstateFsmJSON, null, 2);
-      writeFileSync(`${absFolderPath}/xstate-fsm.json`, jsonOutput);
-      console.log(`Wrote new xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
-      // todo - remove null from all actions from xstateFsmJSON before writing fsm.json
-      const xstateJSONWithoutNull = removeNullActions(xstateFsmJSON);
-      // Add version and workflow_type to fsmJSON and collect child actor info
-      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActor(xstateJSONWithoutNull, dirEntryNameVersion);
+      writeFileSync(`${absFolderPath}/xstate-fsm.json`, JSON.stringify(xstateFsmJSON, null, 2));
+      console.log(`Wrote xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
+
+      // step 2 — removeNullActions (pure): strip null entries from all action arrays
+      const cleanedJSON = removeNullActions(xstateFsmJSON);
+
+      // step 3 — normalizeActionsToObjects (pure): convert plain string actions to { type: string }
+      const normalizedJSON = normalizeActionsToObjects(cleanedJSON);
+
+      // step 4 — addMissingFsmTypeToInvokeActor (pure): fill in fsmType/fsmVersion on invoke entries
+      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActor(normalizedJSON, dirEntryNameVersion);
+
+      // step 5 — write fsm.json
       writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
-      console.log(`Wrote new fsm.json to ${absFolderPath}/fsm.json`);
-      // Optionally log child actor info
+      console.log(`Wrote fsm.json to ${absFolderPath}/fsm.json`);
       if (childActorsInfo.length > 0) {
         console.log('Child actor info:', childActorsInfo);
       }
 
+      // step 6 — (optional) validate fsm.json against schema and show recommendations
       if (showRecommendation) {
         const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
         const validate = ajv.compile(machineSchema);
@@ -210,10 +320,6 @@ async function generateFsmJSONFromFolder(
           console.log(`[recommendation] fsm.json passes schema validation ✓`);
         }
       }
-
-
-      
-      
     } else {
       console.error(`Export in ${createMachinePath} is not a valid xstate machine config`);
     }
