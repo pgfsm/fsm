@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
+import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";

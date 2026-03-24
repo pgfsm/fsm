@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import Ajv from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.json" with { type: "json" };
+import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
