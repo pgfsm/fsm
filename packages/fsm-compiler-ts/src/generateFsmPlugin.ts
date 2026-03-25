@@ -1,113 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName, type WorkflowType } from "./util.ts";
-
-// Helper: Extract actions and guards from FSM JSON
-function getActionsAndGuardsFromFsmJson(fsmData: any): { actions: string[]; guards: string[]; delays: string[]; actors: string[] } {
-  // Recursively traverse the FSM JSON to collect all action, guard, delay, and actor names
-  const actionsSet = new Set<string>();
-  const guardsSet = new Set<string>();
-  const delaysSet = new Set<string>();
-  const actorsSet = new Set<string>();
-
-  function visitState(state: any) {
-    // Collect actions from entry/exit arrays
-    if (Array.isArray(state.entry)) {
-      for (const entry of state.entry) {
-        if (typeof entry === 'string') {
-          actionsSet.add(entry);
-        } else if (entry && typeof entry === 'object' && typeof entry.type === 'string') {
-          actionsSet.add(entry.type);
-        }
-      }
-    }
-    if (Array.isArray(state.exit)) {
-      for (const exit of state.exit) {
-        if (typeof exit === 'string') {
-          actionsSet.add(exit);
-        } else if (exit && typeof exit === 'object' && typeof exit.type === 'string') {
-          actionsSet.add(exit.type);
-        }
-      }
-    }
-
-    // Collect actions, guards, delays from transitions (in 'on' and 'transitions')
-    if (state.on && typeof state.on === 'object') {
-      for (const eventKey of Object.keys(state.on)) {
-        const transitions = state.on[eventKey];
-        if (Array.isArray(transitions)) {
-          for (const transition of transitions) {
-            // Actions
-            if (Array.isArray(transition.actions)) {
-              for (const action of transition.actions) {
-                if (typeof action === 'string') {
-                  actionsSet.add(action);
-                } else if (action && typeof action === 'object' && typeof action.type === 'string') {
-                  actionsSet.add(action.type);
-                }
-              }
-            }
-            // Guards
-            if (transition.guard && typeof transition.guard === 'string') {
-              guardsSet.add(transition.guard);
-            }
-            // Delays
-            if (transition.delay && typeof transition.delay === 'string') {
-              delaysSet.add(transition.delay);
-            }
-          }
-        }
-      }
-    }
-    if (Array.isArray(state.transitions)) {
-      for (const transition of state.transitions) {
-        // Actions
-        if (Array.isArray(transition.actions)) {
-          for (const action of transition.actions) {
-            if (typeof action === 'string') {
-              actionsSet.add(action);
-            } else if (action && typeof action === 'object' && typeof action.type === 'string') {
-              actionsSet.add(action.type);
-            }
-          }
-        }
-        // Guards
-        if (transition.guard && typeof transition.guard === 'string') {
-          guardsSet.add(transition.guard);
-        }
-        // Delays
-        if (transition.delay && typeof transition.delay === 'string') {
-          delaysSet.add(transition.delay);
-        }
-      }
-    }
-
-    // Collect actors from invoke
-    if (Array.isArray(state.invoke)) {
-      for (const inv of state.invoke) {
-        if (inv && typeof inv.src === 'string') {
-          actorsSet.add(inv.src);
-        }
-      }
-    }
-
-    // Recursively visit substates
-    if (state.states && typeof state.states === 'object') {
-      for (const subKey of Object.keys(state.states)) {
-        visitState(state.states[subKey]);
-      }
-    }
-  }
-
-  visitState(fsmData);
-  return {
-    actions: Array.from(actionsSet).filter(Boolean),
-    guards: Array.from(guardsSet).filter(Boolean),
-    delays: Array.from(delaysSet).filter(Boolean),
-    actors: Array.from(actorsSet).filter(Boolean),
-  };
-}
-
+import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs } from "./util.ts";
 
 // Helper: Generate language folders and create modules for each action/guard
 async function generateLanguageFolders(
@@ -116,8 +9,9 @@ async function generateLanguageFolders(
   actions: string[],
   guards: string[],
   delays: string[],
-  actors: string[]
+  actors: { src: string; fsmType?: string; fsmVersion?: string }[]
 ) {
+  const actorNames = actors.map(a => a.src);
   // 2.1 Create folders
   const actionsDir = `${basePath}/${lang}/actions`;
   const guardsDir = `${basePath}/${lang}/guards`;
@@ -155,7 +49,7 @@ async function generateLanguageFolders(
         : `# Delay: ${delay}\ndef ${delay}():\n    # TODO: implement delay logic\n    pass\n\n`;
   }
 
-  for (const actor of actors) {
+  for (const actor of actorNames) {
     actorsIndexContent +=
       lang === 'typescript'
         ? `// Actor: ${actor}\nexport function ${actor}(context: any, event: any) {\n  // TODO: implement actor logic\n}\n\n`
@@ -189,7 +83,7 @@ async function generateFsmPluginFromFolder(
     const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
 
     // 1.1 Call fn to get all actions and guards from json file
-    const { actions, guards, delays, actors } = getActionsAndGuardsFromFsmJson(fsmData);
+    const { actions, guards, delays, actors } = extractFsmPluginRefs(fsmData);
 
     // 2. Call fn to generate folders/files for each language
     await generateLanguageFolders(absFolderPath, 'typescript', actions, guards, delays, actors);

@@ -1,6 +1,73 @@
 export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 
 /**
+ * Recursively traverses FSM JSON and collects all action, guard, delay, and actor names.
+ * Actors are returned as objects preserving fsmType and fsmVersion.
+ */
+export function extractFsmPluginRefs(fsmData: any): {
+  actions: string[];
+  guards: string[];
+  delays: string[];
+  actors: { src: string; fsmType?: string; fsmVersion?: string }[];
+} {
+  const actionsSet = new Set<string>();
+  const guardsSet = new Set<string>();
+  const delaysSet = new Set<string>();
+  const actorsArr: { src: string; fsmType?: string; fsmVersion?: string }[] = [];
+
+  function collectActionName(a: any) {
+    if (typeof a === "string") actionsSet.add(a);
+    else if (a && typeof a === "object" && typeof a.type === "string") actionsSet.add(a.type);
+  }
+
+  function visitState(state: any) {
+    if (Array.isArray(state.entry)) state.entry.forEach(collectActionName);
+    if (Array.isArray(state.exit)) state.exit.forEach(collectActionName);
+
+    if (state.on && typeof state.on === "object") {
+      for (const eventKey of Object.keys(state.on)) {
+        const transitions = state.on[eventKey];
+        if (Array.isArray(transitions)) {
+          for (const transition of transitions) {
+            if (Array.isArray(transition.actions)) transition.actions.forEach(collectActionName);
+            if (transition.guard && typeof transition.guard === "string") guardsSet.add(transition.guard);
+            if (transition.delay && typeof transition.delay === "string") delaysSet.add(transition.delay);
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(state.transitions)) {
+      for (const transition of state.transitions) {
+        if (Array.isArray(transition.actions)) transition.actions.forEach(collectActionName);
+        if (transition.guard && typeof transition.guard === "string") guardsSet.add(transition.guard);
+        if (transition.delay && typeof transition.delay === "string") delaysSet.add(transition.delay);
+      }
+    }
+
+    if (Array.isArray(state.invoke)) {
+      for (const inv of state.invoke) {
+        if (inv && typeof inv.src === "string") {
+          actorsArr.push({ src: inv.src, fsmType: inv.fsmType, fsmVersion: inv.fsmVersion });
+        }
+      }
+    }
+
+    if (state.states && typeof state.states === "object") {
+      for (const subKey of Object.keys(state.states)) visitState(state.states[subKey]);
+    }
+  }
+
+  visitState(fsmData);
+  return {
+    actions: Array.from(actionsSet).filter(Boolean),
+    guards: Array.from(guardsSet).filter(Boolean),
+    delays: Array.from(delaysSet).filter(Boolean),
+    actors: actorsArr,
+  };
+}
+
+/**
  * Checks if a string matches the date pattern YYYY-MM-DD-HH-MM.
  * @param name The string to test
  * @returns true if matches, false otherwise

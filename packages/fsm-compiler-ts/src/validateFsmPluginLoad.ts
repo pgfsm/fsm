@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs } from "./util.ts";
 
 
 // validators.ts
@@ -81,140 +81,6 @@ export async function validateLanguageModules(
   return {
     modules,
     failedMethods,
-  };
-}
-
-// Helper: Extract actions and guards from FSM JSON
-function getActionsAndGuardsFromFsmJson(fsmData: any): {
-  actions: string[];
-  guards: string[];
-  delays: string[];
-  actors: { src: string; fsmType?: string; fsmVersion?: string }[];
-} {
-  // Recursively traverse the FSM JSON to collect all action, guard, delay, and actor names
-  const actionsSet = new Set<string>();
-  const guardsSet = new Set<string>();
-  const delaysSet = new Set<string>();
-  const actorsArr: { src: string; fsmType?: string; fsmVersion?: string }[] = [];
-
-  function visitState(state: any) {
-    // Collect actions from entry/exit arrays
-    if (Array.isArray(state.entry)) {
-      for (const entry of state.entry) {
-        if (typeof entry === "string") {
-          actionsSet.add(entry);
-        } else if (
-          entry &&
-          typeof entry === "object" &&
-          typeof entry.type === "string"
-        ) {
-          actionsSet.add(entry.type);
-        }
-      }
-    }
-    if (Array.isArray(state.exit)) {
-      for (const exit of state.exit) {
-        if (typeof exit === "string") {
-          actionsSet.add(exit);
-        } else if (
-          exit &&
-          typeof exit === "object" &&
-          typeof exit.type === "string"
-        ) {
-          actionsSet.add(exit.type);
-        }
-      }
-    }
-
-    /*
-    // Collect actions, guards, delays from transitions (in 'on' and 'transitions')
-    if (state.on && typeof state.on === "object") {
-      for (const eventKey of Object.keys(state.on)) {
-        const transitions = state.on[eventKey];
-        if (Array.isArray(transitions)) {
-          for (const transition of transitions) {
-            // Actions
-            if (Array.isArray(transition.actions)) {
-              for (const action of transition.actions) {
-                if (typeof action === "string") {
-                  actionsSet.add(action);
-                } else if (
-                  action &&
-                  typeof action === "object" &&
-                  typeof action.type === "string"
-                ) {
-                  actionsSet.add(action.type);
-                }
-              }
-            }
-            // Guards
-            if (transition.guard && typeof transition.guard === "string") {
-              guardsSet.add(transition.guard);
-            }
-            // Delays
-            if (transition.delay && typeof transition.delay === "string") {
-              delaysSet.add(transition.delay);
-            }
-          }
-        }
-      }
-    }
-    */
-   
-    if (Array.isArray(state.transitions)) {
-      for (const transition of state.transitions) {
-        // Actions
-        if (Array.isArray(transition.actions)) {
-          for (const action of transition.actions) {
-            if (typeof action === "string") {
-              actionsSet.add(action);
-            } else if (
-              action &&
-              typeof action === "object" &&
-              typeof action.type === "string"
-            ) {
-              actionsSet.add(action.type);
-            }
-          }
-        }
-        // Guards
-        if (transition.guard && typeof transition.guard === "string") {
-          guardsSet.add(transition.guard);
-        }
-        // Delays
-        if (transition.delay && typeof transition.delay === "string") {
-          delaysSet.add(transition.delay);
-        }
-      }
-    }
-
-    // Collect actors from invoke
-    if (Array.isArray(state.invoke)) {
-      for (const inv of state.invoke) {
-        if (inv && typeof inv.src === "string") {
-          actorsArr.push({
-            src: inv.src,
-            fsmType: inv.fsmType,
-            fsmVersion: inv.fsmVersion,
-          });
-        }
-      }
-    }
-
-    // Recursively visit substates
-    if (state.states && typeof state.states === "object") {
-      for (const subKey of Object.keys(state.states)) {
-        visitState(state.states[subKey]);
-      }
-    }
-  }
-
-  visitState(fsmData);
-  return {
-    actions: Array.from(actionsSet).filter(Boolean),
-    guards: Array.from(guardsSet).filter(Boolean),
-    delays: Array.from(delaysSet).filter(Boolean),
-    actors: actorsArr,
   };
 }
 
@@ -405,7 +271,7 @@ export async function validateFsmPluginLoadFromFolder(
   }
 
   // 1.1 Call fn to get all actions and guards from json file
-  const result = getActionsAndGuardsFromFsmJson(fsmData);
+  const result = extractFsmPluginRefs(fsmData);
   actions = result.actions;
   guards = result.guards;
   delays = result.delays;
