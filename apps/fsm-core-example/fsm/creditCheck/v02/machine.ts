@@ -34,6 +34,9 @@ export const CreditCheckMachineMachineConfig = createMachine({
     logng2000delay: {
       target: "#allWorkflowStepDone"
     },
+    111111: {
+      target: "#allWorkflowStepDone"
+    }
   },
   
   initial: "creditCheck",
