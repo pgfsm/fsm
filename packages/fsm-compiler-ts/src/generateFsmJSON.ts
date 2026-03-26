@@ -155,7 +155,7 @@ export function addActionNameFromDelay(obj: any): any {
     return actions.map((a) => {
       if (a && typeof a === "object" && RAISE_CANCEL.has(a.type) && i < afterTransitions.length) {
         const t = afterTransitions[i++];
-        return { ...a, delayActionName: "delay" + t.delay, delayActionParam: t.eventType };
+        return { ...a, delayActionName: "delay" + t.delay, delayActionEventType: t.eventType };
       }
       return a;
     });
