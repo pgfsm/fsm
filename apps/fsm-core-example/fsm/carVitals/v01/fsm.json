@@ -96,11 +96,10 @@
       "invoke": [
         {
           "fsmType": "sharedFsm",
-          "childFSMVersion": "v01",
+          "fsmVersion": "v01",
           "src": "vitalsWorkflow",
           "type": "xstate.invoke",
-          "id": "0.checkcarvitals.DoCarVitalChecks",
-          "fsmVersion": "v01"
+          "id": "0.checkcarvitals.DoCarVitalChecks"
         }
       ],
       "description": "",
@@ -149,14 +148,14 @@
       "entry": [
         {
           "type": "xstate.raise",
-          "delayActionName": "delay1000",
+          "delayActionNameFail": "delay1000",
           "delayActionEventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
         }
       ],
       "exit": [
         {
           "type": "xstate.cancel",
-          "delayActionName": "delay1000",
+          "delayActionNameFail": "delay1000",
           "delayActionEventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
         }
       ],

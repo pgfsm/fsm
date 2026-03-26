@@ -30,7 +30,7 @@ export const workflow = createMachine(
         description : "",
         invoke: {
           fsmType: 'sharedFsm',
-          childFSMVersion: 'v01',
+          fsmVersion: 'v01',
           src: 'vitalsWorkflow',
           onDone: {
             actions: ({ event }) => {
