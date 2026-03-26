@@ -18,9 +18,7 @@ dotenv.config({ path: "./../../.env" });
   
 
   const deps = {
-    db: pool, // Use the pg Pool for database operations
-    useSupabase: false,
-    supabase: null,
+    db: pool,
   };
 
   // const skipSharedFSMDirs = ["vitalsWorkflow"];

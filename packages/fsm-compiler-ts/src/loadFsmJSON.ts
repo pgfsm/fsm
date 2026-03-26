@@ -43,7 +43,6 @@ async function loadFsmJSONFromFolder(
 /**
  * Loads all FSM JSON files in a folder and processes them.
  * @param folderPath Absolute or relative path to the folder containing FSM JSON files
- * @param supabaseClient The Supabase client instance to use for database operations
  */
 export async function loadFsmJSONFromFolders(
   folderPath: string,

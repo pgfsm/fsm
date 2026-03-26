@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 import { validateFsmPluginLoadFromFolders, validatePromisePluginLoadFromFolders } from './validateFsmPluginLoad.ts';
-import { createClient } from "@supabase/supabase-js";
 
 dotenv.config({ path: "./../../.env" });
 
@@ -25,15 +24,6 @@ dotenv.config({ path: "./../../.env" });
   // }
  
 
-  // const supabaseUrl = process.env.SUPABASE_URL;
-  // const supabaseKey = process.env.SUPABASE_ANON_KEY;
-  // const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  // if (!supabaseUrl || !supabaseKey) {
-  //   throw new Error(
-  //     "Missing SUPABASE_URL, SUPABASE_ANON_KEY env variable"
-  //   );
-  // }
-  // const supabase = createClient(supabaseUrl, supabaseKey);
   // const skipSharedFSMDirs = ["vitalsWorkflow"];
   // const skipFSMDirs = ["carVitals","taskMachineConfig"];
   const skipSharedPromiseDirs = [""];

@@ -15,7 +15,6 @@
     "@deno/dnt": "jsr:@deno/dnt@^0.41.3",
     "@std/assert": "jsr:@std/assert@1",
     "@std/cli": "jsr:@std/cli@1",
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.49.10",
     "@types/pg": "npm:@types/pg@^8.18.0",
     "ajv": "npm:ajv@^8.18.0",
     "dotenv": "npm:dotenv@^16.5.0",
