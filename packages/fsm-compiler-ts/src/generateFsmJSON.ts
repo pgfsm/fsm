@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import Ajv from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
+import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
@@ -272,7 +272,7 @@ async function generateFsmJSONFromFolder(
       // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON = machineConfig.toJSON();
       writeFileSync(`${absFolderPath}/xstate-fsm.json`, JSON.stringify(xstateFsmJSON, null, 2));
-      console.log(`Wrote xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
+      // console.log(`Wrote xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
 
       // step 2 — removeNullActions (pure): strip null entries from all action arrays
       const cleanedJSON = removeNullActions(xstateFsmJSON);
@@ -288,10 +288,10 @@ async function generateFsmJSONFromFolder(
 
       // step 6 — write fsm.json
       writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
-      console.log(`Wrote fsm.json to ${absFolderPath}/fsm.json`);
-      if (childActorsInfo.length > 0) {
-        console.log('Child actor info:', childActorsInfo);
-      }
+      // console.log(`Wrote fsm.json to ${absFolderPath}/fsm.json`);
+      // if (childActorsInfo.length > 0) {
+      //   console.log('Child actor info:', childActorsInfo);
+      // }
 
       // step 7 — (optional) validate fsm.json against schema and show recommendations
       if (showRecommendation) {
