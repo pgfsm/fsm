@@ -9,9 +9,13 @@
           "type": "string",
           "description": "The action type"
         },
-        "actionName": {
+        "delayActionName": {
           "type": "string",
           "description": "Required when type is xstate.raise or xstate.cancel"
+        },
+        "delayActionEventType": {
+          "type": "string",
+          "description": "The event type for the delay action"
         }
       },
       "additionalProperties": true,
@@ -22,7 +26,7 @@
         }
       },
       "then": {
-        "required": ["actionName"]
+        "required": ["delayActionName", "delayActionEventType"]
       }
     },
     "baseStateNode": {
