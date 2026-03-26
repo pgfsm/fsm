@@ -23,9 +23,20 @@
       "if": {
         "properties": {
           "type": { "enum": ["xstate.raise", "xstate.cancel"] }
-        }
+        },
+        "required": ["type"]
       },
       "then": {
+        "properties": {
+          "delayActionName": {
+            "type": "string",
+            "description": "Required when type is xstate.raise or xstate.cancel"
+          },
+          "delayActionEventType": {
+            "type": "string",
+            "description": "The event type for the delay action"
+          }
+        },
         "required": ["delayActionName", "delayActionEventType"]
       }
     },
