@@ -77,19 +77,19 @@ const vitalsWorkflow = createMachine(
         invoke: [
           {
             src: 'checkTirePressure',
-            onDone: { actions: 'assignTirePressure' }
+            onDone: { actions: 'assignTirePressure', target: 'CheckVitals' }
           },
           {
             src: 'checkOilPressure',
-            onDone: { actions: 'assignOilPressure' }
+            onDone: { actions: 'assignOilPressure', target: 'CheckVitals' }
           },
           {
             src: 'checkCoolantLevel',
-            onDone: { actions: 'assignCoolantLevel' }
+            onDone: { actions: 'assignCoolantLevel', target: 'CheckVitals' }
           },
           {
             src: 'checkBattery',
-            onDone: { actions: 'assignBattery' }
+            onDone: { actions: 'assignBattery', target: 'CheckVitals' }
           }
         ],
         always: {

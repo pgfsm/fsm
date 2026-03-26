@@ -30,6 +30,9 @@
             "actions": [
               "assignTirePressure"
             ],
+            "target": [
+              "#vitalscheck.CheckVitals"
+            ],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
@@ -39,6 +42,9 @@
           {
             "actions": [
               "assignOilPressure"
+            ],
+            "target": [
+              "#vitalscheck.CheckVitals"
             ],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
@@ -50,6 +56,9 @@
             "actions": [
               "assignCoolantLevel"
             ],
+            "target": [
+              "#vitalscheck.CheckVitals"
+            ],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
             "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
@@ -59,6 +68,9 @@
           {
             "actions": [
               "assignBattery"
+            ],
+            "target": [
+              "#vitalscheck.CheckVitals"
             ],
             "source": "#vitalscheck.CheckVitals",
             "reenter": false,
@@ -71,6 +83,9 @@
           "actions": [
             "assignTirePressure"
           ],
+          "target": [
+            "#vitalscheck.CheckVitals"
+          ],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
@@ -78,6 +93,9 @@
         {
           "actions": [
             "assignOilPressure"
+          ],
+          "target": [
+            "#vitalscheck.CheckVitals"
           ],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
@@ -87,6 +105,9 @@
           "actions": [
             "assignCoolantLevel"
           ],
+          "target": [
+            "#vitalscheck.CheckVitals"
+          ],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
           "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
@@ -94,6 +115,9 @@
         {
           "actions": [
             "assignBattery"
+          ],
+          "target": [
+            "#vitalscheck.CheckVitals"
           ],
           "source": "#vitalscheck.CheckVitals",
           "reenter": false,
