@@ -3,8 +3,8 @@ import { writeFileSync } from "node:fs";
 
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs } from "./util.ts";
+import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
+import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 
 
 // validators.ts
@@ -30,10 +30,12 @@ export async function validateLanguageModules(
   // Plugin folders
   // Filter actors to only those with fsmType === 'promise'
   const filteredActors = actors.filter(a => a.fsmType === 'promise').map(a => a.src);
+  const filteredActions = actions.filter(a => !RAISE_CANCEL.has(a));
+  const prefixedDelays = delays.map(d => `${DELAY_ACTION_NAME_PREFIX}${d}`);
   const moduleTypes = [
-    { type: "actions", names: actions },
+    { type: "actions", names: filteredActions },
     { type: "guards", names: guards },
-    { type: "delays", names: delays },
+    { type: "delays", names: prefixedDelays },
     { type: "actors", names: filteredActors },
   ];
 
