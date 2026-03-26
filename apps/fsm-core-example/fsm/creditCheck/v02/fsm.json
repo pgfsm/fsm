@@ -182,18 +182,26 @@
           ],
           "entry": [
             {
-              "type": "xstate.raise"
+              "type": "xstate.raise",
+              "delayActionName": "delayvc1000delay",
+              "delayActionEventType": "xstate.after.vc1000delay.(machine).creditCheck.Verifying Credentials"
             },
             {
-              "type": "xstate.raise"
+              "type": "xstate.raise",
+              "delayActionName": "delayvc2000delay",
+              "delayActionEventType": "xstate.after.vc2000delay.(machine).creditCheck.Verifying Credentials"
             }
           ],
           "exit": [
             {
-              "type": "xstate.cancel"
+              "type": "xstate.cancel",
+              "delayActionName": "delayvc1000delay",
+              "delayActionEventType": "xstate.after.vc1000delay.(machine).creditCheck.Verifying Credentials"
             },
             {
-              "type": "xstate.cancel"
+              "type": "xstate.cancel",
+              "delayActionName": "delayvc2000delay",
+              "delayActionEventType": "xstate.after.vc2000delay.(machine).creditCheck.Verifying Credentials"
             }
           ],
           "order": 3,
@@ -1406,24 +1414,36 @@
   ],
   "entry": [
     {
-      "type": "xstate.raise"
+      "type": "xstate.raise",
+      "delayActionName": "delay111111",
+      "delayActionEventType": "xstate.after.111111.(machine)"
     },
     {
-      "type": "xstate.raise"
+      "type": "xstate.raise",
+      "delayActionName": "delayshort1000delay",
+      "delayActionEventType": "xstate.after.short1000delay.(machine)"
     },
     {
-      "type": "xstate.raise"
+      "type": "xstate.raise",
+      "delayActionName": "delaylogng2000delay",
+      "delayActionEventType": "xstate.after.logng2000delay.(machine)"
     }
   ],
   "exit": [
     {
-      "type": "xstate.cancel"
+      "type": "xstate.cancel",
+      "delayActionName": "delay111111",
+      "delayActionEventType": "xstate.after.111111.(machine)"
     },
     {
-      "type": "xstate.cancel"
+      "type": "xstate.cancel",
+      "delayActionName": "delayshort1000delay",
+      "delayActionEventType": "xstate.after.short1000delay.(machine)"
     },
     {
-      "type": "xstate.cancel"
+      "type": "xstate.cancel",
+      "delayActionName": "delaylogng2000delay",
+      "delayActionEventType": "xstate.after.logng2000delay.(machine)"
     }
   ],
   "order": -1,

@@ -148,12 +148,16 @@
       ],
       "entry": [
         {
-          "type": "xstate.raise"
+          "type": "xstate.raise",
+          "delayActionName": "delay1000",
+          "delayActionEventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
         }
       ],
       "exit": [
         {
-          "type": "xstate.cancel"
+          "type": "xstate.cancel",
+          "delayActionName": "delay1000",
+          "delayActionEventType": "xstate.after.1000.checkcarvitals.CheckContinueVitalChecks"
         }
       ],
       "order": 3,
