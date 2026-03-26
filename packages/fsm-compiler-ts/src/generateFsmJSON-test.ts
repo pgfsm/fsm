@@ -12,13 +12,13 @@ const fsmfolderPath = 'apps/fsm-core-example/fsm';
   console.log("=== generateFsmJSON tests ===\n");
 
   // without showRecommendation (default)
-  console.log("--- generate sharedFSM (no recommendation) ---");
-  await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", []);
-  console.log("✅ sharedFSM generated\n");
+  // console.log("--- generate sharedFSM (no recommendation) ---");
+  // await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", []);
+  // console.log("✅ sharedFSM generated\n");
 
-  console.log("--- generate fsm (no recommendation) ---");
-  await generateFsmJSONFromFolders(fsmfolderPath, "fsm", []);
-  console.log("✅ fsm generated\n");
+  // console.log("--- generate fsm (no recommendation) ---");
+  // await generateFsmJSONFromFolders(fsmfolderPath, "fsm", []);
+  // console.log("✅ fsm generated\n");
 
   // with showRecommendation = true
   console.log("--- generate sharedFSM (showRecommendation = true) ---");
