@@ -1,5 +1,9 @@
 export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 
+export const DELAY_ACTION_NAME_PREFIX = "delay";
+
+export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);
+
 /**
  * Recursively traverses FSM JSON and collects all action, guard, delay, and actor names.
  * Actors are returned as objects preserving fsmType and fsmVersion.
@@ -31,7 +35,7 @@ export function extractFsmPluginRefs(fsmData: any): {
           for (const transition of transitions) {
             if (Array.isArray(transition.actions)) transition.actions.forEach(collectActionName);
             if (transition.guard && typeof transition.guard === "string") guardsSet.add(transition.guard);
-            if (transition.delay && typeof transition.delay === "string") delaysSet.add(transition.delay);
+            if (transition.delay) delaysSet.add(transition.delay);
           }
         }
       }
@@ -41,7 +45,7 @@ export function extractFsmPluginRefs(fsmData: any): {
       for (const transition of state.transitions) {
         if (Array.isArray(transition.actions)) transition.actions.forEach(collectActionName);
         if (transition.guard && typeof transition.guard === "string") guardsSet.add(transition.guard);
-        if (transition.delay && typeof transition.delay === "string") delaysSet.add(transition.delay);
+        if (transition.delay) delaysSet.add(transition.delay);
       }
     }
 

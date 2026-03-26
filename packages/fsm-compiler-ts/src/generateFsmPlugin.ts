@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 
 // Helper: Generate language folders and create modules for each action/guard
 async function generateLanguageFolders(
@@ -11,7 +11,7 @@ async function generateLanguageFolders(
   delays: string[],
   actors: { src: string; fsmType?: string; fsmVersion?: string }[]
 ) {
-  const actorNames = actors.map(a => a.src);
+  const actorNames = [...new Set(actors.map(a => a.src))];
   // 2.1 Create folders
   const actionsDir = `${basePath}/${lang}/actions`;
   const guardsDir = `${basePath}/${lang}/guards`;
@@ -29,6 +29,7 @@ async function generateLanguageFolders(
   let actorsIndexContent = '';
 
   for (const action of actions) {
+    if (RAISE_CANCEL.has(action)) continue;
     actionsIndexContent +=
       lang === 'typescript'
         ? `// Action: ${action}\nexport function ${action}(context: any, event: any) {\n  // TODO: implement\n}\n\n`
@@ -43,10 +44,11 @@ async function generateLanguageFolders(
   }
 
   for (const delay of delays) {
+    const delayFnName = `${DELAY_ACTION_NAME_PREFIX}${delay}`;
     delaysIndexContent +=
       lang === 'typescript'
-        ? `// Delay: ${delay}\nexport function ${delay}() {\n  // TODO: implement delay logic\n}\n\n`
-        : `# Delay: ${delay}\ndef ${delay}():\n    # TODO: implement delay logic\n    pass\n\n`;
+        ? `// Delay: ${delay}\nexport function ${delayFnName}() {\n  // TODO: implement delay logic\n}\n\n`
+        : `# Delay: ${delay}\ndef ${delayFnName}():\n    # TODO: implement delay logic\n    pass\n\n`;
   }
 
   for (const actor of actorNames) {

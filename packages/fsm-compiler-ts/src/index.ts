@@ -12,5 +12,5 @@ export {
   hasArity,
 } from "./validateFsmPluginLoad.ts";
 export { deleteFsmJSONFromFolders } from "./cleanFsmJSON.ts";
-export { isVersionFolderName, isValidDateFolderName, isTimestampFolderName, extractFsmPluginRefs } from "./util.ts";
+export { isVersionFolderName, isValidDateFolderName, isTimestampFolderName, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 export type { WorkflowType } from "./util.ts";

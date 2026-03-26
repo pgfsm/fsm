@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType } from "./util.ts";
+import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
 
 /**
  * Pure function — returns a new FSM JSON object with all null values removed
@@ -119,8 +119,6 @@ export function normalizeActionsToObjects(obj: any): any {
 export function addActionNameFromDelay(obj: any): any {
   const clone = JSON.parse(JSON.stringify(obj));
 
-  const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);
-
   /** Collect full transition objects whose event contains "xstate.after." and have a delay key */
   function getAfterTransitions(state: any): any[] {
     const afterTransitions: any[] = [];
@@ -155,7 +153,7 @@ export function addActionNameFromDelay(obj: any): any {
     return actions.map((a) => {
       if (a && typeof a === "object" && RAISE_CANCEL.has(a.type) && i < afterTransitions.length) {
         const t = afterTransitions[i++];
-        return { ...a, delayActionName: "delay" + t.delay, delayActionEventType: t.eventType };
+        return { ...a, delayActionName: DELAY_ACTION_NAME_PREFIX + t.delay, delayActionEventType: t.eventType };
       }
       return a;
     });
