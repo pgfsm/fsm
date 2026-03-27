@@ -60,11 +60,12 @@ export async function loadAndVerifyPromiseFromFolders(
               const folderResult = await validatePromisePluginLoadFromFolder(
                 dirEntry.name,
                 subEntry.name,
-                folderPath,
                 `${fsmDirPath}/${subEntry.name}`,
+                folderPath,
                 dirEntry.name,
+                fsmDirPath,
                 workflow_type,
-                availableActors
+                availableActors,
               );
               console.log(
                 `Validation result for ${dirEntry.name}/${subEntry.name}:`,
@@ -138,40 +139,41 @@ export async function loadAndVerifyFsmFromFolders(
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
 
-              const fsmJson = `${fsmDirPath}/${subEntry.name}/fsm.json`;
               try {
+                const fsmJson = `${fsmDirPath}/${subEntry.name}/fsm.json`;
                 await Deno.stat(fsmJson);
-                
-                // 1. Load fsm.json file
-                const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
 
+                // Load fsm.json for DB ingestion
+                const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
                 const rootNodeText = null;
                 const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, dirEntry.name, subEntry.name);
                 console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
 
                 const folderResult = await validateFsmPluginLoadFromFolder(
-                    fsmData, // should be from fsmResult 
-                    dirEntry.name,
-                    subEntry.name,
-                    folderPath,
-                    `${fsmDirPath}/${subEntry.name}`,
-                    dirEntry.name,
-                    workflow_type,
-                    availableActors
+                  fsmData,
+                  dirEntry.name,
+                  subEntry.name,
+                  `${fsmDirPath}/${subEntry.name}`,
+                  `${dirEntry.name}/${subEntry.name}`,
+                  folderPath,
+                  absFolderPath,
+                  folderPath,
+                  workflow_type,
+                  availableActors,
                 );
 
                 console.log(
                   `Validation result for ${dirEntry.name}/${subEntry.name}:`,
                   folderResult,
                 );
-                
-                allFolderResults.push({...folderResult, ...fsmResult});
+
+                allFolderResults.push({ ...folderResult, ...(fsmResult as object) });
 
               } catch (err) {
                 if (err instanceof Deno.errors.NotFound) {
-                  console.log(`fsm.json is missing in ${absFolderPath}/${dirEntry.name}`);
+                  console.log(`fsm.json is missing in ${fsmDirPath}/${subEntry.name}`);
                 } else {
-                  console.error(`Failed to import or process ${fsmJson}:`, err);
+                  console.error(`Failed to import or process ${fsmDirPath}/${subEntry.name}:`, err);
                 }
               }  
              

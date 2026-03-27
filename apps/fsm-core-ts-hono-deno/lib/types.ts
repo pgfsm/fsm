@@ -2,6 +2,17 @@ import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
 import type { Schema } from "hono";
 import type { PinoLogger } from "hono-pino";
 
+export type FsmFolderConfig = {
+  folderPath: string;
+  skipDirs?: string[];
+};
+
+export type FsmStartupConfig = {
+  sharedPromise?: FsmFolderConfig;
+  sharedFsm?: FsmFolderConfig;
+  fsm?: FsmFolderConfig;
+};
+
 export interface AppBindings {
   Bindings: {
     MY_DB: any;
@@ -10,6 +21,8 @@ export interface AppBindings {
     db: any;
     supabase: any;
     logger: PinoLogger;
+    fsmConfig: FsmStartupConfig | undefined;
+    verifiedModules: { fsmName: string; fsmVersion: string; fsmType: string }[];
   };
 }
 

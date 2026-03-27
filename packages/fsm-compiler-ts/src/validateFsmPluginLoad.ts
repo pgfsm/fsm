@@ -87,61 +87,60 @@ export async function validateLanguageModules(
 }
 
 export async function validatePromisePluginLoadFromFolder(
-  dirEntryName: string,
-  dirEntryNameVersion: string,
-  folderPath: string,
-  absFolderPath: string,
-  parentSource: string,
+  fsmDirName: string,
+  fsmVersionDirName: string,
+  fsmAbsFolderPath: string,
+  fsmRelativeFolderPath: string,
+  fsmParentDirName: string,
+  fsmParentAbsFolderPath: string,
+  fsmParentRelativeFolderPath: string,
   workflow_type: WorkflowType,
   availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
-  let resultValidateLanguageModules;
-  let moduleVerified = false;
+  let fsmModuleDefinition: any = undefined;
+  let isFsmModuleVerified = false;
   let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
- 
-  console.warn(`Skipping plugin validation for sharedPromise ${dirEntryName}/${dirEntryNameVersion} since it is only used as a dependency and not directly invoked.`);
+
+  console.warn(`Skipping plugin validation for sharedPromise ${fsmDirName}/${fsmVersionDirName} since it is only used as a dependency and not directly invoked.`);
   const lang = "typescript";
-  
-  const modDir = `${absFolderPath}/${lang}`;
+
+  const modDir = `${fsmAbsFolderPath}/${lang}`;
   const modulePath = `${modDir}/index.ts`;
   try {
-    // Dynamic import of index.ts
     const mod = await import(modulePath);
 
-    if (typeof mod[dirEntryName] !== "function") {
-      console.log(
-        `sharedPromise does not export '${dirEntryName}' as a function.`,
-      );
-      failedMethods.push({ method: dirEntryName, moduleType: "sharedPromise", modulePath: modulePath });
+    if (typeof mod[fsmDirName] !== "function") {
+      console.log(`sharedPromise does not export '${fsmDirName}' as a function.`);
+      failedMethods.push({ method: fsmDirName, moduleType: "sharedPromise", modulePath });
     } else {
-      console.log(
-        `sharedPromise exports '${dirEntryName}' as a function.`,
-      );
-      resultValidateLanguageModules = mod
-      moduleVerified = true;
+      console.log(`sharedPromise exports '${fsmDirName}' as a function.`);
+      fsmModuleDefinition = mod;
+      isFsmModuleVerified = true;
     }
-    
+
   } catch (err) {
-    console.error(
-      `Failed to import module for sharedPromise from ${modulePath}:`,
-      err,
-    );
-    failedMethods.push({ method: dirEntryName, moduleType: "sharedPromise", modulePath: modulePath });
+    console.error(`Failed to import module for sharedPromise from ${modulePath}:`, err);
+    failedMethods.push({ method: fsmDirName, moduleType: "sharedPromise", modulePath });
   }
 
   return {
-    src: dirEntryName,
-    fsmName: dirEntryName,
-    fsmVersion: dirEntryNameVersion,
+    src: fsmDirName,
+    fsmName: fsmDirName,
+    fsmVersion: fsmVersionDirName,
     fsmType: workflow_type,
+    fsmAbsFolderPath,
+    fsmRelativeFolderPath,
+    fsmParentDirName,
+    fsmParentAbsFolderPath,
+    fsmParentRelativeFolderPath,
     fsmJsonPresent,
     fsmJsonFollowSchema,
-    moduleVerified,
-    resultValidateLanguageModules,
+    isFsmModuleVerified,
+    fsmModuleDefinition,
     failedMethods,
     requiredChildActors,
     externalActors,
@@ -197,11 +196,13 @@ export async function validatePromisePluginLoadFromFolders(
               const folderResult = await validatePromisePluginLoadFromFolder(
                 dirEntry.name,
                 subEntry.name,
-                folderPath,
                 `${fsmDirPath}/${subEntry.name}`,
-                dirEntry.name,
+                `${dirEntry.name}/${subEntry.name}`,
+                folderPath,
+                absFolderPath,
+                folderPath,
                 workflow_type,
-                availableActors
+                availableActors,
               );
               console.log(
                 `Validation result for ${dirEntry.name}/${subEntry.name}:`,
@@ -230,18 +231,20 @@ export async function validatePromisePluginLoadFromFolders(
 
 export async function validateFsmPluginLoadFromFolder(
   fsmData: any,
-  dirEntryName: string,
-  dirEntryNameVersion: string,
-  folderPath: string,
-  absFolderPath: string,
-  parentSource: string,
+  fsmDirName: string,
+  fsmVersionDirName: string,
+  fsmAbsFolderPath: string,
+  fsmRelativeFolderPath: string,
+  fsmParentDirName: string,
+  fsmParentAbsFolderPath: string,
+  fsmParentRelativeFolderPath: string,
   workflow_type: WorkflowType,
   availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
 ) {
   let fsmJsonPresent = true;
   let fsmJsonFollowSchema = false;
-  let resultValidateLanguageModules;
-  let moduleVerified = false;
+  let fsmModuleDefinition: any = undefined;
+  let isFsmModuleVerified = false;
   let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
@@ -258,14 +261,19 @@ export async function validateFsmPluginLoadFromFolder(
   if (!valid) {
     console.error("fsm.json validation failed:", validate.errors);
     return {
-      src: dirEntryName,
-      fsmName: dirEntryName,
-      fsmVersion: dirEntryNameVersion,
+      src: fsmDirName,
+      fsmName: fsmDirName,
+      fsmVersion: fsmVersionDirName,
       fsmType: workflow_type,
+      fsmAbsFolderPath,
+      fsmRelativeFolderPath,
+      fsmParentDirName,
+      fsmParentAbsFolderPath,
+      fsmParentRelativeFolderPath,
       fsmJsonPresent,
       fsmJsonFollowSchema,
-      moduleVerified,
-      resultValidateLanguageModules,
+      isFsmModuleVerified,
+      fsmModuleDefinition,
       failedMethods,
       requiredChildActors,
       externalActors,
@@ -279,10 +287,10 @@ export async function validateFsmPluginLoadFromFolder(
   delays = result.delays;
   actors = result.actors;
   requiredChildActors = [...actors];
-  externalActors = requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor =>  ({...actor, resolved: false}));
+  externalActors = requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
 
-  const outputValidateLanguageModules  = await validateLanguageModules(
-    absFolderPath,
+  const outputValidateLanguageModules = await validateLanguageModules(
+    fsmAbsFolderPath,
     "typescript",
     actions,
     guards,
@@ -290,15 +298,13 @@ export async function validateFsmPluginLoadFromFolder(
     actors,
   );
   failedMethods = outputValidateLanguageModules.failedMethods;
-  resultValidateLanguageModules = outputValidateLanguageModules.modules;
+  fsmModuleDefinition = outputValidateLanguageModules.modules;
 
   for (const dependency of externalActors) {
-    // dependency has structure: { src: string, fsmType?: string, fsmVersion?: string, resolved: boolean }
-    // Check if any folder object matches the dependency
     const isDependencyFound = availableActors.some(folderObj =>
       folderObj.src === dependency.src &&
-      (folderObj.fsmVersion === dependency.fsmVersion) &&
-      (folderObj.fsmType === dependency.fsmType)
+      folderObj.fsmVersion === dependency.fsmVersion &&
+      folderObj.fsmType === dependency.fsmType
     );
 
     if (isDependencyFound) {
@@ -308,7 +314,7 @@ export async function validateFsmPluginLoadFromFolder(
         ? `${dependency.src}/${dependency.fsmVersion}`
         : dependency.src;
       console.error(
-        `Missing dependency: ${expectedFolderPath} (fsmType: ${dependency.fsmType}) required by ${dirEntryName}/${dirEntryNameVersion}`,
+        `Missing dependency: ${expectedFolderPath} (fsmType: ${dependency.fsmType}) required by ${fsmDirName}/${fsmVersionDirName}`,
       );
       failedMethods.push({
         method: `${dependency.src}/${dependency.fsmVersion}`,
@@ -318,17 +324,22 @@ export async function validateFsmPluginLoadFromFolder(
     }
   }
 
-  moduleVerified = failedMethods.length === 0;
+  isFsmModuleVerified = failedMethods.length === 0;
 
   return {
-    src: dirEntryName,
-    fsmName: dirEntryName,
-    fsmVersion: dirEntryNameVersion,
+    src: fsmDirName,
+    fsmName: fsmDirName,
+    fsmVersion: fsmVersionDirName,
     fsmType: workflow_type,
+    fsmAbsFolderPath,
+    fsmRelativeFolderPath,
+    fsmParentDirName,
+    fsmParentAbsFolderPath,
+    fsmParentRelativeFolderPath,
     fsmJsonPresent,
     fsmJsonFollowSchema,
-    moduleVerified,
-    resultValidateLanguageModules,
+    isFsmModuleVerified,
+    fsmModuleDefinition,
     failedMethods,
     requiredChildActors,
     externalActors,
@@ -381,37 +392,32 @@ export async function validateFsmPluginLoadFromFolders(
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
 
-              const fsmJson = `${fsmDirPath}/${subEntry.name}/fsm.json`;
               try {
-                await Deno.stat(fsmJson);
-                
-                // 1. Load fsm.json file
-                const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+                const fsmJsonPath = `${fsmDirPath}/${subEntry.name}/fsm.json`;
+                await Deno.stat(fsmJsonPath);
+                const fsmData = JSON.parse(await Deno.readTextFile(fsmJsonPath));
 
                 const folderResult = await validateFsmPluginLoadFromFolder(
-                    fsmData,
-                    dirEntry.name,
-                    subEntry.name,
-                    folderPath,
-                    `${fsmDirPath}/${subEntry.name}`,
-                    dirEntry.name,
-                    workflow_type,
-                    availableActors
+                  fsmData,
+                  dirEntry.name,
+                  subEntry.name,
+                  `${fsmDirPath}/${subEntry.name}`,
+                  `${dirEntry.name}/${subEntry.name}`,
+                  folderPath,
+                  absFolderPath,
+                  folderPath,
+                  workflow_type,
+                  availableActors,
                 );
 
                 console.log(
                   `Validation result for ${dirEntry.name}/${subEntry.name}:`,
                   folderResult,
                 );
-                
-                allFolderResults.push(folderResult);
 
+                allFolderResults.push(folderResult);
               } catch (err) {
-                if (err instanceof Deno.errors.NotFound) {
-                  console.log(`fsm.json is missing in ${absFolderPath}/${dirEntry.name}`);
-                } else {
-                  console.error(`Failed to import or process ${fsmJson}:`, err);
-                }
+                console.error(`Failed to validate ${fsmDirPath}/${subEntry.name}:`, err);
               }  
              
             } else {

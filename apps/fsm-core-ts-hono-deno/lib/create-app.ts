@@ -6,16 +6,7 @@ import {
   loadAndVerifyPromiseFromFolders,
 } from "../../../packages/fsm-compiler-ts/src/index.ts";
 
-export type FsmFolderConfig = {
-  folderPath: string;
-  skipDirs?: string[];
-};
-
-export type FsmStartupConfig = {
-  sharedPromise?: FsmFolderConfig;
-  sharedFsm?: FsmFolderConfig;
-  fsm?: FsmFolderConfig;
-};
+export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { requestId } from "hono/request-id";
@@ -30,7 +21,7 @@ import configureOpenAPI from "./configure-open-api.ts";
 
 import { pinoLogger } from "./../middlewares/pino-logger.ts";
 
-import type { AppBindings, AppOpenAPI } from "./types.ts";
+import type { AppBindings, AppOpenAPI, FsmStartupConfig } from "./types.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
@@ -63,6 +54,8 @@ export default async function createApp(
     console.error("Database error event:", err);
   });
 
+  let verifiedModules: any[] = [];
+
   if (fsmConfig && pool) {
     const client = await pool.connect();
     client.release();
@@ -88,15 +81,22 @@ export default async function createApp(
         )
       : [];
 
-    if (fsmConfig.fsm) {
-      await loadAndVerifyFsmFromFolders(
-        deps,
-        fsmConfig.fsm.folderPath,
-        "fsm",
-        fsmConfig.fsm.skipDirs ?? [],
-        [...outputSharedPromise, ...outputSharedFsm],
-      );
-    }
+    const outputFsm = fsmConfig.fsm
+      ? await loadAndVerifyFsmFromFolders(
+          deps,
+          fsmConfig.fsm.folderPath,
+          "fsm",
+          fsmConfig.fsm.skipDirs ?? [],
+          [...outputSharedPromise, ...outputSharedFsm],
+        )
+      : [];
+
+    verifiedModules = [
+      ...outputSharedPromise,
+      ...outputSharedFsm,
+      ...outputFsm,
+    ].filter((m) => m.isFsmModuleVerified === true)
+    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath }));
   }
 
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
@@ -105,6 +105,13 @@ export default async function createApp(
       origin: env.CORS_ORIGIN,
     });
     return corsMiddlewareHandler(c, next);
+  });
+  
+
+  app.use("*", (c, next) => {
+    c.set("fsmConfig", fsmConfig);
+    c.set("verifiedModules", verifiedModules);
+    return next();
   });
 
   if (env.DB_TYPE === "supabase") {
