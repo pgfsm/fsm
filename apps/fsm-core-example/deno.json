@@ -3,7 +3,11 @@
     "dev": "deno run --watch main.ts"
   },
   "imports": {
+    "@fsm/compiler": "@fsm/compiler",
     "@std/assert": "jsr:@std/assert@1",
+    "json-diff-ts": "npm:json-diff-ts@^4.9.1",
+    "pg": "npm:pg@^8.16.0",
+    "@types/pg": "npm:@types/pg@^8.15.2",
     "xstate": "npm:xstate@^5.28.0"
   }
 }

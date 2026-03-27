@@ -117,3 +117,41 @@ export function isVersionFolderName(name: string): boolean {
 export function isTimestampFolderName(name: string): boolean {
 	return /^\d{14}$/.test(name);
 }
+
+/**
+ * Recursively replaces underscores with spaces in keys and string values of an object.
+ */
+export function replaceUnderscoresWithSpaces(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(replaceUnderscoresWithSpaces);
+  } else if (obj && typeof obj === "object") {
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+      const newKey = typeof key === "string" ? key.replace(/_/g, " ") : key;
+      acc[newKey] = replaceUnderscoresWithSpaces(value);
+      return acc;
+    }, {} as any);
+  } else if (typeof obj === "string") {
+    return obj.replace(/_/g, " ");
+  } else {
+    return obj;
+  }
+}
+
+/**
+ * Recursively replaces spaces with underscores in keys and string values of an object.
+ */
+export function replaceSpacesWithUnderscores(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(replaceSpacesWithUnderscores);
+  } else if (obj && typeof obj === "object") {
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+      const newKey = typeof key === "string" ? key.replace(/ /g, "_") : key;
+      acc[newKey] = replaceSpacesWithUnderscores(value);
+      return acc;
+    }, {} as any);
+  } else if (typeof obj === "string") {
+    return obj.replace(/ /g, "_");
+  } else {
+    return obj;
+  }
+}
