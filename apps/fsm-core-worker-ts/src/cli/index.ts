@@ -102,7 +102,12 @@ try {
     }
     case "start-promise-worker": {
       const deps = await buildDeps();
-      await startFSMPromiseWorker(deps, queueName!, fsmName!, Number(fsmVersion));
+      const started = await startFSMPromiseWorker(deps, queueName!, fsmName!, Number(fsmVersion));
+      if (!started) {
+        console.error(`Error: PGMQ queue "${queueName}" does not exist.`);
+        Deno.exit(1);
+      }
+      await new Promise(() => {});
       break;
     }
     case "create-and-start-worker": {

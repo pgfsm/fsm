@@ -1,37 +1,36 @@
 import type { Database } from "@fsm/db/database.types";
 
 import type { DBDeps } from "@fsm/db";
-import {
-  archive_event_from_fsm_promise_type_worker,
-} from "@fsm/db";
 
-// Helper function to process a message for a given queue
-// This function should be pure and reusable for different message processing logic
-// @param deps - DBDeps for database access
-// @param queueName - The name of the queue
-// @param msg - The message object to process
-// @returns Promise<void>
+export type FSMPromiseArchiveData = {
+  promise_queue_name: string;
+  msg_id: number | bigint;
+  send_to_parent_queue_id: string;
+  send_event_name_to_parent_queue_id: string;
+  event_output: unknown;
+  event_status: string;
+  event_duration: number;
+  event_finished_at: string;
+};
+
 export async function processFSMPromiseQueueMessage(
   deps: DBDeps,
   queueName: string,
   msg: Database["pgmq"]["CompositeTypes"]["message_record"],
   promise_queue_name: string,
   promise_version?: string,
-): Promise<void> {
+): Promise<FSMPromiseArchiveData> {
   const msg_id = msg.msg_id;
   const eventData = msg.message as any;
-  const eventType = eventData.type;
-  const eventPayload = { ...eventData };
   const send_to_parent_queue_id = eventData.send_to_parent_queue_id;
   let send_event_name_to_parent_queue_id =
     eventData.send_event_name_to_parent_queue_id;
 
   let event_output;
 
-  // implment promise and return random success or failure
   event_output = await new Promise((resolve) => {
     setTimeout(() => {
-      const isSuccess = Math.random() < 0.5; // 50% chance of success
+      const isSuccess = Math.random() < 0.5;
       if (isSuccess) {
         send_event_name_to_parent_queue_id = "xstate.done.actor." +
           send_event_name_to_parent_queue_id;
@@ -41,36 +40,23 @@ export async function processFSMPromiseQueueMessage(
           send_event_name_to_parent_queue_id;
         resolve({ error: "Promise failed" });
       }
-    }, 300); // Simulate async operation delay
+    }, 300);
   });
 
   const event_status = event_output && (event_output as any).error
     ? "failed"
     : "succeeded";
-  const event_duration = 300; // Simulated duration
+  const event_duration = 300;
   const event_finished_at = new Date().toISOString();
 
-  try {
-    const archiveResult = await archive_event_from_fsm_promise_type_worker(
-      deps,
-      promise_queue_name,
-      msg_id,
-      send_to_parent_queue_id,
-      send_event_name_to_parent_queue_id,
-      event_output,
-      event_status,
-      event_duration,
-      event_finished_at,
-    );
-    // throw new Error('Not implemented yet');
-    console.log(
-      "archive_event_from_fsm_promise_type_worker result:",
-      archiveResult,
-    );
-  } catch (err) {
-    console.error(
-      "Error calling archive_event_from_fsm_promise_type_worker:",
-      err,
-    );
-  }
+  return {
+    promise_queue_name,
+    msg_id,
+    send_to_parent_queue_id,
+    send_event_name_to_parent_queue_id,
+    event_output,
+    event_status,
+    event_duration,
+    event_finished_at,
+  };
 }

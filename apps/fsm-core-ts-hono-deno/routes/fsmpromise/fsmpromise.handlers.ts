@@ -11,9 +11,7 @@ import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 import type { CreateRoute, ListRoute, SendRoute } from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { pgmqQueueExists } from "@fsm/db";
-
-import { startFSMPromiseWorker } from "../../../fsm-core-worker-ts/src/index.ts";
+import { startFSMPromiseWorker } from "@fsm/worker";
 
 export const activePromiseLocks: Record<string, boolean> = {};
 
@@ -57,41 +55,24 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
     }
 
     const promise_name = input_promise_name;
-    // const promise_name = input_promise_name +  input_promise_version
 
-    // Check that the PGMQ queue for this promise exists before creating instance
-   
-      const queueExists = await pgmqQueueExists(deps, promise_name);
-      if (!queueExists) {
-        console.warn(
-          `PGMQ queue for promise "${promise_name}" does not exist.`,
-        );
-        // We still call RPC with create_pgmq_queue: true below, but inform the caller
-        return c.json(
-          { error: "PGMQ queue does not exist" },
-          HttpStatusCodes.OK,
-        );
-      }else{
+    const started = await startFSMPromiseWorker(
+      deps,
+      promise_name,
+      promise_name,
+      input_promise_version,
+    );
 
-        console.log(`PGMQ queue for promise "${promise_name}" exists.`);
-         startFSMPromiseWorker(
-          deps,
-          promise_name,
-          promise_name,
-          input_promise_version,
-        ).catch((err) => {
-          console.error(
-            `Worker for queue "${promise_name}" has been stopped due to an error.`,
-            err,
-          );
-        });
+    if (!started) {
+      return c.json(
+        { error: "PGMQ queue does not exist" },
+        HttpStatusCodes.OK,
+      );
+    }
 
-        return c.json({
-          data: `fsm promise with fsm promise name "${promise_name}" is started`,
-        }, HttpStatusCodes.OK);
-
-
-      }
+    return c.json({
+      data: `fsm promise with fsm promise name "${promise_name}" is started`,
+    }, HttpStatusCodes.OK);
    
 
    
