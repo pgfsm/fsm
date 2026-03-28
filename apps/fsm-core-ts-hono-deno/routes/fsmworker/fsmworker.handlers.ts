@@ -72,12 +72,17 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     } else {
+      const verifiedModules = c.get("verifiedModules");
+      const matchedModule = verifiedModules?.find(
+        (m) => m.fsmName === fsm_instance_object.fsm_name && m.fsmVersion === fsm_instance_object.fsm_version,
+      );
       const started = await startFSMWorkerWithDBLock(
         deps,
         queue,
         fsm_instance_object.fsm_name,
         fsm_instance_object.fsm_version,
         activeFSMLocks,
+        matchedModule,
       );
       if (started) {
         // Return empty object to match z.object({})

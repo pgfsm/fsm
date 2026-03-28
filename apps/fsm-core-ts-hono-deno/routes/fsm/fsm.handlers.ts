@@ -69,12 +69,17 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       // Start worker asynchronously
       const fsm_instance_id = fsm_instance.fsm_instance_id;
       const fsm_version = fsm_instance.fsm_version;
+      const verifiedModules = c.get("verifiedModules");
+      const matchedModule = verifiedModules?.find(
+        (m) => m.fsmName === input_fsm_name && m.fsmVersion === fsm_instance.fsm_version,
+      );
       const started = await startFSMWorkerWithDBLock(
         deps,
         fsm_instance_id,
         input_fsm_name,
         fsm_version,
         activeFSMLocks,
+        matchedModule,
       );
       if (!started) {
         console.error(

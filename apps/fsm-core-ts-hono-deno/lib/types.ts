@@ -22,7 +22,15 @@ export interface AppBindings {
     supabase: any;
     logger: PinoLogger;
     fsmConfig: FsmStartupConfig | undefined;
-    verifiedModules: { fsmName: string; fsmVersion: string; fsmType: string }[];
+    verifiedModules: {
+      fsmName: string;
+      fsmVersion: string;
+      fsmType: string;
+      fsmAbsFolderPath: string;
+      fsmRelativeFolderPath: string;
+      fsmParentAbsFolderPath: string;
+      fsmParentRelativeFolderPath: string;
+    }[];
   };
 }
 

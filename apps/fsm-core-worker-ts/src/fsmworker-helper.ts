@@ -97,9 +97,8 @@ export async function macrostep_v2(
   fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"],
   resolved_state_value: unknown,
   fsm_name: string,
-  fsm_version: number,
-  actionsModule?: any,
-  delayModule?: any,
+  fsm_version: number | string,
+  fsmModuleDefinition?: any,
 ): Promise<void> {
   // Simulate work (replace with real logic)
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
@@ -235,7 +234,7 @@ export async function macrostep_v2(
       current_context = await runActionImplementation(
         "exit",
         action,
-        actionsModule,
+        fsmModuleDefinition?.actions,
         current_context,
         { deps, queueName, msg },
       );
@@ -275,7 +274,7 @@ export async function macrostep_v2(
       current_context = await runActionImplementation(
         "entry",
         action,
-        actionsModule,
+        fsmModuleDefinition?.actions,
         current_context,
         { deps, queueName, msg },
       );

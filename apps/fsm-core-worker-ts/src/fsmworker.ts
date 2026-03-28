@@ -9,45 +9,45 @@ import {
   getFSMDataAndResolveStateValue,
 } from "@fsm/db";
 
+
 import { macrostep_v2 } from "./fsmworker-helper.ts";
 
 export async function startFSMWorker(
   deps: DBDeps,
   queueName: string,
   fsm_name: string,
-  fsm_version: number,
+  fsm_version: number | string,
+  verifiedModule?: any,
 ) {
   const visibilityTimeout = 30;
   console.log(
     `👷 Started FSM worker for queue: ${queueName} with fsm_name ${fsm_name} and fsm_version ${fsm_version}`,
   );
-  // Dynamically import actions implementation for this FSM/version (if present)
-  let actionsModule: any = null;
-  try {
-    actionsModule = await import(
-      `../fsmMachines/${fsm_name}/${fsm_version}/actions/index.ts`
-    );
-    console.log(`📦 Loaded actions for ${fsm_name}/${fsm_version}`);
-  } catch (err) {
-    console.warn(
-      `⚠️ Could not load actions for ${fsm_name}/${fsm_version}:`,
-      err?.message || err,
-    );
-    actionsModule = null;
-  }
-  // Dynamically import delay implementation for this FSM/version (if present)
-  let delayModule: any = null;
-  try {
-    delayModule = await import(
-      `../fsmMachines/${fsm_name}/${fsm_version}/delay/index.ts`
-    );
-    console.log(`📦 Loaded delay for ${fsm_name}/${fsm_version}`);
-  } catch (err) {
-    console.warn(
-      `⚠️ Could not load delay for ${fsm_name}/${fsm_version}:`,
-      err?.message || err,
-    );
-    delayModule = null;
+
+  // Load fsmModuleDefinition once using verifiedModule paths
+  let fsmModuleDefinition: any = undefined;
+  if (verifiedModule?.fsmAbsFolderPath) {
+    try {
+      const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
+      const [actions, guards, delays, actors] = await Promise.allSettled([
+        import(`${base}/actions/index.ts`),
+        import(`${base}/guards/index.ts`),
+        import(`${base}/delays/index.ts`),
+        import(`${base}/actors/index.ts`),
+      ]);
+      fsmModuleDefinition = {
+        actions: actions.status === "fulfilled" ? actions.value : null,
+        guards: guards.status === "fulfilled" ? guards.value : null,
+        delays: delays.status === "fulfilled" ? delays.value : null,
+        actors: actors.status === "fulfilled" ? actors.value : null,
+      };
+      console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
+    } catch (err) {
+      console.warn(
+        `⚠️ Could not load fsmModuleDefinition for ${fsm_name}/${fsm_version}:`,
+        err?.message || err,
+      );
+    }
   }
 
   while (true) {
@@ -79,8 +79,7 @@ export async function startFSMWorker(
             fsmDataWithResolvedStateValue.resolved_state_value,
             fsm_name,
             fsm_version,
-            actionsModule,
-            delayModule,
+            fsmModuleDefinition,
           );
           console.log("Macrostep result:", macrostep_v2_result);
           if (macrostep_v2_result) {
