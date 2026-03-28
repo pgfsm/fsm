@@ -5,8 +5,8 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (createFSMInstanceFromName, sendFSMEvent, tryFSMDBLock, releaseFSMDBLock)
- *   - fsm-core-worker-ts/src/index (startFSMWorker)
+ *   - @fsm/db (createFSMInstanceFromName, sendFSMEvent)
+ *   - @fsm/worker (startFSMWorkerWithDBLock)
  *   - middlewares/supabase (getSupabase)
  */
 import { testClient } from "hono/testing";
@@ -28,15 +28,14 @@ vi.mock("../../middlewares/supabase.ts", () => ({
 vi.mock("@fsm/db", () => ({
   createFSMInstanceFromName: vi.fn(),
   sendFSMEvent: vi.fn(),
-  tryFSMDBLock: vi.fn().mockResolvedValue(true),
-  releaseFSMDBLock: vi.fn(),
 }));
 
-vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
-  startFSMWorker: vi.fn().mockResolvedValue(undefined),
+vi.mock("@fsm/worker", () => ({
+  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
 }));
 
-import { createFSMInstanceFromName, sendFSMEvent, tryFSMDBLock } from "@fsm/db";
+import { createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
+import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeFSMLocks } from "./fsm.handlers.ts";
 import router from "./fsm.index.ts";
@@ -122,7 +121,7 @@ describe("POST /fsm", () => {
       fsm_version: "v01",
     };
     vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
-    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(true);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
 
     const res = await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },
@@ -170,7 +169,7 @@ describe("POST /fsm", () => {
   it("does not add to activeFSMLocks when lock acquisition fails", async () => {
     const mockInstance = { fsm_instance_id: "uuid-lock-fail", fsm_version: "v01" };
     vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
-    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(false);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
 
     await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },

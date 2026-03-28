@@ -5,8 +5,8 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (isFSMInstancePresent, tryFSMDBLock, releaseFSMDBLock)
- *   - fsm-core-worker-ts/src/index (startFSMWorker)
+ *   - @fsm/db (isFSMInstancePresent)
+ *   - @fsm/worker (startFSMWorkerWithDBLock)
  *   - middlewares/supabase (getSupabase)
  *   - routes/fsm/fsm.handlers (activeFSMLocks — shared module-level state)
  *
@@ -29,17 +29,14 @@ vi.mock("../../middlewares/supabase.ts", () => ({
 
 vi.mock("@fsm/db", () => ({
   isFSMInstancePresent: vi.fn(),
-  createFSMInstanceFromName: vi.fn(),
-  sendFSMEvent: vi.fn(),
-  tryFSMDBLock: vi.fn().mockResolvedValue(true),
-  releaseFSMDBLock: vi.fn(),
 }));
 
-vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
-  startFSMWorker: vi.fn().mockResolvedValue(undefined),
+vi.mock("@fsm/worker", () => ({
+  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
 }));
 
-import { isFSMInstancePresent, tryFSMDBLock } from "@fsm/db";
+import { isFSMInstancePresent } from "@fsm/db";
+import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 // activeFSMLocks is shared between fsm and fsmworker handlers
 import { activeFSMLocks } from "../fsm/fsm.handlers.ts";
@@ -136,7 +133,7 @@ describe("POST /fsmworker", () => {
       fsm_name: "credit_check",
       fsm_version: "v01",
     } as never);
-    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(false);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
 
     const res = await client.fsmworker.$post({
       json: { queue: queueId },
@@ -156,7 +153,7 @@ describe("POST /fsmworker", () => {
     vi.mocked(isFSMInstancePresent).mockResolvedValueOnce(
       mockFsmInstance as never,
     );
-    vi.mocked(tryFSMDBLock).mockResolvedValueOnce(true);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
 
     const res = await client.fsmworker.$post({
       json: { queue: queueId },
@@ -165,8 +162,6 @@ describe("POST /fsmworker", () => {
     const json = await res.json();
     // Handler returns {} on success
     expect(json).toEqual({});
-    // Lock should be registered
-    expect(activeFSMLocks[queueId]).toBe(true);
   });
 
   it("returns 500 with 'Unexpected error' when isFSMInstancePresent throws", async () => {

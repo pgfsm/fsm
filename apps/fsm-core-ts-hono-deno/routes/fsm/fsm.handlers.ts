@@ -11,10 +11,10 @@ import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 import type { CreateRoute, ListRoute, SendRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { startFSMWorker } from "../../../fsm-core-worker-ts/src/index.ts";
+import { startFSMWorkerWithDBLock } from "@fsm/worker";
 
 import type { Database } from "@fsm/db/database.types";
-import { DBDeps, releaseFSMDBLock, tryFSMDBLock, createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
+import { DBDeps, createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
 
 export const activeFSMLocks: Record<string, boolean> = {};
 
@@ -69,25 +69,14 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       // Start worker asynchronously
       const fsm_instance_id = fsm_instance.fsm_instance_id;
       const fsm_version = fsm_instance.fsm_version;
-      if (await tryFSMDBLock(deps, fsm_instance_id)) {
-        activeFSMLocks[fsm_instance_id] = true;
-        startFSMWorker(
-          deps,
-          fsm_instance_id,
-          input_fsm_name,
-          fsm_version,
-        ).catch((err) => {
-          console.error(
-            `FSM Worker for queue "${fsm_instance_id}" has been stopped due to an error.`,
-            err,
-          );
-          delete activeFSMLocks[fsm_instance_id];
-          releaseFSMDBLock(deps, fsm_instance_id);
-          console.log(
-            `FSM Lock for queue "${fsm_instance_id}" has been released.`,
-          );
-        });
-      } else {
+      const started = await startFSMWorkerWithDBLock(
+        deps,
+        fsm_instance_id,
+        input_fsm_name,
+        fsm_version,
+        activeFSMLocks,
+      );
+      if (!started) {
         console.error(
           `🚫 FSM Worker already running for queue "${fsm_instance_id}"`,
         );
