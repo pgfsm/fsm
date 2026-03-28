@@ -11,10 +11,9 @@ import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 import type { CreateRoute, ListRoute, SendRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { startFSMWorkerWithDBLock } from "@fsm/worker";
+import { createAndStartFSMWorker } from "@fsm/worker";
 
-import type { Database } from "@fsm/db/database.types";
-import { DBDeps, createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
+import { DBDeps, sendFSMEvent } from "@fsm/db";
 
 export const activeFSMLocks: Record<string, boolean> = {};
 
@@ -50,42 +49,25 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
   // Only allow 200 or 500 responses to match OpenAPI contract
   try {
     if (!input_fsm_name) {
-      // Always return 500 with error property for contract
       return c.json(
         { error: "Missing ?queue parameter" },
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+    const verifiedModules = c.get("verifiedModules");
+    const matchedModule = verifiedModules?.find(
+      (m) => m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version
+    );
 
-    // Use createFSMInstanceFromName instead of Supabase RPC
-    const fsm_instance = await createFSMInstanceFromName(
+    const fsm_instance = await createAndStartFSMWorker(
       deps,
       input_fsm_name,
       input_fsm_version,
-      true,
+      matchedModule,
+      activeFSMLocks,
     );
 
-    if (fsm_instance && fsm_instance.fsm_instance_id) {
-      // Start worker asynchronously
-      const fsm_instance_id = fsm_instance.fsm_instance_id;
-      const fsm_version = fsm_instance.fsm_version;
-      const verifiedModules = c.get("verifiedModules");
-      const matchedModule = verifiedModules?.find(
-        (m) => m.fsmName === input_fsm_name && m.fsmVersion === fsm_instance.fsm_version,
-      );
-      const started = await startFSMWorkerWithDBLock(
-        deps,
-        fsm_instance_id,
-        input_fsm_name,
-        fsm_version,
-        activeFSMLocks,
-        matchedModule,
-      );
-      if (!started) {
-        console.error(
-          `🚫 FSM Worker already running for queue "${fsm_instance_id}"`,
-        );
-      }
+    if (fsm_instance) {
       return c.json({ data: fsm_instance }, HttpStatusCodes.OK);
     } else {
       return c.json(
