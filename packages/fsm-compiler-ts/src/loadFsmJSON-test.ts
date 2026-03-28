@@ -1,9 +1,7 @@
 import dotenv from "dotenv";
 import { loadFsmJSONFromFolders } from './loadFsmJSON.ts';
 
-import {
-  pool,
-} from "../../../apps/fsm-core-db-ts/src/pg-client.ts";
+import { pool } from "@fsm/db";
 
 dotenv.config({ path: "./../../.env" });
 

@@ -11,11 +11,7 @@ import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 import type { CreateRoute, ListRoute } from "./fsmworker.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import {
-  releaseFSMDBLock,
-  tryFSMDBLock,
-} from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
-import { isFSMInstancePresent } from "../../../fsm-core-db-ts/src/fsm-instance.ts";
+import { releaseFSMDBLock, tryFSMDBLock, isFSMInstancePresent } from "@fsm/db";
 
 import { startFSMWorker } from "../../../fsm-core-worker-ts/src/index.ts";
 

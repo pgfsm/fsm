@@ -5,8 +5,7 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - fsm-core-db-ts/src/fsm-instance (isFSMInstancePresent)
- *   - fsm-core-db-ts/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
+ *   - @fsm/db (isFSMInstancePresent, tryFSMDBLock, releaseFSMDBLock)
  *   - fsm-core-worker-ts/src/index (startFSMWorker)
  *   - middlewares/supabase (getSupabase)
  *   - routes/fsm/fsm.handlers (activeFSMLocks — shared module-level state)
@@ -28,13 +27,10 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("../../../fsm-core-db-ts/src/fsm-instance.ts", () => ({
+vi.mock("@fsm/db", () => ({
   isFSMInstancePresent: vi.fn(),
   createFSMInstanceFromName: vi.fn(),
   sendFSMEvent: vi.fn(),
-}));
-
-vi.mock("../../../fsm-core-db-ts/src/fsm-instance-lock.ts", () => ({
   tryFSMDBLock: vi.fn().mockResolvedValue(true),
   releaseFSMDBLock: vi.fn(),
 }));
@@ -43,8 +39,7 @@ vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
   startFSMWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { isFSMInstancePresent } from "../../../fsm-core-db-ts/src/fsm-instance.ts";
-import { tryFSMDBLock } from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
+import { isFSMInstancePresent, tryFSMDBLock } from "@fsm/db";
 import { createRouter } from "../../lib/create-app.ts";
 // activeFSMLocks is shared between fsm and fsmworker handlers
 import { activeFSMLocks } from "../fsm/fsm.handlers.ts";

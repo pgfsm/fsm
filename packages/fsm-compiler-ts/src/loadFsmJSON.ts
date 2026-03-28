@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
-import { loadFsmFromJsonV2 } from "../../../apps/fsm-core-db-ts/src/fsm-helper.ts";
+import { loadFsmFromJsonV2 } from "@fsm/db";
 
 
 async function loadFsmJSONFromFolder(

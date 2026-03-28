@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import {
   loadAndVerifyFsmFromFolders,
   loadAndVerifyPromiseFromFolders,
-} from "../../../packages/fsm-compiler-ts/src/index.ts";
+} from "@fsm/compiler";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 

@@ -5,8 +5,7 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - fsm-core-db-ts/src/fsm-instance (createFSMInstanceFromName, sendFSMEvent)
- *   - fsm-core-db-ts/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
+ *   - @fsm/db (createFSMInstanceFromName, sendFSMEvent, tryFSMDBLock, releaseFSMDBLock)
  *   - fsm-core-worker-ts/src/index (startFSMWorker)
  *   - middlewares/supabase (getSupabase)
  */
@@ -26,12 +25,9 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("../../../fsm-core-db-ts/src/fsm-instance.ts", () => ({
+vi.mock("@fsm/db", () => ({
   createFSMInstanceFromName: vi.fn(),
   sendFSMEvent: vi.fn(),
-}));
-
-vi.mock("../../../fsm-core-db-ts/src/fsm-instance-lock.ts", () => ({
   tryFSMDBLock: vi.fn().mockResolvedValue(true),
   releaseFSMDBLock: vi.fn(),
 }));
@@ -40,11 +36,7 @@ vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
   startFSMWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  createFSMInstanceFromName,
-  sendFSMEvent,
-} from "../../../fsm-core-db-ts/src/fsm-instance.ts";
-import { tryFSMDBLock } from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
+import { createFSMInstanceFromName, sendFSMEvent, tryFSMDBLock } from "@fsm/db";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeFSMLocks } from "./fsm.handlers.ts";
 import router from "./fsm.index.ts";

@@ -4,6 +4,7 @@
   },
   "imports": {
     "@fsm/compiler": "@fsm/compiler",
+    "@fsm/db": "@fsm/db",
     "@std/assert": "jsr:@std/assert@1",
     "json-diff-ts": "npm:json-diff-ts@^4.9.1",
     "pg": "npm:pg@^8.16.0",

@@ -1,8 +1,6 @@
 import dotenv from "dotenv";
 import { loadAndVerifyFsmFromFolders, loadAndVerifyPromiseFromFolders } from './loadAndVerifyFsm.ts';
-import {
-  pool,
-} from "../../../apps/fsm-core-db-ts/src/pg-client.ts";
+import { pool } from "@fsm/db";
 
 dotenv.config({ path: "./../../.env" });
 
