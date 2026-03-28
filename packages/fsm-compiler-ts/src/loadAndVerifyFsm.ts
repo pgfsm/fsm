@@ -61,9 +61,10 @@ export async function loadAndVerifyPromiseFromFolders(
                 dirEntry.name,
                 subEntry.name,
                 `${fsmDirPath}/${subEntry.name}`,
+                `${dirEntry.name}/${subEntry.name}`,
                 folderPath,
-                dirEntry.name,
-                fsmDirPath,
+                absFolderPath,
+                folderPath,
                 workflow_type,
                 availableActors,
               );
