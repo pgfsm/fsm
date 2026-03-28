@@ -83,6 +83,7 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
         fsm_instance_object.fsm_version,
         activeFSMLocks,
         matchedModule,
+        false
       );
       if (started) {
         // Return empty object to match z.object({})

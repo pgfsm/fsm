@@ -96,7 +96,7 @@ export default async function createApp(
       ...outputSharedFsm,
       ...outputFsm,
     ].filter((m) => m.isFsmModuleVerified === true)
-    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath }));
+    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentDirName : m.fsmParentDirName, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath }));
   }
 
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());

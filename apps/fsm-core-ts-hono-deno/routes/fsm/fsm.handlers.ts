@@ -65,6 +65,7 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       input_fsm_version,
       matchedModule,
       activeFSMLocks,
+      false,
     );
 
     if (fsm_instance) {

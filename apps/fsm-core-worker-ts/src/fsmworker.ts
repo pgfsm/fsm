@@ -9,6 +9,8 @@ import {
   getFSMDataAndResolveStateValue,
 } from "@fsm/db";
 
+import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
+import type { WorkflowType } from "@fsm/compiler";
 
 import { macrostep_v2 } from "./fsmworker-helper.ts";
 
@@ -18,6 +20,7 @@ export async function startFSMWorker(
   fsm_name: string,
   fsm_version: number | string,
   verifiedModule?: any,
+  validatePlugin?: boolean,
 ) {
   const visibilityTimeout = 30;
   console.log(
@@ -28,20 +31,40 @@ export async function startFSMWorker(
   let fsmModuleDefinition: any = undefined;
   if (verifiedModule?.fsmAbsFolderPath) {
     try {
-      const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
-      const [actions, guards, delays, actors] = await Promise.allSettled([
-        import(`${base}/actions/index.ts`),
-        import(`${base}/guards/index.ts`),
-        import(`${base}/delays/index.ts`),
-        import(`${base}/actors/index.ts`),
-      ]);
-      fsmModuleDefinition = {
-        actions: actions.status === "fulfilled" ? actions.value : null,
-        guards: guards.status === "fulfilled" ? guards.value : null,
-        delays: delays.status === "fulfilled" ? delays.value : null,
-        actors: actors.status === "fulfilled" ? actors.value : null,
-      };
-      console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
+      if (validatePlugin) {
+        const fsmJsonPath = `${verifiedModule.fsmAbsFolderPath}/fsm.json`;
+        const fsmJsonText = await Deno.readTextFile(fsmJsonPath);
+        const fsmData = JSON.parse(fsmJsonText);
+        const result = await validateFsmPluginLoadFromFolder(
+          fsmData,
+          fsm_name,
+          String(fsm_version),
+          verifiedModule.fsmAbsFolderPath,
+          verifiedModule.fsmRelativeFolderPath ?? "",
+          verifiedModule.fsmParentDirName ?? "",
+          verifiedModule.fsmParentAbsFolderPath ?? "",
+          verifiedModule.fsmParentRelativeFolderPath ?? "",
+          (verifiedModule.fsmType ?? "fsm") as WorkflowType,
+          [],
+        );
+        fsmModuleDefinition = result.fsmModuleDefinition;
+        console.log(`📦 Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for ${fsm_name}/${fsm_version}`);
+      } else {
+        const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
+        const [actions, guards, delays, actors] = await Promise.allSettled([
+          import(`${base}/actions/index.ts`),
+          import(`${base}/guards/index.ts`),
+          import(`${base}/delays/index.ts`),
+          import(`${base}/actors/index.ts`),
+        ]);
+        fsmModuleDefinition = {
+          actions: actions.status === "fulfilled" ? actions.value : null,
+          guards: guards.status === "fulfilled" ? guards.value : null,
+          delays: delays.status === "fulfilled" ? delays.value : null,
+          actors: actors.status === "fulfilled" ? actors.value : null,
+        };
+        console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
+      }
     } catch (err) {
       console.warn(
         `⚠️ Could not load fsmModuleDefinition for ${fsm_name}/${fsm_version}:`,

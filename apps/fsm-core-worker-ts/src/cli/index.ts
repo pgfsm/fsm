@@ -5,7 +5,7 @@ import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, create
 
 const args = parseArgs(Deno.args, {
   string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path"],
-  boolean: ["help"],
+  boolean: ["help", "validate-plugin"],
   alias: {
     h: "help",
     c: "command",
@@ -35,13 +35,15 @@ OPTIONS
   -n, --fsm-name <name>           FSM name (required)
   -v, --fsm-version <version>     FSM version number (required)
   -f, --fsm-folder-path <path>    Absolute path to FSM folder for loading actions/guards/delays/actors (required)
+      --validate-plugin           Use validateFsmPluginLoadFromFolder (reads fsm.json + validates modules) instead of direct imports
   -h, --help                      Show this help message
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c start-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c start-worker-with-db-lock -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm
+  deno run --allow-all src/cli/index.ts -c start-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
+  deno run --allow-all src/cli/index.ts -c start-worker-with-db-lock -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
   deno run --allow-all src/cli/index.ts -c start-promise-worker -q sharedPromise_v01 -n sharedPromise -v 1 -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm
+  deno run --allow-all src/cli/index.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
 `);
 }
 
@@ -78,18 +80,19 @@ async function buildDeps() {
 }
 
 const verifiedModule = { fsmAbsFolderPath: fsmFolderPath };
+const validatePlugin = args["validate-plugin"] === true;
 
 try {
   switch (command) {
     case "start-worker": {
       const deps = await buildDeps();
-      await startFSMWorker(deps, queueName!, fsmName!, Number(fsmVersion), verifiedModule);
+      await startFSMWorker(deps, queueName!, fsmName!, Number(fsmVersion), verifiedModule, validatePlugin);
       break;
     }
     case "start-worker-with-db-lock": {
       const deps = await buildDeps();
       const activeLocks: Record<string, boolean> = {};
-      const acquired = await startFSMWorkerWithDBLock(deps, queueName!, fsmName!, Number(fsmVersion), activeLocks, verifiedModule);
+      const acquired = await startFSMWorkerWithDBLock(deps, queueName!, fsmName!, Number(fsmVersion), activeLocks, verifiedModule, validatePlugin);
       if (!acquired) {
         console.error(`Error: Could not acquire DB lock for queue "${queueName}" — another worker may already hold it.`);
         Deno.exit(1);
@@ -105,7 +108,7 @@ try {
     case "create-and-start-worker": {
       const deps = await buildDeps();
       const activeLocks: Record<string, boolean> = {};
-      const fsm_instance = await createAndStartFSMWorker(deps, fsmName!, fsmVersion!, verifiedModule, activeLocks);
+      const fsm_instance = await createAndStartFSMWorker(deps, fsmName!, fsmVersion!, verifiedModule, activeLocks, validatePlugin);
       if (!fsm_instance) {
         console.error(`Error: Failed to create FSM instance for "${fsmName}" v${fsmVersion}.`);
         Deno.exit(1);

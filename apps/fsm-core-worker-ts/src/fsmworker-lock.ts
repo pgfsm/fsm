@@ -9,10 +9,11 @@ export async function startFSMWorkerWithDBLock(
   fsm_version: number | string,
   activeLocks: Record<string, boolean>,
   verifiedModule?: any,
+  validatePlugin?: boolean,
 ): Promise<boolean> {
   if (await tryFSMDBLock(deps, queueName)) {
     activeLocks[queueName] = true;
-    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule).catch((err) => {
+    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule, validatePlugin).catch((err) => {
       console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
       delete activeLocks[queueName];
       releaseFSMDBLock(deps, queueName);
