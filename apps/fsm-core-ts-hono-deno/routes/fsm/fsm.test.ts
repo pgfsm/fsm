@@ -31,7 +31,7 @@ vi.mock("@fsm/db", () => ({
 }));
 
 vi.mock("@fsm/worker", () => ({
-  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
+  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue({ on: vi.fn() }),
 }));
 
 import { createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
@@ -121,7 +121,7 @@ describe("POST /fsm", () => {
       fsm_version: "v01",
     };
     vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
-    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce({ on: vi.fn() } as never);
 
     const res = await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },

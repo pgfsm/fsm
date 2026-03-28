@@ -72,14 +72,14 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     } else {
-      const started = await startFSMWorkerWithDBLock(
+      const emitter = await startFSMWorkerWithDBLock(
         deps,
         queue,
         fsm_instance_object.fsm_name,
         fsm_instance_object.fsm_version,
         activeFSMLocks,
       );
-      if (started) {
+      if (emitter) {
         // Return empty object to match z.object({})
         return c.json({}, HttpStatusCodes.OK);
       } else {

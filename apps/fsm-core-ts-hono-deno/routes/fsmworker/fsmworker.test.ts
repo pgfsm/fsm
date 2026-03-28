@@ -32,7 +32,7 @@ vi.mock("@fsm/db", () => ({
 }));
 
 vi.mock("@fsm/worker", () => ({
-  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
+  startFSMWorkerWithDBLock: vi.fn().mockResolvedValue({ on: vi.fn() }),
 }));
 
 import { isFSMInstancePresent } from "@fsm/db";
@@ -153,7 +153,7 @@ describe("POST /fsmworker", () => {
     vi.mocked(isFSMInstancePresent).mockResolvedValueOnce(
       mockFsmInstance as never,
     );
-    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce({ on: vi.fn() } as never);
 
     const res = await client.fsmworker.$post({
       json: { queue: queueId },

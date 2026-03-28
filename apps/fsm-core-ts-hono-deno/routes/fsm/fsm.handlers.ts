@@ -69,14 +69,14 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       // Start worker asynchronously
       const fsm_instance_id = fsm_instance.fsm_instance_id;
       const fsm_version = fsm_instance.fsm_version;
-      const started = await startFSMWorkerWithDBLock(
+      const emitter = await startFSMWorkerWithDBLock(
         deps,
         fsm_instance_id,
         input_fsm_name,
         fsm_version,
         activeFSMLocks,
       );
-      if (!started) {
+      if (!emitter) {
         console.error(
           `🚫 FSM Worker already running for queue "${fsm_instance_id}"`,
         );
