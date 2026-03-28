@@ -6,65 +6,76 @@ import {
   generateFsmJSONFromFolders,
   generateFsmPluginFromFolders,
   loadAndVerifyFsmFromFolders,
+  loadAndVerifyPromiseFromFolders,
   loadFsmJSONFromFolders,
   validateFsmPluginLoadFromFolders,
 } from "../index.ts";
 import type { WorkflowType } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
-  string: ["workflow-type"],
+  string: ["command", "folder", "workflow-type"],
   boolean: ["help", "show-recommendation"],
-  alias: { h: "help", w: "workflow-type", r: "show-recommendation" },
+  alias: {
+    h: "help",
+    c: "command",
+    f: "folder",
+    w: "workflow-type",
+    r: "show-recommendation",
+  },
 });
-
-const [command, folder] = args._ as string[];
 
 function printHelp(): void {
   console.log(`
 fsm-compiler — FSM JSON compiler CLI
 
 USAGE
-  deno run --allow-all src/cli/index.ts <command> <folder> [options]
+  deno run --allow-all src/cli/index.ts -c <command> -f <folder> [options]
 
 COMMANDS
-  generate <folder> [-r]                    Generate fsm.json from machine.ts files
-  generate-plugin <folder>                  Generate TypeScript plugin stubs from fsm.json
-  clean <folder>                            Delete generated fsm.json / xstate-fsm.json files
-  validate <folder> -w <type>               Validate plugin load for an FSM folder
-  load <folder> -w <type>                   Load FSM JSON into the database
-  load-and-verify <folder> -w <type>        Load and verify FSM + plugins into the database
+  generate              Generate fsm.json from machine.ts files
+  generate-plugin       Generate TypeScript plugin stubs from fsm.json
+  clean                 Delete generated fsm.json / xstate-fsm.json files
+  validate              Validate plugin load for an FSM folder
+  load                  Load FSM JSON into the database
+  load-and-verify       Load and verify FSM + plugins into the database
+  load-and-verify-promise  Load and verify Promise workflow + plugins into the database
 
 WORKFLOW TYPES
   fsm | sharedFsm | sharedPromise | promise
 
 OPTIONS
-  -w, --workflow-type <type>  Workflow type (required for validate, load, load-and-verify)
-  -r, --show-recommendation   Validate generated fsm.json against schema and show errors
-  -h, --help                  Show this help message
+  -c, --command <command>         Command to run (required)
+  -f, --folder <folder>           Path to FSM folder (required)
+  -w, --workflow-type <type>      Workflow type: required for validate, load, load-and-verify, load-and-verify-promise
+  -r, --show-recommendation       Validate generated fsm.json against schema and show errors
+  -h, --help                      Show this help message
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts generate src/example/fsm
-  deno run --allow-all src/cli/index.ts validate src/example/fsm --workflow-type fsm
-  deno run --allow-all src/cli/index.ts load-and-verify src/example/fsm --workflow-type fsm
+  deno run --allow-all src/cli/index.ts -c generate -f src/example/fsm
+  deno run --allow-all src/cli/index.ts -c validate -f src/example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c load-and-verify -f src/example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c load-and-verify-promise -f src/example/sharedFSM -w sharedPromise
 `);
 }
 
-if (args.help || !command) {
+if (args.help) {
   printHelp();
   Deno.exit(0);
 }
 
-if (!folder) {
-  console.error(`Error: <folder> argument is required for command "${command}"\n`);
-  printHelp();
-  Deno.exit(1);
-}
-
+const command = args["command"];
+const folder = args["folder"];
 const workflowType = args["workflow-type"] as WorkflowType | undefined;
-const needsWorkflowType = ["validate", "load", "load-and-verify"];
 
-if (needsWorkflowType.includes(command) && !workflowType) {
-  console.error(`Error: --workflow-type is required for command "${command}"\n`);
+const needsWorkflowType = ["validate", "load", "load-and-verify", "load-and-verify-promise"];
+
+const missing: string[] = [];
+if (!command) missing.push("--command");
+if (!folder) missing.push("--folder");
+if (command && needsWorkflowType.includes(command) && !workflowType) missing.push("--workflow-type");
+
+if (missing.length > 0) {
+  console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
   printHelp();
   Deno.exit(1);
 }
@@ -78,25 +89,30 @@ async function buildDeps() {
 try {
   switch (command) {
     case "generate":
-      await generateFsmJSONFromFolders(folder, "fsm", [], args["show-recommendation"]);
+      await generateFsmJSONFromFolders(folder!, "fsm", [], args["show-recommendation"]);
       break;
     case "generate-plugin":
-      await generateFsmPluginFromFolders(folder, "fsm");
+      await generateFsmPluginFromFolders(folder!, "fsm");
       break;
     case "clean":
-      await deleteFsmJSONFromFolders(folder, "fsm");
+      await deleteFsmJSONFromFolders(folder!, "fsm");
       break;
     case "validate":
-      await validateFsmPluginLoadFromFolders(folder, workflowType!);
+      await validateFsmPluginLoadFromFolders(folder!, workflowType!);
       break;
     case "load": {
       const deps = await buildDeps();
-      await loadFsmJSONFromFolders(folder, workflowType!, [], deps);
+      await loadFsmJSONFromFolders(folder!, workflowType!, [], deps);
       break;
     }
     case "load-and-verify": {
       const deps = await buildDeps();
-      await loadAndVerifyFsmFromFolders(deps, folder, workflowType!);
+      await loadAndVerifyFsmFromFolders(deps, folder!, workflowType!);
+      break;
+    }
+    case "load-and-verify-promise": {
+      const deps = await buildDeps();
+      await loadAndVerifyPromiseFromFolders(deps, folder!, workflowType!);
       break;
     }
     default:
