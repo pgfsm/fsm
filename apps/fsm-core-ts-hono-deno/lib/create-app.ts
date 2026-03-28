@@ -48,7 +48,7 @@ export default async function createApp(
     console.log("Database on connect event");
   });
   pool.on("acquire", () => {
-    console.log("Database on acquired event");
+    // console.log("Database on acquired event");
   });
   pool.on("error", (err) => {
     console.error("Database error event:", err);
