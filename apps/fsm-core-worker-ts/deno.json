@@ -1,0 +1,13 @@
+{
+  "name": "@fsm/worker",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "xstate": "npm:xstate@^5.26.0"
+  },
+  "tasks": {
+    "check": "deno check src/index.ts"
+  }
+}

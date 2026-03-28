@@ -1,13 +1,13 @@
-import type { Database } from "../../fsm-core-db-ts/src/database.types.ts";
+import type { Database } from "@fsm/db/database.types";
 
-import type { DBDeps } from "../../fsm-core-db-ts/src/custom-type.ts";
+import type { DBDeps } from "@fsm/db";
 
-import { readMessage } from "../../fsm-core-db-ts/src/queue.ts";
+import { readMessage } from "@fsm/db";
 
 import {
   archive_event_from_fsm_type_worker,
   getFSMDataAndResolveStateValue,
-} from "../../fsm-core-db-ts/src/fsm-instance.ts";
+} from "@fsm/db";
 
 import { macrostep_v2 } from "./fsmworker-helper.ts";
 

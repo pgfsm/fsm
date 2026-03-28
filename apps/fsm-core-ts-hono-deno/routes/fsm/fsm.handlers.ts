@@ -11,7 +11,7 @@ import { ZOD_ERROR_CODES, ZOD_ERROR_MESSAGES } from "../../lib/constants.ts";
 import type { CreateRoute, ListRoute, SendRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { startFSMWorker } from "../../worker/fsmworker.ts";
+import { startFSMWorker } from "../../../fsm-core-worker-ts/src/index.ts";
 
 import type { Database } from "../../../fsm-core-db-ts/src/database.types.ts";
 import { DBDeps } from "../../../fsm-core-db-ts/src/custom-type.ts";

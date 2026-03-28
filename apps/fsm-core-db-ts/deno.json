@@ -1,4 +1,10 @@
 {
+  "name": "@fsm/db",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./database.types": "./src/database.types.ts"
+  },
   "tasks": {
     "dev": "deno run --watch main.ts"
   },

@@ -7,7 +7,7 @@
  * Mocked dependencies:
  *   - fsm-core-db-ts/src/fsm-instance (isFSMInstancePresent)
  *   - fsm-core-db-ts/src/fsm-instance-lock (tryFSMDBLock, releaseFSMDBLock)
- *   - worker/fsmworker (startFSMWorker)
+ *   - fsm-core-worker-ts/src/index (startFSMWorker)
  *   - middlewares/supabase (getSupabase)
  *   - routes/fsm/fsm.handlers (activeFSMLocks — shared module-level state)
  *
@@ -39,7 +39,7 @@ vi.mock("../../../fsm-core-db-ts/src/fsm-instance-lock.ts", () => ({
   releaseFSMDBLock: vi.fn(),
 }));
 
-vi.mock("../../worker/fsmworker.ts", () => ({
+vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
   startFSMWorker: vi.fn().mockResolvedValue(undefined),
 }));
 

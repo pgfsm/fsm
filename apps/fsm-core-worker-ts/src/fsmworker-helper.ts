@@ -1,11 +1,11 @@
-import type { Database } from "../../fsm-core-db-ts/src/database.types.ts";
+import type { Database } from "@fsm/db/database.types";
 
-import type { DBDeps } from "../../fsm-core-db-ts/src/custom-type.ts";
+import type { DBDeps } from "@fsm/db";
 
 import {
   performMicrostep,
   selectTransitions,
-} from "../../fsm-core-db-ts/src/fsm-helper.ts";
+} from "@fsm/db";
 
 /**
  * Splits the input array into two arrays based on matching event types.

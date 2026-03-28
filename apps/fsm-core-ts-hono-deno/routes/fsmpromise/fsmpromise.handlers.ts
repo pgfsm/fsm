@@ -13,7 +13,7 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { pgmqQueueExists } from "../../../fsm-core-db-ts/src/queue.ts";
 
-import { startFSMPromiseWorker } from "../../worker/fsmpromiseworker.ts";
+import { startFSMPromiseWorker } from "../../../fsm-core-worker-ts/src/index.ts";
 
 export const activePromiseLocks: Record<string, boolean> = {};
 

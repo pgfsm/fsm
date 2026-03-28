@@ -17,7 +17,7 @@ import {
 } from "../../../fsm-core-db-ts/src/fsm-instance-lock.ts";
 import { isFSMInstancePresent } from "../../../fsm-core-db-ts/src/fsm-instance.ts";
 
-import { startFSMWorker } from "../../worker/fsmworker.ts";
+import { startFSMWorker } from "../../../fsm-core-worker-ts/src/index.ts";
 
 import { activeFSMLocks } from "../fsm/fsm.handlers.ts";
 

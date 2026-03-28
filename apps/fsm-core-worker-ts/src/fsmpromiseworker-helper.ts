@@ -1,9 +1,9 @@
-import type { Database } from "../../fsm-core-db-ts/src/database.types.ts";
+import type { Database } from "@fsm/db/database.types";
 
-import type { DBDeps } from "../../fsm-core-db-ts/src/custom-type.ts";
+import type { DBDeps } from "@fsm/db";
 import {
   archive_event_from_fsm_promise_type_worker,
-} from "../../fsm-core-db-ts/src/fsm-instance.ts";
+} from "@fsm/db";
 
 // Helper function to process a message for a given queue
 // This function should be pure and reusable for different message processing logic

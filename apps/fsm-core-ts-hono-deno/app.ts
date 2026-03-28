@@ -7,7 +7,7 @@ const pool = new Pool({
   connectionString: Deno.env.get("DATABASE_URL"),
 });
 
-const urlPathPrefix = "/embedded";
+const urlPathPrefix = "/fsm";
 
 const fsmRouter = await createApp(pool, urlPathPrefix, {
   sharedPromise: {
