@@ -2,7 +2,10 @@
     "typescript.tsserver.experimental.enableProjectDiagnostics": false,
     "deno.path": "/Users/niraj/.proto/shims/deno",
     "deno.enable": true,
-    "deno.enablePaths":["apps/fsm-core", "packages/fsm-compiler-ts", "packages/xstate-compiler","apps/**"],
+    "deno.test": true,
+    "deno.lint": true,
+    // "deno.enablePaths":["apps/fsm-core-db-ts", "apps/fsm-core-example", "apps/fsm-core-ts-hono-deno", "apps/fsm-core-worker-ts", "packages/fsm-compiler-ts"],
+    // "deno.enablePaths":["apps/**", "packages/fsm-compiler-ts"],
     "deno.codeLens.test": true,
     "deno.codeLens.testArgs" : [
         "--allow-all",

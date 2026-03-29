@@ -11,6 +11,7 @@
   "imports": {
     "@std/assert": "jsr:@std/assert@1",
     "@types/pg": "npm:@types/pg@^8.18.0",
-    "pg": "npm:pg@^8.20.0"
+    "pg": "npm:pg@^8.20.0",
+    "type-fest": "npm:type-fest@^5.5.0"
   }
 }
