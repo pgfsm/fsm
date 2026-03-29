@@ -121,7 +121,8 @@ export function isTimestampFolderName(name: string): boolean {
 /**
  * Recursively replaces underscores with spaces in keys and string values of an object.
  */
-export function replaceUnderscoresWithSpaces(obj: any): any {
+export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
+  const obj = objWithMachine?.machine ? objWithMachine.machine : objWithMachine;
   if (Array.isArray(obj)) {
     return obj.map(replaceUnderscoresWithSpaces);
   } else if (obj && typeof obj === "object") {

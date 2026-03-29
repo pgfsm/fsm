@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
 // Import Ajv for JSON schema validation
-import Ajv from "ajv";
+import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 
