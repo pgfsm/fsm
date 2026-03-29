@@ -204,7 +204,7 @@ export async function getFSMDataAndResolveStateValue(
     const text = `
       SELECT ${GET_FSM_DATA_RESOLVE_STATE_VALUE_FN}($1::text) AS result;
     `;
-    const res = await deps.db.query<{ result: unknown }>(text, [id]);
+    const res = await deps.db.query<{ result: { fsm_instance_row: any; resolved_state_value: unknown } }>(text, [id]);
     if (!res.rows || res.rows.length === 0) return null;
     return res.rows[0]?.result ?? null;
   } catch (err) {

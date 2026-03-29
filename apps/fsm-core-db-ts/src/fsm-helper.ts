@@ -154,7 +154,7 @@ export async function resolveStateValue(
 
 export async function performMicrostep(
   deps: DBDeps,
-  transition_record?: unknown,
+  transition_record: unknown,
   event_name: string,
   state_value_node_set: unknown,
   fsm_name: string,
