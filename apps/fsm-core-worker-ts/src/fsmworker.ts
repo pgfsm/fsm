@@ -30,6 +30,7 @@ export async function startFSMWorker(
   fsm_version: number | string,
   verifiedModule?: VerifiedModule,
   validatePlugin?: boolean,
+  signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
   console.log(
@@ -82,7 +83,7 @@ export async function startFSMWorker(
     }
   }
 
-  while (true) {
+  while (!signal?.aborted) {
     const messages = await readMessage(deps, queueName, visibilityTimeout);
     if (messages.length === 0) {
       await new Promise((resolve) => setTimeout(resolve, 1000));

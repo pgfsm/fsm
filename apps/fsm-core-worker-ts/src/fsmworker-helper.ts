@@ -1,4 +1,5 @@
 import type { Database, Json } from "@fsm/db/database.types";
+type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
 import type { DBDeps } from "@fsm/db";
 
@@ -153,13 +154,13 @@ export async function macrostep_v2(
   if (eventType === "initialTransition_event") {
     selectedTransition = null;
   } else {
-    let allTransitions = await selectTransitions(
+    const allTransitions = (await selectTransitions(
       deps,
       eventType,
       resolvedState.all_nodes,
       fsm_name,
       fsm_version.toString(),
-    );
+    )) as FsmTransitionRow[] | null;
     if (!allTransitions || allTransitions.length === 0) {
       console.error("No transitions found for the given FSM name and version.");
       // TODO check if eventType is xstate.error.actor  we may want to pust FSM to error state

@@ -197,16 +197,16 @@ export async function selectTransitions(
   source_state_value_set: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["p_state_value"],
   fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_name_param"],
   fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_version_param"],
-): Promise<DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"][]> {
+): Promise<Json> {
   try {
     const SELECT_TRANSITIONS_FN = `${FSM_SCHEMA}.select_all_transitions_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
-      SELECT * FROM ${SELECT_TRANSITIONS_FN}(
+      SELECT ${SELECT_TRANSITIONS_FN}(
         $1::text,
         $2::text[],
         $3::text,
         $4::text
-      );
+      ) AS result;
     `;
     const values = [
       event_name,
@@ -214,8 +214,8 @@ export async function selectTransitions(
       fsm_name,
       fsm_version,
     ];
-    const res = await deps.db.query<DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"]>(text, values);
-    return res.rows ?? [];
+    const res = await deps.db.query<{ result: Json }>(text, values);
+    return res.rows?.[0]?.result ?? null;
   } catch (err) {
     console.error("Error in selectTransitions:", err);
     throw new Error("Failed to select transitions", { cause: err });
