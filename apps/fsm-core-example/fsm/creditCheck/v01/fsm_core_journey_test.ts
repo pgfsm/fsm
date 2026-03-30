@@ -194,12 +194,12 @@ Deno.test({
         deps,
         fsm_instance.fsm_instance_id,
         (r) => {
-          const stateWithSpaces = replaceUnderscoresWithSpaces(r.fsm_state);
+          const stateWithSpaces = replaceUnderscoresWithSpaces(r.fsm_instance_state);
           return diff(stateWithSpaces, expectedStateValue).length === 0;
         },
       );
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(row.fsm_state);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(row.fsm_instance_state);
       const changes = diff(dbStateWithSpaces, expectedStateValue);
 
       assertEquals(
