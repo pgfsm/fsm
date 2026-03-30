@@ -173,7 +173,7 @@ BEGIN
             initial_state := state_record.initial->'target'->>0;
             RAISE NOTICE 'Initial state: %', initial_state;
             -- Sanitize initial_state
-            sanitized_initial_state := sanitize_to_ltree(initial_state)::TEXT;
+            sanitized_initial_state := fsm_core.sanitize_text_to_ltree(initial_state)::TEXT;
             SELECT computed_state_key_ltree INTO sanitized_initial_state_ltree
             FROM fsm_core.fsm_states
             WHERE computed_state_id_ltree = sanitized_initial_state::ltree;
@@ -237,7 +237,7 @@ BEGIN
                 child_id := child_state->>'id';
                 
                 -- Sanitize child_id
-                sanitized_child_id := sanitize_to_ltree(child_id)::TEXT;
+                sanitized_child_id := fsm_core.sanitize_text_to_ltree(child_id)::TEXT;
                 SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                 FROM fsm_core.fsm_states
                 WHERE computed_state_id_ltree = sanitized_child_id::ltree;
@@ -329,7 +329,7 @@ BEGIN
                 LOOP
                     child_id := child_state->>'id';
                     -- Sanitize child_id
-                    sanitized_child_id := sanitize_to_ltree(child_id)::TEXT;
+                    sanitized_child_id := fsm_core.sanitize_text_to_ltree(child_id)::TEXT;
                     SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                     FROM fsm_core.fsm_states
                     WHERE computed_state_id_ltree = sanitized_child_id::ltree;
