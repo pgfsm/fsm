@@ -1,13 +1,13 @@
-import type { Database } from "@fsm/db/database.types";
+import type { Database, Json } from "@fsm/db/database.types";
 
 import type { DBDeps } from "@fsm/db";
 
 export type FSMPromiseArchiveData = {
   promise_queue_name: string;
-  msg_id: number | bigint;
+  msg_id: number | null;
   send_to_parent_queue_id: string;
   send_event_name_to_parent_queue_id: string;
-  event_output: unknown;
+  event_output: Json;
   event_status: string;
   event_duration: number;
   event_finished_at: string;
@@ -26,7 +26,7 @@ export async function processFSMPromiseQueueMessage(
   let send_event_name_to_parent_queue_id =
     eventData.send_event_name_to_parent_queue_id;
 
-  let event_output;
+  let event_output: Json;
 
   event_output = await new Promise((resolve) => {
     setTimeout(() => {

@@ -1,4 +1,4 @@
-import type { Database } from "./database.types.ts";
+import type { Database as DatabaseGenerated } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
 
 import { QUEUE_SCHEMA } from "./const.ts";
@@ -12,7 +12,7 @@ export async function readMessage(
   deps: DBDeps,
   queueName: string,
   vt: number,
-): Promise<Database["pgmq"]["CompositeTypes"]["message_record"][]> {
+): Promise<DatabaseGenerated["pgmq"]["CompositeTypes"]["message_record"][]> {
   try {
     const READ_QUEUE_FN = `${QUEUE_SCHEMA}.read`;
     const qty = 1; // Read one message at a time for processing
@@ -24,7 +24,7 @@ export async function readMessage(
       );
     `;
     const res = await deps.db.query<
-      Database["pgmq"]["CompositeTypes"]["message_record"]
+      DatabaseGenerated["pgmq"]["CompositeTypes"]["message_record"]
     >(text, [queueName, vt, qty]);
     return res.rows ?? [];
   } catch (err) {
@@ -69,14 +69,6 @@ export async function archiveMessage(
   }
 }
 
-
-/**
- * Checks whether a PGMQ queue with the given name exists in the database.
- * Uses the `${QUEUE_SCHEMA}.list_queues()` wrapper when available.
- * @param deps - DBDeps containing either supabase or drizzle client
- * @param queueName - The PGMQ queue name to check
- * @returns Promise<boolean>
- */
 export async function pgmqQueueExists(
   deps: DBDeps,
   queueName: string,
@@ -86,11 +78,9 @@ export async function pgmqQueueExists(
     const text = `
       SELECT * FROM ${LIST_QUEUES_FN}();
     `;
-    const res = await deps.db.query(text);
+    const res = await deps.db.query<DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"]>(text);
     const rows = res.rows ?? [];
-    return rows.some((r: any) =>
-      r?.name === queueName || r?.queue_name === queueName
-    );
+    return rows.some((r) => r?.queue_name === queueName);
   } catch (err) {
     console.error("Error in pgmqQueueExists:", err);
     return false;

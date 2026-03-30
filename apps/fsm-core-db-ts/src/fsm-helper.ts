@@ -1,26 +1,16 @@
+import type { Database as DatabaseGenerated, Json } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
 import { FSM_SCHEMA, FSM_SCHEMA_FN_VERSION } from "./const.ts";
 import { toJsonbParam } from "./pg-utils.ts";
 
 
-// TODO:  load_fsm_state_from_json_v2 fn
-
-/**
- * Calls the load_fsm_state_from_json_v2 SQL function to load FSM state from JSON.
- * @param deps - DBDeps for database access
- * @param json_input - The FSM state JSONB input
- * @param root_node_text - The root node text (can be null)
- * @param fsm_name - The FSM name/identifier
- * @param fsm_version - The FSM version
- * @returns Promise<unknown> - The result from the SQL function
- */
 export async function loadFsmStateFromJsonV2(
   deps: DBDeps,
-  json_input: unknown,
+  json_input: Json,
   root_node_text: string | null,
-  fsm_name: string,
-  fsm_version: string,
-): Promise<unknown> {
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"]["Args"]["input_fsm_name"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"]["Args"]["input_fsm_version"],
+): Promise<Json> {
   try {
     const LOAD_FSM_STATE_FN = `${FSM_SCHEMA}.load_fsm_state_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
@@ -37,7 +27,7 @@ export async function loadFsmStateFromJsonV2(
       fsm_name,
       fsm_version,
     ];
-    const res = await deps.db.query<{ result: unknown }>(text, values);
+    const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
     console.error("Error in loadFsmStateFromJsonV2:", err);
@@ -45,22 +35,13 @@ export async function loadFsmStateFromJsonV2(
   }
 }
 
-/**
- * Calls the load_fsm_transition_from_json_v2 SQL function to load FSM transitions from JSON.
- * @param deps - DBDeps for database access
- * @param json_input - The FSM transition JSONB input
- * @param root_node_text - The root node text (can be null)
- * @param fsm_name - The FSM name/identifier
- * @param fsm_version - The FSM version
- * @returns Promise<unknown> - The result from the SQL function
- */
 export async function loadFsmTransitionFromJsonV2(
   deps: DBDeps,
-  json_input: unknown,
+  json_input: Json,
   root_node_text: string | null,
-  fsm_name: string,
-  fsm_version: string,
-): Promise<unknown> {
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_transition_from_json_v2"]["Args"]["fsm_name"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_transition_from_json_v2"]["Args"]["fsm_version"],
+): Promise<Json> {
   try {
     const LOAD_FSM_TRANSITION_FN = `${FSM_SCHEMA}.load_fsm_transition_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
@@ -77,7 +58,7 @@ export async function loadFsmTransitionFromJsonV2(
       fsm_name,
       fsm_version,
     ];
-    const res = await deps.db.query<{ result: unknown }>(text, values);
+    const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
     console.error("Error in loadFsmTransitionFromJsonV2:", err);
@@ -87,11 +68,11 @@ export async function loadFsmTransitionFromJsonV2(
 
 export async function loadFsmFromJsonV2(
   deps: DBDeps,
-  json_input: unknown,
+  json_input: Json,
   root_node_text: string | null,
-  fsm_name: string,
-  fsm_version: string,
-): Promise<unknown> {
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_name"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_version"],
+): Promise<Json> {
   try {
     const LOAD_FSM_FROM_JSON_FN = `${FSM_SCHEMA}.load_fsm_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
@@ -103,7 +84,7 @@ export async function loadFsmFromJsonV2(
       ) AS result;
     `;
     const values = [toJsonbParam(json_input), root_node_text, fsm_name, fsm_version];
-    const res = await deps.db.query<{ result: unknown }>(text, values);
+    const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
     console.error("Error in loadFsmFromJsonV2:", err);
@@ -111,21 +92,12 @@ export async function loadFsmFromJsonV2(
   }
 }
 
-/**
- * Resolves state value for a given input JSON, FSM name, and FSM version.
- * Calls resolve_state_value_v2 SQL function and returns the result.
- * @param deps - DBDeps for database access
- * @param input_json - The state value JSONB to resolve
- * @param fsm_name - The FSM name/identifier
- * @param fsm_version - The FSM version
- * @returns Promise<{ json: unknown; all_nodes: string[] }> - The resolved state value and all nodes
- */
 export async function resolveStateValue(
   deps: DBDeps,
-  input_json: unknown,
-  fsm_name: string,
-  fsm_version: string,
-): Promise<{ json: unknown; all_nodes: string[] } | null> {
+  input_json: Json,
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"]["Args"]["input_fsm_name"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"]["Args"]["input_fsm_version"],
+): Promise<{ json: Json; all_nodes: string[] } | null> {
   try {
     const RESOLVE_STATE_VALUE_FN = `${FSM_SCHEMA}.resolve_state_value_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
@@ -141,7 +113,7 @@ export async function resolveStateValue(
       fsm_version,
     ];
     const res = await deps.db.query<{
-      result: { json: unknown; all_nodes: string[] };
+      result: { json: Json; all_nodes: string[] };
     }>(text, values);
     if (!res.rows || res.rows.length === 0) return null;
     return res.rows[0]?.result ?? null;
@@ -154,18 +126,18 @@ export async function resolveStateValue(
 
 export async function performMicrostep(
   deps: DBDeps,
-  transition_record: unknown,
-  event_name: string,
-  state_value_node_set: unknown,
-  fsm_name: string,
-  fsm_version: string,
+  transition_record: DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"] | null,
+  event_name: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["event_name"],
+  state_value_node_set: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["state_value_node_set"],
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["fsm_name_param"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["fsm_version_param"],
 ): Promise<{
   updated_state_value_node_set: string[];
-  updated_state_value: unknown;
-  exit_actions: unknown;
-  entry_actions: unknown;
-  initial_actions: unknown;
-  transition_actions: unknown;
+  updated_state_value: Json;
+  exit_actions: Json;
+  entry_actions: Json;
+  initial_actions: Json;
+  transition_actions: Json;
 }> {
   try {
     const transitionRecordJson =
@@ -197,11 +169,11 @@ export async function performMicrostep(
     ];
     const res = await deps.db.query<{ result: {
       updated_state_value_node_set: string[];
-      updated_state_value: unknown;
-      exit_actions: unknown;
-      entry_actions: unknown;
-      initial_actions: unknown;
-      transition_actions: unknown;
+      updated_state_value: Json;
+      exit_actions: Json;
+      entry_actions: Json;
+      initial_actions: Json;
+      transition_actions: Json;
     } }>(text, values);
     return (
       res.rows?.[0]?.result ?? {
@@ -219,41 +191,30 @@ export async function performMicrostep(
   }
 }
 
-// TODO:
-// add fn with name: selectTransitions that will call select_all_transitions
-/**
- * Fetches all transitions for a given event, FSM name, and version by calling the SQL function select_all_transitions.
- * @param deps - DBDeps for database access
- * @param event_name - The event name to filter transitions
- * @param source_state_value_set - The source state value set to filter transitions
- * @param fsm_name - The FSM name/identifier
- * @param fsm_version - The FSM version
- * @returns Promise<Array<any>> - Array of transition records
- */
 export async function selectTransitions(
   deps: DBDeps,
-  event_name: string,
-  source_state_value_set: unknown,
-  fsm_name: string,
-  fsm_version: string,
-): Promise<any[]> {
+  event_name: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["event_name"],
+  source_state_value_set: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["p_state_value"],
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_name_param"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_version_param"],
+): Promise<DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"][]> {
   try {
     const SELECT_TRANSITIONS_FN = `${FSM_SCHEMA}.select_all_transitions_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT * FROM ${SELECT_TRANSITIONS_FN}(
         $1::text,
-        $2::jsonb,
+        $2::text[],
         $3::text,
         $4::text
       );
     `;
     const values = [
       event_name,
-      toJsonbParam(source_state_value_set),
+      source_state_value_set,
       fsm_name,
       fsm_version,
     ];
-    const res = await deps.db.query(text, values);
+    const res = await deps.db.query<DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"]>(text, values);
     return res.rows ?? [];
   } catch (err) {
     console.error("Error in selectTransitions:", err);

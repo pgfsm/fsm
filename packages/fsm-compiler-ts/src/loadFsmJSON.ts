@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
-import { loadFsmFromJsonV2 } from "@fsm/db";
+import { loadFsmFromJsonV2, type DBDeps } from "@fsm/db";
 
 
 async function loadFsmJSONFromFolder(
@@ -11,7 +11,7 @@ async function loadFsmJSONFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflow_type: WorkflowType,
-  deps: any
+  deps: DBDeps
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
   try {
@@ -48,7 +48,7 @@ export async function loadFsmJSONFromFolders(
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
-  deps: any
+  deps: DBDeps
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);

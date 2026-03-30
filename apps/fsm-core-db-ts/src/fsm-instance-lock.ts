@@ -1,15 +1,12 @@
+import type { Database as DatabaseGenerated } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
 
 import { FSM_SCHEMA } from "./const.ts";
 
 
-
-
-
-
 export async function tryFSMDBLock(
   deps: DBDeps,
-  fsmInstanceId: string,
+  fsmInstanceId: DatabaseGenerated["fsm_core"]["Functions"]["lock_fsm_instance"]["Args"]["p_fsm_instance_id"],
 ): Promise<boolean> {
   const lockedBy = "some-identifier"; // Replace with actual identifier
   try {
@@ -32,7 +29,7 @@ export async function tryFSMDBLock(
 
 export async function releaseFSMDBLock(
   deps: DBDeps,
-  fsmInstanceId: string,
+  fsmInstanceId: DatabaseGenerated["fsm_core"]["Functions"]["unlock_fsm_instance"]["Args"]["p_fsm_instance_id"],
 ): Promise<boolean> {
   try {
     const UNLOCK_FSM_INSTANCE_FN = `${FSM_SCHEMA}.unlock_fsm_instance`;
@@ -48,6 +45,3 @@ export async function releaseFSMDBLock(
     throw new Error("Failed to release FSM DB lock", { cause: err });
   }
 }
-
-
-

@@ -8,10 +8,10 @@ import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
-import { loadFsmFromJsonV2 } from "@fsm/db";
+import { loadFsmFromJsonV2, type DBDeps } from "@fsm/db";
 
 export async function loadAndVerifyPromiseFromFolders(
-  deps: any,
+  deps: DBDeps,
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],
@@ -94,7 +94,7 @@ export async function loadAndVerifyPromiseFromFolders(
 }
 
 export async function loadAndVerifyFsmFromFolders(
-  deps: any,
+  deps: DBDeps,
   folderPath: string,
   workflow_type: WorkflowType,
   skipDirs: string[] = [],

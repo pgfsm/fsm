@@ -1,6 +1,6 @@
 import type { DBDeps } from "@fsm/db";
 import { tryFSMDBLock, releaseFSMDBLock } from "@fsm/db";
-import { startFSMWorker } from "./fsmworker.ts";
+import { startFSMWorker, type VerifiedModule } from "./fsmworker.ts";
 
 export async function startFSMWorkerWithDBLock(
   deps: DBDeps,
@@ -8,7 +8,7 @@ export async function startFSMWorkerWithDBLock(
   fsm_name: string,
   fsm_version: number | string,
   activeLocks: Record<string, boolean>,
-  verifiedModule?: any,
+  verifiedModule?: VerifiedModule,
   validatePlugin?: boolean,
 ): Promise<boolean> {
   if (await tryFSMDBLock(deps, queueName)) {

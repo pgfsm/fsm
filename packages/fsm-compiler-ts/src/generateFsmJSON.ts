@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
+import type { Json } from "@fsm/db/database.types";
 
 /**
  * Pure function — returns a new FSM JSON object with all null values removed
@@ -61,7 +62,7 @@ function removeNullActions(obj: any): any {
  * @param obj The FSM JSON object
  * @returns A new object with all string actions replaced by { type: string }
  */
-export function normalizeActionsToObjects(obj: any): any {
+export function normalizeActionsToObjects(obj: Json): Json {
   const clone = JSON.parse(JSON.stringify(obj));
 
   function toActionObject(a: any): any {
@@ -116,7 +117,7 @@ export function normalizeActionsToObjects(obj: any): any {
  * @param obj The FSM JSON object
  * @returns A new object with actionName populated on matching entry/exit actions
  */
-export function addActionNameFromDelay(obj: any): any {
+export function addActionNameFromDelay(obj: Json): Json {
   const clone = JSON.parse(JSON.stringify(obj));
 
   /** Collect full transition objects whose event contains "xstate.after." and have a delay key */
@@ -182,7 +183,7 @@ export function addActionNameFromDelay(obj: any): any {
  * @param parentFsmVersion Fallback fsmVersion applied when invoke entry has none
  * @returns { fulljson, childActorsInfo }
  */
-export function addMissingFsmTypeToInvokeActor(fsmJSON: any, parentFsmVersion: string): { fulljson: any, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
+export function addMissingFsmTypeToInvokeActor(fsmJSON: Json, parentFsmVersion: string): { fulljson: Json, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
   const clone = JSON.parse(JSON.stringify(fsmJSON));
   const childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> = [];
 

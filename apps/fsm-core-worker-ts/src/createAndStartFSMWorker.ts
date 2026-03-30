@@ -1,12 +1,16 @@
 import type { DBDeps } from "@fsm/db";
+import type { Json } from "@fsm/db/database.types";
 import { createFSMInstanceFromName } from "@fsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker-lock.ts";
+import type { VerifiedModule } from "./fsmworker.ts";
+
+type FsmInstanceResult = { fsm_instance_id: string; fsm_version: string } & Record<string, Json>;
 
 export async function createAndStartFSMWorker(
   deps: DBDeps,
   fsm_name: string,
-  fsm_version: string | number | undefined,
-  matchedModule: any,
+  fsm_version: string,
+  matchedModule: VerifiedModule,
   activeLocks: Record<string, boolean>,
   validatePlugin?: boolean,
 ) {
@@ -15,7 +19,7 @@ export async function createAndStartFSMWorker(
     fsm_name,
     fsm_version,
     true,
-  );
+  ) as FsmInstanceResult | null;
 
   if (!fsm_instance || !fsm_instance.fsm_instance_id) {
     return null;

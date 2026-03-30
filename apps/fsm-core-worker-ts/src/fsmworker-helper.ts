@@ -1,6 +1,13 @@
-import type { Database } from "@fsm/db/database.types";
+import type { Database, Json } from "@fsm/db/database.types";
 
 import type { DBDeps } from "@fsm/db";
+
+export type FsmModuleDefinition = {
+  actions: Record<string, (...args: unknown[]) => unknown> | null;
+  guards: Record<string, (...args: unknown[]) => unknown> | null;
+  delays: Record<string, (...args: unknown[]) => unknown> | null;
+  actors: Record<string, (...args: unknown[]) => unknown> | null;
+};
 
 import {
   performMicrostep,
@@ -63,11 +70,11 @@ export function splitBySendEventName<
 // Helper: run an action implementation from an actions module.
 export async function runActionImplementation(
   actionKind: "exit" | "transition" | "entry",
-  action: any,
-  actionsModule: any,
-  current_context: any,
-  meta: { deps: DBDeps; queueName: string; msg: any },
-): Promise<any> {
+  action: Json,
+  actionsModule: Record<string, (...args: unknown[]) => unknown> | null | undefined,
+  current_context: Json,
+  meta: { deps: DBDeps; queueName: string; msg: Database["pgmq"]["CompositeTypes"]["message_record"] },
+): Promise<Json> {
   console.log(`Running ${actionKind} action:`, action);
   try {
     const actionName = action.type || action.action_type || action.name;
@@ -94,12 +101,13 @@ export async function macrostep_v2(
   deps: DBDeps,
   queueName: string,
   msg: Database["pgmq"]["CompositeTypes"]["message_record"],
-  fsm_instance_row: Database["public"]["Tables"]["fsm_instance"]["Row"],
-  resolved_state_value: unknown,
+  fsm_instance_row: Database["fsm_core"]["Tables"]["fsm_instance"]["Row"],
+  resolved_state_value: Json,
   fsm_name: string,
   fsm_version: number | string,
-  fsmModuleDefinition?: any,
-): Promise<void> {
+  fsmModuleDefinition?: FsmModuleDefinition,
+): Promise<any> {
+  const resolvedState = resolved_state_value as { json: Json; all_nodes: string[] };
   // Simulate work (replace with real logic)
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
@@ -122,9 +130,12 @@ export async function macrostep_v2(
     fsm_instance_data_save_fsm_error: {},
     fsm_instance_data_save_fsm_output: {},
     fsm_instance_data_save_fsm_xstate_state: {},
+    exit_actions: [] as any,
+    transition_actions: [] as any,
+    entry_actions: [] as any,
   };
 
-  let nextState = {};
+  let nextState : any = {};
 
   let current_context = fsm_instance_row?.fsm_instance_context;
   // pass cuurent_context to all actions and update its value after every action execution
@@ -145,7 +156,7 @@ export async function macrostep_v2(
     let allTransitions = await selectTransitions(
       deps,
       eventType,
-      resolved_state_value.all_nodes,
+      resolvedState.all_nodes,
       fsm_name,
       fsm_version.toString(),
     );
@@ -247,7 +258,7 @@ export async function macrostep_v2(
     current_context = await runActionImplementation(
       "transition",
       action,
-      actionsModule,
+      fsmModuleDefinition?.actions,
       current_context,
       { deps, queueName, msg },
     );
@@ -283,7 +294,7 @@ export async function macrostep_v2(
 
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
-    .filter((item: any) => item !== msg.message?.type);
+    .filter((item: any) => item !== (msg.message as any)?.type);
 
   // get both removed and new_total_schedule_queue_data
   // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);
