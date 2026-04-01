@@ -924,7 +924,11 @@
                 "target": [
                   "#(machine).creditCheck.Entering Information"
                 ],
-                "actions": [],
+                "actions": [
+                  {
+                    "type": "assignCreditScoreError"
+                  }
+                ],
                 "source": "#(machine).creditCheck.CheckingCreditScores",
                 "reenter": false,
                 "eventType": "xstate.done.state.(machine).creditCheck.CheckingCreditScores"
@@ -946,7 +950,11 @@
               "target": [
                 "#(machine).creditCheck.Entering Information"
               ],
-              "actions": [],
+              "actions": [
+                {
+                  "type": "assignCreditScoreError"
+                }
+              ],
               "source": "#(machine).creditCheck.CheckingCreditScores",
               "reenter": false,
               "eventType": "xstate.done.state.(machine).creditCheck.CheckingCreditScores"

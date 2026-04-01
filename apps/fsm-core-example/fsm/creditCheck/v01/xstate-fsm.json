@@ -911,7 +911,9 @@
                   "#(machine).creditCheck.Entering Information"
                 ],
                 "actions": [
-                  null
+                  {
+                    "type": "assignCreditScoreError"
+                  }
                 ],
                 "source": "#(machine).creditCheck.CheckingCreditScores",
                 "reenter": false,
@@ -935,7 +937,9 @@
                 "#(machine).creditCheck.Entering Information"
               ],
               "actions": [
-                null
+                {
+                  "type": "assignCreditScoreError"
+                }
               ],
               "source": "#(machine).creditCheck.CheckingCreditScores",
               "reenter": false,
