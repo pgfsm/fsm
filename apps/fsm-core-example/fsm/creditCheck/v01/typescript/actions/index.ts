@@ -18,6 +18,11 @@ export function assignErrorMessage(context: any, event: any) {
   // TODO: implement
 }
 
+// Action: assignCreditScoreError
+export function assignCreditScoreError(context: any, event: any) {
+  // TODO: implement
+}
+
 // Action: assignEquiGavinScore
 export function assignEquiGavinScore(context: any, event: any) {
   // TODO: implement
