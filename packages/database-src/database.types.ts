@@ -541,6 +541,7 @@ export type Database = {
         Args: {
           input_fsm_name: string
           input_fsm_version: string
+          input_fsm_context: Json
           create_pgmq_queue?: boolean
         }
         Returns: Json

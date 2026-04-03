@@ -1,86 +1,11 @@
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_queue_with_event_logs_v2(
-    input_msg jsonb,
-    input_event_source jsonb,
-    input_event_name text DEFAULT NULL,
-    input_event_delay integer DEFAULT 0,
-    input_fsm_instance_id uuid DEFAULT NULL
-)
--- RETURNS TABLE (
---     event_id uuid,
---     queue_msg_id bigint,
---     event_data jsonb
--- ) 
-RETURNS JSONB
-AS $$
-DECLARE
-    output_fsm_instance_queue_msg_id bigint;
-    fsm_instance_queue_name text;
-    fsm_instance_queue_event_logs_id uuid;
-BEGIN
-    IF input_fsm_instance_id IS NULL THEN
-        RAISE EXCEPTION 'fsm_instance_id is NULL';
-    END IF;
+drop function if exists "fsm_core"."create_fsm_instance_from_name_v2"(input_fsm_name text, input_fsm_version text, create_pgmq_queue boolean);
 
-    fsm_instance_queue_name := input_fsm_instance_id::text;
+set check_function_bodies = off;
 
-
-    -- Call pgmq.send and get queue_msg_id
-    BEGIN
-        SELECT pgmq.send(fsm_instance_queue_name, input_msg, input_event_delay) INTO output_fsm_instance_queue_msg_id;
-    EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION 'pgmq.send failed for queue %: %', fsm_instance_queue_name, SQLERRM;
-    END;
-    IF output_fsm_instance_queue_msg_id IS NULL THEN
-        RAISE EXCEPTION 'Failed to send event to queue %', fsm_instance_queue_name;
-    END IF;
-
-    -- Insert into fsm_core.fsm_instance_queue_event_logs and get id
-    INSERT INTO fsm_core.fsm_instance_queue_event_logs (
-        fsm_instance_id,
-        event_name,
-        event_data,
-        fsm_instance_queue_msg_id,
-        event_source,
-        event_started_at,
-        event_status
-    ) VALUES (
-        input_fsm_instance_id,
-        input_event_name,
-        input_msg,
-        output_fsm_instance_queue_msg_id,
-        input_event_source,
-        now(),
-        'queued'
-    ) RETURNING id INTO fsm_instance_queue_event_logs_id;
-
-    RETURN jsonb_build_object(
-        'event_data', input_msg,
-        'fsm_instance_queue_name', fsm_instance_queue_name,
-        'fsm_instance_queue_msg_id', output_fsm_instance_queue_msg_id,
-        'fsm_instance_queue_event_logs_id', fsm_instance_queue_event_logs_id
-    );
-
-    -- RETURN QUERY SELECT fsm_instance_event_logs_id, v_queue_msg_id, input_msg;
-
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-
-
--- Function: fsm_core.create_fsm_instance_from_name_v2
--- Purpose: Given a fsm_name, create a fsm_instance and related fsm_instance_transitions_auth entries from the latest fsm_transitions and its auths.
-
-
-CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(
-    input_fsm_name text,
-    input_fsm_version TEXT,
-    input_fsm_context jsonb,
-    create_pgmq_queue boolean DEFAULT false
-)
-RETURNS JSONB
-AS $$
+CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(input_fsm_name text, input_fsm_version text, input_fsm_context jsonb, create_pgmq_queue boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     output_queue_created boolean := false;
     output_message text := NULL;
@@ -156,7 +81,7 @@ BEGIN
         'send_event_result', send_event_result
     );
 END;
-$$ LANGUAGE plpgsql;
-
+$function$
+;
 
 
