@@ -9,10 +9,13 @@ dotenv.config({ path: "./../../.env" });
 (async () => {
   
   // const folderPath = Deno.args[0] || Deno.cwd()+ "/packages/fsm-compiler-ts/src/sampleFSMfromFolder";
-  const sharedPromisefolderPath = 'packages/fsm-compiler-ts/src/example/sharedPromise';
-  const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
-  const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
- 
+  // const sharedPromisefolderPath = 'packages/fsm-compiler-ts/src/example/sharedPromise';
+  // const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
+  // const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
+  
+  const sharedPromisefolderPath = 'apps/fsm-core-example/sharedPromise';
+  const sharedFSMfolderPath = 'apps/fsm-core-example/sharedFSM';
+  const fsmfolderPath = 'apps/fsm-core-example/fsm';
   
 
   const deps = {
