@@ -41,6 +41,7 @@ export async function createFSMInstanceFromName(
   deps: DBDeps,
   fsmName: CreateInstanceArgs["input_fsm_name"],
   fsmVersion: CreateInstanceArgs["input_fsm_version"],
+  fsmContext: CreateInstanceArgs["input_fsm_context"],
   createQueue: NonNullable<CreateInstanceArgs["create_pgmq_queue"]> = false,
 ): Promise<Json> {
   try {
@@ -48,10 +49,11 @@ export async function createFSMInstanceFromName(
       SELECT ${CREATE_FSM_INSTANCE_FN}(
         $1::text,
         $2::text,
-        $3::boolean
+        $3::jsonb,
+        $4::boolean
       ) AS instance_result;
     `;
-    const values = [fsmName, fsmVersion, createQueue];
+    const values = [fsmName, fsmVersion, toJsonbParam(fsmContext), createQueue];
     const result = await deps.db.query<{ instance_result: Json }>(
       text,
       values,

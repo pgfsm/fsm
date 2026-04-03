@@ -12,6 +12,7 @@ export async function createAndStartFSMWorker(
   fsm_version: string,
   matchedModule: VerifiedModule,
   activeLocks: Record<string, boolean>,
+  fsm_context: Json,
   validatePlugin?: boolean,
   signal?: AbortSignal,
 ) {
@@ -19,6 +20,7 @@ export async function createAndStartFSMWorker(
     deps,
     fsm_name,
     fsm_version,
+    fsm_context,
     true,
   ) as FsmInstanceResult | null;
 
