@@ -127,7 +127,7 @@ export async function macrostep_v2(
     total_promise_queue_data: [] as any,
     fsm_instance_data_save_fsm_status: {},
     fsm_instance_data_save_fsm_state: {},
-    fsm_instance_data_save_fsm_context: {},
+    fsm_instance_data_save_fsm_context: {} as any,
     fsm_instance_data_save_fsm_error: {},
     fsm_instance_data_save_fsm_output: {},
     fsm_instance_data_save_fsm_xstate_state: {},
@@ -327,8 +327,7 @@ export async function macrostep_v2(
   macroSaveFnPayload.new_promise_queue_data = new_promise_queue_data;
   macroSaveFnPayload.total_promise_queue_data = total_promise_queue_data;
 
-  macroSaveFnPayload.fsm_instance_data_save_fsm_context = nextState?.context ||
-    {};
+  macroSaveFnPayload.fsm_instance_data_save_fsm_context = current_context;
 
   // BUG fixed microstepResult.updated_state_value will return json value with 'machine' as root key of object.
   // while in xstate it will return state value without 'machine' as root key of object.
