@@ -19,6 +19,8 @@ export async function processFSMPromiseQueueMessage(
   msg: Database["pgmq"]["CompositeTypes"]["message_record"],
   promise_queue_name: string,
   promise_version?: string,
+  fsm_promise_type?: string,
+  actorFn?: ((input: unknown) => Promise<unknown>) | undefined,
 ): Promise<FSMPromiseArchiveData> {
   const msg_id = msg.msg_id;
   const eventData = msg.message as any;
@@ -28,20 +30,33 @@ export async function processFSMPromiseQueueMessage(
 
   let event_output: Json;
 
-  event_output = await new Promise((resolve) => {
-    setTimeout(() => {
-      const isSuccess = Math.random() < 0.5;
-      if (isSuccess) {
-        send_event_name_to_parent_queue_id = "xstate.done.actor." +
-          send_event_name_to_parent_queue_id;
-        resolve({ result: "Promise fulfilled successfully" });
-      } else {
-        send_event_name_to_parent_queue_id = "xstate.error.actor." +
-          send_event_name_to_parent_queue_id;
-        resolve({ error: "Promise failed" });
-      }
-    }, 300);
-  });
+  if (actorFn) {
+    try {
+      const result = await actorFn(eventData.input ?? eventData);
+      send_event_name_to_parent_queue_id = "xstate.done.actor." +
+        send_event_name_to_parent_queue_id;
+      event_output = result as Json;
+    } catch (err) {
+      send_event_name_to_parent_queue_id = "xstate.error.actor." +
+        send_event_name_to_parent_queue_id;
+      event_output = { error: String(err) };
+    }
+  } else {
+    event_output = await new Promise((resolve) => {
+      setTimeout(() => {
+        const isSuccess = Math.random() < 0.5;
+        if (isSuccess) {
+          send_event_name_to_parent_queue_id = "xstate.done.actor." +
+            send_event_name_to_parent_queue_id;
+          resolve({ result: "Promise fulfilled successfully" });
+        } else {
+          send_event_name_to_parent_queue_id = "xstate.error.actor." +
+            send_event_name_to_parent_queue_id;
+          resolve({ error: "Promise failed" });
+        }
+      }, 300);
+    });
+  }
 
   const event_status = event_output && (event_output as any).error
     ? "failed"

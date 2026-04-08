@@ -138,6 +138,101 @@ $$ LANGUAGE plpgsql;
 -- return { promise_queue_name : 'fetchTask' , queue_msg_id : 1 , start_promise_worker: true | false, number_of_workers_currently_running?(optional): 5 }
 
 
+CREATE OR REPLACE FUNCTION fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
+    event_name text, 
+    event_input jsonb,
+    id text,
+    action_type text,
+    src text,
+    fsmName text,
+    fsmType text,
+    fsmVersion text,
+    parentFsmName text,
+    parentFsmVersion text,
+    from_source_fsm_instance_id uuid
+) RETURNS jsonb AS $$
+DECLARE
+    new_queue_name text;
+    queue_msg_data jsonb;
+    queue_exists boolean := false;
+    queue_msg_id bigint;
+    start_queue_worker boolean := false;
+BEGIN
+
+    -- if fsmType is Promise, queue_name will be from_source_fsm_instance_id
+    IF fsmType = 'promise' THEN
+        new_queue_name := parentFsmName || '_' || parentFsmVersion || '_' || fsmName; -- you can adjust naming convention as needed
+    ELSIF fsmType = 'sharedPromise' THEN
+        new_queue_name := 'sharedPromise_' || fsmName || '_' || fsmVersion; -- you can adjust naming convention as needed
+    ELSE 
+        new_queue_name := 'childFsm_' || uuid_generate_v4()::text; -- default to a unique queue name for child FSMs or other types, adjust as needed
+        RAISE NOTICE 'Generated new queue name: %', new_queue_name;          
+        -- new_queue_name := src;
+    END IF;
+
+
+
+    IF NOT queue_exists THEN
+        
+            PERFORM fsm_core.create(queue_name := new_queue_name);
+            start_queue_worker := true;
+        
+    END IF;
+
+    queue_msg_data := jsonb_build_object(
+            'type', fsmType,
+            'event_data', jsonb_build_object(
+                'event_type', event_name,
+                'event_payload', event_input,
+                'id', id, 
+                'src', src, 
+                'action_type', action_type,
+                'fsmType', fsmType,
+                'fsmVersion', fsmVersion),
+            'send_event_name_to_parent_queue_id', event_name,
+            'send_to_parent_queue_id', from_source_fsm_instance_id
+        );
+
+
+    SELECT * INTO queue_msg_id FROM fsm_core.send(
+        queue_name := new_queue_name,
+        msg := queue_msg_data,
+        delay := 0
+    );
+    
+
+    -- 3. Log event (log even if queue_msg_id is NULL)
+    -- INSERT INTO fsm_core.fsm_promise_queue_event_logs (
+    --     event_name,
+    --     event_input,
+    --     promise_queue_name,
+    --     promise_queue_msg_id,
+    --     send_to_parent_queue_id,
+    --     send_to_parent_queue_id_msg_id,
+    --     event_status,
+    --     event_finished_at
+    -- ) VALUES (
+    --     event_name,
+    --     event_input,
+    --     promise_queue_name,
+    --     queue_msg_id,
+    --     from_source_fsm_instance_id,
+    --     event_name,
+    --     'sent',
+    --     now()
+    -- );
+
+    -- 4. Return result
+    RETURN jsonb_build_object(
+        'queue_name', new_queue_name,
+        'queue_type', fsmType,
+        'queue_msg_id', queue_msg_id,
+        'queue_msg_data', queue_msg_data,
+        'start_queue_worker', start_queue_worker
+    );
+END;
+$$ LANGUAGE plpgsql;
+
 
 
 
@@ -397,10 +492,25 @@ BEGIN
         FOR i IN 0 .. jsonb_array_length(to_be_added_promise_queue_data)-1 LOOP
             to_be_added_promise_queue_data_entry := to_be_added_promise_queue_data->i;
             -- IF (to_be_added_promise_queue_data_entry->>'src') IS NOT NULL AND (to_be_added_promise_queue_data_entry->>'src') <> '' THEN
-                output_promise_result := fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
-                    to_be_added_promise_queue_data_entry->>'id', -- type can be also used here 
+                -- output_promise_result := fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
+                --     to_be_added_promise_queue_data_entry->>'id', -- type can be also used here 
+                --     to_be_added_promise_queue_data_entry->'input',
+                --     to_be_added_promise_queue_data_entry->>'src',
+                --     remove_from_current_fsm_instance_queue_id::uuid
+                --     -- CASE WHEN remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' THEN remove_from_current_fsm_instance_queue_id::uuid ELSE NULL::uuid END
+                -- );
+
+                output_promise_result := fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
+                    to_be_added_promise_queue_data_entry->>'id', -- id is used as event_name param 
                     to_be_added_promise_queue_data_entry->'input',
+                    to_be_added_promise_queue_data_entry->>'id',
+                    to_be_added_promise_queue_data_entry->>'action_type',
                     to_be_added_promise_queue_data_entry->>'src',
+                    to_be_added_promise_queue_data_entry->>'src', -- src is used as fsmName param
+                    to_be_added_promise_queue_data_entry->>'fsmType',
+                    to_be_added_promise_queue_data_entry->>'fsmVersion',
+                    to_be_added_promise_queue_data_entry->>'parentFsmName',
+                    to_be_added_promise_queue_data_entry->>'parentFsmVersion',
                     remove_from_current_fsm_instance_queue_id::uuid
                     -- CASE WHEN remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' THEN remove_from_current_fsm_instance_queue_id::uuid ELSE NULL::uuid END
                 );

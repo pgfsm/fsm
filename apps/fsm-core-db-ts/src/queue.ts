@@ -4,9 +4,18 @@ import type { DBDeps } from "./custom-type.ts";
 import { QUEUE_SCHEMA } from "./const.ts";
 
 
+const CREATE_QUEUE_FN = `${QUEUE_SCHEMA}.create`;
 const DELETE_QUEUE_FN = `${QUEUE_SCHEMA}.delete`;
 const ARCHIVE_QUEUE_FN = `${QUEUE_SCHEMA}.archive`;
 const LIST_QUEUES_FN = `${QUEUE_SCHEMA}.list_queues`;
+
+export async function createPgmqQueue(
+  deps: DBDeps,
+  queueName: string,
+): Promise<void> {
+  const text = `SELECT ${CREATE_QUEUE_FN}($1)`;
+  await deps.db.query(text, [queueName]);
+}
 
 export async function readMessage(
   deps: DBDeps,

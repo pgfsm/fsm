@@ -1,10 +1,10 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
-import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker } from "../index.ts";
+import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker, createAndStartPromiseWorker } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path"],
+  string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type"],
   boolean: ["help", "validate-plugin"],
   alias: {
     h: "help",
@@ -13,6 +13,7 @@ const args = parseArgs(Deno.args, {
     n: "fsm-name",
     v: "fsm-version",
     f: "fsm-folder-path",
+    t: "promise-type",
   },
 });
 
@@ -24,26 +25,28 @@ USAGE
   deno run --allow-all src/cli/index.ts -c <command> [options]
 
 COMMANDS
-  start-worker                Create FSM queue worker (requires -q)
-  start-worker-with-db-lock   Start FSM worker with DB advisory lock (requires -q)
-  start-promise-worker        Start FSM promise worker (requires -q)
-  create-and-start-worker     Create FSM instance and start worker with DB lock
+  start-worker                      Start FSM queue worker (requires -q)
+  start-worker-with-db-lock         Start FSM worker with DB advisory lock (requires -q)
+  start-promise-worker              Start FSM promise worker for existing queue (requires -q, -t)
+  create-and-start-worker           Create FSM instance + queue and start worker with DB lock
+  create-and-start-promise-worker   Create PGMQ queue and start promise worker (requires -q, -t)
 
 OPTIONS
-  -c, --command <command>         Command to run (required)
-  -q, --queue-name <queueName>    Queue name (required for start-worker, start-worker-with-db-lock, start-promise-worker)
-  -n, --fsm-name <name>           FSM name (required)
-  -v, --fsm-version <version>     FSM version number (required)
-  -f, --fsm-folder-path <path>    Absolute path to FSM folder for loading actions/guards/delays/actors (required)
-      --validate-plugin           Use validateFsmPluginLoadFromFolder (reads fsm.json + validates modules) instead of direct imports
-  -h, --help                      Show this help message
+  -c, --command <command>           Command to run (required)
+  -q, --queue-name <queueName>      Queue name (required for start-worker, start-worker-with-db-lock, start-promise-worker, create-and-start-promise-worker)
+  -n, --fsm-name <name>             FSM name (required)
+  -v, --fsm-version <version>       FSM version number (required)
+  -f, --fsm-folder-path <path>      Absolute path to FSM folder for loading actions/guards/delays/actors (required)
+  -t, --promise-type <type>         Promise actor type to invoke (required for start-promise-worker, create-and-start-promise-worker)
+      --validate-plugin             Use validateFsmPluginLoadFromFolder instead of direct imports
+  -h, --help                        Show this help message
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c start-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c start-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
   deno run --allow-all src/cli/index.ts -c start-worker-with-db-lock -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
-  deno run --allow-all src/cli/index.ts -c start-promise-worker -q sharedPromise_v01 -n sharedPromise -v 1 -f /abs/path/to/fsm
+  deno run --allow-all src/cli/index.ts -c start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
   deno run --allow-all src/cli/index.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
+  deno run --allow-all src/cli/index.ts -c create-and-start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
 `);
 }
 
@@ -57,12 +60,15 @@ const queueName = args["queue-name"];
 const fsmName = args["fsm-name"];
 const fsmVersion = args["fsm-version"];
 const fsmFolderPath = args["fsm-folder-path"];
+const promiseType = args["promise-type"];
 
-const needsQueueName = ["start-worker", "start-worker-with-db-lock", "start-promise-worker"];
+const needsQueueName = ["start-worker", "start-worker-with-db-lock", "start-promise-worker", "create-and-start-promise-worker"];
+const needsPromiseType = ["start-promise-worker", "create-and-start-promise-worker"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
 if (command && needsQueueName.includes(command) && !queueName) missing.push("--queue-name");
+if (command && needsPromiseType.includes(command) && !promiseType) missing.push("--promise-type");
 if (!fsmName) missing.push("--fsm-name");
 if (!fsmVersion) missing.push("--fsm-version");
 if (!fsmFolderPath) missing.push("--fsm-folder-path");
@@ -102,11 +108,18 @@ try {
     }
     case "start-promise-worker": {
       const deps = await buildDeps();
-      const started = await startFSMPromiseWorker(deps, queueName!, fsmName!, Number(fsmVersion));
-      if (!started) {
-        console.error(`Error: PGMQ queue "${queueName}" does not exist.`);
+      startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule).catch((err) => {
+        console.error(`Promise worker for queue "${queueName}" stopped:`, err);
         Deno.exit(1);
-      }
+      });
+      console.log(`Promise worker started for queue: ${queueName}`);
+      await new Promise(() => {});
+      break;
+    }
+    case "create-and-start-promise-worker": {
+      const deps = await buildDeps();
+      await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule);
+      console.log(`Promise worker started for queue: ${queueName}`);
       await new Promise(() => {});
       break;
     }

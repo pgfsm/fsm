@@ -1,6 +1,7 @@
 import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
 import type { Schema } from "hono";
 import type { PinoLogger } from "hono-pino";
+import { int } from "drizzle-orm/mysql-core";
 
 export type FsmFolderConfig = {
   folderPath: string;
@@ -22,7 +23,7 @@ export interface AppBindings {
     supabase: any;
     logger: PinoLogger;
     fsmConfig: FsmStartupConfig | undefined;
-    verifiedModules: {
+    verifiedFsmModules: {
       fsmName: string;
       fsmVersion: string;
       fsmType: string;
@@ -30,6 +31,7 @@ export interface AppBindings {
       fsmRelativeFolderPath: string;
       fsmParentAbsFolderPath: string;
       fsmParentRelativeFolderPath: string;
+      internalActors: any;
     }[];
   };
 }

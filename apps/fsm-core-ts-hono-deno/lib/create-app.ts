@@ -5,6 +5,7 @@ import {
   loadAndVerifyFsmFromFolders,
   loadAndVerifyPromiseFromFolders,
 } from "@fsm/compiler";
+import { createAndStartPromiseWorker } from "@fsm/worker";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 
@@ -42,7 +43,7 @@ export default async function createApp(
   basePath = "",
   fsmConfig?: FsmStartupConfig,
 ) {
-  const app = createRouter();
+  
 
   pool.on("connect", () => {
     console.log("Database on connect event");
@@ -54,8 +55,8 @@ export default async function createApp(
     console.error("Database error event:", err);
   });
 
-  let verifiedModules: any[] = [];
-
+  let verifiedFsmModules: any[] = [];
+  let verifiedPromiseModules: any[] = [];
   if (fsmConfig && pool) {
     const client = await pool.connect();
     client.release();
@@ -70,6 +71,7 @@ export default async function createApp(
           [],
         )
       : [];
+    const verifiedSharedPromise = outputSharedPromise.filter((m) => m.isFsmModuleVerified === true)  
 
     const outputSharedFsm = fsmConfig.sharedFsm
       ? await loadAndVerifyFsmFromFolders(
@@ -80,7 +82,9 @@ export default async function createApp(
           outputSharedPromise,
         )
       : [];
-
+    const verifiedSharedFsm = outputSharedFsm.filter((m) => m.isFsmModuleVerified === true)  
+    
+    
     const outputFsm = fsmConfig.fsm
       ? await loadAndVerifyFsmFromFolders(
           deps,
@@ -90,14 +94,53 @@ export default async function createApp(
           [...outputSharedPromise, ...outputSharedFsm],
         )
       : [];
+    const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);  
 
-    verifiedModules = [
-      ...outputSharedPromise,
-      ...outputSharedFsm,
-      ...outputFsm,
-    ].filter((m) => m.isFsmModuleVerified === true)
-    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentDirName : m.fsmParentDirName, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath }));
+    verifiedFsmModules = [
+      ...verifiedSharedPromise,
+      ...verifiedSharedFsm,
+      ...verifiedFsm,
+    ]
+    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentDirName : m.fsmParentDirName, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath, internalActors: m.internalActors }));
+
+    // Merge internalActors from verifiedSharedFsm and verifiedFsm into one flat array,
+    // each with its own AbortController for graceful shutdown
+    const allInternalActors = [
+      ...verifiedSharedFsm,
+      ...verifiedFsm,
+    ].flatMap((fsm) =>
+      (fsm.internalActors ?? []).map((actor) => ({
+        src: actor.src,
+        fsmName: actor.fsmName,
+        fsmType: actor.fsmType,
+        fsmVersion: actor.fsmVersion,
+        fsmAbsFolderPath: fsm.fsmAbsFolderPath as string,
+        controller: new AbortController(),
+      }))
+    );
+
+    const promiseDeps = { db: pool, useSupabase: false };
+
+    for (const actor of allInternalActors) {
+      try {
+        await createAndStartPromiseWorker(
+          promiseDeps,
+          actor.src,
+          actor.src,
+          actor.fsmType,
+          actor.fsmVersion,
+          { fsmAbsFolderPath: actor.fsmAbsFolderPath },
+          actor.controller.signal,
+        );
+        console.log(`✅ Promise worker started for actor: ${actor.src}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not start promise worker for "${actor.src}":`, err);
+      }
+    }
+
   }
+
+  const app = createRouter();
 
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
   app.use("*", async (c, next) => {
@@ -110,7 +153,7 @@ export default async function createApp(
 
   app.use("*", (c, next) => {
     c.set("fsmConfig", fsmConfig);
-    c.set("verifiedModules", verifiedModules);
+    c.set("verifiedFsmModules", verifiedFsmModules);
     return next();
   });
 

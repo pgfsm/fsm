@@ -102,7 +102,7 @@ export async function validatePromisePluginLoadFromFolder(
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
-  let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
+  let internalActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
 
@@ -143,7 +143,7 @@ export async function validatePromisePluginLoadFromFolder(
     isFsmModuleVerified,
     fsmModuleDefinition,
     failedMethods,
-    requiredChildActors,
+    internalActors,
     externalActors,
   };
 }
@@ -246,7 +246,7 @@ export async function validateFsmPluginLoadFromFolder(
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
-  let requiredChildActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
+  let internalActors: { src: string; fsmName: string; fsmType: string; fsmVersion: string; fsmAbsFolderPath: string; fsmRelativeFolderPath: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
   let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
   let actions: string[] = [];
@@ -276,7 +276,7 @@ export async function validateFsmPluginLoadFromFolder(
       isFsmModuleVerified,
       fsmModuleDefinition,
       failedMethods,
-      requiredChildActors,
+      internalActors,
       externalActors,
     };
   }
@@ -287,8 +287,8 @@ export async function validateFsmPluginLoadFromFolder(
   guards = result.guards;
   delays = result.delays;
   actors = result.actors;
-  requiredChildActors = [...actors];
-  externalActors = requiredChildActors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
+  internalActors = actors.filter(actor => actor.fsmType === 'promise').map(actor => ({ ...actor, resolved: true, fsmName : actor.src,  fsmAbsFolderPath : `${fsmAbsFolderPath}`, fsmRelativeFolderPath: `${fsmRelativeFolderPath}`  })); 
+  externalActors = actors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
 
   const outputValidateLanguageModules = await validateLanguageModules(
     fsmAbsFolderPath,
@@ -342,7 +342,7 @@ export async function validateFsmPluginLoadFromFolder(
     isFsmModuleVerified,
     fsmModuleDefinition,
     failedMethods,
-    requiredChildActors,
+    internalActors,
     externalActors,
   };
 }

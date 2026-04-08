@@ -78,7 +78,9 @@ BEGIN
         SELECT 
             COALESCE(fs.entry, '[]'::jsonb) AS entry_actions,
             COALESCE(fs.invoke, '[]'::jsonb) AS invoke_actions,
-            fs.fsm_order
+            fs.fsm_order,
+            fs.fsm_name,
+            fs.fsm_version
         FROM fsm_core.fsm_states fs
         WHERE 
             fs.computed_state_key_ltree = ANY(p_state_paths::ltree[])
@@ -92,7 +94,9 @@ BEGIN
                 action := rec.entry_actions->i;
                 action := action || jsonb_build_object(
                     'fsm_order', rec.fsm_order,
-                    'action_type', 'entry'
+                    'action_type', 'entry',
+                    'parentFsmName', rec.fsm_name,
+                    'parentFsmVersion', rec.fsm_version
                 );
                 all_actions := all_actions || jsonb_build_array(action);
             END LOOP;
@@ -104,7 +108,9 @@ BEGIN
                 action := rec.invoke_actions->i;
                 action := action || jsonb_build_object(
                     'fsm_order', rec.fsm_order,
-                    'action_type', 'invoke'
+                    'action_type', 'invoke',
+                    'parentFsmName', rec.fsm_name,
+                    'parentFsmVersion', rec.fsm_version
                 );
                 all_actions := all_actions || jsonb_build_array(action);
             END LOOP;
