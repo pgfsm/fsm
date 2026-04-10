@@ -136,7 +136,7 @@ export async function archive_event_from_fsm_promise_type_worker(
       SELECT * FROM ${ARCHIVE_EVENT_FROM_FSM_PROMISE_TYPE_WORKER_FN}(
         $1::text,
         $2::bigint,
-        $3::text,
+        $3::uuid,
         $4::text,
         $5::jsonb,
         $6::text,

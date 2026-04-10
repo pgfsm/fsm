@@ -1,70 +1,109 @@
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_queue_with_event_logs_v2(
-    input_msg jsonb,
-    input_event_source jsonb,
-    input_event_name text DEFAULT NULL,
+CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+    input_fsm_instance_id uuid,
+    input_fsm_instance_id_fsm_type text,
+    input_fsm_instance_id_fsm_version text,
+    input_send_to_parent_queue_id uuid,
+    input_send_to_parent_queue_id_msg_id text,
+    input_event_name text,
+    input_event_action_type text,
+    input_event_data jsonb,
     input_event_delay integer DEFAULT 0,
-    input_fsm_instance_id uuid DEFAULT NULL
+    input_event_status text DEFAULT 'ACTIVE',
+    input_event_output jsonb DEFAULT '{}'::jsonb,
+    input_error_message text DEFAULT NULL,
+    input_execution_started_at timestamp with time zone DEFAULT now(),
+    input_execution_duration integer DEFAULT NULL,
+    input_execution_finished_at timestamp with time zone DEFAULT now()
 )
--- RETURNS TABLE (
---     event_id uuid,
---     queue_msg_id bigint,
---     event_data jsonb
--- ) 
 RETURNS JSONB
 AS $$
 DECLARE
+    queue_msg_data jsonb;
     output_fsm_instance_queue_msg_id bigint;
-    fsm_instance_queue_name text;
-    fsm_instance_queue_event_logs_id uuid;
+    output_fsm_instance_queue_event_log_id uuid;
 BEGIN
     IF input_fsm_instance_id IS NULL THEN
         RAISE EXCEPTION 'fsm_instance_id is NULL';
     END IF;
 
-    fsm_instance_queue_name := input_fsm_instance_id::text;
-
-
-    -- Call pgmq.send and get queue_msg_id
-    BEGIN
-        SELECT pgmq.send(fsm_instance_queue_name, input_msg, input_event_delay) INTO output_fsm_instance_queue_msg_id;
-    EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION 'pgmq.send failed for queue %: %', fsm_instance_queue_name, SQLERRM;
-    END;
-    IF output_fsm_instance_queue_msg_id IS NULL THEN
-        RAISE EXCEPTION 'Failed to send event to queue %', fsm_instance_queue_name;
-    END IF;
-
-    -- Insert into fsm_core.fsm_instance_queue_event_logs and get id
-    INSERT INTO fsm_core.fsm_instance_queue_event_logs (
-        fsm_instance_id,
-        event_name,
-        event_data,
-        fsm_instance_queue_msg_id,
-        event_source,
-        event_started_at,
-        event_status
-    ) VALUES (
-        input_fsm_instance_id,
-        input_event_name,
-        input_msg,
-        output_fsm_instance_queue_msg_id,
-        input_event_source,
-        now(),
-        'queued'
-    ) RETURNING id INTO fsm_instance_queue_event_logs_id;
-
-    RETURN jsonb_build_object(
-        'event_data', input_msg,
-        'fsm_instance_queue_name', fsm_instance_queue_name,
-        'fsm_instance_queue_msg_id', output_fsm_instance_queue_msg_id,
-        'fsm_instance_queue_event_logs_id', fsm_instance_queue_event_logs_id
+    queue_msg_data := jsonb_build_object(
+        
+        'event_data', jsonb_build_object(
+            'event_type', input_event_name,
+            'event_payload', input_event_data,
+            'action_type', input_event_action_type
+        ),
+        'fsm_instance_id', input_fsm_instance_id,
+        'fsm_instance_id_fsm_type', input_fsm_instance_id_fsm_type,
+        'fsm_instance_id_fsm_version', input_fsm_instance_id_fsm_version,
+        'send_to_parent_queue_id', input_send_to_parent_queue_id,
+        'send_to_parent_queue_type', input_fsm_instance_id_fsm_type,
+        'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+        'send_to_parent_queue_id_event_name', input_event_name
     );
 
-    -- RETURN QUERY SELECT fsm_instance_event_logs_id, v_queue_msg_id, input_msg;
+    BEGIN
+        SELECT pgmq.send(input_fsm_instance_id::text, queue_msg_data, input_event_delay)
+        INTO output_fsm_instance_queue_msg_id;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_fsm_instance_id, SQLERRM;
+    END;
 
+    IF output_fsm_instance_queue_msg_id IS NULL THEN
+        RAISE EXCEPTION 'Failed to send event to queue %', input_fsm_instance_id;
+    END IF;
+
+    INSERT INTO fsm_core.fsm_instance_queue_event_logs (
+        fsm_instance_id,
+        fsm_instance_id_fsm_type,
+        fsm_instance_id_fsm_version,
+        fsm_instance_queue_msg_id,
+        event_name,
+        event_data,
+        event_delay,
+        send_to_parent_queue_id,
+        send_to_parent_queue_id_msg_id,
+        execution_started_at,
+        execution_duration,
+        execution_finished_at,
+        event_status,
+        event_output,
+        error_message
+    ) VALUES (
+        input_fsm_instance_id,
+        input_fsm_instance_id_fsm_type,
+        input_fsm_instance_id_fsm_version,
+        output_fsm_instance_queue_msg_id,
+        input_event_name,
+        input_event_data,
+        input_event_delay,
+        input_send_to_parent_queue_id,
+        input_send_to_parent_queue_id_msg_id,
+        input_execution_started_at,
+        input_execution_duration,
+        input_execution_finished_at,
+        input_event_status,
+        input_event_output,
+        input_error_message
+    ) RETURNING fsm_instance_queue_event_log_id INTO output_fsm_instance_queue_event_log_id;
+
+    RETURN jsonb_build_object(
+        'event_name', input_event_name,
+        'event_data', input_event_data,
+        'event_delay', input_event_delay,
+        'send_to_parent_queue_id', input_send_to_parent_queue_id,
+        'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+        'event_status', input_event_status,
+        'event_output', input_event_output,
+        'error_message', input_error_message,
+        'fsm_instance_queue_msg_id', output_fsm_instance_queue_msg_id,
+        'fsm_instance_queue_name', input_fsm_instance_id,
+        'queue_msg_data', queue_msg_data,
+        'queue_msg_delay', input_event_delay,
+        'fsm_instance_queue_event_log_id', output_fsm_instance_queue_event_log_id
+    );
 END;
 $$ LANGUAGE plpgsql;
-
 
 
 
@@ -124,12 +163,27 @@ BEGIN
             output_message := 'Queue created successfully.';
             -- Try to send initialTransition_event to the queue
             BEGIN
-                send_event_result := fsm_core.send_event_to_queue_with_event_logs_v2(
-                    jsonb_build_object('type', 'initialTransition_event'),
-                    jsonb_build_object('source', 'system'),
-                    'initialTransition_event',
-                    0,
-                    fsm_instance_id
+                send_event_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+                    input_fsm_instance_id := fsm_instance_id,
+                    input_fsm_instance_id_fsm_type := input_fsm_name,
+                    input_fsm_instance_id_fsm_version := input_fsm_version,
+                    input_send_to_parent_queue_id := NULL,
+                    input_send_to_parent_queue_id_msg_id := NULL,
+                    input_event_name := 'initialTransition_event',
+                    input_event_action_type := 'system',
+                    input_event_data := jsonb_build_object('source', 'system'),
+                    input_event_delay := 0,
+                    input_event_status := 'ACTIVE',
+                    input_event_output := '{}'::jsonb,
+                    input_error_message := NULL,
+                    input_execution_started_at := now(),
+                    input_execution_duration := NULL,
+                    input_execution_finished_at := now()
+                    -- jsonb_build_object('type', 'initialTransition_event'),
+                    -- jsonb_build_object('source', 'system'),
+                    -- 'initialTransition_event',
+                    -- 0,
+                    -- fsm_instance_id
                 );
                 output_extra_message := 'initialTransition_event is also sent to queue.';
             EXCEPTION WHEN OTHERS THEN
