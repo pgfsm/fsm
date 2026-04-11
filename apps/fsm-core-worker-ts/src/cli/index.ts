@@ -82,7 +82,7 @@ if (missing.length > 0) {
 async function buildDeps() {
   dotenv.config({ path: ".env" });
   const { Pool } = await import("pg");
-  return { db: new Pool({ connectionString: Deno.env.get("DATABASE_URL") }) };
+  return { db: new Pool({ connectionString: Deno.env.get("DATABASE_URL") }), useSupabase: false };
 }
 
 const verifiedModule = { fsmAbsFolderPath: fsmFolderPath };

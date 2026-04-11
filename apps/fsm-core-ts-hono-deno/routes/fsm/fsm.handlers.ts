@@ -108,11 +108,9 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
 
     const instance = await sendFSMEvent(
       deps,
-      event_data,
-      { source: "system" },
-      0,
-      event_data?.type,
       fsm_instance_id,
+      event_data?.type ?? '',
+      event_data,
     );
 
     return c.json({ data: instance }, HttpStatusCodes.OK);

@@ -86,13 +86,21 @@ export async function startFSMPromiseWorker(
               const archiveResult = await archive_event_from_fsm_promise_type_worker(
                 deps,
                 archiveData.promise_queue_name,
-                archiveData.msg_id,
+                archiveData.promise_queue_type,
+                archiveData.promise_queue_version,
+                archiveData.msg_id!,
+                archiveData.event_name,
+                archiveData.event_action_type,
+                archiveData.event_data,
+                archiveData.event_delay,
                 archiveData.send_to_parent_queue_id,
-                archiveData.send_event_name_to_parent_queue_id,
-                archiveData.event_output,
+                archiveData.send_to_parent_queue_id_msg_id,
+                archiveData.execution_started_at,
+                archiveData.execution_duration,
+                archiveData.execution_finished_at,
                 archiveData.event_status,
-                archiveData.event_duration,
-                archiveData.event_finished_at,
+                archiveData.event_output,
+                archiveData.error_message,
               );
               console.log("Message archived with result:", archiveResult);
             }

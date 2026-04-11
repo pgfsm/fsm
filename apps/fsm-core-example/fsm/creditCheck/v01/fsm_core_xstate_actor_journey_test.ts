@@ -161,11 +161,15 @@ Deno.test({
       // DB FSM: send Submit event
       await sendFSMEvent(
         deps,
-        { type: "Submit", payload: {} },
-        { source: "test" },
-        0,
-        "Submit",
         fsm_instance.fsm_instance_id,
+        fsm_instance.fsm_instance_type,
+        fsm_instance.fsm_instance_version,
+        null,
+        null,
+        "Submit",
+        "external",
+        { type: "Submit", payload: {} },
+        0
       );
 
       // Wait for worker to process Submit and write new state to DB
@@ -258,11 +262,15 @@ Deno.test({
       // DB FSM: send Submit event
       await sendFSMEvent(
         deps,
-        { type: "Submit", payload: {} },
-        { source: "test" },
-        0,
-        "Submit",
         fsm_instance.fsm_instance_id,
+        fsm_instance.fsm_instance_type,
+        fsm_instance.fsm_instance_version,
+        null,
+        null,
+        "Submit",
+        "external",
+        { type: "Submit", payload: {} },
+        0
       );
 
       // DB FSM: poll until state reaches CheckingCreditScores

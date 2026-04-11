@@ -24,7 +24,7 @@ async function loadFsmJSONFromFolder(
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
     const rootNodeText = null;
-    const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, fsmName, fsmVersion);
+    const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, workflow_type, fsmName, fsmVersion);
     console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
     return fsmResult;
     

@@ -147,7 +147,7 @@ export async function loadAndVerifyFsmFromFolders(
                 // Load fsm.json for DB ingestion
                 const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
                 const rootNodeText = null;
-                const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, dirEntry.name, subEntry.name);
+                const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, workflow_type, dirEntry.name, subEntry.name);
                 console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
 
                 const folderResult = await validateFsmPluginLoadFromFolder(

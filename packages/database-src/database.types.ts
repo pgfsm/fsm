@@ -117,49 +117,68 @@ export type Database = {
         Row: {
           error_message: string | null
           event_data: Json | null
-          event_duration: number | null
-          event_finished_at: string | null
+          event_delay: number | null
           event_name: string | null
           event_output: Json | null
-          event_source: Json | null
-          event_started_at: string | null
           event_status: string | null
+          execution_duration: number | null
+          execution_finished_at: string | null
+          execution_started_at: string | null
           fsm_instance_id: string | null
+          fsm_instance_id_fsm_type: string | null
+          fsm_instance_id_fsm_version: string | null
+          fsm_instance_queue_event_log_id: string
           fsm_instance_queue_msg_id: number | null
-          id: string
+          send_to_parent_queue_id: string | null
+          send_to_parent_queue_id_msg_id: string | null
         }
         Insert: {
           error_message?: string | null
           event_data?: Json | null
-          event_duration?: number | null
-          event_finished_at?: string | null
+          event_delay?: number | null
           event_name?: string | null
           event_output?: Json | null
-          event_source?: Json | null
-          event_started_at?: string | null
           event_status?: string | null
+          execution_duration?: number | null
+          execution_finished_at?: string | null
+          execution_started_at?: string | null
           fsm_instance_id?: string | null
+          fsm_instance_id_fsm_type?: string | null
+          fsm_instance_id_fsm_version?: string | null
+          fsm_instance_queue_event_log_id?: string
           fsm_instance_queue_msg_id?: number | null
-          id?: string
+          send_to_parent_queue_id?: string | null
+          send_to_parent_queue_id_msg_id?: string | null
         }
         Update: {
           error_message?: string | null
           event_data?: Json | null
-          event_duration?: number | null
-          event_finished_at?: string | null
+          event_delay?: number | null
           event_name?: string | null
           event_output?: Json | null
-          event_source?: Json | null
-          event_started_at?: string | null
           event_status?: string | null
+          execution_duration?: number | null
+          execution_finished_at?: string | null
+          execution_started_at?: string | null
           fsm_instance_id?: string | null
+          fsm_instance_id_fsm_type?: string | null
+          fsm_instance_id_fsm_version?: string | null
+          fsm_instance_queue_event_log_id?: string
           fsm_instance_queue_msg_id?: number | null
-          id?: string
+          send_to_parent_queue_id?: string | null
+          send_to_parent_queue_id_msg_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "fsm_instance_queue_event_logs_fsm_instance_id_fkey"
             columns: ["fsm_instance_id"]
+            isOneToOne: false
+            referencedRelation: "fsm_instance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fsm_instance_queue_event_logs_send_to_parent_queue_id_fkey"
+            columns: ["send_to_parent_queue_id"]
             isOneToOne: false
             referencedRelation: "fsm_instance"
             referencedColumns: ["id"]
@@ -214,18 +233,21 @@ export type Database = {
         Row: {
           fsm_json: Json | null
           fsm_name: string | null
+          fsm_type: string | null
           fsm_version: string | null
           id: number
         }
         Insert: {
           fsm_json?: Json | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           id?: number
         }
         Update: {
           fsm_json?: Json | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           id?: number
         }
@@ -234,46 +256,55 @@ export type Database = {
       fsm_promise_queue_event_logs: {
         Row: {
           error_message: string | null
-          event_duration: number | null
-          event_finished_at: string | null
-          event_input: Json | null
+          event_data: Json | null
+          event_delay: number | null
           event_name: string | null
           event_output: Json | null
-          event_started_at: string | null
           event_status: string | null
-          id: string
+          execution_duration: number | null
+          execution_finished_at: string | null
+          execution_started_at: string | null
+          promise_queue_event_log_id: string
           promise_queue_msg_id: number | null
           promise_queue_name: string | null
+          promise_queue_type: string | null
+          promise_queue_version: string | null
           send_to_parent_queue_id: string | null
           send_to_parent_queue_id_msg_id: string | null
         }
         Insert: {
           error_message?: string | null
-          event_duration?: number | null
-          event_finished_at?: string | null
-          event_input?: Json | null
+          event_data?: Json | null
+          event_delay?: number | null
           event_name?: string | null
           event_output?: Json | null
-          event_started_at?: string | null
           event_status?: string | null
-          id?: string
+          execution_duration?: number | null
+          execution_finished_at?: string | null
+          execution_started_at?: string | null
+          promise_queue_event_log_id?: string
           promise_queue_msg_id?: number | null
           promise_queue_name?: string | null
+          promise_queue_type?: string | null
+          promise_queue_version?: string | null
           send_to_parent_queue_id?: string | null
           send_to_parent_queue_id_msg_id?: string | null
         }
         Update: {
           error_message?: string | null
-          event_duration?: number | null
-          event_finished_at?: string | null
-          event_input?: Json | null
+          event_data?: Json | null
+          event_delay?: number | null
           event_name?: string | null
           event_output?: Json | null
-          event_started_at?: string | null
           event_status?: string | null
-          id?: string
+          execution_duration?: number | null
+          execution_finished_at?: string | null
+          execution_started_at?: string | null
+          promise_queue_event_log_id?: string
           promise_queue_msg_id?: number | null
           promise_queue_name?: string | null
+          promise_queue_type?: string | null
+          promise_queue_version?: string | null
           send_to_parent_queue_id?: string | null
           send_to_parent_queue_id_msg_id?: string | null
         }
@@ -426,14 +457,22 @@ export type Database = {
           }
       archive_event_from_fsm_promise_type_worker_v2: {
         Args: {
-          promise_queue_name: string
-          queue_msg_id: number
-          send_to_parent_queue_id: string
-          send_event_name_to_parent_queue_id: string
-          event_output: Json
-          event_status?: string
-          event_duration?: number
-          event_finished_at?: string
+          input_promise_queue_name: string
+          input_promise_queue_type: string
+          input_promise_queue_version: string
+          input_promise_queue_msg_id: number
+          input_event_name: string
+          input_event_action_type: string
+          input_event_data: Json
+          input_event_delay: number
+          input_send_to_parent_queue_id: string
+          input_send_to_parent_queue_id_msg_id: string
+          input_execution_started_at: string
+          input_execution_duration: number
+          input_execution_finished_at: string
+          input_event_status: string
+          input_event_output: Json
+          input_error_message: string
         }
         Returns: Json
       }
@@ -790,6 +829,7 @@ export type Database = {
         Args: {
           json_input: Json
           root_node_text: string
+          input_fsm_type: string
           input_fsm_name: string
           input_fsm_version: string
         }
@@ -1034,22 +1074,91 @@ export type Database = {
         }
         Returns: number[]
       }
-      send_event_to_fsm_promise_queue_from_fsm_instance_id_v2: {
+      send_event_to_fsm_queue_from_fsm_instance_id_v2: {
         Args: {
           event_name: string
           event_input: Json
-          promise_queue_name: string
+          id: string
+          action_type: string
+          src: string
+          fsmname: string
+          fsmtype: string
+          fsmversion: string
+          parentfsmname: string
+          parentfsmversion: string
           from_source_fsm_instance_id: string
         }
         Returns: Json
       }
-      send_event_to_queue_with_event_logs_v2: {
+      send_event_to_fsm_queue_with_event_logs_v2: {
         Args: {
-          input_msg: Json
-          input_event_source: Json
-          input_event_name?: string
+          input_fsm_instance_id: string
+          input_fsm_instance_id_fsm_type: string
+          input_fsm_instance_id_fsm_version: string
+          input_send_to_parent_queue_id: string
+          input_send_to_parent_queue_id_msg_id: string
+          input_event_name: string
+          input_event_action_type: string
+          input_event_data: Json
           input_event_delay?: number
-          input_fsm_instance_id?: string
+          input_event_status?: string
+          input_event_output?: Json
+          input_error_message?: string
+          input_execution_started_at?: string
+          input_execution_duration?: number
+          input_execution_finished_at?: string
+        }
+        Returns: Json
+      }
+      send_event_to_promise_queue_from_fsm_instance_id_v2: {
+        Args: {
+          event_name: string
+          event_input: Json
+          id: string
+          action_type: string
+          src: string
+          fsmname: string
+          fsmtype: string
+          fsmversion: string
+          parentfsmname: string
+          parentfsmversion: string
+          from_source_fsm_instance_id: string
+        }
+        Returns: Json
+      }
+      send_event_to_promise_queue_with_event_logs_v2: {
+        Args: {
+          input_promise_queue_name: string
+          input_promise_queue_type: string
+          input_promise_queue_version: string
+          input_send_to_parent_queue_id: string
+          input_send_to_parent_queue_id_msg_id: string
+          input_event_name: string
+          input_event_action_type: string
+          input_event_data: Json
+          input_event_delay?: number
+          input_event_status?: string
+          input_event_output?: Json
+          input_error_message?: string
+          input_execution_started_at?: string
+          input_execution_duration?: number
+          input_execution_finished_at?: string
+        }
+        Returns: Json
+      }
+      send_event_to_queue_from_fsm_instance_id_v2: {
+        Args: {
+          event_name: string
+          event_input: Json
+          id: string
+          action_type: string
+          src: string
+          fsmname: string
+          fsmtype: string
+          fsmversion: string
+          parentfsmname: string
+          parentfsmversion: string
+          from_source_fsm_instance_id: string
         }
         Returns: Json
       }

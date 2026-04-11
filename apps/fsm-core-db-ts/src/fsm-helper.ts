@@ -70,6 +70,7 @@ export async function loadFsmFromJsonV2(
   deps: DBDeps,
   json_input: Json,
   root_node_text: string | null,
+  fsm_type: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_type"],
   fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_name"],
   fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_version"],
 ): Promise<Json> {
@@ -80,10 +81,11 @@ export async function loadFsmFromJsonV2(
         $1::jsonb,
         $2::text,
         $3::text,
-        $4::text
+        $4::text,
+        $5::text
       ) AS result;
     `;
-    const values = [toJsonbParam(json_input), root_node_text, fsm_name, fsm_version];
+    const values = [toJsonbParam(json_input), root_node_text, fsm_type, fsm_name, fsm_version];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {

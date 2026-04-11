@@ -2,6 +2,7 @@ import type { Database, Json } from "@fsm/db/database.types";
 type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
 import type { DBDeps } from "@fsm/db";
+import type { FsmQueueMessage } from "./types.ts";
 
 export type FsmModuleDefinition = {
   actions: Record<string, (...args: unknown[]) => unknown> | null;
@@ -112,9 +113,9 @@ export async function macrostep_v2(
   // Simulate work (replace with real logic)
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
-  const eventData = msg.message as any;
-  const eventType = eventData.type;
-  const eventPayload = { ...eventData };
+  const eventData = msg.message as unknown as FsmQueueMessage;
+  const eventType = eventData.event_data?.event_type;
+  const eventPayload = eventData.event_data?.event_payload ?? {};
 
   const macroSaveFnPayload = {
     remove_from_current_fsm_instance_queue_id: queueName,
@@ -295,7 +296,7 @@ export async function macrostep_v2(
 
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
-    .filter((item: any) => item !== (msg.message as any)?.type);
+    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.event_data?.event_type);
 
   // get both removed and new_total_schedule_queue_data
   // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);

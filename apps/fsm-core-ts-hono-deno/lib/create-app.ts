@@ -114,6 +114,8 @@ export default async function createApp(
         fsmName: actor.fsmName,
         fsmType: actor.fsmType,
         fsmVersion: actor.fsmVersion,
+        parentFsmName: fsm.fsmName,
+        parentFsmVersion: fsm.fsmVersion,
         fsmAbsFolderPath: fsm.fsmAbsFolderPath as string,
         controller: new AbortController(),
       }))
@@ -125,7 +127,7 @@ export default async function createApp(
       try {
         await createAndStartPromiseWorker(
           promiseDeps,
-          actor.src,
+          `${actor.parentFsmName}_${actor.parentFsmVersion}_${actor.src}`,
           actor.src,
           actor.fsmType,
           actor.fsmVersion,

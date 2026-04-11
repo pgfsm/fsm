@@ -110,11 +110,9 @@ Deno.test({
 
       await sendFSMEvent(
         deps,
-        { type: "Submit", payload: {} },
-        { source: "test" },
-        0,
-        "Submit",
         fsm_instance.fsm_instance_id,
+        "Submit",
+        { type: "Submit", payload: {} },
       );
 
       // const row = await pollUntil(
@@ -183,11 +181,9 @@ Deno.test({
 
       await sendFSMEvent(
         deps,
-        { type: "Submit", payload: {} },
-        { source: "test" },
-        0,
-        "Submit",
         fsm_instance.fsm_instance_id,
+        "Submit",
+        { type: "Submit", payload: {} },
       );
 
       const row = await pollUntil(

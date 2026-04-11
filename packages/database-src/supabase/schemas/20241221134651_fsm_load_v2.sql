@@ -359,7 +359,7 @@ $$ LANGUAGE plpgsql;
 
 -- DROP FUNCTION IF EXISTS fsm_core.load_fsm_from_json_v2;
 
-CREATE OR REPLACE FUNCTION fsm_core.load_fsm_from_json_v2(json_input JSONB, root_node_text TEXT, input_fsm_name TEXT, input_fsm_version TEXT) RETURNS JSONB AS $$
+CREATE OR REPLACE FUNCTION fsm_core.load_fsm_from_json_v2(json_input JSONB, root_node_text TEXT, input_fsm_type TEXT, input_fsm_name TEXT, input_fsm_version TEXT) RETURNS JSONB AS $$
 DECLARE
     state_result JSONB;
     transition_result JSONB;
@@ -423,8 +423,8 @@ BEGIN
         RAISE EXCEPTION 'fsm_core.load_fsm_transition_from_json_v2 reported failure: %', transition_result;
     END IF;
 
-    INSERT INTO fsm_core.fsm_json (fsm_name, fsm_version, fsm_json)
-    VALUES (input_fsm_name, input_fsm_version, json_input::JSON);
+    INSERT INTO fsm_core.fsm_json (fsm_name, fsm_type, fsm_version, fsm_json)
+    VALUES (input_fsm_name, input_fsm_type, input_fsm_version, json_input::JSON);
 
     RETURN jsonb_build_object(
         'ok', to_jsonb(true),

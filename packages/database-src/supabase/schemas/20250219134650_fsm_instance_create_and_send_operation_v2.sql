@@ -126,12 +126,15 @@ DECLARE
     output_extra_message text := NULL;
     fsm_instance_id uuid;
     send_event_result jsonb := NULL;
+    derived_fsm_type text;
 BEGIN
-    -- 1. Find all transitions for the given FSM name and version
-    IF NOT EXISTS (
-        SELECT 1 FROM fsm_core.fsm_transitions WHERE fsm_name = input_fsm_name AND fsm_version = input_fsm_version
-    ) THEN
-        RAISE EXCEPTION 'No transitions found for FSM name % and version %', input_fsm_name, input_fsm_version;
+    -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json and get fsm_type
+    SELECT fj.fsm_type INTO derived_fsm_type
+    FROM fsm_core.fsm_json fj
+    WHERE fj.fsm_name = input_fsm_name AND fj.fsm_version = input_fsm_version;
+
+    IF derived_fsm_type IS NULL THEN
+        RAISE EXCEPTION 'FSM with name % and version % not found in fsm_core.fsm_json', input_fsm_name, input_fsm_version;
     END IF;
 
     -- 2. Create new fsm_instance
@@ -165,7 +168,7 @@ BEGIN
             BEGIN
                 send_event_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
                     input_fsm_instance_id := fsm_instance_id,
-                    input_fsm_instance_id_fsm_type := input_fsm_name,
+                    input_fsm_instance_id_fsm_type := derived_fsm_type,
                     input_fsm_instance_id_fsm_version := input_fsm_version,
                     input_send_to_parent_queue_id := NULL,
                     input_send_to_parent_queue_id_msg_id := NULL,
