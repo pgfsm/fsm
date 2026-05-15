@@ -4,7 +4,7 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import { machineWithProvider } from "./machineWithProvider.ts";
-import { createAndStartFSMWorker } from "@fsm/worker";
+import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@fsm/worker";
 import { sendFSMEvent, getFSMDataAndResolveStateValue } from "@fsm/db";
 import type { DBDeps } from "@fsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
@@ -166,6 +166,7 @@ Deno.test({
         fsm_instance.fsm_instance_version,
         null,
         null,
+        null,
         "Submit",
         "external",
         { type: "Submit", payload: {} },
@@ -244,6 +245,31 @@ Deno.test({
         },
         { timeout: 5000 },
       );
+      // start promise worker for verifyCredentials actor
+      const promiseActor = {
+        src: "verifyCredentials",
+        fsmType: "promise",
+        fsmVersion: "v01",
+        parentFsmName: fsm_name,
+        parentFsmVersion: fsm_version,
+        fsmAbsFolderPath: verifiedModule.fsmAbsFolderPath as string,
+        controller: new AbortController(),
+
+      }
+      try {
+        await createAndStartPromiseWorker(
+          deps,
+          `${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}`,
+          promiseActor.src,
+          promiseActor.fsmType,
+          promiseActor.fsmVersion,
+          { fsmAbsFolderPath: promiseActor.fsmAbsFolderPath },
+          promiseActor.controller.signal,
+        );
+        console.log(`✅ Promise worker started for actor: ${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not start promise worker for "${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}":`, err);
+      }
 
       // DB FSM: create instance and start worker
       const fsm_instance = await createAndStartFSMWorker(
@@ -265,6 +291,7 @@ Deno.test({
         fsm_instance.fsm_instance_id,
         fsm_instance.fsm_instance_type,
         fsm_instance.fsm_instance_version,
+        null,
         null,
         null,
         "Submit",
@@ -290,7 +317,7 @@ Deno.test({
       //   30000,
       // );
 
-      await new Promise((r) => setTimeout(r, 30000));
+      await new Promise((r) => setTimeout(r, 3000));
 
       const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");

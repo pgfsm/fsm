@@ -1,6 +1,7 @@
 // Action: assignSSN
 export function assignSSN(context: any, event: any) {
   // TODO: implement
+  console.log("assignSSN action called with context:", context, "and event:", event);
 }
 
 // Action: assignFirstName

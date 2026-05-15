@@ -131,7 +131,7 @@ export async function archive_event_from_fsm_promise_type_worker(
   event_data: ArchivePromiseWorkerArgs["input_event_data"],
   event_delay: ArchivePromiseWorkerArgs["input_event_delay"],
   send_to_parent_queue_id: ArchivePromiseWorkerArgs["input_send_to_parent_queue_id"],
-  send_to_parent_queue_id_msg_id: ArchivePromiseWorkerArgs["input_send_to_parent_queue_id_msg_id"],
+  send_to_parent_queue_id_event_name: ArchivePromiseWorkerArgs["input_send_to_parent_queue_id_event_name"],
   execution_started_at: ArchivePromiseWorkerArgs["input_execution_started_at"],
   execution_duration: ArchivePromiseWorkerArgs["input_execution_duration"],
   execution_finished_at: ArchivePromiseWorkerArgs["input_execution_finished_at"],
@@ -170,7 +170,7 @@ export async function archive_event_from_fsm_promise_type_worker(
       toJsonbParam(event_data),
       event_delay,
       send_to_parent_queue_id,
-      send_to_parent_queue_id_msg_id,
+      send_to_parent_queue_id_event_name,
       execution_started_at,
       execution_duration,
       execution_finished_at,
@@ -234,12 +234,12 @@ export async function sendFSMEvent(
   fsm_instance_id_fsm_type: SendEventArgs["input_fsm_instance_id_fsm_type"] | null,
   fsm_instance_id_fsm_version: SendEventArgs["input_fsm_instance_id_fsm_version"] | null,
   send_to_parent_queue_id: SendEventArgs["input_send_to_parent_queue_id"] | null,
-  send_to_parent_queue_id_msg_id: SendEventArgs["input_send_to_parent_queue_id_msg_id"] | null,
+  send_to_parent_queue_type: SendEventArgs["input_send_to_parent_queue_type"] | null,
+  send_to_parent_queue_id_event_name: SendEventArgs["input_send_to_parent_queue_id_event_name"] | null,
   event_name: SendEventArgs["input_event_name"],
   event_action_type: SendEventArgs["input_event_action_type"],
   event_data: SendEventArgs["input_event_data"],
   event_delay: NonNullable<SendEventArgs["input_event_delay"]>,
-  
 ): Promise<Json> {
   try {
     const text = `
@@ -251,8 +251,9 @@ export async function sendFSMEvent(
         $5::text,
         $6::text,
         $7::text,
-        $8::jsonb,
-        $9::integer
+        $8::text,
+        $9::jsonb,
+        $10::integer
       ) AS result;
     `;
     const values = [
@@ -260,7 +261,8 @@ export async function sendFSMEvent(
       fsm_instance_id_fsm_type ?? null,
       fsm_instance_id_fsm_version ?? null,
       send_to_parent_queue_id ?? null,
-      send_to_parent_queue_id_msg_id ?? null,
+      send_to_parent_queue_type ?? null,
+      send_to_parent_queue_id_event_name ?? null,
       event_name,
       event_action_type ?? 'external',
       toJsonbParam(event_data),

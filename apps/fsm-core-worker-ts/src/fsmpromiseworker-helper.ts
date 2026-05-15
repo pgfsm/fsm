@@ -24,11 +24,11 @@ export type FSMPromiseArchiveData = {
 
 export async function processFSMPromiseQueueMessage(
   deps: DBDeps,
-  queueName: string,
-  msg: Database["pgmq"]["CompositeTypes"]["message_record"],
   promise_queue_name: string,
+  msg: Database["pgmq"]["CompositeTypes"]["message_record"],
+  promise_fn_name: string,
   promise_version?: string,
-  fsm_promise_type?: string,
+  promise_queue_type?: string,
   actorFn?: ((input: unknown) => Promise<unknown>) | undefined,
 ): Promise<FSMPromiseArchiveData> {
   const execution_started_at = new Date().toISOString();
@@ -76,7 +76,7 @@ export async function processFSMPromiseQueueMessage(
 
   return {
     promise_queue_name,
-    promise_queue_type: fsm_promise_type ?? "",
+    promise_queue_type: promise_queue_type ?? "",
     promise_queue_version: promise_version ?? "",
     msg_id,
     event_name: send_event_name_to_parent_queue_id,

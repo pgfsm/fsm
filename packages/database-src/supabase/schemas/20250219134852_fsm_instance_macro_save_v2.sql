@@ -24,7 +24,7 @@ BEGIN
     -- 3. Log event to fsm_promise_queue_event_logs (allow null queue id but record name)
     INSERT INTO fsm_core.fsm_promise_queue_event_logs (
         event_name,
-        event_input,
+        event_data,
         promise_queue_name,
         promise_queue_msg_id,
         -- send_to_parent_queue_id,
@@ -49,7 +49,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- SELECT fsm_core.cancel_event_for_fsm_promise_type_worker_v2('verifyCredentials', 1::BIGINT);
+-- SELECT fsm_core.cancel_event_for_fsm_promise_type_worker_v2('creditCheck_v01_verifyCredentials', 1::BIGINT);
 
 
 
@@ -110,15 +110,17 @@ BEGIN
 
     send_result := fsm_core.send_event_to_promise_queue_with_event_logs_v2(
         input_promise_queue_name := promise_queue_name,
+        input_promise_fn_name := fsmName,
         input_promise_queue_type := fsmType,
         input_promise_queue_version := fsmVersion,
         input_send_to_parent_queue_id := from_source_fsm_instance_id,
-        input_send_to_parent_queue_id_msg_id := id,
+        input_send_to_parent_queue_type := 'FSM',
+        input_send_to_parent_queue_id_event_name := id,
         input_event_name := event_name,
         input_event_action_type := action_type,
         input_event_data := event_input,
         input_event_delay := 0,
-        input_event_status := 'ACTIVE',
+        input_event_status := 'pomise_started',
         input_event_output := '{}'::jsonb,
         input_error_message := NULL
     );
@@ -157,12 +159,13 @@ BEGIN
         input_fsm_instance_id_fsm_type := fsmType,
         input_fsm_instance_id_fsm_version := fsmVersion,
         input_send_to_parent_queue_id := from_source_fsm_instance_id,
-        input_send_to_parent_queue_id_msg_id := id,
+        input_send_to_parent_queue_type := fsmType,
+        input_send_to_parent_queue_id_event_name := id,
         input_event_name := event_name,
         input_event_action_type := action_type,
         input_event_data := event_input,
         input_event_delay := 0,
-        input_event_status := 'ACTIVE',
+        input_event_status := 'fsm_started',
         input_event_output := '{}'::jsonb,
         input_error_message := NULL
     );
@@ -227,7 +230,7 @@ $$ LANGUAGE plpgsql;
 
 
 
-
+-- OLD structure for reference
 
 -- to_be_removed_promise_queue_msg_ids example input:
 -- [
@@ -255,6 +258,40 @@ $$ LANGUAGE plpgsql;
 --   },
 -- ]
 
+
+-- NEW structure for reference
+-- to_be_removed_promise_queue_msg_ids example input:
+-- [
+--     {
+--       id: "0.(machine).creditCheck.Verifying Credentials",
+--       src: "verifyCredentials",
+--       type: "xstate.invoke",
+--       fsmType: "promise",
+--       fsm_order: 3,
+--       fsmVersion: "v01",
+--       action_type: "invoke"
+--     }
+-- ]
+
+-- input_total_promise_queue_data example input:
+-- [
+--     {
+--     queue_id: "creditCheck_v01_verifyCredentials",
+--     queue_msg_id: 2,
+--     queue_msg_delay: 0,
+--     event_data: {
+--         event_type: "0.(machine).creditCheck.Verifying Credentials",
+--         action_type: "invoke",
+--         event_payload: null
+--     },
+--     queue_type: "promise",
+--     queue_fn_name: "verifyCredentials",
+--     queue_version: "v01",
+--     send_to_parent_queue_id: "44ab9fd4-4411-4e1f-aa31-c687d2b925b6",
+--     send_to_parent_queue_type: "fsm",
+--     send_to_parent_queue_id_event_name: "done.0.(machine).creditCheck.Verifying Credentials"
+--     }
+-- ]    
 
 -- DROP FUNCTION  if EXISTS fsm_core.archive_event_from_fsm_type_worker_v2;
 -- macro save fn
@@ -291,7 +328,7 @@ DECLARE
    
     to_be_added_schedule_queue_data_entry jsonb;
     to_be_added_schedule_queue_data_entry_delay int;
-    output_schedule_queue_msg_id bigint;
+    output_schedule_result jsonb;
    
     to_be_added_promise_queue_data_entry jsonb;
     output_promise_result jsonb;
@@ -385,8 +422,8 @@ BEGIN
                     promise_queue_message := to_be_removed_promise_queue_msg_ids->i;
                     
                     IF (
-                        (promise_queue_entry->'event'->>'send_event_name_to_parent_queue_id')::text = (promise_queue_message->>'id')::text
-                        AND (promise_queue_entry->>'promise_queue_name')::text = (promise_queue_message->>'src')::text
+                        (promise_queue_entry->>'send_to_parent_queue_id_event_name')::text = (promise_queue_message->>'id')::text
+                        AND (promise_queue_entry->>'queue_fn_name')::text = (promise_queue_message->>'src')::text
                     ) THEN
                         remove_promise := true;
                         
@@ -413,8 +450,8 @@ BEGIN
             confirmed_match_for_promise := false;
             FOREACH promise_queue_entry IN ARRAY confirmed_removed_promise_queue_data LOOP
                 IF (
-                    (promise_queue_entry->'event'->>'send_event_name_to_parent_queue_id')::text = (promise_queue_message->>'id')::text
-                    AND (promise_queue_entry->>'promise_queue_name')::text = (promise_queue_message->>'src')::text
+                    (promise_queue_entry->>'send_to_parent_queue_id_event_name')::text = (promise_queue_message->>'id')::text
+                    AND (promise_queue_entry->>'queue_fn_name')::text = (promise_queue_message->>'src')::text
                 ) THEN
                     confirmed_match_for_promise := true;
                     EXIT;
@@ -453,7 +490,7 @@ BEGIN
             --     pq_msg_id := NULL;
             -- END;
             -- IF pq_name IS NOT NULL AND pq_name <> '' AND pq_msg_id IS NOT NULL THEN
-                PERFORM fsm_core.cancel_event_for_fsm_promise_type_worker(promise_queue_entry->>'promise_queue_name', (promise_queue_entry->>'queue_msg_id')::bigint);
+                PERFORM fsm_core.cancel_event_for_fsm_promise_type_worker_v2((promise_queue_entry->>'queue_id')::text, (promise_queue_entry->>'queue_msg_id')::bigint);
                 confirmed_removed_promise_queue_data_success := array_append(confirmed_removed_promise_queue_data_success, promise_queue_entry);
             -- END IF;
         END LOOP;
@@ -464,17 +501,23 @@ BEGIN
         FOR i IN 0 .. jsonb_array_length(to_be_added_schedule_queue_data)-1 LOOP
             to_be_added_schedule_queue_data_entry := to_be_added_schedule_queue_data->i;
             to_be_added_schedule_queue_data_entry_delay := COALESCE((to_be_added_schedule_queue_data_entry->>'delay')::integer, 0) / 1000;
-            -- IF remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' THEN
-                SELECT * INTO output_schedule_queue_msg_id FROM pgmq.send(
-                    queue_name := remove_from_current_fsm_instance_queue_id,
-                    msg := to_be_added_schedule_queue_data_entry,
-                    delay := to_be_added_schedule_queue_data_entry_delay
-                );
-            -- ELSE
-            --     output_schedule_queue_msg_id := NULL;
-            -- END IF;
-            added_schedule_queue_data := array_append(added_schedule_queue_data, jsonb_build_object('queue_msg_id', output_schedule_queue_msg_id, 'event', to_be_added_schedule_queue_data_entry, 'fsm_queue_name', remove_from_current_fsm_instance_queue_id));
-            new_total_schedule_queue_data := new_total_schedule_queue_data || jsonb_build_object('queue_msg_id', output_schedule_queue_msg_id, 'event', to_be_added_schedule_queue_data_entry, 'fsm_queue_name', remove_from_current_fsm_instance_queue_id);
+            output_schedule_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+                input_fsm_instance_id := remove_from_current_fsm_instance_queue_id::uuid,
+                input_fsm_instance_id_fsm_type := to_be_added_schedule_queue_data_entry->>'fsmType',
+                input_fsm_instance_id_fsm_version := to_be_added_schedule_queue_data_entry->>'fsmVersion',
+                input_send_to_parent_queue_id := remove_from_current_fsm_instance_queue_id::uuid,
+                input_send_to_parent_queue_type := to_be_added_schedule_queue_data_entry->>'fsmType',
+                input_send_to_parent_queue_id_event_name := to_be_added_schedule_queue_data_entry->>'id',
+                input_event_name := to_be_added_schedule_queue_data_entry->>'id',
+                input_event_action_type := to_be_added_schedule_queue_data_entry->>'action_type',
+                input_event_data := to_be_added_schedule_queue_data_entry->'input',
+                input_event_delay := to_be_added_schedule_queue_data_entry_delay,
+                input_event_status := 'ACTIVE',
+                input_event_output := '{}'::jsonb,
+                input_error_message := NULL
+            );
+            added_schedule_queue_data := array_append(added_schedule_queue_data, output_schedule_result);
+            new_total_schedule_queue_data := new_total_schedule_queue_data || output_schedule_result;
         END LOOP;
     END IF;
 
@@ -492,24 +535,24 @@ BEGIN
                 -- );
 
                 output_promise_result := fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
-                    to_be_added_promise_queue_data_entry->>'id', -- id is used as event_name param 
-                    to_be_added_promise_queue_data_entry->'input',
-                    to_be_added_promise_queue_data_entry->>'id',
-                    to_be_added_promise_queue_data_entry->>'action_type',
-                    to_be_added_promise_queue_data_entry->>'src',
-                    to_be_added_promise_queue_data_entry->>'src', -- src is used as fsmName param
-                    to_be_added_promise_queue_data_entry->>'fsmType',
-                    to_be_added_promise_queue_data_entry->>'fsmVersion',
-                    to_be_added_promise_queue_data_entry->>'parentFsmName',
-                    to_be_added_promise_queue_data_entry->>'parentFsmVersion',
-                    remove_from_current_fsm_instance_queue_id::uuid
+                    event_name := to_be_added_promise_queue_data_entry->>'id',
+                    event_input := to_be_added_promise_queue_data_entry->'input',
+                    id := to_be_added_promise_queue_data_entry->>'id',
+                    action_type := to_be_added_promise_queue_data_entry->>'action_type',
+                    src := to_be_added_promise_queue_data_entry->>'src',
+                    fsmName := to_be_added_promise_queue_data_entry->>'src',
+                    fsmType := to_be_added_promise_queue_data_entry->>'fsmType',
+                    fsmVersion := to_be_added_promise_queue_data_entry->>'fsmVersion',
+                    parentFsmName := to_be_added_promise_queue_data_entry->>'parentFsmName',
+                    parentFsmVersion := to_be_added_promise_queue_data_entry->>'parentFsmVersion',
+                    from_source_fsm_instance_id := remove_from_current_fsm_instance_queue_id::uuid
                     -- CASE WHEN remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' THEN remove_from_current_fsm_instance_queue_id::uuid ELSE NULL::uuid END
                 );
             -- ELSE
             --     output_promise_result := NULL;
             -- END IF;
-            added_promise_queue_data := array_append(added_promise_queue_data, output_promise_result);
-            new_total_promise_queue_data := new_total_promise_queue_data ||  output_promise_result;
+            added_promise_queue_data := array_append(added_promise_queue_data, output_promise_result->'queue_data');
+            new_total_promise_queue_data := new_total_promise_queue_data ||  (output_promise_result->'queue_data');
         END LOOP;
     END IF;
 

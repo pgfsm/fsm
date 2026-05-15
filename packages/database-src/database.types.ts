@@ -130,7 +130,7 @@ export type Database = {
           fsm_instance_queue_event_log_id: string
           fsm_instance_queue_msg_id: number | null
           send_to_parent_queue_id: string | null
-          send_to_parent_queue_id_msg_id: string | null
+          send_to_parent_queue_id_event_name: string | null
         }
         Insert: {
           error_message?: string | null
@@ -148,7 +148,7 @@ export type Database = {
           fsm_instance_queue_event_log_id?: string
           fsm_instance_queue_msg_id?: number | null
           send_to_parent_queue_id?: string | null
-          send_to_parent_queue_id_msg_id?: string | null
+          send_to_parent_queue_id_event_name?: string | null
         }
         Update: {
           error_message?: string | null
@@ -166,19 +166,12 @@ export type Database = {
           fsm_instance_queue_event_log_id?: string
           fsm_instance_queue_msg_id?: number | null
           send_to_parent_queue_id?: string | null
-          send_to_parent_queue_id_msg_id?: string | null
+          send_to_parent_queue_id_event_name?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "fsm_instance_queue_event_logs_fsm_instance_id_fkey"
             columns: ["fsm_instance_id"]
-            isOneToOne: false
-            referencedRelation: "fsm_instance"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fsm_instance_queue_event_logs_send_to_parent_queue_id_fkey"
-            columns: ["send_to_parent_queue_id"]
             isOneToOne: false
             referencedRelation: "fsm_instance"
             referencedColumns: ["id"]
@@ -264,13 +257,14 @@ export type Database = {
           execution_duration: number | null
           execution_finished_at: string | null
           execution_started_at: string | null
+          promise_fn_name: string | null
           promise_queue_event_log_id: string
           promise_queue_msg_id: number | null
           promise_queue_name: string | null
           promise_queue_type: string | null
           promise_queue_version: string | null
           send_to_parent_queue_id: string | null
-          send_to_parent_queue_id_msg_id: string | null
+          send_to_parent_queue_id_event_name: string | null
         }
         Insert: {
           error_message?: string | null
@@ -282,13 +276,14 @@ export type Database = {
           execution_duration?: number | null
           execution_finished_at?: string | null
           execution_started_at?: string | null
+          promise_fn_name?: string | null
           promise_queue_event_log_id?: string
           promise_queue_msg_id?: number | null
           promise_queue_name?: string | null
           promise_queue_type?: string | null
           promise_queue_version?: string | null
           send_to_parent_queue_id?: string | null
-          send_to_parent_queue_id_msg_id?: string | null
+          send_to_parent_queue_id_event_name?: string | null
         }
         Update: {
           error_message?: string | null
@@ -300,13 +295,14 @@ export type Database = {
           execution_duration?: number | null
           execution_finished_at?: string | null
           execution_started_at?: string | null
+          promise_fn_name?: string | null
           promise_queue_event_log_id?: string
           promise_queue_msg_id?: number | null
           promise_queue_name?: string | null
           promise_queue_type?: string | null
           promise_queue_version?: string | null
           send_to_parent_queue_id?: string | null
-          send_to_parent_queue_id_msg_id?: string | null
+          send_to_parent_queue_id_event_name?: string | null
         }
         Relationships: [
           {
@@ -466,7 +462,7 @@ export type Database = {
           input_event_data: Json
           input_event_delay: number
           input_send_to_parent_queue_id: string
-          input_send_to_parent_queue_id_msg_id: string
+          input_send_to_parent_queue_id_event_name: string
           input_execution_started_at: string
           input_execution_duration: number
           input_execution_finished_at: string
@@ -1096,7 +1092,8 @@ export type Database = {
           input_fsm_instance_id_fsm_type: string
           input_fsm_instance_id_fsm_version: string
           input_send_to_parent_queue_id: string
-          input_send_to_parent_queue_id_msg_id: string
+          input_send_to_parent_queue_type: string
+          input_send_to_parent_queue_id_event_name: string
           input_event_name: string
           input_event_action_type: string
           input_event_data: Json
@@ -1129,10 +1126,12 @@ export type Database = {
       send_event_to_promise_queue_with_event_logs_v2: {
         Args: {
           input_promise_queue_name: string
+          input_promise_fn_name: string
           input_promise_queue_type: string
           input_promise_queue_version: string
           input_send_to_parent_queue_id: string
-          input_send_to_parent_queue_id_msg_id: string
+          input_send_to_parent_queue_type: string
+          input_send_to_parent_queue_id_event_name: string
           input_event_name: string
           input_event_action_type: string
           input_event_data: Json

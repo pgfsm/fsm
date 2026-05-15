@@ -1,0 +1,490 @@
+-- -- Migration: Fix and complete promise event routing functions
+-- -- 1. Fix send_event_to_fsm_queue_with_event_logs_v2 (full row return, fix RETURNING column)
+-- -- 2. Fix send_event_to_promise_queue_with_event_logs_v2 (full row return, fix undefined vars, fix column name)
+-- -- 3. Add send_event_to_promise_queue_from_fsm_instance_id_v2 (new sub-function)
+-- -- 4. Add send_event_to_fsm_queue_from_fsm_instance_id_v2 (new sub-function)
+-- -- 5. Fix archive_event_from_fsm_promise_type_worker_v2 (implement step 2, fix INSERT + RETURN)
+-- -- 6. Fix send_event_to_queue_from_fsm_instance_id_v2 (fix pgmq.create, queue_exists check, remove dead code)
+
+
+-- -- ============================================================
+-- -- 1. send_event_to_fsm_queue_with_event_logs_v2
+-- --    Fix: RETURNING column name, wrong variable in RETURN, add queue_msg_data to RETURN
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+--     input_fsm_instance_id uuid,
+--     input_fsm_instance_id_fsm_type text,
+--     input_fsm_instance_id_fsm_version text,
+--     input_send_to_parent_queue_id uuid,
+--     input_send_to_parent_queue_id_msg_id text,
+--     input_event_name text,
+--     input_event_action_type text,
+--     input_event_data jsonb,
+--     input_event_delay integer DEFAULT 0,
+--     input_event_status text DEFAULT 'ACTIVE',
+--     input_event_output jsonb DEFAULT '{}'::jsonb,
+--     input_error_message text DEFAULT NULL,
+--     input_execution_started_at timestamp with time zone DEFAULT now(),
+--     input_execution_duration integer DEFAULT NULL,
+--     input_execution_finished_at timestamp with time zone DEFAULT now()
+-- )
+-- RETURNS JSONB
+-- AS $$
+-- DECLARE
+--     queue_msg_data jsonb;
+--     output_fsm_instance_queue_msg_id bigint;
+--     output_fsm_instance_queue_event_log_id uuid;
+-- BEGIN
+--     IF input_fsm_instance_id IS NULL THEN
+--         RAISE EXCEPTION 'fsm_instance_id is NULL';
+--     END IF;
+
+--     queue_msg_data := jsonb_build_object(
+--         'fsm_type', input_fsm_instance_id_fsm_type,
+--         'event_data', jsonb_build_object(
+--             'event_type', input_event_name,
+--             'event_payload', input_event_data,
+--             'action_type', input_event_action_type,
+--             'fsm_type', input_fsm_instance_id_fsm_type,
+--             'fsm_version', input_fsm_instance_id_fsm_version
+--         ),
+--         'send_to_parent_queue_id', input_send_to_parent_queue_id,
+--         'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+--         'send_to_parent_queue_id_event_name', input_event_name
+--     );
+
+--     BEGIN
+--         SELECT pgmq.send(input_fsm_instance_id::text, queue_msg_data, input_event_delay)
+--         INTO output_fsm_instance_queue_msg_id;
+--     EXCEPTION WHEN OTHERS THEN
+--         RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_fsm_instance_id, SQLERRM;
+--     END;
+
+--     IF output_fsm_instance_queue_msg_id IS NULL THEN
+--         RAISE EXCEPTION 'Failed to send event to queue %', input_fsm_instance_id;
+--     END IF;
+
+--     INSERT INTO fsm_core.fsm_instance_queue_event_logs (
+--         fsm_instance_id,
+--         fsm_instance_id_fsm_type,
+--         fsm_instance_id_fsm_version,
+--         fsm_instance_queue_msg_id,
+--         event_name,
+--         event_data,
+--         event_delay,
+--         send_to_parent_queue_id,
+--         send_to_parent_queue_id_msg_id,
+--         execution_started_at,
+--         execution_duration,
+--         execution_finished_at,
+--         event_status,
+--         event_output,
+--         error_message
+--     ) VALUES (
+--         input_fsm_instance_id,
+--         input_fsm_instance_id_fsm_type,
+--         input_fsm_instance_id_fsm_version,
+--         output_fsm_instance_queue_msg_id,
+--         input_event_name,
+--         input_event_data,
+--         input_event_delay,
+--         input_send_to_parent_queue_id,
+--         input_send_to_parent_queue_id_msg_id,
+--         input_execution_started_at,
+--         input_execution_duration,
+--         input_execution_finished_at,
+--         input_event_status,
+--         input_event_output,
+--         input_error_message
+--     ) RETURNING fsm_instance_queue_event_log_id INTO output_fsm_instance_queue_event_log_id;
+
+--     RETURN jsonb_build_object(
+--         'event_name', input_event_name,
+--         'event_data', input_event_data,
+--         'event_delay', input_event_delay,
+--         'send_to_parent_queue_id', input_send_to_parent_queue_id,
+--         'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+--         'event_status', input_event_status,
+--         'event_output', input_event_output,
+--         'error_message', input_error_message,
+--         'queue_msg_data', queue_msg_data,
+--         'fsm_instance_queue_name', input_fsm_instance_id,
+--         'fsm_instance_queue_msg_id', output_fsm_instance_queue_msg_id,
+--         'fsm_instance_queue_event_log_id', output_fsm_instance_queue_event_log_id
+--     );
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+
+-- -- ============================================================
+-- -- 2. send_event_to_promise_queue_with_event_logs_v2
+-- --    Fix: undefined variable refs in queue_msg_data and INSERT VALUES,
+-- --         wrong INSERT column name (event_data → event_input_data),
+-- --         add queue_msg_data to RETURN
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.send_event_to_promise_queue_with_event_logs_v2(
+--     input_promise_queue_name text,
+--     input_promise_queue_type text,
+--     input_promise_queue_version text,
+--     input_send_to_parent_queue_id uuid,
+--     input_send_to_parent_queue_id_msg_id text,
+--     input_event_name text,
+--     input_event_action_type text,
+--     input_event_data jsonb,
+--     input_event_delay integer DEFAULT 0,
+--     input_event_status text DEFAULT 'ACTIVE',
+--     input_event_output jsonb DEFAULT '{}'::jsonb,
+--     input_error_message text DEFAULT NULL,
+--     input_execution_started_at timestamp with time zone DEFAULT now(),
+--     input_execution_duration integer DEFAULT NULL,
+--     input_execution_finished_at timestamp with time zone DEFAULT now()
+-- )
+-- RETURNS JSONB
+-- AS $$
+-- DECLARE
+--     queue_msg_data jsonb;
+--     output_promise_queue_msg_id bigint;
+--     output_promise_queue_event_log_id uuid;
+-- BEGIN
+--     IF input_promise_queue_name IS NULL THEN
+--         RAISE EXCEPTION 'promise_queue_name is NULL';
+--     END IF;
+
+--     queue_msg_data := jsonb_build_object(
+--         'fsm_type', input_promise_queue_type,
+--         'event_data', jsonb_build_object(
+--             'event_type', input_event_name,
+--             'event_payload', input_event_data,
+--             'action_type', input_event_action_type,
+--             'fsm_type', input_promise_queue_type,
+--             'fsm_version', input_promise_queue_version
+--         ),
+--         'send_to_parent_queue_id', input_send_to_parent_queue_id,
+--         'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+--         'send_to_parent_queue_id_event_name', input_event_name
+--     );
+
+--     BEGIN
+--         SELECT pgmq.send(input_promise_queue_name, queue_msg_data, input_event_delay)
+--         INTO output_promise_queue_msg_id;
+--     EXCEPTION WHEN OTHERS THEN
+--         RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_promise_queue_name, SQLERRM;
+--     END;
+
+--     IF output_promise_queue_msg_id IS NULL THEN
+--         RAISE EXCEPTION 'Failed to send event to queue %', input_promise_queue_name;
+--     END IF;
+
+--     INSERT INTO fsm_core.fsm_promise_queue_event_logs (
+--         promise_queue_name,
+--         promise_queue_type,
+--         promise_queue_version,
+--         promise_queue_msg_id,
+--         event_name,
+--         event_input_data,
+--         event_delay,
+--         send_to_parent_queue_id,
+--         send_to_parent_queue_id_msg_id,
+--         execution_started_at,
+--         execution_duration,
+--         execution_finished_at,
+--         event_status,
+--         event_output,
+--         error_message
+--     ) VALUES (
+--         input_promise_queue_name,
+--         input_promise_queue_type,
+--         input_promise_queue_version,
+--         output_promise_queue_msg_id,
+--         input_event_name,
+--         input_event_data,
+--         input_event_delay,
+--         input_send_to_parent_queue_id,
+--         input_send_to_parent_queue_id_msg_id,
+--         input_execution_started_at,
+--         input_execution_duration,
+--         input_execution_finished_at,
+--         input_event_status,
+--         input_event_output,
+--         input_error_message
+--     ) RETURNING promise_queue_event_log_id INTO output_promise_queue_event_log_id;
+
+--     RETURN jsonb_build_object(
+--         'event_name', input_event_name,
+--         'event_data', input_event_data,
+--         'event_delay', input_event_delay,
+--         'send_to_parent_queue_id', input_send_to_parent_queue_id,
+--         'send_to_parent_queue_id_msg_id', input_send_to_parent_queue_id_msg_id,
+--         'event_status', input_event_status,
+--         'event_output', input_event_output,
+--         'error_message', input_error_message,
+--         'queue_msg_data', queue_msg_data,
+--         'promise_queue_name', input_promise_queue_name,
+--         'promise_queue_msg_id', output_promise_queue_msg_id,
+--         'promise_queue_event_log_id', output_promise_queue_event_log_id
+--     );
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+
+-- -- ============================================================
+-- -- 3. send_event_to_promise_queue_from_fsm_instance_id_v2 (new)
+-- --    Routes promise/sharedPromise events to promise queue.
+-- --    Checks queue existence, creates if missing, returns send result.
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(
+--     event_name text,
+--     event_input jsonb,
+--     id text,
+--     action_type text,
+--     src text,
+--     fsmName text,
+--     fsmType text,
+--     fsmVersion text,
+--     parentFsmName text,
+--     parentFsmVersion text,
+--     from_source_fsm_instance_id uuid
+-- ) RETURNS jsonb AS $$
+-- DECLARE
+--     promise_queue_name text;
+--     queue_exists boolean := false;
+--     start_queue_worker boolean := false;
+--     send_result jsonb;
+-- BEGIN
+--     IF fsmType = 'promise' THEN
+--         promise_queue_name := parentFsmName || '_' || parentFsmVersion || '_' || fsmName;
+--     ELSIF fsmType = 'sharedPromise' THEN
+--         promise_queue_name := 'sharedPromise_' || fsmName || '_' || fsmVersion;
+--     ELSE
+--         RAISE EXCEPTION 'send_event_to_promise_queue_from_fsm_instance_id_v2: unsupported fsmType: %', fsmType;
+--     END IF;
+
+--     SELECT EXISTS (
+--         SELECT 1 FROM pgmq.list_queues() WHERE queue_name = promise_queue_name
+--     ) INTO queue_exists;
+
+--     IF NOT queue_exists THEN
+--         PERFORM pgmq.create(promise_queue_name);
+--         start_queue_worker := true;
+--     END IF;
+
+--     send_result := fsm_core.send_event_to_promise_queue_with_event_logs_v2(
+--         input_promise_queue_name := promise_queue_name,
+--         input_promise_queue_type := fsmType,
+--         input_promise_queue_version := fsmVersion,
+--         input_send_to_parent_queue_id := from_source_fsm_instance_id,
+--         input_send_to_parent_queue_id_msg_id := id,
+--         input_event_name := event_name,
+--         input_event_action_type := action_type,
+--         input_event_data := event_input,
+--         input_event_delay := 0,
+--         input_event_status := 'ACTIVE',
+--         input_event_output := '{}'::jsonb,
+--         input_error_message := NULL
+--     );
+
+--     RETURN send_result || jsonb_build_object('start_queue_worker', start_queue_worker);
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+
+-- -- ============================================================
+-- -- 4. send_event_to_fsm_queue_from_fsm_instance_id_v2 (new)
+-- --    Routes childFsm events: generates UUID child queue,
+-- --    creates it, sends event, returns send result.
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_from_fsm_instance_id_v2(
+--     event_name text,
+--     event_input jsonb,
+--     id text,
+--     action_type text,
+--     src text,
+--     fsmName text,
+--     fsmType text,
+--     fsmVersion text,
+--     parentFsmName text,
+--     parentFsmVersion text,
+--     from_source_fsm_instance_id uuid
+-- ) RETURNS jsonb AS $$
+-- DECLARE
+--     child_instance_id uuid := uuid_generate_v4();
+--     send_result jsonb;
+-- BEGIN
+--     PERFORM pgmq.create(child_instance_id::text);
+
+--     send_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+--         input_fsm_instance_id := child_instance_id,
+--         input_fsm_instance_id_fsm_type := fsmType,
+--         input_fsm_instance_id_fsm_version := fsmVersion,
+--         input_send_to_parent_queue_id := from_source_fsm_instance_id,
+--         input_send_to_parent_queue_id_msg_id := id,
+--         input_event_name := event_name,
+--         input_event_action_type := action_type,
+--         input_event_data := event_input,
+--         input_event_delay := 0,
+--         input_event_status := 'ACTIVE',
+--         input_event_output := '{}'::jsonb,
+--         input_error_message := NULL
+--     );
+
+--     RETURN send_result || jsonb_build_object('start_queue_worker', true, 'child_instance_id', child_instance_id);
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+
+-- -- ============================================================
+-- -- 5. archive_event_from_fsm_promise_type_worker_v2
+-- --    Fix: input_promise_queue_name uuid → text,
+-- --         add missing params,
+-- --         implement step 2 (send result to parent FSM queue),
+-- --         fix INSERT variables and column name,
+-- --         fix RETURN
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_promise_type_worker_v2(
+--     input_promise_queue_name text,
+--     input_promise_queue_type text,
+--     input_promise_queue_version text,
+--     input_promise_queue_msg_id bigint,
+--     input_event_name text,
+--     input_event_action_type text,
+--     input_event_data jsonb,
+--     input_event_delay integer,
+--     input_send_to_parent_queue_id uuid,
+--     input_send_to_parent_queue_id_msg_id text,
+--     input_execution_started_at timestamp with time zone,
+--     input_execution_duration integer,
+--     input_execution_finished_at timestamp with time zone,
+--     input_event_status text,
+--     input_event_output jsonb,
+--     input_error_message text
+-- )
+-- RETURNS jsonb
+-- AS $$
+-- DECLARE
+--     promise_archive_result boolean;
+--     send_to_parent_result jsonb;
+--     output_promise_queue_event_log_id uuid;
+-- BEGIN
+--     -- 1. Remove event from promise queue
+--     promise_archive_result := pgmq.archive(
+--         queue_name := input_promise_queue_name,
+--         msg_id := input_promise_queue_msg_id
+--     );
+
+--     -- 2. Send promise result back to parent FSM queue
+--     send_to_parent_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+--         input_fsm_instance_id := input_send_to_parent_queue_id,
+--         input_fsm_instance_id_fsm_type := NULL,
+--         input_fsm_instance_id_fsm_version := NULL,
+--         input_send_to_parent_queue_id := NULL,
+--         input_send_to_parent_queue_id_msg_id := NULL,
+--         input_event_name := input_event_name,
+--         input_event_action_type := 'promise_result',
+--         input_event_data := input_event_output,
+--         input_event_delay := 0,
+--         input_event_status := input_event_status,
+--         input_event_output := input_event_output,
+--         input_error_message := input_error_message,
+--         input_execution_started_at := input_execution_started_at,
+--         input_execution_duration := input_execution_duration,
+--         input_execution_finished_at := input_execution_finished_at
+--     );
+
+--     -- 3. Log archive event in promise queue event logs
+--     INSERT INTO fsm_core.fsm_promise_queue_event_logs (
+--         promise_queue_name,
+--         promise_queue_type,
+--         promise_queue_version,
+--         promise_queue_msg_id,
+--         event_name,
+--         event_input_data,
+--         event_delay,
+--         send_to_parent_queue_id,
+--         send_to_parent_queue_id_msg_id,
+--         execution_started_at,
+--         execution_duration,
+--         execution_finished_at,
+--         event_status,
+--         event_output,
+--         error_message
+--     ) VALUES (
+--         input_promise_queue_name,
+--         input_promise_queue_type,
+--         input_promise_queue_version,
+--         input_promise_queue_msg_id,
+--         input_event_name,
+--         input_event_data,
+--         input_event_delay,
+--         input_send_to_parent_queue_id,
+--         input_send_to_parent_queue_id_msg_id,
+--         input_execution_started_at,
+--         input_execution_duration,
+--         input_execution_finished_at,
+--         input_event_status,
+--         input_event_output,
+--         input_error_message
+--     ) RETURNING promise_queue_event_log_id INTO output_promise_queue_event_log_id;
+
+--     RETURN jsonb_build_object(
+--         'promise_queue_archive_result', promise_archive_result,
+--         'promise_queue_name', input_promise_queue_name,
+--         'promise_queue_msg_id', input_promise_queue_msg_id,
+--         'send_to_parent_result', send_to_parent_result,
+--         'promise_queue_event_log_id', output_promise_queue_event_log_id
+--     );
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+
+-- -- ============================================================
+-- -- 6. send_event_to_queue_from_fsm_instance_id_v2
+-- --    Fix: pgmq.create (was fsm_core.create), real queue_exists check,
+-- --         delegate to sub-functions, remove dead RETURN at end
+-- -- ============================================================
+-- CREATE OR REPLACE FUNCTION fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
+--     event_name text,
+--     event_input jsonb,
+--     id text,
+--     action_type text,
+--     src text,
+--     fsmName text,
+--     fsmType text,
+--     fsmVersion text,
+--     parentFsmName text,
+--     parentFsmVersion text,
+--     from_source_fsm_instance_id uuid
+-- ) RETURNS jsonb AS $$
+-- BEGIN
+--     IF fsmType = 'promise' OR fsmType = 'sharedPromise' THEN
+--         RETURN fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(
+--             event_name := event_name,
+--             event_input := event_input,
+--             id := id,
+--             action_type := action_type,
+--             src := src,
+--             fsmName := fsmName,
+--             fsmType := fsmType,
+--             fsmVersion := fsmVersion,
+--             parentFsmName := parentFsmName,
+--             parentFsmVersion := parentFsmVersion,
+--             from_source_fsm_instance_id := from_source_fsm_instance_id
+--         );
+--     ELSIF fsmType = 'childFsm' THEN
+--         RETURN fsm_core.send_event_to_fsm_queue_from_fsm_instance_id_v2(
+--             event_name := event_name,
+--             event_input := event_input,
+--             id := id,
+--             action_type := action_type,
+--             src := src,
+--             fsmName := fsmName,
+--             fsmType := fsmType,
+--             fsmVersion := fsmVersion,
+--             parentFsmName := parentFsmName,
+--             parentFsmVersion := parentFsmVersion,
+--             from_source_fsm_instance_id := from_source_fsm_instance_id
+--         );
+--     ELSE
+--         RAISE EXCEPTION 'Unsupported fsmType: %', fsmType;
+--     END IF;
+-- END;
+-- $$ LANGUAGE plpgsql;

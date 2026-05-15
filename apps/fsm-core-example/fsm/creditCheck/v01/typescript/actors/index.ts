@@ -1,7 +1,7 @@
 // Actor: verifyCredentials
 export function verifyCredentials(input: { SSN: string; firstName: string; lastName: string }): Promise<{ SSN: string; firstName: string; lastName: string }> {
   // TODO: implement actor logic
-  console.log(`Verifying credentials for SSN: ${input.SSN}, Name: ${input.firstName} ${input.lastName}`);
+  console.log(`Verifying credentials input ${JSON.stringify(input)}`);
   return Promise.resolve(input);
 }
 
