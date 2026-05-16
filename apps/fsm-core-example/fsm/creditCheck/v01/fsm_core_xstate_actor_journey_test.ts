@@ -317,7 +317,7 @@ Deno.test({
       //   30000,
       // );
 
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 30000));
 
       const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");

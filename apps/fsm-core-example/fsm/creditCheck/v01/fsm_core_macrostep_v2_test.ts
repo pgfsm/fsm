@@ -68,7 +68,12 @@ Deno.test({
       };
       const msg = {
         msg_id: 1,
-        message: { type: "initialTransition_event", payload: {} },
+        message: {
+          event_data : { 
+            event_type: "initialTransition_event",
+            event_payload: {},
+          }
+       },
       };
 
       const macrostepState: any = await macrostep_v2(
@@ -135,9 +140,15 @@ Deno.test({
           total_promise_queue_data: null,
           total_schedule_queue_data: null,
       };
+     
       const msg = {
         msg_id: 1,
-        message: submitEvent
+        message: {
+          event_data : { 
+            event_type: submitEvent.type,
+            event_payload: submitEvent.payload,
+          }
+       },
       };
 
       const macrostepState: any = await macrostep_v2(
@@ -228,7 +239,15 @@ Deno.test({
           total_schedule_queue_data: null,
       };
 
-      const msg = { msg_id: 1, message: doneEvent };
+      const msg = {
+        msg_id: 1,
+        message: {
+          event_data : { 
+            event_type: doneEvent.type,
+            event_payload: doneEvent.payload,
+          }
+       },
+      };
 
       const macrostepState: any = await macrostep_v2(
         dbDeps,
