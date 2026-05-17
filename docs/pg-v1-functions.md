@@ -25,3 +25,11 @@ These functions have no TypeScript wrappers by design — they are superseded by
 | `fsm_core.select_all_transitions_v1` | `event_name text`, `p_state_value text[]`, `fsm_name_param text`, `fsm_version_param text` | — |
 | `fsm_core.macrostep_v1` | `event_name text`, `p_state_value text[]`, `fsm_name_param text`, `fsm_version_param text` | `select_all_transitions_v1`, `select_transitions_with_guard_eval_v1`, `microstep_v1` |
 | `fsm_core.fsm_worker_v1` | `event_name text`, `p_state_value jsonb`, `fsm_name_param text`, `fsm_version_param text` | `resolve_state_value_v1`, `macrostep_v1` |
+
+---
+
+## p_* Argument Rename Suggestions
+
+See [pg-v1-argument-rename-suggestions.md](./pg-v1-argument-rename-suggestions.md) for suggested `p_*` → `input_*` renames across all v1 functions.
+
+These suggestions are **not applied** — v1 functions are superseded by v2 and not actively maintained.
