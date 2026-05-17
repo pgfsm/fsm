@@ -90,3 +90,23 @@ FSMs are versioned JSON files in `apps/fsm-core-example/fsm/`. Each FSM folder (
 - `"postgres"` — direct PostgreSQL connection
 - `"supabase"` — Supabase JS client
 - `"supabase_and_postgres"` — both clients available
+
+## Naming Conventions
+
+PostgreSQL is the source of truth. TypeScript wrappers in `apps/fsm-core-db-ts/src/` must stay aligned with PG function names and parameter names.
+
+### PG → TS Function Name Rules
+- Strip `_v1` / `_v2` version suffix from TS names — version is driven by `FSM_SCHEMA_FN_VERSION = "v2"` in `const.ts`
+- Use camelCase matching the PG snake_case name (e.g., `archive_event_from_fsm_type_worker_v2` → `archiveEventFromFsmTypeWorker`)
+- No added verbs or abbreviations not in the PG name
+
+### Parameter Name Rules (PG schema)
+- All PG function parameters use `input_*` prefix (e.g., `input_fsm_name`, `input_state_value`)
+- Exception: internal orchestration params keep their names (e.g., `fsm_name_param`, `event_name`, `transition_record`)
+- v1 functions still use `p_*` prefix — not to be changed (superseded by v2)
+
+### Reference Document
+See `docs/pg-ts-function-mapping.md` for the complete PG→TS function mapping table, including:
+- All 18 direct 1:1 mappings (Table 1)
+- TS functions not directly mapped to a PG function (Table 2)
+- Gap: PG functions with no TS wrapper (Table 3)
