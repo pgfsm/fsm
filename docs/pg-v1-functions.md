@@ -1,0 +1,27 @@
+# PostgreSQL v1 Functions (Superseded by v2)
+
+These functions have no TypeScript wrappers by design — they are superseded by their `_v2` equivalents. The active TypeScript layer in `apps/fsm-core-db-ts/` targets v2 only (`FSM_SCHEMA_FN_VERSION = "v2"`).
+
+| PostgreSQL Function | PG Input Arguments | Child PG Functions Called |
+|---|---|---|
+| `fsm_core.load_fsm_state_from_json_v1` | `json_input jsonb`, `root_node_text text`, `input_fsm_name text`, `input_fsm_version text` | `load_fsm_state_from_json_v1` (recursive), `sanitize_text_to_ltree` |
+| `fsm_core.load_fsm_transition_from_json_v1` | `json_input jsonb`, `root_node_text text`, `fsm_name text`, `fsm_version text` | `load_fsm_state_from_json_v1`, `load_fsm_transition_from_json_v1` (recursive), `sanitize_text_array_to_ltree_array`, `sanitize_text_to_ltree`, `sql_lca_from_array` |
+| `fsm_core.resolve_state_value_v1` | `input_json jsonb`, `input_fsm_name text`, `input_fsm_version text` | `jsonb_all_paths`, `fsm_get_all_state_nodes_v1`, `build_nested_json_recursive` |
+| `fsm_core.fsm_get_initial_state_nodes_v1` | `p_fsm_name text`, `p_fsm_version text`, `p_state_path ltree` | `sanitize_text_to_ltree` |
+| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v1` | `p_fsm_name text`, `p_fsm_version text`, `p_state_path ltree` | `fsm_get_initial_state_nodes_v1`, `get_proper_ancestors` |
+| `fsm_core.fsm_get_all_state_nodes_v1` | `p_state_paths text[]`, `p_fsm_name text`, `p_fsm_version text` | `fsm_get_initial_state_nodes_with_ancestors_v1`, `sanitize_text_to_ltree` |
+| `fsm_core.get_exit_actions_v1` | `p_state_paths text[]`, `p_fsm_name text`, `p_fsm_version text` | — |
+| `fsm_core.compute_child_exit_set_v1` | `transition_domain_lca ltree`, `state_node_set ltree[]` | — |
+| `fsm_core.compute_full_exit_set_v1` | `transition_record fsm_core.fsm_transitions`, `state_node_set text[]` | `compute_child_exit_set_v1`, `sanitize_text_array_to_ltree_array`, `sql_lca_from_array` |
+| `fsm_core.compute_exit_actions_v1` | `transition_record fsm_core.fsm_transitions`, `p_state_node_set text[]`, `p_fsm_name text`, `p_fsm_version text` | `compute_full_exit_set_v1`, `get_exit_actions_v1` |
+| `fsm_core.get_initial_actions_v1` | `p_state_paths text[]`, `p_fsm_name text`, `p_fsm_version text` | — |
+| `fsm_core.get_entry_actions_v1` | `p_state_paths text[]`, `p_fsm_name text`, `p_fsm_version text` | — |
+| `fsm_core.get_descendant_states_for_entry_v1` | `input_state_id text`, `fsm_name_param text`, `fsm_version_param text` | `get_ancestor_states_for_entry_v1`, `get_descendant_states_for_entry_v1` (recursive), `get_proper_ancestors`, `sanitize_text_to_ltree` |
+| `fsm_core.get_ancestor_states_for_entry_v1` | `ancestors text[]`, `reentrancy_domain text`, `fsm_name_param text`, `fsm_version_param text` | `get_descendant_states_for_entry_v1`, `sanitize_text_to_ltree` |
+| `fsm_core.compute_entry_actions_v1` | `transition_record fsm_core.fsm_transitions`, `fsm_name_param text`, `fsm_version_param text`, `is_initial_transition boolean` | `get_ancestor_states_for_entry_v1`, `get_descendant_states_for_entry_v1`, `get_entry_actions_v1`, `get_initial_actions_v1`, `resolve_state_value_v1`, `sql_lca_from_array`, `get_proper_ancestors` |
+| `fsm_core.test_event_transition_for_entry_v1` | `event_name text`, `fsm_name_param text`, `fsm_version_param text` | `compute_entry_actions_v1` |
+| `fsm_core.microstep_v1` | `transition_record fsm_core.fsm_transitions`, `event_name text`, `state_value_node_set text[]`, `fsm_name_param text`, `fsm_version_param text` | `build_nested_json_recursive`, `compute_exit_actions_v1`, `compute_entry_actions_v1` |
+| `fsm_core.select_transitions_with_guard_eval_v1` | `input_all_transitions fsm_core.fsm_transitions[]` | — |
+| `fsm_core.select_all_transitions_v1` | `event_name text`, `p_state_value text[]`, `fsm_name_param text`, `fsm_version_param text` | — |
+| `fsm_core.macrostep_v1` | `event_name text`, `p_state_value text[]`, `fsm_name_param text`, `fsm_version_param text` | `select_all_transitions_v1`, `select_transitions_with_guard_eval_v1`, `microstep_v1` |
+| `fsm_core.fsm_worker_v1` | `event_name text`, `p_state_value jsonb`, `fsm_name_param text`, `fsm_version_param text` | `resolve_state_value_v1`, `macrostep_v1` |
