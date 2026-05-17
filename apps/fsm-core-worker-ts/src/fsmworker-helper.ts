@@ -99,23 +99,23 @@ export async function runActionImplementation(
 }
 
 // Main function to process a message for a given queue
-export async function macrostep_v2(
+export async function macrostepV2(
   deps: DBDeps,
   queueName: string,
   msg: Database["pgmq"]["CompositeTypes"]["message_record"],
-  fsm_instance_row: Database["fsm_core"]["Tables"]["fsm_instance"]["Row"],
-  resolved_state_value: Json,
-  fsm_name: string,
-  fsm_version: number | string,
+  fsmInstanceRow: Database["fsm_core"]["Tables"]["fsm_instance"]["Row"],
+  resolvedStateValue: Json,
+  fsmName: string,
+  fsmVersion: number | string,
   fsmModuleDefinition?: FsmModuleDefinition,
 ): Promise<any> {
-  const resolvedState = resolved_state_value as { json: Json; all_nodes: string[] };
+  const resolvedState = resolvedStateValue as { json: Json; all_nodes: string[] };
   // Simulate work (replace with real logic)
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
   const eventData = msg.message as unknown as FsmQueueMessage;
-  const eventType = eventData.event_data?.event_type;
-  const eventPayload = eventData.event_data?.event_payload ?? {};
+  const eventType = eventData.eventData?.eventType;
+  const eventPayload = eventData.eventData?.eventPayload ?? {};
 
   const macroSaveFnPayload = {
     remove_from_current_fsm_instance_queue_id: queueName,
@@ -137,13 +137,11 @@ export async function macrostep_v2(
     entry_actions: [] as any,
   };
 
-  let nextState : any = {};
-
-  let current_context = fsm_instance_row?.fsm_instance_context;
+  let current_context = fsmInstanceRow?.fsm_instance_context;
   // pass cuurent_context to all actions and update its value after every action execution
-  let total_schedule_queue_data = fsm_instance_row?.total_schedule_queue_data ||
+  let total_schedule_queue_data = fsmInstanceRow?.total_schedule_queue_data ||
     [] as any;
-  let total_promise_queue_data = fsm_instance_row?.total_promise_queue_data ||
+  let total_promise_queue_data = fsmInstanceRow?.total_promise_queue_data ||
     [] as any;
 
   let remove_schedule_queue_msg_ids_xstate = [] as any;
@@ -159,8 +157,8 @@ export async function macrostep_v2(
       deps,
       eventType,
       resolvedState.all_nodes,
-      fsm_name,
-      fsm_version.toString(),
+      fsmName,
+      fsmVersion.toString(),
     )) as FsmTransitionRow[] | null;
     if (!allTransitions || allTransitions.length === 0) {
       console.error("No transitions found for the given FSM name and version.");
@@ -170,41 +168,34 @@ export async function macrostep_v2(
     } else if (allTransitions.length === 1) {
       selectedTransition = allTransitions[0];
     } else {
-      // iterate through all transitions and check if cond column is string and value is true add it into selectedTransitions
-      let filteredTransitions;
-      // approach 1: evaluate cond column here
-      filteredTransitions = allTransitions.filter((transition) => {
+      // iterate through all transitions and evaluate guard conditions
+      const filteredTransitions: FsmTransitionRow[] = [];
+      for (const transition of allTransitions) {
         if (typeof transition.cond === "string") {
-          return transition.cond === "true";
+          if (transition.cond === "true") filteredTransitions.push(transition);
         } else if (
           typeof transition.cond === "object" && transition.cond !== null
         ) {
-          // if cond type is json object parse it and check it has type key call key function here with rest of arguments
           const condObj = transition.cond as any;
           if (condObj.type) {
-            let eval_result = false;
-            // call condition function here with rest of arguments
-            const eval_fn_name = condObj.type;
-            // call eval_fn_name with condObj as argument
-            eval_result = eval_fn_name(condObj);
-            return eval_result;
+            const guardFn = fsmModuleDefinition?.guards?.[condObj.type];
+            if (typeof guardFn === "function") {
+              const eval_result = await (guardFn as Function)(
+                current_context,
+                condObj,
+                { deps, queueName, msg },
+              );
+              if (eval_result) filteredTransitions.push(transition);
+            } else {
+              console.error(`Guard function "${condObj.type}" not found in module.`);
+            }
           } else {
-            console.error(
-              "Condition object does not have a type key:",
-              condObj,
-            );
-            return false;
+            console.error("Condition object does not have a type key:", condObj);
           }
         } else {
-          console.error(
-            "Condition is neither string nor object:",
-            transition.cond,
-          );
-          return false;
+          console.error("Condition is neither string nor object:", transition.cond);
         }
-      });
-      // approach 2: consider guard is not used in fsm.
-      // filteredTransitions = allTransitions
+      }
 
       if (filteredTransitions.length === 0) {
         console.error(
@@ -227,9 +218,9 @@ export async function macrostep_v2(
     deps,
     selectedTransition,
     eventType,
-    resolved_state_value.all_nodes,
-    fsm_name,
-    fsm_version.toString(),
+    resolvedStateValue.all_nodes,
+    fsmName,
+    fsmVersion.toString(),
   );
 
   const exit_actions = microstepResult.exit_actions || [];
@@ -296,7 +287,7 @@ export async function macrostep_v2(
 
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
-    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.event_data?.event_type);
+    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.eventData?.eventType);
 
   // get both removed and new_total_schedule_queue_data
   // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);
@@ -339,10 +330,10 @@ export async function macrostep_v2(
     .updated_state_value?.machine;
 
   macroSaveFnPayload.fsm_instance_data_save_fsm_status = "active"; // "active" | "done" | "error" | "stopped"
-  macroSaveFnPayload.fsm_instance_data_save_fsm_error = nextState?.error;
-  macroSaveFnPayload.fsm_instance_data_save_fsm_output = nextState?.output;
+  macroSaveFnPayload.fsm_instance_data_save_fsm_error = {};
+  macroSaveFnPayload.fsm_instance_data_save_fsm_output = {};
 
-  macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state = nextState;
+  macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state = microstepResult?.updated_state_value ?? null;
 
   macroSaveFnPayload.exit_actions = exit_actions;
   macroSaveFnPayload.transition_actions = transition_actions;

@@ -126,7 +126,7 @@ try {
     case "create-and-start-worker": {
       const deps = await buildDeps();
       const activeLocks: Record<string, boolean> = {};
-      const fsm_instance = await createAndStartFSMWorker(deps, fsmName!, fsmVersion!, verifiedModule, activeLocks, validatePlugin);
+      const fsm_instance = await createAndStartFSMWorker(deps, fsmName!, fsmVersion!, verifiedModule, activeLocks, {}, validatePlugin);
       if (!fsm_instance) {
         console.error(`Error: Failed to create FSM instance for "${fsmName}" v${fsmVersion}.`);
         Deno.exit(1);

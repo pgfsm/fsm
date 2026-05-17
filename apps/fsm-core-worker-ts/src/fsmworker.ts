@@ -12,7 +12,7 @@ import {
 import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
 import type { WorkflowType } from "@fsm/compiler";
 
-import { macrostep_v2 } from "./fsmworker-helper.ts";
+import { macrostepV2 } from "./fsmworker-helper.ts";
 
 export type VerifiedModule = {
   fsmAbsFolderPath?: string | null;
@@ -106,7 +106,7 @@ export async function startFSMWorker(
           //
           if(fsmDataWithResolvedStateValue) {
           
-            const macrostep_v2_result = await macrostep_v2(
+            const macrostepV2Result = await macrostepV2(
               deps,
               queueName,
               msg,
@@ -116,28 +116,28 @@ export async function startFSMWorker(
               fsm_version,
               fsmModuleDefinition,
             );
-            console.log("Macrostep result:", macrostep_v2_result);
-            if (macrostep_v2_result) {
+            console.log("Macrostep result:", macrostepV2Result);
+            if (macrostepV2Result) {
               const archiveResult = await archiveEventFromFsmTypeWorker(
                 deps,
-                macrostep_v2_result.remove_from_current_fsm_instance_queue_id,
-                macrostep_v2_result.remove_current_queue_msg_id,
-                macrostep_v2_result.remove_schedule_queue_msg_ids,
-                macrostep_v2_result.remove_promise_queue_msg_ids,
-                macrostep_v2_result.new_schedule_queue_data,
-                macrostep_v2_result.new_promise_queue_data,
-                macrostep_v2_result.total_schedule_queue_data,
-                macrostep_v2_result.total_promise_queue_data,
-                macrostep_v2_result.fsm_instance_data_save_fsm_status,
-                macrostep_v2_result.fsm_instance_data_save_fsm_state,
-                macrostep_v2_result.fsm_instance_data_save_fsm_context,
-                macrostep_v2_result.fsm_instance_data_save_fsm_xstate_state,
+                macrostepV2Result.remove_from_current_fsm_instance_queue_id,
+                macrostepV2Result.remove_current_queue_msg_id,
+                macrostepV2Result.remove_schedule_queue_msg_ids,
+                macrostepV2Result.remove_promise_queue_msg_ids,
+                macrostepV2Result.new_schedule_queue_data,
+                macrostepV2Result.new_promise_queue_data,
+                macrostepV2Result.total_schedule_queue_data,
+                macrostepV2Result.total_promise_queue_data,
+                macrostepV2Result.fsm_instance_data_save_fsm_status,
+                macrostepV2Result.fsm_instance_data_save_fsm_state,
+                macrostepV2Result.fsm_instance_data_save_fsm_context,
+                macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
               );
               console.log("Message archived with result:", archiveResult);
             }
             // await archiveMessage(deps, queueName, msg.msg_id || 1);
           }else{
-            console.warn("⚠️ No result from macrostep_v2, skipping archiving.");
+            console.warn("⚠️ No result from macrostepV2, skipping archiving.");
             
           }
         } catch (err) {
