@@ -14,11 +14,11 @@ Replace the `p_` prefix with `input_` on all function parameters.
 
 **File:** `20250119144637_fsm_instance_lock.sql`
 
-| Function | Current Param | Type | Suggested Param |
-|---|---|---|---|
-| `fsm_core.lock_fsm_instance` | `p_fsm_instance_id` | `uuid` | `input_fsm_instance_id` |
-| `fsm_core.lock_fsm_instance` | `p_locked_by` | `text` | `input_locked_by` |
-| `fsm_core.unlock_fsm_instance` | `p_fsm_instance_id` | `uuid` | `input_fsm_instance_id` |
+| Function | Current Param | Type | Suggested Param | Status |
+|---|---|---|---|---|
+| `fsm_core.lock_fsm_instance` | `p_fsm_instance_id` | `uuid` | `input_fsm_instance_id` | Implemented |
+| `fsm_core.lock_fsm_instance` | `p_locked_by` | `text` | `input_locked_by` | Implemented |
+| `fsm_core.unlock_fsm_instance` | `p_fsm_instance_id` | `uuid` | `input_fsm_instance_id` | Implemented |
 
 ---
 
@@ -26,17 +26,17 @@ Replace the `p_` prefix with `input_` on all function parameters.
 
 **File:** `20241221134661_fsm_state_values_v2.sql`
 
-| Function | Current Param | Type | Suggested Param |
-|---|---|---|---|
-| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_fsm_name` | `text` | `input_fsm_name` |
-| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_fsm_version` | `text` | `input_fsm_version` |
-| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_state_path` | `ltree` | `input_state_path` |
-| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_fsm_name` | `text` | `input_fsm_name` |
-| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_fsm_version` | `text` | `input_fsm_version` |
-| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_state_path` | `ltree` | `input_state_path` |
-| `fsm_core.fsm_get_all_state_nodes_v2` | `p_state_paths` | `text[]` | `input_state_paths` |
-| `fsm_core.fsm_get_all_state_nodes_v2` | `p_fsm_name` | `text` | `input_fsm_name` |
-| `fsm_core.fsm_get_all_state_nodes_v2` | `p_fsm_version` | `text` | `input_fsm_version` |
+| Function | Current Param | Type | Suggested Param | Status |
+|---|---|---|---|---|
+| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_fsm_name` | `text` | `input_fsm_name` | Implemented |
+| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_fsm_version` | `text` | `input_fsm_version` | Implemented |
+| `fsm_core.fsm_get_initial_state_nodes_v2` | `p_state_path` | `ltree` | `input_state_path` | Implemented |
+| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_fsm_name` | `text` | `input_fsm_name` | Implemented |
+| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_fsm_version` | `text` | `input_fsm_version` | Implemented |
+| `fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2` | `p_state_path` | `ltree` | `input_state_path` | Implemented |
+| `fsm_core.fsm_get_all_state_nodes_v2` | `p_state_paths` | `text[]` | `input_state_paths` | Implemented |
+| `fsm_core.fsm_get_all_state_nodes_v2` | `p_fsm_name` | `text` | `input_fsm_name` | Implemented |
+| `fsm_core.fsm_get_all_state_nodes_v2` | `p_fsm_version` | `text` | `input_fsm_version` | Implemented |
 
 ---
 
@@ -44,14 +44,14 @@ Replace the `p_` prefix with `input_` on all function parameters.
 
 **File:** `20241222134632_fsm_exit_actions_v2.sql`
 
-| Function | Current Param | Type | Suggested Param |
-|---|---|---|---|
-| `fsm_core.get_exit_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` |
-| `fsm_core.get_exit_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` |
-| `fsm_core.get_exit_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` |
-| `fsm_core.compute_exit_actions_v2` | `p_state_node_set` | `TEXT[]` | `input_state_node_set` |
-| `fsm_core.compute_exit_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` |
-| `fsm_core.compute_exit_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` |
+| Function | Current Param | Type | Suggested Param | Status |
+|---|---|---|---|---|
+| `fsm_core.get_exit_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` | Implemented |
+| `fsm_core.get_exit_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` | Implemented |
+| `fsm_core.get_exit_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` | Implemented |
+| `fsm_core.compute_exit_actions_v2` | `p_state_node_set` | `TEXT[]` | `input_state_node_set` | Implemented |
+| `fsm_core.compute_exit_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` | Implemented |
+| `fsm_core.compute_exit_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` | Implemented |
 
 ---
 
@@ -59,14 +59,14 @@ Replace the `p_` prefix with `input_` on all function parameters.
 
 **File:** `20241222134642_fsm_entry_actions_v2.sql`
 
-| Function | Current Param | Type | Suggested Param |
-|---|---|---|---|
-| `fsm_core.get_initial_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` |
-| `fsm_core.get_initial_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` |
-| `fsm_core.get_initial_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` |
-| `fsm_core.get_entry_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` |
-| `fsm_core.get_entry_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` |
-| `fsm_core.get_entry_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` |
+| Function | Current Param | Type | Suggested Param | Status |
+|---|---|---|---|---|
+| `fsm_core.get_initial_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` | Implemented |
+| `fsm_core.get_initial_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` | Implemented |
+| `fsm_core.get_initial_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` | Implemented |
+| `fsm_core.get_entry_actions_v2` | `p_state_paths` | `TEXT[]` | `input_state_paths` | Implemented |
+| `fsm_core.get_entry_actions_v2` | `p_fsm_name` | `TEXT` | `input_fsm_name` | Implemented |
+| `fsm_core.get_entry_actions_v2` | `p_fsm_version` | `TEXT` | `input_fsm_version` | Implemented |
 
 ---
 
@@ -74,11 +74,11 @@ Replace the `p_` prefix with `input_` on all function parameters.
 
 **File:** `20241222134842_fsm_macrostep_v2.sql`
 
-| Function | Current Param | Type | Suggested Param |
-|---|---|---|---|
-| `fsm_core.select_all_transitions_v2` | `p_state_value` | `TEXT[]` | `input_state_value` |
-| `fsm_core.macrostep_v2` | `p_state_value` | `TEXT[]` | `input_state_value` |
-| `fsm_core.fsm_worker_v2` | `p_state_value` | `JSONB` | `input_state_value` |
+| Function | Current Param | Type | Suggested Param | Status |
+|---|---|---|---|---|
+| `fsm_core.select_all_transitions_v2` | `p_state_value` | `TEXT[]` | `input_state_value` | Implemented |
+| `fsm_core.macrostep_v2` | `p_state_value` | `TEXT[]` | `input_state_value` | Implemented |
+| `fsm_core.fsm_worker_v2` | `p_state_value` | `JSONB` | `input_state_value` | Implemented |
 
 
 > v1 function rename suggestions have been moved to [pg-v1-argument-rename-suggestions.md](./pg-v1-argument-rename-suggestions.md).

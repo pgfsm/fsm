@@ -5,7 +5,7 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
-import { createFSMInstanceFromName, sendFSMEvent, getFSMDataAndResolveStateValue } from "@fsm/db";
+import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
 import type { DBDeps } from "@fsm/db";
 
@@ -13,7 +13,7 @@ const fsm_name = "creditCheck";
 const fsm_version = "v01";
 const verifiedModule = { fsmAbsFolderPath: import.meta.dirname };
 
-// Poll getFSMDataAndResolveStateValue until predicate is satisfied or timeout
+// Poll getFsmDataResolveStateValue until predicate is satisfied or timeout
 async function pollUntil(
   deps: DBDeps,
   queueName: string,
@@ -23,7 +23,7 @@ async function pollUntil(
 ): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const data = await getFSMDataAndResolveStateValue(deps, queueName);
+    const data = await getFsmDataResolveStateValue(deps, queueName);
     if (data?.fsm_instance_row && predicate(data.fsm_instance_row)) {
       return data.fsm_instance_row;
     }
@@ -61,7 +61,7 @@ Deno.test({
       // wait for worker to create instance and write initial state to DB
       await new Promise((r) => setTimeout(r, 10000));
 
-      const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");
 
       const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
@@ -79,7 +79,7 @@ Deno.test({
   },
 });
 
-// Journey 2: createAndStartFSMWorker + sendFSMEvent(Submit) — wait and compare with xstate
+// Journey 2: createAndStartFSMWorker + sendEventToFsmQueueWithEventLogs(Submit) — wait and compare with xstate
 Deno.test({
   name: "Journey 2 — Submit: DB state after Submit matches xstate transition",
   sanitizeResources: false,
@@ -108,7 +108,7 @@ Deno.test({
 
       if (!fsm_instance) throw new Error("Failed to create FSM instance");
 
-      await sendFSMEvent(
+      await sendEventToFsmQueueWithEventLogs(
         deps,
         fsm_instance.fsm_instance_id,
         "Submit",
@@ -127,7 +127,7 @@ Deno.test({
       // wait for worker to finish processing event and writing new state to DB
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");
 
       
@@ -146,7 +146,7 @@ Deno.test({
   },
 });
 
-// Journey 3: createFSMInstanceFromName + startFSMWorkerWithDBLock — same Submit journey via lower-level API
+// Journey 3: createFsmInstanceFromName + startFSMWorkerWithDBLock — same Submit journey via lower-level API
 Deno.test({
   name: "Journey 3 — startFSMWorkerWithDBLock: DB state after Submit matches xstate transition",
   sanitizeResources: false,
@@ -163,7 +163,7 @@ Deno.test({
       const [afterSubmitXstate] = transition(machineConfig, resolvedInitialState, { type: "Submit", payload: {} });
       const expectedStateValue = afterSubmitXstate.value;
 
-      const fsm_instance: any = await createFSMInstanceFromName(deps, fsm_name, fsm_version, true);
+      const fsm_instance: any = await createFsmInstanceFromName(deps, fsm_name, fsm_version, true);
       if (!fsm_instance || !fsm_instance?.fsm_instance_id) throw new Error("Failed to create FSM instance");
 
       const acquired = await startFSMWorkerWithDBLock(
@@ -179,7 +179,7 @@ Deno.test({
 
       if (!acquired) throw new Error(`Could not acquire DB lock for queue "${fsm_instance.fsm_instance_id}"`);
 
-      await sendFSMEvent(
+      await sendEventToFsmQueueWithEventLogs(
         deps,
         fsm_instance.fsm_instance_id,
         "Submit",

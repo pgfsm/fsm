@@ -196,7 +196,7 @@ export async function microstep(
 export async function selectAllTransitions(
   deps: DBDeps,
   event_name: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["event_name"],
-  p_state_value: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["p_state_value"],
+  input_state_value: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["input_state_value"],
   fsm_name_param: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_name_param"],
   fsm_version_param: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_version_param"],
 ): Promise<Json> {
@@ -212,7 +212,7 @@ export async function selectAllTransitions(
     `;
     const values = [
       event_name,
-      p_state_value,
+      input_state_value,
       fsm_name_param,
       fsm_version_param,
     ];

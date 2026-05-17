@@ -5,7 +5,7 @@ import { Pool } from "pg";
 
 import { machineWithProvider } from "./machineWithProvider.ts";
 import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@fsm/worker";
-import { sendFSMEvent, getFSMDataAndResolveStateValue } from "@fsm/db";
+import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
 import type { DBDeps } from "@fsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
 
@@ -20,7 +20,7 @@ const SUBMIT_EVENT = {
   lastName: "Doe",
 };
 
-// Poll getFSMDataAndResolveStateValue until predicate is satisfied or timeout
+// Poll getFsmDataResolveStateValue until predicate is satisfied or timeout
 async function pollUntil(
   deps: DBDeps,
   instanceId: string,
@@ -32,7 +32,7 @@ async function pollUntil(
 ): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const data = await getFSMDataAndResolveStateValue(deps, instanceId);
+    const data = await getFsmDataResolveStateValue(deps, instanceId);
     if (data?.fsm_instance_row && predicate(data.fsm_instance_row)) {
       return data.fsm_instance_row;
     }
@@ -87,7 +87,7 @@ Deno.test({
       // Wait for worker to write initial state to DB
       await new Promise((r) => setTimeout(r, 10000));
 
-      const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");
 
       const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
@@ -159,7 +159,7 @@ Deno.test({
       const xstateSnapshot = actor.getSnapshot();
 
       // DB FSM: send Submit event
-      await sendFSMEvent(
+      await sendEventToFsmQueueWithEventLogs(
         deps,
         fsm_instance.fsm_instance_id,
         fsm_instance.fsm_instance_type,
@@ -176,7 +176,7 @@ Deno.test({
       // Wait for worker to process Submit and write new state to DB
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");
 
       const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
@@ -286,7 +286,7 @@ Deno.test({
       if (!fsm_instance) throw new Error("Failed to create FSM instance");
 
       // DB FSM: send Submit event
-      await sendFSMEvent(
+      await sendEventToFsmQueueWithEventLogs(
         deps,
         fsm_instance.fsm_instance_id,
         fsm_instance.fsm_instance_type,
@@ -319,7 +319,7 @@ Deno.test({
 
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFSMDataAndResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
       if (!data) throw new Error("No FSM data found for instance");
 
       const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);

@@ -6,7 +6,7 @@ import { FSM_SCHEMA } from "./const.ts";
 
 export async function lockFsmInstance(
   deps: DBDeps,
-  p_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["lock_fsm_instance"]["Args"]["p_fsm_instance_id"],
+  input_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["lock_fsm_instance"]["Args"]["input_fsm_instance_id"],
 ): Promise<boolean> {
   const lockedBy = "some-identifier"; // Replace with actual identifier
   try {
@@ -17,7 +17,7 @@ export async function lockFsmInstance(
         $2::text
       ) AS locked;
     `;
-    const values = [p_fsm_instance_id, lockedBy];
+    const values = [input_fsm_instance_id, lockedBy];
     const res = await deps.db.query<{ locked: boolean }>(text, values);
     return res.rows?.[0]?.locked === true;
   } catch (err) {
@@ -29,7 +29,7 @@ export async function lockFsmInstance(
 
 export async function unlockFsmInstance(
   deps: DBDeps,
-  p_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["unlock_fsm_instance"]["Args"]["p_fsm_instance_id"],
+  input_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["unlock_fsm_instance"]["Args"]["input_fsm_instance_id"],
 ): Promise<boolean> {
   try {
     const UNLOCK_FSM_INSTANCE_FN = `${FSM_SCHEMA}.unlock_fsm_instance`;
@@ -38,7 +38,7 @@ export async function unlockFsmInstance(
         $1::uuid
       ) AS unlocked;
     `;
-    const res = await deps.db.query<{ unlocked: boolean }>(text, [p_fsm_instance_id]);
+    const res = await deps.db.query<{ unlocked: boolean }>(text, [input_fsm_instance_id]);
     return res.rows?.[0]?.unlocked === true;
   } catch (err) {
     console.error("Error in unlockFsmInstance:", err);

@@ -34,7 +34,7 @@ BEGIN
 
 
 	-- 1. Call processEventTransitionForExit
-	exit_result := fsm_core.compute_exit_actions_v2(transition_record := transition_record, p_state_node_set := state_value_node_set, p_fsm_name := transition_record.fsm_name, p_fsm_version := transition_record.fsm_version);
+	exit_result := fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := state_value_node_set, input_fsm_name := transition_record.fsm_name, input_fsm_version := transition_record.fsm_version);
 	RAISE NOTICE 'exit_result: %', exit_result;
 	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO exit_nodes
 	FROM jsonb_array_elements_text(COALESCE(exit_result->'exit_nodes', '[]'::jsonb));

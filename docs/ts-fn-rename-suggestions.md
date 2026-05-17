@@ -130,3 +130,21 @@ TS function names omit the `_v1` / `_v2` version suffix — they are version-agn
 | Current | Suggested | PG Param |
 |---|---|---|
 | `fsmInstanceId` | `input_fsm_instance_id` | `input_fsm_instance_id` |
+
+---
+
+## Additional Argument Changes (from PG `p_*` → `input_*` rename)
+
+These changes cascade from the SQL argument renames applied to v2 + lock functions.
+
+### `fsm-helper.ts` — `selectAllTransitions`
+
+| Current Param | Suggested Param | PG Param | Status |
+|---|---|---|---|
+| `p_state_value` | `input_state_value` | `input_state_value` | Implemented |
+
+### `fsm-instance-lock.ts` — `lockFsmInstance` and `unlockFsmInstance`
+
+| Current Param | Suggested Param | PG Param | Status |
+|---|---|---|---|
+| `p_fsm_instance_id` | `input_fsm_instance_id` | `input_fsm_instance_id` | Implemented |
