@@ -169,8 +169,8 @@ Deno.test("normalizeActionsToObjects - does not mutate original", () => {
 
 // --- generateFsmJSONFromFolders integration tests ---
 
-const FSM_FOLDER = "packages/fsm-compiler-ts/src/example/fsm";
-const SHARED_FSM_FOLDER = "packages/fsm-compiler-ts/src/example/sharedFSM";
+const FSM_FOLDER = "apps/fsm-core-example/fsm";
+const SHARED_FSM_FOLDER = "apps/fsm-core-example/sharedFSM";
 
 Deno.test("generateFsmJSONFromFolders - generates fsm.json for fsm folder", async () => {
   await generateFsmJSONFromFolders(FSM_FOLDER, "fsm", []);

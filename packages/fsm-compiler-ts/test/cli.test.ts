@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
 const CLI = "packages/fsm-compiler-ts/src/cli/index.ts";
-const FSM_FOLDER = "packages/fsm-compiler-ts/src/example/fsm";
+const FSM_FOLDER = "apps/fsm-core-example/fsm";
 
 async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   const cmd = new Deno.Command(Deno.execPath(), {

@@ -51,10 +51,10 @@ OPTIONS
   -h, --help                      Show this help message
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts -c generate -f src/example/fsm
-  deno run --allow-all src/cli/index.ts -c validate -f src/example/fsm -w fsm
-  deno run --allow-all src/cli/index.ts -c load-and-verify -f src/example/fsm -w fsm
-  deno run --allow-all src/cli/index.ts -c load-and-verify-promise -f src/example/sharedFSM -w sharedPromise
+  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c load-and-verify -f apps/fsm-core-example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c load-and-verify-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
 `);
 }
 
