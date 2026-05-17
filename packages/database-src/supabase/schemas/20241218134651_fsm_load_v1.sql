@@ -18,8 +18,8 @@ DECLARE
 BEGIN
     total_calls := 1; -- this invocation
 
-    state_id_ltree := fsm_core.sanitize_text_to_ltree(json_input->>'id');
-    state_key_ltree := fsm_core.sanitize_text_to_ltree(json_input->>'key');
+    state_id_ltree := fsm_core.sanitize_text_to_ltree(input_text := json_input->>'id');
+    state_key_ltree := fsm_core.sanitize_text_to_ltree(input_text := json_input->>'key');
 
     IF root_node_text IS NOT NULL THEN
         root_key := root_node_text || '.' || state_key_ltree::TEXT;
@@ -106,7 +106,7 @@ BEGIN
         IF state_obj IS NOT NULL THEN
             RAISE NOTICE 'Inserting nested state key: % and root_key: %', state_obj->>'id', root_key;
             -- Call recursively and capture result to aggregate counts and propagate errors
-            child_result := fsm_core.load_fsm_state_from_json_v1(state_obj, root_key, input_fsm_name, input_fsm_version);
+            child_result := fsm_core.load_fsm_state_from_json_v1(json_input := state_obj, root_node_text := root_key, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version);
             -- If child_result is null (should not happen), raise an exception
             IF child_result IS NULL THEN
                 RAISE EXCEPTION 'Child loader returned NULL for nested state % under %', state_obj->>'id', root_key;
@@ -164,8 +164,8 @@ DECLARE
 BEGIN
     
     total_calls := 1; -- this invocation
-    state_id_ltree := fsm_core.sanitize_text_to_ltree(json_input->>'id');
-    state_key_ltree := fsm_core.sanitize_text_to_ltree(json_input->>'key');
+    state_id_ltree := fsm_core.sanitize_text_to_ltree(input_text := json_input->>'id');
+    state_key_ltree := fsm_core.sanitize_text_to_ltree(input_text := json_input->>'key');
 
     IF root_node_text IS NOT NULL THEN
         root_key := root_node_text || '.' || state_key_ltree::TEXT;
@@ -189,7 +189,7 @@ BEGIN
                     source := transition->>'source';
                     -- TODO:TBD:: fsm_core.sanitize_text_to_ltree or remove_hashtag_from_text
                     RAISE NOTICE 'sanitized source by using fsm_core.sanitize_text_to_ltree or remove_hashtag_from_text';
-                    sanitized_source := fsm_core.sanitize_text_to_ltree(source);
+                    sanitized_source := fsm_core.sanitize_text_to_ltree(input_text := source);
 
                     SELECT computed_state_key_ltree INTO sanitized_source_ltree
                     FROM fsm_core.fsm_states
@@ -205,7 +205,7 @@ BEGIN
                     IF target_array IS NULL THEN
                         sanitized_target_array := ARRAY[]::ltree[];
                     ELSE
-                        sanitized_target_array := fsm_core.sanitize_text_array_to_ltree_array(target_array);
+                        sanitized_target_array := fsm_core.sanitize_text_array_to_ltree_array(input_array := target_array);
                     END IF;
 
 
@@ -253,7 +253,7 @@ BEGIN
         IF state_obj IS NOT NULL THEN
             RAISE NOTICE 'Inserting nested state key: % and root_key: %', state_obj->>'id', root_key;
             -- Call recursively and capture result to aggregate counts and propagate errors
-            child_result := fsm_core.load_fsm_transition_from_json_v1(state_obj, root_key, fsm_name, fsm_version);
+            child_result := fsm_core.load_fsm_transition_from_json_v1(json_input := state_obj, root_node_text := root_key, fsm_name := fsm_name, fsm_version := fsm_version);
             IF child_result IS NULL THEN
                 RAISE EXCEPTION 'Child transition loader returned NULL for nested state % under %', state_obj->>'id', root_key;
             END IF;

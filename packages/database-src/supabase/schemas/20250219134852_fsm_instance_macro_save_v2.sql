@@ -104,7 +104,7 @@ BEGIN
     ) INTO queue_exists;
 
     IF NOT queue_exists THEN
-        PERFORM pgmq.create(promise_queue_name);
+        PERFORM pgmq.create(queue_name := promise_queue_name);
         start_queue_worker := true;
     END IF;
 
@@ -152,7 +152,7 @@ DECLARE
     child_instance_id uuid := uuid_generate_v4();
     send_result jsonb;
 BEGIN
-    PERFORM pgmq.create(child_instance_id::text);
+    PERFORM pgmq.create(queue_name := child_instance_id::text);
 
     send_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
         input_fsm_instance_id := child_instance_id,
@@ -490,7 +490,10 @@ BEGIN
             --     pq_msg_id := NULL;
             -- END;
             -- IF pq_name IS NOT NULL AND pq_name <> '' AND pq_msg_id IS NOT NULL THEN
-                PERFORM fsm_core.cancel_event_for_fsm_promise_type_worker_v2((promise_queue_entry->>'queue_id')::text, (promise_queue_entry->>'queue_msg_id')::bigint);
+                PERFORM fsm_core.cancel_event_for_fsm_promise_type_worker_v2(
+                    promise_type_worker_name := (promise_queue_entry->>'queue_id')::text,
+                    queue_msg_id := (promise_queue_entry->>'queue_msg_id')::bigint
+                );
                 confirmed_removed_promise_queue_data_success := array_append(confirmed_removed_promise_queue_data_success, promise_queue_entry);
             -- END IF;
         END LOOP;

@@ -179,7 +179,7 @@ BEGIN
             initial_state := state_record.initial->'target'->>0;
             RAISE NOTICE 'Initial state: %', initial_state;
             -- Sanitize initial_state
-            sanitized_initial_state := fsm_core.sanitize_text_to_ltree(initial_state)::TEXT;
+            sanitized_initial_state := fsm_core.sanitize_text_to_ltree(input_text := initial_state)::TEXT;
             SELECT computed_state_key_ltree INTO sanitized_initial_state_ltree
             FROM fsm_core.fsm_states
             WHERE computed_state_id_ltree = sanitized_initial_state::ltree;
@@ -190,7 +190,7 @@ BEGIN
             descendant_states_for_default_entry := array_append(descendant_states_for_default_entry, sanitized_initial_state_ltree::text);
             
             -- Recursive call with sanitized initial target and merge results
-            child_result := fsm_core.get_descendant_states_for_entry_v2(sanitized_initial_state_ltree::text, fsm_name_param, fsm_version_param);
+            child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_initial_state_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
 
             descendant_states_to_enter := array_cat(descendant_states_to_enter, child_result.descendant_states_to_enter);
             descendant_states_for_default_entry := array_cat(descendant_states_for_default_entry, child_result.descendant_states_for_default_entry);
@@ -219,12 +219,12 @@ BEGIN
             --         );
             --     }
 
-            ancestors := fsm_core.get_proper_ancestors(sanitized_initial_state_ltree::TEXT, state_record.computed_state_key_ltree::TEXT); 
+            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := sanitized_initial_state_ltree::TEXT, to_state_path_ltree := state_record.computed_state_key_ltree::TEXT);
             ancestors_result := fsm_core.get_ancestor_states_for_entry_v2(
-                ancestors,
-                NULL,
-                fsm_name_param,
-                fsm_version_param
+                ancestors := ancestors,
+                reentrancy_domain := NULL,
+                fsm_name_param := fsm_name_param,
+                fsm_version_param := fsm_version_param
             );
 
             -- TODO: DIFF::  for  descendant_states_to_enter and descendant_states_for_default_entry
@@ -243,7 +243,7 @@ BEGIN
                 child_id := child_state->>'id';
                 
                 -- Sanitize child_id
-                sanitized_child_id := fsm_core.sanitize_text_to_ltree(child_id)::TEXT;
+                sanitized_child_id := fsm_core.sanitize_text_to_ltree(input_text := child_id)::TEXT;
                 SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                 FROM fsm_core.fsm_states
                 WHERE computed_state_id_ltree = sanitized_child_id::ltree;
@@ -253,7 +253,7 @@ BEGIN
                 descendant_states_for_default_entry := array_append(descendant_states_for_default_entry, sanitized_child_id_ltree::text);
                 
                 -- Recursive call with sanitized child state and merge results
-                child_result := fsm_core.get_descendant_states_for_entry_v2(sanitized_child_id_ltree::text, fsm_name_param, fsm_version_param);
+                child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_child_id_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
                 descendant_states_to_enter := array_cat(descendant_states_to_enter, child_result.descendant_states_to_enter);
                 descendant_states_for_default_entry := array_cat(descendant_states_for_default_entry, child_result.descendant_states_for_default_entry);
             END LOOP;
@@ -335,7 +335,7 @@ BEGIN
                 LOOP
                     child_id := child_state->>'id';
                     -- Sanitize child_id
-                    sanitized_child_id := fsm_core.sanitize_text_to_ltree(child_id)::TEXT;
+                    sanitized_child_id := fsm_core.sanitize_text_to_ltree(input_text := child_id)::TEXT;
                     SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                     FROM fsm_core.fsm_states
                     WHERE computed_state_id_ltree = sanitized_child_id::ltree;
@@ -353,7 +353,7 @@ BEGIN
                            
                            
                             -- Optionally, add descendants here if needed
-                            child_result := fsm_core.get_descendant_states_for_entry_v2(sanitized_child_id_ltree::text, fsm_name_param, fsm_version_param);
+                            child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_child_id_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
                             
                             -- TODO: DIFF:: only child_result would be added in both place ancestor_states_to_enter and ancestor_states_for_default_entry 
                             ancestor_states_to_enter := array_cat(ancestor_states_to_enter, child_result.descendant_states_to_enter);
@@ -405,13 +405,13 @@ BEGIN
    -- if is_initial_transition true 
    -- then return empty result
     IF is_initial_transition THEN
-          select fsm_core.resolve_state_value_v2('{}'::jsonb, fsm_name_param, fsm_version_param) INTO resolve_state_value_result;
+          select fsm_core.resolve_state_value_v2(input_json := '{}'::jsonb, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO resolve_state_value_result;
         --   states_to_enter := resolve_state_value_result->'all_nodes';
           states_to_enter := array(
                 SELECT jsonb_array_elements_text(resolve_state_value_result->'all_nodes')
             );
 
-          SELECT fsm_core.get_entry_actions_v2(states_to_enter, fsm_name_param, fsm_version_param) INTO entry_actions_result;
+          SELECT fsm_core.get_entry_actions_v2(p_state_paths := states_to_enter, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO entry_actions_result;
           RETURN jsonb_build_object(
                 'states_to_enter', states_to_enter,
                 'states_for_default_entry', '[]'::jsonb,
@@ -481,7 +481,7 @@ BEGIN
             RAISE NOTICE 'states_for_default_entry: %', states_for_default_entry;
             
             -- call fsm_core.get_descendant_states_for_entry_v2 for each child state
-            child_result := fsm_core.get_descendant_states_for_entry_v2(sanitized_target_state::text, fsm_name_param, fsm_version_param);
+            child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_target_state::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
             RAISE NOTICE 'After fsm_core.get_descendant_states_for_entry_v2 for sanitized_target_state: %', sanitized_target_state;
             RAISE NOTICE 'child_result: %', child_result;
             states_to_enter := array_cat(states_to_enter, child_result.descendant_states_to_enter);
@@ -522,7 +522,7 @@ BEGIN
             
 
             -- Get ancestors for s and domain
-            ancestors := fsm_core.get_proper_ancestors(sanitized_effective_target_state::TEXT, transition_domain_lca::TEXT);
+            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := sanitized_effective_target_state::TEXT, to_state_path_ltree := transition_domain_lca::TEXT);
 
             -- If domain is parallel, append domain to ancestors
             IF domain_type = 'parallel' THEN
@@ -531,10 +531,10 @@ BEGIN
 
             
             ancestors_result := fsm_core.get_ancestor_states_for_entry_v2(
-                ancestors,
-                CASE WHEN transition_record.source IS NULL AND transition_record.reenter THEN NULL ELSE transition_domain_lca::TEXT END,
-                fsm_name_param,
-                fsm_version_param
+                ancestors := ancestors,
+                reentrancy_domain := CASE WHEN transition_record.source IS NULL AND transition_record.reenter THEN NULL ELSE transition_domain_lca::TEXT END,
+                fsm_name_param := fsm_name_param,
+                fsm_version_param := fsm_version_param
             );
 
             states_to_enter := array_cat(states_to_enter, ancestors_result.ancestor_states_to_enter);
@@ -563,13 +563,13 @@ BEGIN
   
 
     -- Get entry actions for states_to_enter
-    SELECT fsm_core.get_entry_actions_v2(states_to_enter, fsm_name_param, fsm_version_param) INTO entry_actions_result;
+    SELECT fsm_core.get_entry_actions_v2(p_state_paths := states_to_enter, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO entry_actions_result;
 
     -- -- Get entry actions for states_for_default_entry
     -- SELECT fsm_core.get_entry_actions_v2(states_for_default_entry, fsm_name_param, fsm_version_param) INTO default_entry_actions_result;
     -- Get entry actions for the common states
     IF array_length(common_states, 1) > 0 THEN
-        SELECT fsm_core.get_initial_actions_v2(common_states, fsm_name_param, fsm_version_param) INTO initial_actions_for_common_states_result;
+        SELECT fsm_core.get_initial_actions_v2(p_state_paths := common_states, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
     END IF;
 
 
@@ -605,9 +605,9 @@ BEGIN
     -- and call fsm_core.compute_entry_actions_v2 with is_initial_transition = TRUE
     -- else call with FALSE
     IF event_name = 'initialTransition_event' THEN
-        SELECT fsm_core.compute_entry_actions_v2(transition_record, fsm_name_param, fsm_version_param, TRUE) INTO result;
+        SELECT fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := TRUE) INTO result;
     ELSE
-        SELECT fsm_core.compute_entry_actions_v2(transition_record, fsm_name_param, fsm_version_param, FALSE) INTO result;
+        SELECT fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := FALSE) INTO result;
     END IF;
 
 

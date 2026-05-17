@@ -21,11 +21,11 @@ BEGIN
             CASE
                 WHEN s.type = 'compound'
                      AND s.initial->'target'->>0 IS NOT NULL
-                THEN fsm_core.sanitize_text_to_ltree(s.initial->'target'->>0)::ltree
+                THEN fsm_core.sanitize_text_to_ltree(input_text := s.initial->'target'->>0)::ltree
 
                 WHEN s.type = 'parallel'
                      AND s.states IS NOT NULL
-                THEN (t.node_path::text || '.' || fsm_core.sanitize_text_to_ltree(c.value->>'key')::text)::ltree
+                THEN (t.node_path::text || '.' || fsm_core.sanitize_text_to_ltree(input_text := c.value->>'key')::text)::ltree
 
                 ELSE NULL
             END AS next_path
@@ -72,14 +72,14 @@ DECLARE
     ancestors text[];
 BEGIN
     -- Get initial state nodes
-    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v2(p_fsm_name, p_fsm_version, p_state_path);
+    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := p_state_path);
 
     -- Add initial nodes to result
     IF initial_nodes IS NOT NULL THEN
         all_nodes := initial_nodes;
         -- For each initial node, add its proper ancestors up to p_state_path
         FOREACH node IN ARRAY initial_nodes LOOP
-            ancestors := fsm_core.get_proper_ancestors(node, p_state_path::text);
+            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := node, to_state_path_ltree := p_state_path::text);
             IF ancestors IS NOT NULL THEN
                 all_nodes := all_nodes || ancestors;
             END IF;
@@ -153,7 +153,7 @@ BEGIN
 
             IF temp_flag THEN
                 RAISE NOTICE 'Compound node % is not immediate parent of any path, adding initial states with ancestors...', node_rec.computed_state_key_ltree;
-                initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name, p_fsm_version, node_rec.computed_state_key_ltree::ltree);
+                initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := node_rec.computed_state_key_ltree::ltree);
                
                 RAISE NOTICE 'Initial states with ancestors for node %: %', node_rec.computed_state_key_ltree, initialStates;
                 IF initialStates IS NOT NULL THEN
@@ -173,7 +173,7 @@ BEGIN
                 FOR child_rec IN SELECT value FROM jsonb_each(node_rec.states) LOOP
                     RAISE NOTICE 'Processing child node in parallel state: %', child_rec.value->>'id';
                     
-                    initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name, p_fsm_version, fsm_core.sanitize_text_to_ltree(child_rec.value->>'id'));
+                    initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := fsm_core.sanitize_text_to_ltree(input_text := child_rec.value->>'id'));
                     RAISE NOTICE 'Initial states with ancestors for child node %: %', child_rec.value->>'id', initialStates;
                     
                     IF initialStates IS NOT NULL THEN
@@ -299,18 +299,18 @@ BEGIN
     -- Get all paths from the JSONB object, using root_node as prefix if found
     IF root_node IS NOT NULL THEN
         RAISE NOTICE 'Using root_node as prefix for jsonb_all_paths';
-        all_paths := fsm_core.jsonb_all_paths(input_json, root_node);
+        all_paths := fsm_core.jsonb_all_paths(j := input_json, prefix := root_node);
     ELSE
-        all_paths := fsm_core.jsonb_all_paths(input_json, '');
+        all_paths := fsm_core.jsonb_all_paths(j := input_json, prefix := '');
     END IF;
 
     RAISE NOTICE 'All paths: %', all_paths;
     -- Get all state nodes for these paths
-    all_nodes := fsm_core.fsm_get_all_state_nodes_v2(all_paths, input_fsm_name, input_fsm_version);
+    all_nodes := fsm_core.fsm_get_all_state_nodes_v2(p_state_paths := all_paths, p_fsm_name := input_fsm_name, p_fsm_version := input_fsm_version);
 
     RAISE NOTICE 'All nodes after fsm_core.fsm_get_all_state_nodes_v2: %', all_nodes;
     -- Build nested JSON from the state nodes
-    nested_json := fsm_core.build_nested_json_recursive(all_nodes);
+    nested_json := fsm_core.build_nested_json_recursive(paths := all_nodes);
 
     RAISE NOTICE 'Nested JSON: %', nested_json;
 

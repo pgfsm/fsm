@@ -43,7 +43,7 @@ BEGIN
     );
 
     BEGIN
-        SELECT pgmq.send(input_fsm_instance_id::text, queue_msg_data, input_event_delay)
+        SELECT pgmq.send(queue_name := input_fsm_instance_id::text, msg := queue_msg_data, delay := input_event_delay)
         INTO output_fsm_instance_queue_msg_id;
     EXCEPTION WHEN OTHERS THEN
         RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_fsm_instance_id, SQLERRM;
@@ -163,7 +163,7 @@ BEGIN
     -- 4. Optionally create pgmq queue and send initial event
     IF create_pgmq_queue THEN
         BEGIN
-            PERFORM pgmq.create(fsm_instance_id::text);
+            PERFORM pgmq.create(queue_name := fsm_instance_id::text);
             output_queue_created := true;
             output_message := 'Queue created successfully.';
             -- Try to send initialTransition_event to the queue

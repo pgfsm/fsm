@@ -110,9 +110,9 @@ BEGIN
 
   transition_domain_lca := transition_record.computed_transition_domain_lca;
 
-  state_node_set_ltree = fsm_core.sanitize_text_array_to_ltree_array(state_node_set);
+  state_node_set_ltree = fsm_core.sanitize_text_array_to_ltree_array(input_array := state_node_set);
   -- call child exit set using the domain text (fsm_core.compute_child_exit_set_v2 will sanitize)
-  child_exit := fsm_core.compute_child_exit_set_v2(transition_domain_lca, state_node_set_ltree);
+  child_exit := fsm_core.compute_child_exit_set_v2(transition_domain_lca := transition_domain_lca, state_node_set := state_node_set_ltree);
 
   -- sanitize source to compare with LCA in the same normalized form
   sanitized_source := transition_record.computed_sanitized_source_ltree;
@@ -166,12 +166,12 @@ BEGIN
 
   RAISE NOTICE 'Transition Record: %', transition_record;
   -- Step 1: Call compute_full_exit_set function
-  SELECT fsm_core.compute_full_exit_set_v2(transition_record, p_state_node_set) INTO exit_set_result;
+  SELECT fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := p_state_node_set) INTO exit_set_result;
 
   RAISE NOTICE 'Exit Set Result: %', exit_set_result;
 
   -- Step 2: Call fsm_core.get_exit_actions_v2 with the result from step 1
-  SELECT fsm_core.get_exit_actions_v2(exit_set_result, p_fsm_name, p_fsm_version) INTO actions_result;
+  SELECT fsm_core.get_exit_actions_v2(p_state_paths := exit_set_result, p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version) INTO actions_result;
 
   RAISE NOTICE 'exit_actions Result: %', actions_result;
 
@@ -201,7 +201,7 @@ BEGIN
     LIMIT 1;
 
 
-    SELECT fsm_core.compute_exit_actions_v2(transition_record, p_state_node_set, fsm_name_param, fsm_version_param) INTO result;
+    SELECT fsm_core.compute_exit_actions_v2(transition_record := transition_record, p_state_node_set := p_state_node_set, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO result;
 
 
     RETURN result;

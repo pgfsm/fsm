@@ -44,7 +44,7 @@ BEGIN
     );
 
     BEGIN
-        SELECT pgmq.send(input_promise_queue_name, queue_msg_data, input_event_delay)
+        SELECT pgmq.send(queue_name := input_promise_queue_name, msg := queue_msg_data, delay := input_event_delay)
         INTO output_promise_queue_msg_id;
     EXCEPTION WHEN OTHERS THEN
         RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_promise_queue_name, SQLERRM;

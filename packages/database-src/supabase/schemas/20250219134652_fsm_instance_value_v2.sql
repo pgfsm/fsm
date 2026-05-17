@@ -18,7 +18,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '[get_fsm_data_resolve_state_value_v2] Found fsm_instance, calling resolve_state_value_v2...';
-    resolved_value := fsm_core.resolve_state_value_v2(fi_record.fsm_instance_state, fi_record.fsm_name, fi_record.fsm_version);
+    resolved_value := fsm_core.resolve_state_value_v2(input_json := fi_record.fsm_instance_state, input_fsm_name := fi_record.fsm_name, input_fsm_version := fi_record.fsm_version);
 
     result_json := jsonb_build_object(
         'fsm_instance_row', to_jsonb(fi_record),

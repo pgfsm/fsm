@@ -120,7 +120,7 @@ CREATE OR REPLACE FUNCTION public.purge_queue(queue_name text)
 AS $function$
 BEGIN
   RETURN QUERY
-  SELECT * FROM pgmq.purge_queue(queue_name);
+  SELECT * FROM pgmq.purge_queue(queue_name := queue_name);
 END;
 $function$;
 

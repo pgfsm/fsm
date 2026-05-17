@@ -34,7 +34,7 @@ BEGIN
 
 
 	-- 1. Call processEventTransitionForExit
-	exit_result := fsm_core.compute_exit_actions_v1(transition_record, state_value_node_set, transition_record.fsm_name, transition_record.fsm_version);
+	exit_result := fsm_core.compute_exit_actions_v1(transition_record := transition_record, p_state_node_set := state_value_node_set, p_fsm_name := transition_record.fsm_name, p_fsm_version := transition_record.fsm_version);
 	RAISE NOTICE 'exit_result: %', exit_result;
 	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO exit_nodes
 	FROM jsonb_array_elements_text(COALESCE(exit_result->'exit_nodes', '[]'::jsonb));
@@ -48,9 +48,9 @@ BEGIN
 	-- 3. Call fsm_core.compute_entry_actions_v1
 	-- if event is initialTransition_event, set is_initial_transition to TRUE
 	IF event_name = 'initialTransition_event' THEN
-		entry_result := fsm_core.compute_entry_actions_v1(transition_record, fsm_name_param, fsm_version_param, TRUE);
+		entry_result := fsm_core.compute_entry_actions_v1(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := TRUE);
 	ELSE
-		entry_result := fsm_core.compute_entry_actions_v1(transition_record, fsm_name_param, fsm_version_param, FALSE);
+		entry_result := fsm_core.compute_entry_actions_v1(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := FALSE);
 	END IF;
 	RAISE NOTICE 'entry_result: %', entry_result;
 	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO entry_nodes
@@ -72,7 +72,7 @@ BEGIN
 	RAISE NOTICE 'updated_state_nodes: %', updated_state_nodes;
 
 	
-	updated_state_nodes_jsonb := fsm_core.build_nested_json_recursive(updated_state_nodes);
+	updated_state_nodes_jsonb := fsm_core.build_nested_json_recursive(paths := updated_state_nodes);
 	RAISE NOTICE 'updated_state_nodes_jsonb: %', updated_state_nodes_jsonb;
 
 	-- 5. Return result as JSONB

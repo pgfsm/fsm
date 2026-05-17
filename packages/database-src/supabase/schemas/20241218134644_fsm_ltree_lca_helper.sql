@@ -84,7 +84,7 @@ BEGIN
     -- Process each element in the array using fsm_core.sanitize_text_to_ltree
     FOREACH element IN ARRAY input_array
     LOOP
-        sanitized_ltree := fsm_core.sanitize_text_to_ltree(element);
+        sanitized_ltree := fsm_core.sanitize_text_to_ltree(input_text := element);
         
         -- Add to result if sanitization was successful
         IF sanitized_ltree IS NOT NULL THEN
@@ -127,7 +127,7 @@ BEGIN
     -- Process each element in the array using fsm_core.sanitize_text_to_ltree
     FOREACH element IN ARRAY input_array
     LOOP
-        sanitized_ltree := fsm_core.sanitize_text_to_ltree(element);
+        sanitized_ltree := fsm_core.sanitize_text_to_ltree(input_text := element);
         
         -- Add to result if sanitization was successful
         IF sanitized_ltree IS NOT NULL THEN

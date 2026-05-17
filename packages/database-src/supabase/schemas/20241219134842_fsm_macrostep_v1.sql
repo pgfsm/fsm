@@ -139,7 +139,7 @@ BEGIN
 		SELECT array_agg(t) INTO all_transition_records
 		FROM (
 			SELECT (jsonb_populate_record(NULL::fsm_core.fsm_transitions, elem))::fsm_core.fsm_transitions AS t
-			FROM jsonb_array_elements(fsm_core.select_all_transitions_v1(event_name, p_state_value, fsm_name_param, fsm_version_param)) elem
+			FROM jsonb_array_elements(fsm_core.select_all_transitions_v1(event_name := event_name, p_state_value := p_state_value, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param)) elem
 		) sub;
 
 		RAISE NOTICE 'Number of transition_records found: %', array_length(all_transition_records, 1);
@@ -159,7 +159,7 @@ BEGIN
 			-- method 2: call Evaluate guard conditions again in SQL to find the valid transition record, if multiple records are still valid after evaluation, raise exception
 			RAISE NOTICE 'RUN : Evaluating guard : conditions for all transition_records in SQL to find the valid transition record';
 			SELECT array_agg(t) INTO guard_eval_transition_records
-				FROM fsm_core.select_transitions_with_guard_eval_v1(all_transition_records) t;
+				FROM fsm_core.select_transitions_with_guard_eval_v1(input_all_transitions := all_transition_records) t;
 
 			RAISE NOTICE 'Number of transition_records after guard evaluation: %', array_length(guard_eval_transition_records, 1);
 			IF guard_eval_transition_records IS NULL OR array_length(guard_eval_transition_records, 1) IS NULL THEN
@@ -192,11 +192,11 @@ BEGIN
 
 	-- Call fsm_core.microstep_v1 and return its JSONB result
 	microstep_result := fsm_core.microstep_v1(
-		transition_record,
-		event_name,
-		p_state_value,
-		fsm_name_param,
-		fsm_version_param
+		transition_record := transition_record,
+		event_name := event_name,
+		state_value_node_set := p_state_value,
+		fsm_name_param := fsm_name_param,
+		fsm_version_param := fsm_version_param
 	);
 
 	RAISE NOTICE 'microstep_result: %', microstep_result;
@@ -246,7 +246,7 @@ BEGIN
 	
 	-- in Actual Language, single SQL function like get_fsm_data_and_resolve_state_value can be called which internally calls get_fsm_data and resolve_state_value, here we are calling resolve_state_value directly for simplicity
 	-- assume p_state_value value would be drived from get_fsm_data function which fetches the current state value from database based on fsm_name and fsm_version, and then resolve_state_value function resolves it to get the set of active state nodes
-	select fsm_core.resolve_state_value_v1(p_state_value::jsonb, fsm_name_param, fsm_version_param) INTO resolve_state_value_result;
+	select fsm_core.resolve_state_value_v1(input_json := p_state_value::jsonb, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO resolve_state_value_result;
 
 	RAISE NOTICE 'resolve_state_value_result: %', resolve_state_value_result;
 	state_node_set := array(
@@ -258,10 +258,10 @@ BEGIN
 	
 	-- Call fsm_core.macrostep_v1 and return its JSONB result
 	macrostep_result := fsm_core.macrostep_v1(
-		event_name,
-		state_node_set,
-		fsm_name_param,
-		fsm_version_param
+		event_name := event_name,
+		p_state_value := state_node_set,
+		fsm_name_param := fsm_name_param,
+		fsm_version_param := fsm_version_param
 	);
 
 	RAISE NOTICE 'fsm_core.macrostep_v1: %', macrostep_result;

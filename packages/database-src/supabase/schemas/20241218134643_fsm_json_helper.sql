@@ -27,7 +27,7 @@ BEGIN
   ELSIF array_length(parts, 1) = 2 THEN
     RETURN jsonb_build_object(parts[1], parts[2]::text); -- Cast to text, not JSON string
   ELSE
-    RETURN jsonb_build_object(parts[1], fsm_core.path_string_to_jsonb(array_to_string(parts[2:], '.')));
+    RETURN jsonb_build_object(parts[1], fsm_core.path_string_to_jsonb(path := array_to_string(parts[2:], '.')));
   END IF;
 END;
 $$ LANGUAGE plpgsql;
@@ -90,7 +90,7 @@ BEGIN
                     merged := jsonb_set(
                         merged,
                         ARRAY[key_],
-                        fsm_core.jsonb_deep_merge(aval, jsonb_build_object(scalar_key, NULL)),
+                        fsm_core.jsonb_deep_merge(a := aval, b := jsonb_build_object(scalar_key, NULL)),
                         true
                     );
                 ELSIF jsonb_typeof(aval) <> 'object' AND jsonb_typeof(bval) = 'object' THEN
@@ -103,14 +103,14 @@ BEGIN
                     merged := jsonb_set(
                         merged,
                         ARRAY[key_],
-                        fsm_core.jsonb_deep_merge(jsonb_build_object(scalar_key, NULL), bval),
+                        fsm_core.jsonb_deep_merge(a := jsonb_build_object(scalar_key, NULL), b := bval),
                         true
                     );
                 ELSE
                     merged := jsonb_set(
                         merged,
                         ARRAY[key_],
-                        fsm_core.jsonb_deep_merge(aval, bval),
+                        fsm_core.jsonb_deep_merge(a := aval, b := bval),
                         true
                     );
                 END IF;
@@ -232,7 +232,7 @@ BEGIN
   END IF;
 
   FOREACH path IN ARRAY sorted_paths LOOP
-    result := fsm_core.jsonb_deep_merge(result, fsm_core.path_string_to_jsonb(path));
+    result := fsm_core.jsonb_deep_merge(a := result, b := fsm_core.path_string_to_jsonb(path := path));
   END LOOP;
 
   RETURN result;
@@ -414,7 +414,7 @@ BEGIN
               result := result || new_prefix;
               RAISE NOTICE 'current result array: %', result;
               RAISE NOTICE 'Recursing into value: % with new prefix: %', rec.value, new_prefix;
-              result := result || fsm_core.jsonb_all_paths(rec.value, new_prefix);
+              result := result || fsm_core.jsonb_all_paths(j := rec.value, prefix := new_prefix);
       END LOOP;
     END IF;  
         
@@ -577,8 +577,8 @@ DECLARE
     extracted_paths TEXT[];
     rebuilt_jsonb JSONB;
 BEGIN
-    extracted_paths := fsm_core.jsonb_all_paths(input_jsonb, '');
-    rebuilt_jsonb := fsm_core.build_nested_json_recursive(extracted_paths);
+    extracted_paths := fsm_core.jsonb_all_paths(j := input_jsonb, prefix := '');
+    rebuilt_jsonb := fsm_core.build_nested_json_recursive(paths := extracted_paths);
     RETURN QUERY SELECT input_jsonb, rebuilt_jsonb, extracted_paths;
 END;
 $$ LANGUAGE plpgsql;
