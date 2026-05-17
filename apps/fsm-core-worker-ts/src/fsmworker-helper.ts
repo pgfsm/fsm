@@ -12,8 +12,8 @@ export type FsmModuleDefinition = {
 };
 
 import {
-  performMicrostep,
-  selectTransitions,
+  microstep,
+  selectAllTransitions,
 } from "@fsm/db";
 
 /**
@@ -155,7 +155,7 @@ export async function macrostep_v2(
   if (eventType === "initialTransition_event") {
     selectedTransition = null;
   } else {
-    const allTransitions = (await selectTransitions(
+    const allTransitions = (await selectAllTransitions(
       deps,
       eventType,
       resolvedState.all_nodes,
@@ -223,7 +223,7 @@ export async function macrostep_v2(
     }
   }
 
-  const microstepResult = await performMicrostep(
+  const microstepResult = await microstep(
     deps,
     selectedTransition,
     eventType,

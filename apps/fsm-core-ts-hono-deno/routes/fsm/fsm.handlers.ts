@@ -13,7 +13,7 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker } from "@fsm/worker";
 
-import { DBDeps, sendFSMEvent } from "@fsm/db";
+import { DBDeps, sendEventToFsmQueueWithEventLogs } from "@fsm/db";
 
 export const activeFSMLocks: Record<string, boolean> = {};
 
@@ -106,7 +106,7 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
       );
     }
 
-    const instance = await sendFSMEvent(
+    const instance = await sendEventToFsmQueueWithEventLogs(
       deps,
       fsm_instance_id,
       event_data?.type ?? '',

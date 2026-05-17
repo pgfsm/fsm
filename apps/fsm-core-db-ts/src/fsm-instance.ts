@@ -37,12 +37,12 @@ export async function isFSMInstancePresent(
 }
 
 
-export async function createFSMInstanceFromName(
+export async function createFsmInstanceFromName(
   deps: DBDeps,
-  fsmName: CreateInstanceArgs["input_fsm_name"],
-  fsmVersion: CreateInstanceArgs["input_fsm_version"],
-  fsmContext: CreateInstanceArgs["input_fsm_context"],
-  createQueue: NonNullable<CreateInstanceArgs["create_pgmq_queue"]> = false,
+  input_fsm_name: CreateInstanceArgs["input_fsm_name"],
+  input_fsm_version: CreateInstanceArgs["input_fsm_version"],
+  input_fsm_context: CreateInstanceArgs["input_fsm_context"],
+  create_pgmq_queue: NonNullable<CreateInstanceArgs["create_pgmq_queue"]> = false,
 ): Promise<Json> {
   try {
     const text = `
@@ -53,27 +53,27 @@ export async function createFSMInstanceFromName(
         $4::boolean
       ) AS instance_result;
     `;
-    const values = [fsmName, fsmVersion, toJsonbParam(fsmContext), createQueue];
+    const values = [input_fsm_name, input_fsm_version, toJsonbParam(input_fsm_context), create_pgmq_queue];
     const result = await deps.db.query<{ instance_result: Json }>(
       text,
       values,
     );
     return result.rows && result.rows[0] ? result.rows[0].instance_result : null;
   } catch (err) {
-    console.error("Error in createFSMInstanceFromName:", err);
+    console.error("Error in createFsmInstanceFromName:", err);
     throw new Error("Failed to create FSM instance from name", { cause: err });
   }
 }
 
 
-export async function archive_event_from_fsm_type_worker(
+export async function archiveEventFromFsmTypeWorker(
   deps: DBDeps,
   remove_from_current_fsm_instance_queue_id: ArchiveWorkerArgs["remove_from_current_fsm_instance_queue_id"],
   remove_current_queue_msg_id: ArchiveWorkerArgs["remove_current_queue_msg_id"],
-  remove_schedule_queue_msg_ids: ArchiveWorkerArgs["to_be_removed_schedule_queue_msg_ids"] | null,
-  remove_promise_queue_msg_ids: ArchiveWorkerArgs["to_be_removed_promise_queue_msg_ids"] | null,
-  input_schedule_queue_data: ArchiveWorkerArgs["to_be_added_schedule_queue_data"] | null,
-  input_promise_queue_data: ArchiveWorkerArgs["to_be_added_promise_queue_data"] | null,
+  to_be_removed_schedule_queue_msg_ids: ArchiveWorkerArgs["to_be_removed_schedule_queue_msg_ids"] | null,
+  to_be_removed_promise_queue_msg_ids: ArchiveWorkerArgs["to_be_removed_promise_queue_msg_ids"] | null,
+  to_be_added_schedule_queue_data: ArchiveWorkerArgs["to_be_added_schedule_queue_data"] | null,
+  to_be_added_promise_queue_data: ArchiveWorkerArgs["to_be_added_promise_queue_data"] | null,
   total_schedule_queue_data: ArchiveWorkerArgs["input_total_schedule_queue_data"] | null,
   total_promise_queue_data: ArchiveWorkerArgs["input_total_promise_queue_data"] | null,
   fsm_instance_data_save_fsm_status: ArchiveWorkerArgs["fsm_instance_data_save_fsm_status"],
@@ -101,10 +101,10 @@ export async function archive_event_from_fsm_type_worker(
     const values = [
       remove_from_current_fsm_instance_queue_id,
       remove_current_queue_msg_id,
-      toJsonbParam(remove_schedule_queue_msg_ids),
-      toJsonbParam(remove_promise_queue_msg_ids),
-      toJsonbParam(input_schedule_queue_data),
-      toJsonbParam(input_promise_queue_data),
+      toJsonbParam(to_be_removed_schedule_queue_msg_ids),
+      toJsonbParam(to_be_removed_promise_queue_msg_ids),
+      toJsonbParam(to_be_added_schedule_queue_data),
+      toJsonbParam(to_be_added_promise_queue_data),
       toJsonbParam(total_schedule_queue_data),
       toJsonbParam(total_promise_queue_data),
       toJsonbParam(fsm_instance_data_save_fsm_status),
@@ -115,12 +115,12 @@ export async function archive_event_from_fsm_type_worker(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in archive_event_from_fsm_type_worker:", err);
+    console.error("Error in archiveEventFromFsmTypeWorker:", err);
     throw new Error("Failed to archive event from FSM type worker", { cause: err });
   }
 }
 
-export async function archive_event_from_fsm_promise_type_worker(
+export async function archiveEventFromFsmPromiseTypeWorker(
   deps: DBDeps,
   promise_queue_name: ArchivePromiseWorkerArgs["input_promise_queue_name"],
   promise_queue_type: ArchivePromiseWorkerArgs["input_promise_queue_type"],
@@ -181,7 +181,7 @@ export async function archive_event_from_fsm_promise_type_worker(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in archive_event_from_fsm_promise_type_worker:", err);
+    console.error("Error in archiveEventFromFsmPromiseTypeWorker:", err);
     throw new Error("Failed to archive event from FSM promise type worker", { cause: err });
   }
 }
@@ -210,36 +210,36 @@ export async function getFSMData(
 }
 
 
-export async function getFSMDataAndResolveStateValue(
+export async function getFsmDataResolveStateValue(
   deps: DBDeps,
-  id: FsmInstanceRow["id"],
+  input_fsm_id: FsmInstanceRow["id"],
 ): Promise<{ fsm_instance_row: FsmInstanceRow; resolved_state_value: Json } | null> {
   try {
     const text = `
       SELECT ${GET_FSM_DATA_RESOLVE_STATE_VALUE_FN}($1::text) AS result;
     `;
-    const res = await deps.db.query<{ result: { fsm_instance_row: FsmInstanceRow; resolved_state_value: Json } }>(text, [id]);
+    const res = await deps.db.query<{ result: { fsm_instance_row: FsmInstanceRow; resolved_state_value: Json } }>(text, [input_fsm_id]);
     if (!res.rows || res.rows.length === 0) return null;
     return res.rows[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in getFSMDataAndResolveStateValue:", err);
+    console.error("Error in getFsmDataResolveStateValue:", err);
     throw new Error("Failed to get FSM data and resolve state value", { cause: err });
   }
 }
 
 
-export async function sendFSMEvent(
+export async function sendEventToFsmQueueWithEventLogs(
   deps: DBDeps,
-  fsm_instance_id: SendEventArgs["input_fsm_instance_id"],
-  fsm_instance_id_fsm_type: SendEventArgs["input_fsm_instance_id_fsm_type"] | null,
-  fsm_instance_id_fsm_version: SendEventArgs["input_fsm_instance_id_fsm_version"] | null,
-  send_to_parent_queue_id: SendEventArgs["input_send_to_parent_queue_id"] | null,
-  send_to_parent_queue_type: SendEventArgs["input_send_to_parent_queue_type"] | null,
-  send_to_parent_queue_id_event_name: SendEventArgs["input_send_to_parent_queue_id_event_name"] | null,
-  event_name: SendEventArgs["input_event_name"],
-  event_action_type: SendEventArgs["input_event_action_type"],
-  event_data: SendEventArgs["input_event_data"],
-  event_delay: NonNullable<SendEventArgs["input_event_delay"]>,
+  input_fsm_instance_id: SendEventArgs["input_fsm_instance_id"],
+  input_fsm_instance_id_fsm_type: SendEventArgs["input_fsm_instance_id_fsm_type"] | null,
+  input_fsm_instance_id_fsm_version: SendEventArgs["input_fsm_instance_id_fsm_version"] | null,
+  input_send_to_parent_queue_id: SendEventArgs["input_send_to_parent_queue_id"] | null,
+  input_send_to_parent_queue_type: SendEventArgs["input_send_to_parent_queue_type"] | null,
+  input_send_to_parent_queue_id_event_name: SendEventArgs["input_send_to_parent_queue_id_event_name"] | null,
+  input_event_name: SendEventArgs["input_event_name"],
+  input_event_action_type: SendEventArgs["input_event_action_type"],
+  input_event_data: SendEventArgs["input_event_data"],
+  input_event_delay: NonNullable<SendEventArgs["input_event_delay"]>,
 ): Promise<Json> {
   try {
     const text = `
@@ -257,21 +257,21 @@ export async function sendFSMEvent(
       ) AS result;
     `;
     const values = [
-      fsm_instance_id,
-      fsm_instance_id_fsm_type ?? null,
-      fsm_instance_id_fsm_version ?? null,
-      send_to_parent_queue_id ?? null,
-      send_to_parent_queue_type ?? null,
-      send_to_parent_queue_id_event_name ?? null,
-      event_name,
-      event_action_type ?? 'external',
-      toJsonbParam(event_data),
-      event_delay ?? 0,
+      input_fsm_instance_id,
+      input_fsm_instance_id_fsm_type ?? null,
+      input_fsm_instance_id_fsm_version ?? null,
+      input_send_to_parent_queue_id ?? null,
+      input_send_to_parent_queue_type ?? null,
+      input_send_to_parent_queue_id_event_name ?? null,
+      input_event_name,
+      input_event_action_type ?? 'external',
+      toJsonbParam(input_event_data),
+      input_event_delay ?? 0,
     ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in sendFSMEvent:", err);
+    console.error("Error in sendEventToFsmQueueWithEventLogs:", err);
     throw new Error("Failed to send FSM event", { cause: err });
   }
 }

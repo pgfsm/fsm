@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
-import { loadFsmFromJsonV2, type DBDeps } from "@fsm/db";
+import { loadFsmFromJson, type DBDeps } from "@fsm/db";
 
 
 async function loadFsmJSONFromFolder(
@@ -24,7 +24,7 @@ async function loadFsmJSONFromFolder(
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
     const rootNodeText = null;
-    const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, workflow_type, fsmName, fsmVersion);
+    const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflow_type, fsmName, fsmVersion);
     console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
     return fsmResult;
     

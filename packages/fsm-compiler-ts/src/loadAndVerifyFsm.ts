@@ -8,7 +8,7 @@ import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
-import { loadFsmFromJsonV2, type DBDeps } from "@fsm/db";
+import { loadFsmFromJson, type DBDeps } from "@fsm/db";
 
 export async function loadAndVerifyPromiseFromFolders(
   deps: DBDeps,
@@ -147,7 +147,7 @@ export async function loadAndVerifyFsmFromFolders(
                 // Load fsm.json for DB ingestion
                 const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
                 const rootNodeText = null;
-                const fsmResult = await loadFsmFromJsonV2(deps, fsmData, rootNodeText, workflow_type, dirEntry.name, subEntry.name);
+                const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflow_type, dirEntry.name, subEntry.name);
                 console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
 
                 const folderResult = await validateFsmPluginLoadFromFolder(

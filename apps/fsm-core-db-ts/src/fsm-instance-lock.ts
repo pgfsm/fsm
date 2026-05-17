@@ -4,9 +4,9 @@ import type { DBDeps } from "./custom-type.ts";
 import { FSM_SCHEMA } from "./const.ts";
 
 
-export async function tryFSMDBLock(
+export async function lockFsmInstance(
   deps: DBDeps,
-  fsmInstanceId: DatabaseGenerated["fsm_core"]["Functions"]["lock_fsm_instance"]["Args"]["p_fsm_instance_id"],
+  p_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["lock_fsm_instance"]["Args"]["p_fsm_instance_id"],
 ): Promise<boolean> {
   const lockedBy = "some-identifier"; // Replace with actual identifier
   try {
@@ -17,19 +17,19 @@ export async function tryFSMDBLock(
         $2::text
       ) AS locked;
     `;
-    const values = [fsmInstanceId, lockedBy];
+    const values = [p_fsm_instance_id, lockedBy];
     const res = await deps.db.query<{ locked: boolean }>(text, values);
     return res.rows?.[0]?.locked === true;
   } catch (err) {
-    console.error("Error in tryFSMDBLock:", err);
+    console.error("Error in lockFsmInstance:", err);
 
     throw new Error("Failed to acquire FSM DB lock", { cause: err });
   }
 }
 
-export async function releaseFSMDBLock(
+export async function unlockFsmInstance(
   deps: DBDeps,
-  fsmInstanceId: DatabaseGenerated["fsm_core"]["Functions"]["unlock_fsm_instance"]["Args"]["p_fsm_instance_id"],
+  p_fsm_instance_id: DatabaseGenerated["fsm_core"]["Functions"]["unlock_fsm_instance"]["Args"]["p_fsm_instance_id"],
 ): Promise<boolean> {
   try {
     const UNLOCK_FSM_INSTANCE_FN = `${FSM_SCHEMA}.unlock_fsm_instance`;
@@ -38,10 +38,10 @@ export async function releaseFSMDBLock(
         $1::uuid
       ) AS unlocked;
     `;
-    const res = await deps.db.query<{ unlocked: boolean }>(text, [fsmInstanceId]);
+    const res = await deps.db.query<{ unlocked: boolean }>(text, [p_fsm_instance_id]);
     return res.rows?.[0]?.unlocked === true;
   } catch (err) {
-    console.error("Error in releaseFSMDBLock:", err);
+    console.error("Error in unlockFsmInstance:", err);
     throw new Error("Failed to release FSM DB lock", { cause: err });
   }
 }

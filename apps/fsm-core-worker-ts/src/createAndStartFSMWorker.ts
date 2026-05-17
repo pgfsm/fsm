@@ -1,6 +1,6 @@
 import type { DBDeps } from "@fsm/db";
 import type { Json } from "@fsm/db/database.types";
-import { createFSMInstanceFromName } from "@fsm/db";
+import { createFsmInstanceFromName } from "@fsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker-lock.ts";
 import type { VerifiedModule } from "./fsmworker.ts";
 
@@ -16,7 +16,7 @@ export async function createAndStartFSMWorker(
   validatePlugin?: boolean,
   signal?: AbortSignal,
 ) {
-  const fsm_instance = await createFSMInstanceFromName(
+  const fsm_instance = await createFsmInstanceFromName(
     deps,
     fsm_name,
     fsm_version,

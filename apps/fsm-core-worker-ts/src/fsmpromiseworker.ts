@@ -2,7 +2,7 @@ import type { Database } from "@fsm/db/database.types";
 
 import type { DBDeps } from "@fsm/db";
 
-import { readMessage, pgmqQueueExists, archive_event_from_fsm_promise_type_worker, getFSMDataAndResolveStateValue } from "@fsm/db";
+import { readMessage, pgmqQueueExists, archiveEventFromFsmPromiseTypeWorker, getFsmDataResolveStateValue } from "@fsm/db";
 
 import { processFSMPromiseQueueMessage } from "./fsmpromiseworker-helper.ts";
 import type { VerifiedModule } from "./fsmworker.ts";
@@ -63,7 +63,7 @@ export async function startFSMPromiseWorker(
           console.log("✅ Processing FSM message:", msg.message);
 
           // const fsmDataWithResolvedStateValue =
-          //   await getFSMDataAndResolveStateValue(deps, queueName);
+          //   await getFsmDataResolveStateValue(deps, queueName);
           // console.log(
           //   "Initial FSM state from DB:",
           //   fsmDataWithResolvedStateValue,
@@ -83,7 +83,7 @@ export async function startFSMPromiseWorker(
             );
             
             if (archiveData) {
-              const archiveResult = await archive_event_from_fsm_promise_type_worker(
+              const archiveResult = await archiveEventFromFsmPromiseTypeWorker(
                 deps,
                 archiveData.promise_queue_name,
                 archiveData.promise_queue_type,

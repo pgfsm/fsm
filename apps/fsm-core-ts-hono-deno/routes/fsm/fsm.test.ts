@@ -5,7 +5,7 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (createFSMInstanceFromName, sendFSMEvent)
+ *   - @fsm/db (createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs)
  *   - @fsm/worker (startFSMWorkerWithDBLock)
  *   - middlewares/supabase (getSupabase)
  */
@@ -26,15 +26,15 @@ vi.mock("../../middlewares/supabase.ts", () => ({
 }));
 
 vi.mock("@fsm/db", () => ({
-  createFSMInstanceFromName: vi.fn(),
-  sendFSMEvent: vi.fn(),
+  createFsmInstanceFromName: vi.fn(),
+  sendEventToFsmQueueWithEventLogs: vi.fn(),
 }));
 
 vi.mock("@fsm/worker", () => ({
   startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
 }));
 
-import { createFSMInstanceFromName, sendFSMEvent } from "@fsm/db";
+import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs } from "@fsm/db";
 import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeFSMLocks } from "./fsm.handlers.ts";
@@ -120,7 +120,7 @@ describe("POST /fsm", () => {
       fsm_name: "credit_check",
       fsm_version: "v01",
     };
-    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
+    vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce(mockInstance);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
 
     const res = await client.fsm.$post({
@@ -131,8 +131,8 @@ describe("POST /fsm", () => {
     expect(json.data).toMatchObject(mockInstance);
   });
 
-  it("returns 500 when createFSMInstanceFromName returns null (creation failed)", async () => {
-    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(null);
+  it("returns 500 when createFsmInstanceFromName returns null (creation failed)", async () => {
+    vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce(null);
 
     const res = await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },
@@ -142,8 +142,8 @@ describe("POST /fsm", () => {
     expect(json).toHaveProperty("error", "fsm instance creation failed");
   });
 
-  it("returns 500 when createFSMInstanceFromName returns an object without fsm_instance_id", async () => {
-    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce({} as never);
+  it("returns 500 when createFsmInstanceFromName returns an object without fsm_instance_id", async () => {
+    vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce({} as never);
 
     const res = await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },
@@ -154,7 +154,7 @@ describe("POST /fsm", () => {
   });
 
   it("returns 500 with 'Unexpected error' when an exception is thrown", async () => {
-    vi.mocked(createFSMInstanceFromName).mockRejectedValueOnce(
+    vi.mocked(createFsmInstanceFromName).mockRejectedValueOnce(
       new Error("DB connection failed"),
     );
 
@@ -168,7 +168,7 @@ describe("POST /fsm", () => {
 
   it("does not add to activeFSMLocks when lock acquisition fails", async () => {
     const mockInstance = { fsm_instance_id: "uuid-lock-fail", fsm_version: "v01" };
-    vi.mocked(createFSMInstanceFromName).mockResolvedValueOnce(mockInstance);
+    vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce(mockInstance);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
 
     await client.fsm.$post({
@@ -216,7 +216,7 @@ describe("POST /fsm/send", () => {
 
   it("returns 200 with data on successful event send", async () => {
     const mockResult = { msg_id: "42" };
-    vi.mocked(sendFSMEvent).mockResolvedValueOnce(mockResult);
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce(mockResult);
 
     const res = await client.fsm.send.$post({
       json: {
@@ -230,7 +230,7 @@ describe("POST /fsm/send", () => {
   });
 
   it("accepts extra fields in event_data (passthrough schema)", async () => {
-    vi.mocked(sendFSMEvent).mockResolvedValueOnce({ msg_id: "1" });
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce({ msg_id: "1" });
 
     const res = await client.fsm.send.$post({
       json: {
@@ -241,8 +241,8 @@ describe("POST /fsm/send", () => {
     expect(res.status).toBe(200);
   });
 
-  it("returns 500 with 'Unexpected error' when sendFSMEvent throws", async () => {
-    vi.mocked(sendFSMEvent).mockRejectedValueOnce(new Error("queue error"));
+  it("returns 500 with 'Unexpected error' when sendEventToFsmQueueWithEventLogs throws", async () => {
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockRejectedValueOnce(new Error("queue error"));
 
     const res = await client.fsm.send.$post({
       json: {

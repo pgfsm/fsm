@@ -5,8 +5,8 @@ import type { DBDeps } from "@fsm/db";
 import { readMessage } from "@fsm/db";
 
 import {
-  archive_event_from_fsm_type_worker,
-  getFSMDataAndResolveStateValue,
+  archiveEventFromFsmTypeWorker,
+  getFsmDataResolveStateValue,
 } from "@fsm/db";
 
 import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
@@ -96,7 +96,7 @@ export async function startFSMWorker(
           console.log("✅ Processing FSM message:", msg.message);
 
           const fsmDataWithResolvedStateValue =
-            await getFSMDataAndResolveStateValue(deps, queueName);
+            await getFsmDataResolveStateValue(deps, queueName);
           console.log(
             "Initial FSM state from DB:",
             fsmDataWithResolvedStateValue,
@@ -118,7 +118,7 @@ export async function startFSMWorker(
             );
             console.log("Macrostep result:", macrostep_v2_result);
             if (macrostep_v2_result) {
-              const archiveResult = await archive_event_from_fsm_type_worker(
+              const archiveResult = await archiveEventFromFsmTypeWorker(
                 deps,
                 macrostep_v2_result.remove_from_current_fsm_instance_queue_id,
                 macrostep_v2_result.remove_current_queue_msg_id,
