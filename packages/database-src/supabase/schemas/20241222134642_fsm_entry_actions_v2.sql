@@ -5,9 +5,9 @@ DROP TYPE IF EXISTS fsm_core.ancestor_states_result_v2;
 
 
 CREATE OR REPLACE FUNCTION fsm_core.get_initial_actions_v2(
-    p_state_paths TEXT[],
-    p_fsm_name TEXT,
-    p_fsm_version TEXT
+    input_state_paths TEXT[],
+    input_fsm_name TEXT,
+    input_fsm_version TEXT
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -26,9 +26,9 @@ BEGIN
             fs.computed_state_key_ltree
         FROM fsm_core.fsm_states fs
         WHERE 
-            fs.computed_state_key_ltree = ANY(p_state_paths::ltree[])
-            AND fs.fsm_name = p_fsm_name
-            AND fs.fsm_version = p_fsm_version
+            fs.computed_state_key_ltree = ANY(input_state_paths::ltree[])
+            AND fs.fsm_name = input_fsm_name
+            AND fs.fsm_version = input_fsm_version
         ORDER BY fs.fsm_order DESC
     LOOP
         initial_record := rec.initial_data;
@@ -62,9 +62,9 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 
 CREATE OR REPLACE FUNCTION fsm_core.get_entry_actions_v2(
-    p_state_paths TEXT[],
-    p_fsm_name TEXT,
-    p_fsm_version TEXT
+    input_state_paths TEXT[],
+    input_fsm_name TEXT,
+    input_fsm_version TEXT
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -83,9 +83,9 @@ BEGIN
             fs.fsm_version
         FROM fsm_core.fsm_states fs
         WHERE 
-            fs.computed_state_key_ltree = ANY(p_state_paths::ltree[])
-            AND fs.fsm_name = p_fsm_name
-            AND fs.fsm_version = p_fsm_version
+            fs.computed_state_key_ltree = ANY(input_state_paths::ltree[])
+            AND fs.fsm_name = input_fsm_name
+            AND fs.fsm_version = input_fsm_version
         ORDER BY fs.fsm_order DESC
     LOOP
         -- Process entry actions and add to combined array
@@ -411,7 +411,7 @@ BEGIN
                 SELECT jsonb_array_elements_text(resolve_state_value_result->'all_nodes')
             );
 
-          SELECT fsm_core.get_entry_actions_v2(p_state_paths := states_to_enter, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO entry_actions_result;
+          SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
           RETURN jsonb_build_object(
                 'states_to_enter', states_to_enter,
                 'states_for_default_entry', '[]'::jsonb,
@@ -563,13 +563,13 @@ BEGIN
   
 
     -- Get entry actions for states_to_enter
-    SELECT fsm_core.get_entry_actions_v2(p_state_paths := states_to_enter, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO entry_actions_result;
+    SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
 
     -- -- Get entry actions for states_for_default_entry
     -- SELECT fsm_core.get_entry_actions_v2(states_for_default_entry, fsm_name_param, fsm_version_param) INTO default_entry_actions_result;
     -- Get entry actions for the common states
     IF array_length(common_states, 1) > 0 THEN
-        SELECT fsm_core.get_initial_actions_v2(p_state_paths := common_states, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
+        SELECT fsm_core.get_initial_actions_v2(input_state_paths := common_states, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
     END IF;
 
 

@@ -60,7 +60,7 @@ $$ LANGUAGE plpgsql;
 DROP FUNCTION IF EXISTS fsm_core.select_all_transitions_v2(TEXT, TEXT[], TEXT, TEXT);
 CREATE OR REPLACE FUNCTION fsm_core.select_all_transitions_v2(
 	event_name TEXT,
-	p_state_value TEXT[],
+	input_state_value TEXT[],
 	fsm_name_param TEXT,
 	fsm_version_param TEXT
 )
@@ -73,7 +73,7 @@ BEGIN
 		FROM (
 			SELECT * FROM fsm_core.fsm_transitions
 			WHERE event_type = event_name
-			  AND computed_sanitized_source_ltree::text = ANY(p_state_value)
+			  AND computed_sanitized_source_ltree::text = ANY(input_state_value)
 			  AND fsm_name = fsm_name_param
 			  AND fsm_version = fsm_version_param
 		) t
@@ -116,7 +116,7 @@ ARRAY['machine', 'machine.creditCheck', 'machine.creditCheck.Entering_Informatio
 -- and then call fsm_core.microstep_v2 with the valid transition record, here we are simulating the whole flow in SQL for testing and demonstration purpose
 CREATE OR REPLACE FUNCTION fsm_core.macrostep_v2(
 	event_name TEXT,
-	p_state_value TEXT[],
+	input_state_value TEXT[],
 	fsm_name_param TEXT,
 	fsm_version_param TEXT
 )
@@ -139,7 +139,7 @@ BEGIN
 		SELECT array_agg(t) INTO all_transition_records
 		FROM (
 			SELECT (jsonb_populate_record(NULL::fsm_core.fsm_transitions, elem))::fsm_core.fsm_transitions AS t
-			FROM jsonb_array_elements(fsm_core.select_all_transitions_v2(event_name := event_name, p_state_value := p_state_value, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param)) elem
+			FROM jsonb_array_elements(fsm_core.select_all_transitions_v2(event_name := event_name, input_state_value := input_state_value, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param)) elem
 		) sub;
 
 		RAISE NOTICE 'Number of transition_records found: %', array_length(all_transition_records, 1);
@@ -194,7 +194,7 @@ BEGIN
 	microstep_result := fsm_core.microstep_v2(
 		transition_record := transition_record,
 		event_name := event_name,
-		state_value_node_set := p_state_value,
+		state_value_node_set := input_state_value,
 		fsm_name_param := fsm_name_param,
 		fsm_version_param := fsm_version_param
 	);
@@ -230,7 +230,7 @@ $$ LANGUAGE plpgsql;
 --  call resolve_state_value_result and call fsm_core.macrostep_v2 in fsm_core.fsm_worker_v2
 CREATE OR REPLACE FUNCTION fsm_core.fsm_worker_v2(
 	event_name TEXT,
-	p_state_value JSONB,
+	input_state_value JSONB,
 	fsm_name_param TEXT,
 	fsm_version_param TEXT
 )
@@ -245,8 +245,8 @@ BEGIN
 
 	
 	-- in Actual Language, single SQL function like get_fsm_data_and_resolve_state_value can be called which internally calls get_fsm_data and resolve_state_value, here we are calling resolve_state_value directly for simplicity
-	-- assume p_state_value value would be drived from get_fsm_data function which fetches the current state value from database based on fsm_name and fsm_version, and then resolve_state_value function resolves it to get the set of active state nodes
-	select fsm_core.resolve_state_value_v2(input_json := p_state_value::jsonb, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO resolve_state_value_result;
+	-- assume input_state_value value would be drived from get_fsm_data function which fetches the current state value from database based on fsm_name and fsm_version, and then resolve_state_value function resolves it to get the set of active state nodes
+	select fsm_core.resolve_state_value_v2(input_json := input_state_value::jsonb, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO resolve_state_value_result;
 
 	RAISE NOTICE 'resolve_state_value_result: %', resolve_state_value_result;
 	state_node_set := array(
@@ -259,7 +259,7 @@ BEGIN
 	-- Call fsm_core.macrostep_v2 and return its JSONB result
 	macrostep_result := fsm_core.macrostep_v2(
 		event_name := event_name,
-		p_state_value := state_node_set,
+		input_state_value := state_node_set,
 		fsm_name_param := fsm_name_param,
 		fsm_version_param := fsm_version_param
 	);

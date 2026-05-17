@@ -19,8 +19,8 @@ create table fsm_core.fsm_instance_lock (
 
 
 CREATE OR REPLACE FUNCTION fsm_core.lock_fsm_instance(
-    p_fsm_instance_id uuid,
-    p_locked_by text
+    input_fsm_instance_id uuid,
+    input_locked_by text
 )
 RETURNS boolean AS $$
 DECLARE
@@ -28,7 +28,7 @@ DECLARE
 BEGIN
     -- Step 1: Check if the fsm_instance_id exists in referenced table
     IF NOT EXISTS (
-        SELECT 1 FROM fsm_core.fsm_instance WHERE id = p_fsm_instance_id
+        SELECT 1 FROM fsm_core.fsm_instance WHERE id = input_fsm_instance_id
     ) THEN
         RETURN FALSE;  -- Or raise an exception if required
     END IF;
@@ -38,7 +38,7 @@ BEGIN
         fsm_instance_id, locked, locked_by, locked_at
     )
     VALUES (
-        p_fsm_instance_id, TRUE, p_locked_by, now()
+        input_fsm_instance_id, TRUE, input_locked_by, now()
     )
     ON CONFLICT (fsm_instance_id)
     DO UPDATE
@@ -56,7 +56,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION fsm_core.unlock_fsm_instance(p_fsm_instance_id uuid)
+CREATE OR REPLACE FUNCTION fsm_core.unlock_fsm_instance(input_fsm_instance_id uuid)
 RETURNS boolean AS $$
 DECLARE
     updated_count INTEGER;
@@ -67,7 +67,7 @@ BEGIN
         locked_by = NULL,
         locked_at = NULL,
         expires_at = NULL
-    WHERE fsm_instance_id = p_fsm_instance_id
+    WHERE fsm_instance_id = input_fsm_instance_id
       AND locked = TRUE;
 
     -- Check if the row was updated

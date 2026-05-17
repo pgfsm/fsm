@@ -546,9 +546,9 @@ export type Database = {
       compute_exit_actions_v2: {
         Args: {
           transition_record: Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"]
-          p_state_node_set: string[]
-          p_fsm_name: string
-          p_fsm_version: string
+          input_state_node_set: string[]
+          input_fsm_name: string
+          input_fsm_version: string
         }
         Returns: Json
       }
@@ -612,9 +612,9 @@ export type Database = {
       }
       fsm_get_all_state_nodes_v2: {
         Args: {
-          p_state_paths: string[]
-          p_fsm_name: string
-          p_fsm_version: string
+          input_state_paths: string[]
+          input_fsm_name: string
+          input_fsm_version: string
         }
         Returns: string[]
       }
@@ -628,9 +628,9 @@ export type Database = {
       }
       fsm_get_initial_state_nodes_v2: {
         Args: {
-          p_fsm_name: string
-          p_fsm_version: string
-          p_state_path: unknown
+          input_fsm_name: string
+          input_fsm_version: string
+          input_state_path: unknown
         }
         Returns: string[]
       }
@@ -644,9 +644,9 @@ export type Database = {
       }
       fsm_get_initial_state_nodes_with_ancestors_v2: {
         Args: {
-          p_fsm_name: string
-          p_fsm_version: string
-          p_state_path: unknown
+          input_fsm_name: string
+          input_fsm_version: string
+          input_state_path: unknown
         }
         Returns: string[]
       }
@@ -662,7 +662,7 @@ export type Database = {
       fsm_worker_v2: {
         Args: {
           event_name: string
-          p_state_value: Json
+          input_state_value: Json
           fsm_name_param: string
           fsm_version_param: string
         }
@@ -712,9 +712,9 @@ export type Database = {
       }
       get_entry_actions_v2: {
         Args: {
-          p_state_paths: string[]
-          p_fsm_name: string
-          p_fsm_version: string
+          input_state_paths: string[]
+          input_fsm_name: string
+          input_fsm_version: string
         }
         Returns: Json
       }
@@ -728,9 +728,9 @@ export type Database = {
       }
       get_exit_actions_v2: {
         Args: {
-          p_state_paths: string[]
-          p_fsm_name: string
-          p_fsm_version: string
+          input_state_paths: string[]
+          input_fsm_name: string
+          input_fsm_version: string
         }
         Returns: Json
       }
@@ -750,9 +750,9 @@ export type Database = {
       }
       get_initial_actions_v2: {
         Args: {
-          p_state_paths: string[]
-          p_fsm_name: string
-          p_fsm_version: string
+          input_state_paths: string[]
+          input_fsm_name: string
+          input_fsm_version: string
         }
         Returns: Json
       }
@@ -869,8 +869,8 @@ export type Database = {
       }
       lock_fsm_instance: {
         Args: {
-          p_fsm_instance_id: string
-          p_locked_by: string
+          input_fsm_instance_id: string
+          input_locked_by: string
         }
         Returns: boolean
       }
@@ -886,7 +886,7 @@ export type Database = {
       macrostep_v2: {
         Args: {
           event_name: string
-          p_state_value: string[]
+          input_state_value: string[]
           fsm_name_param: string
           fsm_version_param: string
         }
@@ -1018,7 +1018,7 @@ export type Database = {
       select_all_transitions_v2: {
         Args: {
           event_name: string
-          p_state_value: string[]
+          input_state_value: string[]
           fsm_name_param: string
           fsm_version_param: string
         }
@@ -1209,7 +1209,7 @@ export type Database = {
       }
       unlock_fsm_instance: {
         Args: {
-          p_fsm_instance_id: string
+          input_fsm_instance_id: string
         }
         Returns: boolean
       }
@@ -1699,7 +1699,7 @@ export type Database = {
       test_event_transition_for_exit_v2: {
         Args: {
           event_name: string
-          p_state_node_set: string[]
+          input_state_node_set: string[]
           fsm_name_param: string
           fsm_version_param: string
         }

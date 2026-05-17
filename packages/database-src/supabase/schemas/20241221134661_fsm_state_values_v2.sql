@@ -1,9 +1,9 @@
 -- this function returns all initial state nodes reachable from the given state node,
 -- including handling nested compound and parallel states
 CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_v2(
-    p_fsm_name text,
-    p_fsm_version text,
-    p_state_path ltree
+    input_fsm_name text,
+    input_fsm_version text,
+    input_state_path ltree
 )
 RETURNS text[] LANGUAGE plpgsql AS
 $$
@@ -12,7 +12,7 @@ DECLARE
 BEGIN
     WITH RECURSIVE traverse(node_path) AS (
         -- Base case
-        SELECT p_state_path
+        SELECT input_state_path
 
         UNION ALL
 
@@ -32,8 +32,8 @@ BEGIN
         FROM traverse t
         JOIN fsm_core.fsm_states s
           ON s.computed_state_key_ltree = t.node_path
-         AND s.fsm_name = p_fsm_name
-         AND s.fsm_version = p_fsm_version
+         AND s.fsm_name = input_fsm_name
+         AND s.fsm_version = input_fsm_version
         LEFT JOIN LATERAL jsonb_each(s.states) c
           ON s.type = 'parallel'
         WHERE (s.type = 'compound' AND s.initial->'target'->>0 IS NOT NULL)
@@ -59,9 +59,9 @@ $$;
 
 -- Returns all initial state nodes and their proper ancestors up to (but not including) the given state node
 CREATE OR REPLACE FUNCTION fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(
-    p_fsm_name text,
-    p_fsm_version text,
-    p_state_path ltree
+    input_fsm_name text,
+    input_fsm_version text,
+    input_state_path ltree
 )
 RETURNS text[] LANGUAGE plpgsql AS
 $$
@@ -72,14 +72,14 @@ DECLARE
     ancestors text[];
 BEGIN
     -- Get initial state nodes
-    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := p_state_path);
+    initial_nodes := fsm_core.fsm_get_initial_state_nodes_v2(input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version, input_state_path := input_state_path);
 
     -- Add initial nodes to result
     IF initial_nodes IS NOT NULL THEN
         all_nodes := initial_nodes;
-        -- For each initial node, add its proper ancestors up to p_state_path
+        -- For each initial node, add its proper ancestors up to input_state_path
         FOREACH node IN ARRAY initial_nodes LOOP
-            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := node, to_state_path_ltree := p_state_path::text);
+            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := node, to_state_path_ltree := input_state_path::text);
             IF ancestors IS NOT NULL THEN
                 all_nodes := all_nodes || ancestors;
             END IF;
@@ -103,9 +103,9 @@ $$;
 -- Enhanced: Iterates through all nodes, handles compound/parallel, collects initial state nodes with ancestors
 
 CREATE OR REPLACE FUNCTION fsm_core.fsm_get_all_state_nodes_v2(
-    p_state_paths text[],
-    p_fsm_name text,
-    p_fsm_version text
+    input_state_paths text[],
+    input_fsm_name text,
+    input_fsm_version text
 )
 RETURNS text[] AS $$
 DECLARE
@@ -119,11 +119,11 @@ DECLARE
     all_fsm_states fsm_core.fsm_states[];
     temp_flag BOOLEAN;
 BEGIN
-    RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] Input state_paths: %', p_state_paths;
+    RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] Input state_paths: %', input_state_paths;
     
     SELECT array_agg(fsm_states ORDER BY fsm_order ASC) INTO all_fsm_states
     FROM fsm_core.fsm_states
-    WHERE fsm_name = p_fsm_name AND fsm_version = p_fsm_version AND computed_state_key_ltree::text = ANY(p_state_paths);
+    WHERE fsm_name = input_fsm_name AND fsm_version = input_fsm_version AND computed_state_key_ltree::text = ANY(input_state_paths);
 
     RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] Matching fsm_core.fsm_states count: %', array_length(all_fsm_states, 1);
 
@@ -135,8 +135,8 @@ BEGIN
         IF node_rec.type = 'compound' THEN
 
             
-            -- Check if node_rec.computed_state_key_ltree is immediate parent of any node in p_state_paths
-            -- iterate through p_state_paths and check if any path has node_rec.computed_state_key_ltree as prefix (immediate parent)
+            -- Check if node_rec.computed_state_key_ltree is immediate parent of any node in input_state_paths
+            -- iterate through input_state_paths and check if any path has node_rec.computed_state_key_ltree as prefix (immediate parent)
             
             temp_flag := true;
 
@@ -153,7 +153,7 @@ BEGIN
 
             IF temp_flag THEN
                 RAISE NOTICE 'Compound node % is not immediate parent of any path, adding initial states with ancestors...', node_rec.computed_state_key_ltree;
-                initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := node_rec.computed_state_key_ltree::ltree);
+                initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version, input_state_path := node_rec.computed_state_key_ltree::ltree);
                
                 RAISE NOTICE 'Initial states with ancestors for node %: %', node_rec.computed_state_key_ltree, initialStates;
                 IF initialStates IS NOT NULL THEN
@@ -173,7 +173,7 @@ BEGIN
                 FOR child_rec IN SELECT value FROM jsonb_each(node_rec.states) LOOP
                     RAISE NOTICE 'Processing child node in parallel state: %', child_rec.value->>'id';
                     
-                    initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version, p_state_path := fsm_core.sanitize_text_to_ltree(input_text := child_rec.value->>'id'));
+                    initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version, input_state_path := fsm_core.sanitize_text_to_ltree(input_text := child_rec.value->>'id'));
                     RAISE NOTICE 'Initial states with ancestors for child node %: %', child_rec.value->>'id', initialStates;
                     
                     IF initialStates IS NOT NULL THEN
@@ -306,7 +306,7 @@ BEGIN
 
     RAISE NOTICE 'All paths: %', all_paths;
     -- Get all state nodes for these paths
-    all_nodes := fsm_core.fsm_get_all_state_nodes_v2(p_state_paths := all_paths, p_fsm_name := input_fsm_name, p_fsm_version := input_fsm_version);
+    all_nodes := fsm_core.fsm_get_all_state_nodes_v2(input_state_paths := all_paths, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version);
 
     RAISE NOTICE 'All nodes after fsm_core.fsm_get_all_state_nodes_v2: %', all_nodes;
     -- Build nested JSON from the state nodes

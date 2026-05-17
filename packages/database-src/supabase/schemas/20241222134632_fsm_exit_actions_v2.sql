@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION fsm_core.get_exit_actions_v2(
-    p_state_paths TEXT[],
-    p_fsm_name TEXT,
-    p_fsm_version TEXT
+    input_state_paths TEXT[],
+    input_fsm_name TEXT,
+    input_fsm_version TEXT
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -19,10 +19,10 @@ BEGIN
             fs.fsm_order
         FROM fsm_core.fsm_states fs
         WHERE 
-            -- p_state_paths should be always matched from computed_state_key_ltree column
-            fs.computed_state_key_ltree = ANY(p_state_paths::ltree[])
-            AND fs.fsm_name = p_fsm_name
-            AND fs.fsm_version = p_fsm_version
+            -- input_state_paths should be always matched from computed_state_key_ltree column
+            fs.computed_state_key_ltree = ANY(input_state_paths::ltree[])
+            AND fs.fsm_name = input_fsm_name
+            AND fs.fsm_version = input_fsm_version
         ORDER BY fs.fsm_order DESC
     LOOP
         -- Process exit actions and add to combined array
@@ -141,9 +141,9 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION fsm_core.compute_exit_actions_v2(
     transition_record fsm_core.fsm_transitions,
-    p_state_node_set TEXT[],
-    p_fsm_name TEXT,
-    p_fsm_version TEXT
+    input_state_node_set TEXT[],
+    input_fsm_name TEXT,
+    input_fsm_version TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -166,12 +166,12 @@ BEGIN
 
   RAISE NOTICE 'Transition Record: %', transition_record;
   -- Step 1: Call compute_full_exit_set function
-  SELECT fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := p_state_node_set) INTO exit_set_result;
+  SELECT fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := input_state_node_set) INTO exit_set_result;
 
   RAISE NOTICE 'Exit Set Result: %', exit_set_result;
 
   -- Step 2: Call fsm_core.get_exit_actions_v2 with the result from step 1
-  SELECT fsm_core.get_exit_actions_v2(p_state_paths := exit_set_result, p_fsm_name := p_fsm_name, p_fsm_version := p_fsm_version) INTO actions_result;
+  SELECT fsm_core.get_exit_actions_v2(input_state_paths := exit_set_result, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version) INTO actions_result;
 
   RAISE NOTICE 'exit_actions Result: %', actions_result;
 
@@ -185,7 +185,8 @@ $BODY$;
 
 
 
-CREATE OR REPLACE FUNCTION test_event_transition_for_exit_v2(event_name TEXT, p_state_node_set TEXT[], fsm_name_param TEXT, fsm_version_param TEXT)
+DROP FUNCTION IF EXISTS test_event_transition_for_exit_v2;
+CREATE OR REPLACE FUNCTION test_event_transition_for_exit_v2(event_name TEXT, input_state_node_set TEXT[], fsm_name_param TEXT, fsm_version_param TEXT)
 RETURNS JSONB AS $$
 DECLARE
     transition_record fsm_core.fsm_transitions;
@@ -201,7 +202,7 @@ BEGIN
     LIMIT 1;
 
 
-    SELECT fsm_core.compute_exit_actions_v2(transition_record := transition_record, p_state_node_set := p_state_node_set, p_fsm_name := fsm_name_param, p_fsm_version := fsm_version_param) INTO result;
+    SELECT fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := input_state_node_set, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO result;
 
 
     RETURN result;
