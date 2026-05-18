@@ -964,6 +964,18 @@ export type Database = {
             }
             Returns: boolean
           }
+      pg_system_event_name: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      pg_system_queue_type: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      pg_system_queue_uuid: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       pg_try_advisory_lock:
         | {
             Args: {
