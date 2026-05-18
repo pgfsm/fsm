@@ -7,7 +7,7 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker } from "@fsm/worker";
 
-import { listFsmInstances, sendEventToFsmQueueWithEventLogs, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME } from "@fsm/db";
+import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@fsm/db";
 
 import { activeFSMLocks } from "../fsmworker/fsmworker.handlers.ts";
 
@@ -96,17 +96,22 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
       );
     }
 
+    const fsmInstance = await getFSMData(deps, fsm_instance_id);
+    if (!fsmInstance) {
+      return c.json({ message: "FSM instance not found" }, HttpStatusCodes.NOT_FOUND);
+    }
+
     const instance = await sendEventToFsmQueueWithEventLogs(
       deps,
       fsm_instance_id,
-      null,
-      null,
+      fsmInstance.fsm_type ?? null,
+      fsmInstance.fsm_version ?? null,
       API_SYSTEM_QUEUE_UUID,
       API_SYSTEM_QUEUE_TYPE,
       API_SYSTEM_EVENT_NAME,
       event_data?.type ?? "",
       "external",
-      event_data,
+      event_data as unknown as Json,
       0,
     );
 

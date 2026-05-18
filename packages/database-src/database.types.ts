@@ -38,6 +38,7 @@ export type Database = {
           fsm_instance_status: Json | null
           fsm_instance_xstate_state: Json | null
           fsm_name: string | null
+          fsm_type: string | null
           fsm_version: string | null
           id: string
           parent: string | null
@@ -55,6 +56,7 @@ export type Database = {
           fsm_instance_status?: Json | null
           fsm_instance_xstate_state?: Json | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           id?: string
           parent?: string | null
@@ -72,6 +74,7 @@ export type Database = {
           fsm_instance_status?: Json | null
           fsm_instance_xstate_state?: Json | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           id?: string
           parent?: string | null
@@ -183,6 +186,7 @@ export type Database = {
           fsm_instance_event_type: string | null
           fsm_instance_id: string | null
           fsm_name: string | null
+          fsm_type: string | null
           fsm_version: string | null
           groups: Json[] | null
           id: string
@@ -194,6 +198,7 @@ export type Database = {
           fsm_instance_event_type?: string | null
           fsm_instance_id?: string | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           groups?: Json[] | null
           id?: string
@@ -205,6 +210,7 @@ export type Database = {
           fsm_instance_event_type?: string | null
           fsm_instance_id?: string | null
           fsm_name?: string | null
+          fsm_type?: string | null
           fsm_version?: string | null
           groups?: Json[] | null
           id?: string

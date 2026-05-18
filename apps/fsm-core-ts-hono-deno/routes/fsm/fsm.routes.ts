@@ -85,6 +85,10 @@ export const send = createRoute({
       z.object({}),
       "The fsm started successfully",
     ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      notFoundSchema,
+      "FSM instance not found",
+    ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       z.object({}),
       "The validation error(s)",

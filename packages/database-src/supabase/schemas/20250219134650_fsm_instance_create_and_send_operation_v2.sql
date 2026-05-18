@@ -140,17 +140,18 @@ BEGIN
     END IF;
 
     -- 2. Create new fsm_instance
-    INSERT INTO fsm_core.fsm_instance (fsm_name, fsm_version, fsm_instance_context)
-    VALUES (input_fsm_name, input_fsm_version, input_fsm_context)
+    INSERT INTO fsm_core.fsm_instance (fsm_name, fsm_version, fsm_type, fsm_instance_context)
+    VALUES (input_fsm_name, input_fsm_version, derived_fsm_type, input_fsm_context)
     RETURNING id INTO fsm_instance_id;
 
     -- 3. Insert all transitions into fsm_core.fsm_instance_transitions_auth
     INSERT INTO fsm_core.fsm_instance_transitions_auth (
-        fsm_name, fsm_version, fsm_instance_id, fsm_instance_event_type, users, groups, module_tag, meta_info
+        fsm_name, fsm_version, fsm_type, fsm_instance_id, fsm_instance_event_type, users, groups, module_tag, meta_info
     )
-    SELECT 
+    SELECT
         t.fsm_name,
         t.fsm_version,
+        derived_fsm_type,
         fsm_instance_id,
         t.event_type,
         ARRAY[]::jsonb[], -- users (default empty array)

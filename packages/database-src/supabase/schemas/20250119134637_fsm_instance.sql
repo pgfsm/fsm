@@ -6,6 +6,7 @@ create table fsm_core.fsm_instance (
   
   fsm_name text,
   fsm_version TEXT,
+  fsm_type text,
 
   fsm_instance_context jsonb,
   fsm_instance_state jsonb,
@@ -38,6 +39,7 @@ create table "fsm_core"."fsm_instance_transitions_auth" (
 
 	"fsm_name" text,
 	fsm_version text,
+	fsm_type text,
     "fsm_instance_id" uuid references fsm_core.fsm_instance,
 
     "fsm_instance_event_type" text,

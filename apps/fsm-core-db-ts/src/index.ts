@@ -7,4 +7,6 @@ export * from "./fsm-helper.ts";
 export * from "./fsm-instance.ts";
 export * from "./fsm-instance-lock.ts";
 
+export type { Json } from "./database.types.ts";
+
 // If there are additional files, add them here
