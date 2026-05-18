@@ -1,5 +1,8 @@
 export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 
+export type ActorReference = { src: string; fsmType?: string; fsmVersion?: string };
+export type FailedMethod = { method: string; moduleType: string; modulePath: string };
+
 export const DELAY_ACTION_NAME_PREFIX = "delay";
 
 export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);

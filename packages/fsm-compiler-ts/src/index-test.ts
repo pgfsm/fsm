@@ -4,7 +4,7 @@
  */
 
 import {
-  addMissingFsmTypeToInvokeActor,
+  addMissingFsmTypeToInvokeActors,
   deleteFsmJSONFromFolders,
   generateFsmJSONFromFolders,
   generateFsmPluginFromFolders,
@@ -29,7 +29,7 @@ import {
   // Verify all exports are functions
   const exports = {
     generateFsmJSONFromFolders,
-    addMissingFsmTypeToInvokeActor,
+    addMissingFsmTypeToInvokeActors,
     generateFsmPluginFromFolders,
     loadFsmJSONFromFolders,
     loadAndVerifyFsmFromFolders,

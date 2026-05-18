@@ -183,7 +183,7 @@ export function addActionNameFromDelay(obj: Json): Json {
  * @param parentFsmVersion Fallback fsmVersion applied when invoke entry has none
  * @returns { fulljson, childActorsInfo }
  */
-export function addMissingFsmTypeToInvokeActor(fsmJSON: Json, parentFsmVersion: string): { fulljson: Json, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
+export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion: string): { fulljson: Json, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
   const clone = JSON.parse(JSON.stringify(fsmJSON));
   const childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> = [];
 
@@ -252,7 +252,7 @@ async function generateFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   showRecommendation: boolean = false,
 ) {
   
@@ -284,8 +284,8 @@ async function generateFsmJSONFromFolder(
       // step 4 — addActionNameFromDelay (pure): set actionName from delay on xstate.raise/xstate.cancel actions
       const enrichedJSON = addActionNameFromDelay(normalizedJSON);
 
-      // step 5 — addMissingFsmTypeToInvokeActor (pure): fill in fsmType/fsmVersion on invoke entries
-      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActor(enrichedJSON, dirEntryNameVersion);
+      // step 5 — addMissingFsmTypeToInvokeActors (pure): fill in fsmType/fsmVersion on invoke entries
+      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActors(enrichedJSON, dirEntryNameVersion);
 
       // step 6 — write fsm.json
       writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
@@ -324,7 +324,7 @@ async function generateFsmJSONFromFolder(
 
 export async function generateFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
   showRecommendation: boolean = false,
 ) {
@@ -351,7 +351,7 @@ export async function generateFsmJSONFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
           if (isVersionFolderName(subEntry.name)) {
-            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type, showRecommendation);
+            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, showRecommendation);
           } else {
             console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
           }

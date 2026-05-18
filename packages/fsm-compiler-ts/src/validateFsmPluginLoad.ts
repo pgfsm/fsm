@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, type ActorReference, type FailedMethod, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 import type { Json } from "@fsm/db/database.types";
 
 
@@ -25,9 +25,9 @@ export async function validateLanguageModules(
   actions: string[],
   guards: string[],
   delays: string[],
-  actors: { src: string; fsmType?: string; fsmVersion?: string }[],
+  actors: ActorReference[],
 ) {
-  const failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
+  const failedMethods: FailedMethod[] = [];
   // Plugin folders
   // Filter actors to only those with fsmType === 'promise'
   const filteredActors = actors.filter(a => a.fsmType === 'promise').map(a => a.src);
@@ -88,15 +88,15 @@ export async function validateLanguageModules(
 }
 
 export async function validatePromisePluginLoadFromFolder(
-  fsmDirName: string,
-  fsmVersionDirName: string,
-  fsmAbsFolderPath: string,
-  fsmRelativeFolderPath: string,
-  fsmParentDirName: string,
-  fsmParentAbsFolderPath: string,
-  fsmParentRelativeFolderPath: string,
-  workflow_type: WorkflowType,
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
+  dirName: string,
+  versionName: string,
+  absPath: string,
+  relPath: string,
+  parentDirName: string,
+  parentAbsPath: string,
+  parentRelPath: string,
+  workflowType: WorkflowType,
+  availableActors: ActorReference[],
 ) {
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
@@ -104,40 +104,40 @@ export async function validatePromisePluginLoadFromFolder(
   let isFsmModuleVerified = false;
   let internalActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
-  let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
+  let failedMethods: FailedMethod[] = [];
 
-  console.warn(`Skipping plugin validation for sharedPromise ${fsmDirName}/${fsmVersionDirName} since it is only used as a dependency and not directly invoked.`);
+  console.warn(`Skipping plugin validation for sharedPromise ${dirName}/${versionName} since it is only used as a dependency and not directly invoked.`);
   const lang = "typescript";
 
-  const modDir = `${fsmAbsFolderPath}/${lang}`;
+  const modDir = `${absPath}/${lang}`;
   const modulePath = `${modDir}/index.ts`;
   try {
     const mod = await import(modulePath);
 
-    if (typeof mod[fsmDirName] !== "function") {
-      console.log(`sharedPromise does not export '${fsmDirName}' as a function.`);
-      failedMethods.push({ method: fsmDirName, moduleType: "sharedPromise", modulePath });
+    if (typeof mod[dirName] !== "function") {
+      console.log(`sharedPromise does not export '${dirName}' as a function.`);
+      failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
     } else {
-      console.log(`sharedPromise exports '${fsmDirName}' as a function.`);
+      console.log(`sharedPromise exports '${dirName}' as a function.`);
       fsmModuleDefinition = mod;
       isFsmModuleVerified = true;
     }
 
   } catch (err) {
     console.error(`Failed to import module for sharedPromise from ${modulePath}:`, err);
-    failedMethods.push({ method: fsmDirName, moduleType: "sharedPromise", modulePath });
+    failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
   }
 
   return {
-    src: fsmDirName,
-    fsmName: fsmDirName,
-    fsmVersion: fsmVersionDirName,
-    fsmType: workflow_type,
-    fsmAbsFolderPath,
-    fsmRelativeFolderPath,
-    fsmParentDirName,
-    fsmParentAbsFolderPath,
-    fsmParentRelativeFolderPath,
+    src: dirName,
+    fsmName: dirName,
+    fsmVersion: versionName,
+    fsmType: workflowType,
+    fsmAbsFolderPath: absPath,
+    fsmRelativeFolderPath: relPath,
+    fsmParentDirName: parentDirName,
+    fsmParentAbsFolderPath: parentAbsPath,
+    fsmParentRelativeFolderPath: parentRelPath,
     fsmJsonPresent,
     fsmJsonFollowSchema,
     isFsmModuleVerified,
@@ -150,9 +150,9 @@ export async function validatePromisePluginLoadFromFolder(
 
 export async function validatePromisePluginLoadFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: ActorReference[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -202,7 +202,7 @@ export async function validatePromisePluginLoadFromFolders(
                 folderPath,
                 absFolderPath,
                 folderPath,
-                workflow_type,
+                workflowType,
                 availableActors,
               );
               console.log(
@@ -232,15 +232,15 @@ export async function validatePromisePluginLoadFromFolders(
 
 export async function validateFsmPluginLoadFromFolder(
   fsmData: Json,
-  fsmDirName: string,
-  fsmVersionDirName: string,
-  fsmAbsFolderPath: string,
-  fsmRelativeFolderPath: string,
-  fsmParentDirName: string,
-  fsmParentAbsFolderPath: string,
-  fsmParentRelativeFolderPath: string,
-  workflow_type: WorkflowType,
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[],
+  dirName: string,
+  versionName: string,
+  absPath: string,
+  relPath: string,
+  parentDirName: string,
+  parentAbsPath: string,
+  parentRelPath: string,
+  workflowType: WorkflowType,
+  availableActors: ActorReference[],
 ) {
   let fsmJsonPresent = true;
   let fsmJsonFollowSchema = false;
@@ -248,7 +248,7 @@ export async function validateFsmPluginLoadFromFolder(
   let isFsmModuleVerified = false;
   let internalActors: { src: string; fsmName: string; fsmType: string; fsmVersion: string; fsmAbsFolderPath: string; fsmRelativeFolderPath: string }[] = [];
   let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
-  let failedMethods: { method: string; moduleType: string; modulePath: string }[] = [];
+  let failedMethods: FailedMethod[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
   let delays: string[] = [];
@@ -262,15 +262,15 @@ export async function validateFsmPluginLoadFromFolder(
   if (!valid) {
     console.error("fsm.json validation failed:", validate.errors);
     return {
-      src: fsmDirName,
-      fsmName: fsmDirName,
-      fsmVersion: fsmVersionDirName,
-      fsmType: workflow_type,
-      fsmAbsFolderPath,
-      fsmRelativeFolderPath,
-      fsmParentDirName,
-      fsmParentAbsFolderPath,
-      fsmParentRelativeFolderPath,
+      src: dirName,
+      fsmName: dirName,
+      fsmVersion: versionName,
+      fsmType: workflowType,
+      fsmAbsFolderPath: absPath,
+      fsmRelativeFolderPath: relPath,
+      fsmParentDirName: parentDirName,
+      fsmParentAbsFolderPath: parentAbsPath,
+      fsmParentRelativeFolderPath: parentRelPath,
       fsmJsonPresent,
       fsmJsonFollowSchema,
       isFsmModuleVerified,
@@ -287,11 +287,11 @@ export async function validateFsmPluginLoadFromFolder(
   guards = result.guards;
   delays = result.delays;
   actors = result.actors;
-  internalActors = actors.filter(actor => actor.fsmType === 'promise').map(actor => ({ ...actor, resolved: true, fsmName : actor.src,  fsmAbsFolderPath : `${fsmAbsFolderPath}`, fsmRelativeFolderPath: `${fsmRelativeFolderPath}`  })); 
+  internalActors = actors.filter(actor => actor.fsmType === 'promise').map(actor => ({ ...actor, resolved: true, fsmName: actor.src, fsmAbsFolderPath: absPath, fsmRelativeFolderPath: relPath }));
   externalActors = actors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
 
   const outputValidateLanguageModules = await validateLanguageModules(
-    fsmAbsFolderPath,
+    absPath,
     "typescript",
     actions,
     guards,
@@ -315,7 +315,7 @@ export async function validateFsmPluginLoadFromFolder(
         ? `${dependency.src}/${dependency.fsmVersion}`
         : dependency.src;
       console.error(
-        `Missing dependency: ${expectedFolderPath} (fsmType: ${dependency.fsmType}) required by ${fsmDirName}/${fsmVersionDirName}`,
+        `Missing dependency: ${expectedFolderPath} (fsmType: ${dependency.fsmType}) required by ${dirName}/${versionName}`,
       );
       failedMethods.push({
         method: `${dependency.src}/${dependency.fsmVersion}`,
@@ -328,15 +328,15 @@ export async function validateFsmPluginLoadFromFolder(
   isFsmModuleVerified = failedMethods.length === 0;
 
   return {
-    src: fsmDirName,
-    fsmName: fsmDirName,
-    fsmVersion: fsmVersionDirName,
-    fsmType: workflow_type,
-    fsmAbsFolderPath,
-    fsmRelativeFolderPath,
-    fsmParentDirName,
-    fsmParentAbsFolderPath,
-    fsmParentRelativeFolderPath,
+    src: dirName,
+    fsmName: dirName,
+    fsmVersion: versionName,
+    fsmType: workflowType,
+    fsmAbsFolderPath: absPath,
+    fsmRelativeFolderPath: relPath,
+    fsmParentDirName: parentDirName,
+    fsmParentAbsFolderPath: parentAbsPath,
+    fsmParentRelativeFolderPath: parentRelPath,
     fsmJsonPresent,
     fsmJsonFollowSchema,
     isFsmModuleVerified,
@@ -349,9 +349,9 @@ export async function validateFsmPluginLoadFromFolder(
 
 export async function validateFsmPluginLoadFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: ActorReference[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -407,7 +407,7 @@ export async function validateFsmPluginLoadFromFolders(
                   folderPath,
                   absFolderPath,
                   folderPath,
-                  workflow_type,
+                  workflowType,
                   availableActors,
                 );
 

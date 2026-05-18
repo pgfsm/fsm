@@ -9,7 +9,7 @@ async function deleteFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: WorkflowType
+  workflowType: WorkflowType
 ) {
   try {
     await Deno.remove(`${absFolderPath}/xstate-fsm.json`);
@@ -32,7 +32,7 @@ async function deleteFsmJSONFromFolder(
 
 export async function deleteFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
@@ -61,7 +61,7 @@ export async function deleteFsmJSONFromFolders(
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
              
-              await deleteFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
+              await deleteFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType);
             }else {
               console.log(`Skipping non-timestamped folder: ${subEntry.name} in ${fsmDirPath}`);
             }

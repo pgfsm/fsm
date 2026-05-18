@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
-import { isVersionFolderName, type WorkflowType, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, type ActorReference, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 
 // Helper: Generate language folders and create modules for each action/guard
 async function generateLanguageFolders(
@@ -9,7 +9,7 @@ async function generateLanguageFolders(
   actions: string[],
   guards: string[],
   delays: string[],
-  actors: { src: string; fsmType?: string; fsmVersion?: string }[]
+  actors: ActorReference[]
 ) {
   const actorNames = [...new Set(actors.map(a => a.src))];
   // 2.1 Create folders
@@ -75,7 +75,7 @@ async function generateFsmPluginFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: WorkflowType
+  workflowType: WorkflowType
 ) {
   
   const fsmJson = `${absFolderPath}/fsm.json`;
@@ -105,7 +105,7 @@ async function generateFsmPluginFromFolder(
 
 export async function generateFsmPluginFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = []
 ) {
   if (folderPath.startsWith(".")) {
@@ -132,7 +132,7 @@ export async function generateFsmPluginFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
-              await generateFsmPluginFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type);
+              await generateFsmPluginFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType);
             }else {
               console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
             }

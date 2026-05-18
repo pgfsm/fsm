@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { deleteFsmJSONFromFolders } from './cleanFsmJSON.ts';
+import { deleteFsmJSONFromFolders } from './deleteFsmJSON.ts';
 
 dotenv.config({ path: "./../../.env" });
 
@@ -22,10 +22,10 @@ dotenv.config({ path: "./../../.env" });
   // }
  
 
-  // const skipSharedFSMDirs = ["vitalsWorkflow"];
-  // const skipFSMDirs = ["carVitals","taskMachineConfig"];
-  const skipSharedFSMDirs = [];
-  const skipFSMDirs = [];
+  const skipSharedFSMDirs = ["vitalsWorkflow"];
+  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  // const skipSharedFSMDirs = [];
+  // const skipFSMDirs = [];
   const outputSharedFSM = await deleteFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs);
   const outputFSM = await deleteFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
 

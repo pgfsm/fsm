@@ -20,13 +20,15 @@ const fsmfolderPath = 'apps/fsm-core-example/fsm';
   // await generateFsmJSONFromFolders(fsmfolderPath, "fsm", []);
   // console.log("✅ fsm generated\n");
 
+  const skipSharedFSMDirs = ["vitalsWorkflow"];
+  const skipFSMDirs = ["carVitals","taskMachineConfig"];
   // with showRecommendation = true
   console.log("--- generate sharedFSM (showRecommendation = true) ---");
-  await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", [], true);
+  await generateFsmJSONFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, true);
   console.log("✅ sharedFSM generated with recommendation\n");
 
   console.log("--- generate fsm (showRecommendation = true) ---");
-  await generateFsmJSONFromFolders(fsmfolderPath, "fsm", [], true);
+  await generateFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs, true);
   console.log("✅ fsm generated with recommendation\n");
 
   console.log("=== generateFsmJSON tests complete ===");

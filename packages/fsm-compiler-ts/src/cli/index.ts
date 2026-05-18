@@ -9,11 +9,12 @@ import {
   loadAndVerifyPromiseFromFolders,
   loadFsmJSONFromFolders,
   validateFsmPluginLoadFromFolders,
+  validatePromisePluginLoadFromFolders,
 } from "../index.ts";
-import type { WorkflowType } from "../index.ts";
+import type { WorkflowType, ActorReference } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "folder", "workflow-type"],
+  string: ["command", "folder", "workflow-type", "skip-dirs", "available-actors"],
   boolean: ["help", "show-recommendation"],
   alias: {
     h: "help",
@@ -21,6 +22,8 @@ const args = parseArgs(Deno.args, {
     f: "folder",
     w: "workflow-type",
     r: "show-recommendation",
+    s: "skip-dirs",
+    a: "available-actors",
   },
 });
 
@@ -34,8 +37,9 @@ USAGE
 COMMANDS
   generate              Generate fsm.json from machine.ts files
   generate-plugin       Generate TypeScript plugin stubs from fsm.json
-  clean                 Delete generated fsm.json / xstate-fsm.json files
+  delete                Delete generated fsm.json / xstate-fsm.json files
   validate              Validate plugin load for an FSM folder
+  validate-promise      Validate plugin load for a sharedPromise folder
   load                  Load FSM JSON into the database
   load-and-verify       Load and verify FSM + plugins into the database
   load-and-verify-promise  Load and verify Promise workflow + plugins into the database
@@ -44,15 +48,23 @@ WORKFLOW TYPES
   fsm | sharedFsm | sharedPromise | promise
 
 OPTIONS
-  -c, --command <command>         Command to run (required)
-  -f, --folder <folder>           Path to FSM folder (required)
-  -w, --workflow-type <type>      Workflow type: required for validate, load, load-and-verify, load-and-verify-promise
-  -r, --show-recommendation       Validate generated fsm.json against schema and show errors
-  -h, --help                      Show this help message
+  -c, --command <command>             Command to run (required)
+  -f, --folder <folder>               Path to FSM folder (required)
+  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate, load, load-and-verify, validate-promise, load-and-verify-promise)
+  -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
+  -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
+  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate, validate-promise, load-and-verify, load-and-verify-promise)
+  -h, --help                          Show this help message
+
+ENVIRONMENT
+  DATABASE_URL    Required for load, load-and-verify, load-and-verify-promise. Set in .env or environment.
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm -w sharedFsm
+  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
   deno run --allow-all src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
   deno run --allow-all src/cli/index.ts -c load-and-verify -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c load-and-verify-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
 `);
@@ -66,8 +78,16 @@ if (args.help) {
 const command = args["command"];
 const folder = args["folder"];
 const workflowType = args["workflow-type"] as WorkflowType | undefined;
+const skipDirs = args["skip-dirs"] ? args["skip-dirs"].split(",").map((s: string) => s.trim()) : [];
 
-const needsWorkflowType = ["validate", "load", "load-and-verify", "load-and-verify-promise"];
+const VALID_WORKFLOW_TYPES: string[] = ["fsm", "sharedFsm", "sharedPromise", "promise"];
+if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
+  console.error(`Error: Invalid --workflow-type "${workflowType}". Must be one of: ${VALID_WORKFLOW_TYPES.join(", ")}\n`);
+  printHelp();
+  Deno.exit(1);
+}
+
+const needsWorkflowType = ["validate", "validate-promise", "load", "load-and-verify", "load-and-verify-promise"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
@@ -80,39 +100,65 @@ if (missing.length > 0) {
   Deno.exit(1);
 }
 
+async function loadAvailableActors(): Promise<ActorReference[]> {
+  const actorsFile = args["available-actors"];
+  if (!actorsFile) return [];
+  try {
+    const content = await Deno.readTextFile(actorsFile);
+    return JSON.parse(content) as ActorReference[];
+  } catch (err) {
+    console.error(`Error: Failed to read --available-actors file "${actorsFile}":`, err);
+    Deno.exit(1);
+  }
+}
+
 async function buildDeps() {
   dotenv.config({ path: ".env" });
+  const dbUrl = Deno.env.get("DATABASE_URL");
+  if (!dbUrl) {
+    console.error("Error: DATABASE_URL environment variable is not set. Create a .env file or set it in your environment.");
+    Deno.exit(1);
+  }
   const { Pool } = await import("pg");
-  return { db: new Pool({ connectionString: Deno.env.get("DATABASE_URL") }) };
+  return { db: new Pool({ connectionString: dbUrl }) };
 }
 
 try {
   switch (command) {
     case "generate":
-      await generateFsmJSONFromFolders(folder!, "fsm", [], args["show-recommendation"]);
+      await generateFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs, args["show-recommendation"]);
       break;
     case "generate-plugin":
-      await generateFsmPluginFromFolders(folder!, "fsm");
+      await generateFsmPluginFromFolders(folder!, workflowType ?? "fsm", skipDirs);
       break;
-    case "clean":
-      await deleteFsmJSONFromFolders(folder!, "fsm");
+    case "delete":
+      await deleteFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs);
       break;
-    case "validate":
-      await validateFsmPluginLoadFromFolders(folder!, workflowType!);
+    case "validate": {
+      const availableActors = await loadAvailableActors();
+      await validateFsmPluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
       break;
+    }
+    case "validate-promise": {
+      const availableActors = await loadAvailableActors();
+      await validatePromisePluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
+      break;
+    }
     case "load": {
       const deps = await buildDeps();
-      await loadFsmJSONFromFolders(folder!, workflowType!, [], deps);
+      await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
       break;
     }
     case "load-and-verify": {
       const deps = await buildDeps();
-      await loadAndVerifyFsmFromFolders(deps, folder!, workflowType!);
+      const availableActors = await loadAvailableActors();
+      await loadAndVerifyFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
     case "load-and-verify-promise": {
       const deps = await buildDeps();
-      await loadAndVerifyPromiseFromFolders(deps, folder!, workflowType!);
+      const availableActors = await loadAvailableActors();
+      await loadAndVerifyPromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
     default:

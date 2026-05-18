@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, type ActorReference } from "./util.ts";
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
@@ -13,9 +13,9 @@ import { loadFsmFromJson, type DBDeps } from "@fsm/db";
 export async function loadAndVerifyPromiseFromFolders(
   deps: DBDeps,
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: ActorReference[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -65,7 +65,7 @@ export async function loadAndVerifyPromiseFromFolders(
                 folderPath,
                 absFolderPath,
                 folderPath,
-                workflow_type,
+                workflowType,
                 availableActors,
               );
               console.log(
@@ -96,9 +96,9 @@ export async function loadAndVerifyPromiseFromFolders(
 export async function loadAndVerifyFsmFromFolders(
   deps: DBDeps,
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: { src: string; fsmType?: string; fsmVersion?: string }[] = [],
+  availableActors: ActorReference[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -147,7 +147,7 @@ export async function loadAndVerifyFsmFromFolders(
                 // Load fsm.json for DB ingestion
                 const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
                 const rootNodeText = null;
-                const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflow_type, dirEntry.name, subEntry.name);
+                const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflowType, dirEntry.name, subEntry.name);
                 console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
 
                 const folderResult = await validateFsmPluginLoadFromFolder(
@@ -159,7 +159,7 @@ export async function loadAndVerifyFsmFromFolders(
                   folderPath,
                   absFolderPath,
                   folderPath,
-                  workflow_type,
+                  workflowType,
                   availableActors,
                 );
 

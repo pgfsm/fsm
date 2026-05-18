@@ -10,7 +10,7 @@ async function loadFsmJSONFromFolder(
   folderPath: string,
   absFolderPath: string,
   parentSource: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   deps: DBDeps
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
@@ -24,7 +24,7 @@ async function loadFsmJSONFromFolder(
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
     const rootNodeText = null;
-    const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflow_type, fsmName, fsmVersion);
+    const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflowType, fsmName, fsmVersion);
     console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
     return fsmResult;
     
@@ -46,7 +46,7 @@ async function loadFsmJSONFromFolder(
  */
 export async function loadFsmJSONFromFolders(
   folderPath: string,
-  workflow_type: WorkflowType,
+  workflowType: WorkflowType,
   skipDirs: string[] = [],
   deps: DBDeps
 ) {
@@ -75,7 +75,7 @@ export async function loadFsmJSONFromFolders(
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
              
-              const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflow_type, deps);
+              const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, deps);
               folderResults.push(folderResult);
               console.log(`Successfully loaded FSM from ${fsmDirPath}/${subEntry.name}`);
             }else {
