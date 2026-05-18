@@ -4,12 +4,7 @@ import {
   jsonContent,
   jsonContentRequired,
 } from "stoker/openapi/helpers/index.ts";
-import {
-  createErrorSchema,
-  IdParamsSchema,
-} from "stoker/openapi/schemas/index.ts";
 
-// import { insertpromiseSchema, patchpromiseSchema, selectpromiseSchema } from "./../../db/schema.ts";
 import { notFoundSchema } from "../../lib/constants.ts";
 
 const tags = ["fsmpromise"];
@@ -21,13 +16,11 @@ export const list = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       z.object({}),
-      "The list of promise",
+      "The list of active promise workers",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        error: z.string(),
-      }),
-      "Failed to retrieve user",
+      z.object({ error: z.string() }),
+      "Error",
     ),
   },
 });
@@ -38,26 +31,55 @@ export const create = createRoute({
   request: {
     body: jsonContentRequired(
       z.object({
-        promise_name: z.string().describe("The name of the promise to start"),
-        promise_version: z.string().describe(
-          "The version of the promise to start",
-        ),
+        promise_name: z.string().describe("The queue name for the promise worker"),
+        promise_type: z.string().describe("The actor type name to invoke"),
+        promise_version: z.string().describe("The version of the promise"),
+        fsm_name: z.string().describe("Parent FSM name (for verifiedModule lookup)"),
+        fsm_version: z.string().describe("Parent FSM version (for verifiedModule lookup)"),
       }),
-      "The promise configuration",
+      "Promise worker configuration",
     ),
   },
   tags,
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       z.object({}),
-      "The promise started successfully",
+      "Promise worker started successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
+export const createAndStart = createRoute({
+  path: "/fsmpromise/create-and-start",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        queue_name: z.string().describe("The PGMQ queue name to create"),
+        fsm_name: z.string().describe("Parent FSM name (for verifiedModule lookup)"),
+        promise_type: z.string().describe("The actor type name to invoke"),
+        fsm_version: z.string().describe("Parent FSM version"),
+      }),
+      "Promise worker creation config",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
       z.object({}),
-      "The validation error(s)",
+      "Promise queue created and worker started",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
     ),
   },
 });
 
 export type ListRoute = typeof list;
 export type CreateRoute = typeof create;
+export type CreateAndStartRoute = typeof createAndStart;

@@ -60,7 +60,7 @@ export async function startFSMPromiseWorker(
     for (const msg of messages) {
       if (msg.message && msg.msg_id) {
         try {
-          console.log("✅ Processing FSM message:", msg.message);
+          console.log("✅ Processing Promise message:", msg.message);
 
           // const fsmDataWithResolvedStateValue =
           //   await getFsmDataResolveStateValue(deps, queueName);
@@ -110,7 +110,7 @@ export async function startFSMPromiseWorker(
             
           // }
         } catch (err) {
-          console.error("❌ Error processing FSM message:", err);
+          console.error("❌ Error processing Promise message:", err);
         }
       }
     }

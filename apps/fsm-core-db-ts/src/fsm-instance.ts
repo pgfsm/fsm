@@ -18,6 +18,24 @@ type SendEventArgs = DatabaseGenerated["fsm_core"]["Functions"]["send_event_to_f
 type CreateInstanceArgs = DatabaseGenerated["fsm_core"]["Functions"]["create_fsm_instance_from_name_v2"]["Args"];
 
 
+export async function listFsmInstances(
+  deps: DBDeps,
+): Promise<FsmInstanceRow[]> {
+  try {
+    const text = `
+      SELECT *
+      FROM ${FSM_INSTANCE_TABLE}
+      ORDER BY created_at DESC;
+    `;
+    const result = await deps.db.query<FsmInstanceRow>(text);
+    return Array.isArray(result.rows) ? result.rows : [];
+  } catch (err) {
+    console.error("Error in listFsmInstances:", err);
+    throw new Error("Failed to list FSM instances", { cause: err });
+  }
+}
+
+
 export async function isFSMInstancePresent(
   deps: DBDeps,
   queue: FsmInstanceRow["id"],

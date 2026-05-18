@@ -1,5 +1,11 @@
 # Naming Suggestions — fsm-core-worker-ts
 
+## Status
+
+**All renames applied ✅** — verified via `deno check src/index.ts` (clean).
+
+---
+
 This document lists naming inconsistencies found in `apps/fsm-core-worker-ts/src/` relative to the project conventions in CLAUDE.md.
 
 ## Convention recap

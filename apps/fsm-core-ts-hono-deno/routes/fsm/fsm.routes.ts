@@ -20,14 +20,19 @@ export const list = createRoute({
   tags,
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.object({}),
-      "The list of fsm",
+      z.object({
+        data: z.array(z.object({
+          id: z.string(),
+          fsm_name: z.string().nullable(),
+          fsm_version: z.string().nullable(),
+          fsm_instance_status: z.string().nullable(),
+        })),
+      }),
+      "List of FSM instances",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        error: z.string(),
-      }),
-      "Failed to retrieve user",
+      z.object({ error: z.string() }),
+      "Error",
     ),
   },
 });
@@ -38,8 +43,11 @@ export const create = createRoute({
   request: {
     body: jsonContentRequired(
       z.object({
-        fsm_name: z.string().describe("The name of the fsm to start"),
-        fsm_version: z.string().describe("The version of the fsm to start"),
+        fsm_name: z.string().describe("The FSM definition name"),
+        fsm_version: z.string().describe("The FSM version"),
+        fsm_context: z.record(z.unknown()).optional().describe(
+          "Initial FSM context (defaults to {})",
+        ),
       }),
       "The fsm configuration",
     ),
