@@ -68,11 +68,12 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================
--- 3. send_event_to_promise_queue_from_fsm_instance_id_v2 (new)
+-- 3. create_promise_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
 --    Routes promise/sharedPromise events to promise queue.
 --    Checks queue existence, creates if missing, returns send result.
 -- ============================================================
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(
+DROP FUNCTION IF EXISTS fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(text, jsonb, text, text, text, text, text, text, text, text, uuid);
+CREATE OR REPLACE FUNCTION fsm_core.create_promise_queue_and_send_event_from_fsm_instance_id_v2(
     event_name text,
     event_input jsonb,
     id text,
@@ -96,7 +97,7 @@ BEGIN
     ELSIF fsmType = 'sharedPromise' THEN
         promise_queue_name := 'sharedPromise_' || fsmName || '_' || fsmVersion;
     ELSE
-        RAISE EXCEPTION 'send_event_to_promise_queue_from_fsm_instance_id_v2: unsupported fsmType: %', fsmType;
+        RAISE EXCEPTION 'create_promise_queue_and_send_event_from_fsm_instance_id_v2: unsupported fsmType: %', fsmType;
     END IF;
 
     SELECT EXISTS (
@@ -131,11 +132,12 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================
--- 4. send_event_to_fsm_queue_from_fsm_instance_id_v2 (new)
+-- 4. create_fsm_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
 --    Routes childFsm events: generates UUID child queue,
 --    creates it, sends event, returns send result.
 -- ============================================================
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_from_fsm_instance_id_v2(
+DROP FUNCTION IF EXISTS fsm_core.send_event_to_fsm_queue_from_fsm_instance_id_v2(text, jsonb, text, text, text, text, text, text, text, text, uuid);
+CREATE OR REPLACE FUNCTION fsm_core.create_fsm_queue_and_send_event_from_fsm_instance_id_v2(
     event_name text,
     event_input jsonb,
     id text,
@@ -195,7 +197,7 @@ CREATE OR REPLACE FUNCTION fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
 ) RETURNS jsonb AS $$
 BEGIN
     IF fsmType = 'promise' OR fsmType = 'sharedPromise' THEN
-        RETURN fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(
+        RETURN fsm_core.create_promise_queue_and_send_event_from_fsm_instance_id_v2(
             event_name := event_name,
             event_input := event_input,
             id := id,
@@ -209,7 +211,7 @@ BEGIN
             from_source_fsm_instance_id := from_source_fsm_instance_id
         );
     ELSIF fsmType = 'childFsm' THEN
-        RETURN fsm_core.send_event_to_fsm_queue_from_fsm_instance_id_v2(
+        RETURN fsm_core.create_fsm_queue_and_send_event_from_fsm_instance_id_v2(
             event_name := event_name,
             event_input := event_input,
             id := id,

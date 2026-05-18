@@ -581,6 +581,38 @@ export type Database = {
         }
         Returns: Json
       }
+      create_fsm_queue_and_send_event_from_fsm_instance_id_v2: {
+        Args: {
+          event_name: string
+          event_input: Json
+          id: string
+          action_type: string
+          src: string
+          fsmname: string
+          fsmtype: string
+          fsmversion: string
+          parentfsmname: string
+          parentfsmversion: string
+          from_source_fsm_instance_id: string
+        }
+        Returns: Json
+      }
+      create_promise_queue_and_send_event_from_fsm_instance_id_v2: {
+        Args: {
+          event_name: string
+          event_input: Json
+          id: string
+          action_type: string
+          src: string
+          fsmname: string
+          fsmtype: string
+          fsmversion: string
+          parentfsmname: string
+          parentfsmversion: string
+          from_source_fsm_instance_id: string
+        }
+        Returns: Json
+      }
       delete:
         | {
             Args: {
@@ -1070,22 +1102,6 @@ export type Database = {
         }
         Returns: number[]
       }
-      send_event_to_fsm_queue_from_fsm_instance_id_v2: {
-        Args: {
-          event_name: string
-          event_input: Json
-          id: string
-          action_type: string
-          src: string
-          fsmname: string
-          fsmtype: string
-          fsmversion: string
-          parentfsmname: string
-          parentfsmversion: string
-          from_source_fsm_instance_id: string
-        }
-        Returns: Json
-      }
       send_event_to_fsm_queue_with_event_logs_v2: {
         Args: {
           input_fsm_instance_id: string
@@ -1104,22 +1120,6 @@ export type Database = {
           input_execution_started_at?: string
           input_execution_duration?: number
           input_execution_finished_at?: string
-        }
-        Returns: Json
-      }
-      send_event_to_promise_queue_from_fsm_instance_id_v2: {
-        Args: {
-          event_name: string
-          event_input: Json
-          id: string
-          action_type: string
-          src: string
-          fsmname: string
-          fsmtype: string
-          fsmversion: string
-          parentfsmname: string
-          parentfsmversion: string
-          from_source_fsm_instance_id: string
         }
         Returns: Json
       }
