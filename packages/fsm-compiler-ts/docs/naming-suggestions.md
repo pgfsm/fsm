@@ -101,3 +101,16 @@ All other exported functions that operate on collections use the plural form in 
 |---|---|
 | `validateFsmPluginLoadFromFolders` | `validate` ✅ |
 | `validatePromisePluginLoadFromFolders` | *(none)* ❌ |
+
+---
+
+## 7. `loadAndVerify*` → `loadAndValidate*` *(Implemented)*
+
+**Priority: Medium**
+
+`verify` was the only verb in the package not aligned with `validate`. Renamed for consistency.
+
+| Old Name | New Name | File |
+|---|---|---|
+| `loadAndVerifyFsmFromFolders` | `loadAndValidateFsmFromFolders` | `loadAndValidateFsm.ts` (was `loadAndVerifyFsm.ts`) |
+| `loadAndVerifyPromiseFromFolders` | `loadAndValidatePromiseFromFolders` | `loadAndValidateFsm.ts` |

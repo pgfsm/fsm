@@ -10,7 +10,7 @@ import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { loadFsmFromJson, type DBDeps } from "@fsm/db";
 
-export async function loadAndVerifyPromiseFromFolders(
+export async function loadAndValidatePromiseFromFolders(
   deps: DBDeps,
   folderPath: string,
   workflowType: WorkflowType,
@@ -93,7 +93,7 @@ export async function loadAndVerifyPromiseFromFolders(
   return allFolderResults;
 }
 
-export async function loadAndVerifyFsmFromFolders(
+export async function loadAndValidateFsmFromFolders(
   deps: DBDeps,
   folderPath: string,
   workflowType: WorkflowType,

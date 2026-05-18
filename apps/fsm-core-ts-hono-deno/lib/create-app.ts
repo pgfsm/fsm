@@ -2,8 +2,8 @@ import type { Schema } from "hono";
 import { cors } from "hono/cors";
 import { Pool } from "pg";
 import {
-  loadAndVerifyFsmFromFolders,
-  loadAndVerifyPromiseFromFolders,
+  loadAndValidateFsmFromFolders,
+  loadAndValidatePromiseFromFolders,
 } from "@fsm/compiler";
 import { createAndStartPromiseWorker } from "@fsm/worker";
 
@@ -63,7 +63,7 @@ export default async function createApp(
     const deps = { db: pool };
 
     const outputSharedPromise = fsmConfig.sharedPromise
-      ? await loadAndVerifyPromiseFromFolders(
+      ? await loadAndValidatePromiseFromFolders(
           deps,
           fsmConfig.sharedPromise.folderPath,
           "sharedPromise",
@@ -74,7 +74,7 @@ export default async function createApp(
     const verifiedSharedPromise = outputSharedPromise.filter((m) => m.isFsmModuleVerified === true)  
 
     const outputSharedFsm = fsmConfig.sharedFsm
-      ? await loadAndVerifyFsmFromFolders(
+      ? await loadAndValidateFsmFromFolders(
           deps,
           fsmConfig.sharedFsm.folderPath,
           "sharedFsm",
@@ -86,7 +86,7 @@ export default async function createApp(
     
     
     const outputFsm = fsmConfig.fsm
-      ? await loadAndVerifyFsmFromFolders(
+      ? await loadAndValidateFsmFromFolders(
           deps,
           fsmConfig.fsm.folderPath,
           "fsm",

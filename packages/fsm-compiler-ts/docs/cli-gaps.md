@@ -56,8 +56,8 @@ Calls: `loadFsmJSONFromFolders(folder, workflowType, [], deps)` (line 105)
 | `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
 | `deps` | env var `DATABASE_URL` | ⚠️ implicit | No early validation; fails mid-run if missing |
 
-### `load-and-verify`
-Calls: `loadAndVerifyFsmFromFolders(deps, folder, workflowType)` (line 110)
+### `load-and-validate`
+Calls: `loadAndValidateFsmFromFolders(deps, folder, workflowType)` (line 110)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
@@ -67,8 +67,8 @@ Calls: `loadAndVerifyFsmFromFolders(deps, folder, workflowType)` (line 110)
 | `skipDirs` | `--skip-dirs` | ❌ not passed | Cannot exclude subdirectories |
 | `availableActors` | `--available-actors` | ❌ not passed | External actor dependencies always unresolved |
 
-### `load-and-verify-promise`
-Calls: `loadAndVerifyPromiseFromFolders(deps, folder, workflowType)` (line 115)
+### `load-and-validate-promise`
+Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType)` (line 115)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
@@ -113,10 +113,10 @@ Location: `src/cli/index.ts` lines 27-58.
 
 | Issue | Severity |
 |---|---|
-| `-w, --workflow-type` documented as "required for validate, load, load-and-verify, load-and-verify-promise" — but `generate`, `generate-plugin`, and `clean` also accept it (it is just ignored, hardcoded to `"fsm"`) | Medium |
+| `-w, --workflow-type` documented as "required for validate, load, load-and-validate, load-and-validate-promise" — but `generate`, `generate-plugin`, and `clean` also accept it (it is just ignored, hardcoded to `"fsm"`) | Medium |
 | `--skip-dirs` flag does not exist in the CLI but is accepted by all underlying functions | High — users have no way to use this feature |
-| `--available-actors` flag does not exist in the CLI but is accepted by `validate`, `load-and-verify`, `load-and-verify-promise` | High — external actor dependencies always reported as unresolved |
-| `DATABASE_URL` env var requirement not mentioned for `load`, `load-and-verify`, `load-and-verify-promise` | High — silent failures when env var is missing |
+| `--available-actors` flag does not exist in the CLI but is accepted by `validate`, `load-and-validate`, `load-and-validate-promise` | High — external actor dependencies always reported as unresolved |
+| `DATABASE_URL` env var requirement not mentioned for `load`, `load-and-validate`, `load-and-validate-promise` | High — silent failures when env var is missing |
 | `--show-recommendation` only applies to `generate` but help text does not say so | Low |
 
 ---
@@ -135,8 +135,8 @@ Test files: `test/cli.test.ts`, `src/cli/index-test.ts`.
 | `generate-plugin` | ❌ |
 | `clean` | ❌ |
 | `load` | ❌ (needs DB) |
-| `load-and-verify` | ❌ (needs DB) |
-| `load-and-verify-promise` | ❌ (needs DB) |
+| `load-and-validate` | ❌ (needs DB) |
+| `load-and-validate-promise` | ❌ (needs DB) |
 | Invalid `--workflow-type` value | ❌ |
 | `--folder` path that does not exist | ❌ |
 | Missing `DATABASE_URL` for DB commands | ❌ |

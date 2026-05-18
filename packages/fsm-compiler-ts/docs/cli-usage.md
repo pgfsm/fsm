@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Deno** (see `.prototools` for pinned version)
-- **`.env` file** with `DATABASE_URL` set — required only for `load`, `load-and-verify`, `load-and-verify-promise`
+- **`.env` file** with `DATABASE_URL` set — required only for `load`, `load-and-validate`, `load-and-validate-promise`
 - Run all commands from the **repo root**
 
 ## Invocation
@@ -20,7 +20,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 |---|---|---|
 | `--command <command>` | `-c` | Command to run (required) |
 | `--folder <folder>` | `-f` | Path to FSM folder, relative to repo root (required) |
-| `--workflow-type <type>` | `-w` | Workflow type — required for `validate`, `load`, `load-and-verify`, `load-and-verify-promise` |
+| `--workflow-type <type>` | `-w` | Workflow type — required for `validate`, `load`, `load-and-validate`, `load-and-validate-promise` |
 | `--show-recommendation` | `-r` | Validate generated `fsm.json` against schema and print issues (`generate` only) |
 | `--help` | `-h` | Show help message |
 
@@ -126,13 +126,13 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-### `load-and-verify`
+### `load-and-validate`
 
 Load FSM JSON into the database and verify plugin module exports in one step. Requires `DATABASE_URL` in `.env`.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c load-and-verify \
+  -c load-and-validate \
   -f apps/fsm-core-example/fsm \
   -w fsm
 ```
@@ -141,13 +141,13 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-### `load-and-verify-promise`
+### `load-and-validate-promise`
 
 Load a promise-based workflow folder into the database and verify exports. Requires `DATABASE_URL` in `.env`.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c load-and-verify-promise \
+  -c load-and-validate-promise \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedPromise
 ```
@@ -169,7 +169,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-plugi
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
 
 # 4. Load into DB and verify
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-verify -f apps/fsm-core-example/fsm -w fsm
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
 ```
 
 ---
@@ -180,6 +180,6 @@ See [cli-gaps.md](./cli-gaps.md) for the full audit. Key points:
 
 - `--workflow-type` is **ignored** for `generate`, `generate-plugin`, and `clean` — hardcoded to `"fsm"`
 - `--skip-dirs` flag does not exist — subdirectories cannot be excluded
-- `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate` and `load-and-verify`
+- `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate` and `load-and-validate`
 - `validatePromisePluginLoadFromFolders` has no CLI command — use the library API directly
 - No early validation that `--folder` exists or that `DATABASE_URL` is set

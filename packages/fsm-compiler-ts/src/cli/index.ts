@@ -5,8 +5,8 @@ import {
   deleteFsmJSONFromFolders,
   generateFsmJSONFromFolders,
   generateFsmPluginFromFolders,
-  loadAndVerifyFsmFromFolders,
-  loadAndVerifyPromiseFromFolders,
+  loadAndValidateFsmFromFolders,
+  loadAndValidatePromiseFromFolders,
   loadFsmJSONFromFolders,
   validateFsmPluginLoadFromFolders,
   validatePromisePluginLoadFromFolders,
@@ -35,14 +35,14 @@ USAGE
   deno run --allow-all src/cli/index.ts -c <command> -f <folder> [options]
 
 COMMANDS
-  generate              Generate fsm.json from machine.ts files
-  generate-plugin       Generate TypeScript plugin stubs from fsm.json
-  delete                Delete generated fsm.json / xstate-fsm.json files
-  validate              Validate plugin load for an FSM folder
-  validate-promise      Validate plugin load for a sharedPromise folder
-  load                  Load FSM JSON into the database
-  load-and-verify       Load and verify FSM + plugins into the database
-  load-and-verify-promise  Load and verify Promise workflow + plugins into the database
+  generate                  Generate fsm.json from machine.ts files
+  generate-plugin           Generate TypeScript plugin stubs from fsm.json
+  delete                    Delete generated fsm.json / xstate-fsm.json files
+  validate                  Validate plugin load for an FSM folder
+  validate-promise          Validate plugin load for a sharedPromise folder
+  load                      Load FSM JSON into the database
+  load-and-validate         Load FSM JSON into DB and validate plugins
+  load-and-validate-promise Load Promise workflow into DB and validate plugins
 
 WORKFLOW TYPES
   fsm | sharedFsm | sharedPromise | promise
@@ -50,14 +50,14 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder (required)
-  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate, load, load-and-verify, validate-promise, load-and-verify-promise)
+  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate, validate-promise, load, load-and-validate, load-and-validate-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
-  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate, validate-promise, load-and-verify, load-and-verify-promise)
+  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate, validate-promise, load-and-validate, load-and-validate-promise)
   -h, --help                          Show this help message
 
 ENVIRONMENT
-  DATABASE_URL    Required for load, load-and-verify, load-and-verify-promise. Set in .env or environment.
+  DATABASE_URL    Required for load, load-and-validate, load-and-validate-promise. Set in .env or environment.
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
@@ -65,8 +65,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
   deno run --allow-all src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
-  deno run --allow-all src/cli/index.ts -c load-and-verify -f apps/fsm-core-example/fsm -w fsm
-  deno run --allow-all src/cli/index.ts -c load-and-verify-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
+  deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c load-and-validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
 `);
 }
 
@@ -87,7 +87,7 @@ if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
   Deno.exit(1);
 }
 
-const needsWorkflowType = ["validate", "validate-promise", "load", "load-and-verify", "load-and-verify-promise"];
+const needsWorkflowType = ["validate", "validate-promise", "load", "load-and-validate", "load-and-validate-promise"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
@@ -149,16 +149,16 @@ try {
       await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
       break;
     }
-    case "load-and-verify": {
+    case "load-and-validate": {
       const deps = await buildDeps();
       const availableActors = await loadAvailableActors();
-      await loadAndVerifyFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await loadAndValidateFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
-    case "load-and-verify-promise": {
+    case "load-and-validate-promise": {
       const deps = await buildDeps();
       const availableActors = await loadAvailableActors();
-      await loadAndVerifyPromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await loadAndValidatePromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
     default:
