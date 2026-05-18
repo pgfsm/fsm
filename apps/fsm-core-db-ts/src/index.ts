@@ -1,4 +1,5 @@
 // Expose all methods from db implementation
+export * from "./const.ts";
 export * from "./pg-client.ts";
 export * from "./custom-type.ts";
 export * from "./queue.ts";

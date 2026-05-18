@@ -7,7 +7,7 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker } from "@fsm/worker";
 
-import { listFsmInstances, sendEventToFsmQueueWithEventLogs } from "@fsm/db";
+import { listFsmInstances, sendEventToFsmQueueWithEventLogs, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME } from "@fsm/db";
 
 import { activeFSMLocks } from "../fsmworker/fsmworker.handlers.ts";
 
@@ -101,9 +101,9 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
       fsm_instance_id,
       null,
       null,
-      null,
-      null,
-      null,
+      API_SYSTEM_QUEUE_UUID,
+      API_SYSTEM_QUEUE_TYPE,
+      API_SYSTEM_EVENT_NAME,
       event_data?.type ?? "",
       "external",
       event_data,
