@@ -442,6 +442,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      api_system_event_name: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      api_system_queue_type: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      api_system_queue_uuid: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       archive:
         | {
             Args: {
@@ -492,6 +504,9 @@ export type Database = {
           fsm_instance_data_save_fsm_state: Json
           fsm_instance_data_save_fsm_context: Json
           fsm_instance_data_save_fsm_xstate_state: Json
+          send_to_parent_queue_id: string
+          send_to_parent_queue_type: string
+          send_to_parent_queue_id_event_name: string
         }
         Returns: Json
       }

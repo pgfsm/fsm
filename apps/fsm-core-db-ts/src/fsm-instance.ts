@@ -98,6 +98,9 @@ export async function archiveEventFromFsmTypeWorker(
   fsm_instance_data_save_fsm_state: ArchiveWorkerArgs["fsm_instance_data_save_fsm_state"],
   fsm_instance_data_save_fsm_context: ArchiveWorkerArgs["fsm_instance_data_save_fsm_context"],
   fsm_instance_data_save_fsm_xstate_state: ArchiveWorkerArgs["fsm_instance_data_save_fsm_xstate_state"],
+  send_to_parent_queue_id: string | null,
+  send_to_parent_queue_type: string | null,
+  send_to_parent_queue_id_event_name: string | null,
 ): Promise<Json> {
   try {
     const text = `
@@ -113,7 +116,10 @@ export async function archiveEventFromFsmTypeWorker(
         $9::jsonb,
         $10::jsonb,
         $11::jsonb,
-        $12::jsonb
+        $12::jsonb,
+        $13::uuid,
+        $14::text,
+        $15::text
       ) AS result;
     `;
     const values = [
@@ -129,6 +135,9 @@ export async function archiveEventFromFsmTypeWorker(
       toJsonbParam(fsm_instance_data_save_fsm_state),
       toJsonbParam(fsm_instance_data_save_fsm_context),
       toJsonbParam(fsm_instance_data_save_fsm_xstate_state),
+      send_to_parent_queue_id,
+      send_to_parent_queue_type,
+      send_to_parent_queue_id_event_name,
     ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;

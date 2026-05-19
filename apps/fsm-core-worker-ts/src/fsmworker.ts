@@ -13,6 +13,7 @@ import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
 import type { WorkflowType } from "@fsm/compiler";
 
 import { macrostepV2 } from "./fsmworker-helper.ts";
+import type { FsmQueueMessage } from "./types.ts";
 
 export type VerifiedModule = {
   fsmAbsFolderPath?: string | null;
@@ -94,6 +95,7 @@ export async function startFSMWorker(
       if (msg.message && msg.msg_id) {
         try {
           console.log("✅ Processing FSM message:", msg.message);
+          const msgData = msg.message as unknown as FsmQueueMessage;
 
           const fsmDataWithResolvedStateValue =
             await getFsmDataResolveStateValue(deps, queueName);
@@ -132,6 +134,9 @@ export async function startFSMWorker(
                 macrostepV2Result.fsm_instance_data_save_fsm_state,
                 macrostepV2Result.fsm_instance_data_save_fsm_context,
                 macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
+                msgData.send_to_parent_queue_id ?? null,
+                msgData.send_to_parent_queue_type ?? null,
+                msgData.send_to_parent_queue_id_event_name ?? null,
               );
               console.log("Message archived with result:", archiveResult);
             }

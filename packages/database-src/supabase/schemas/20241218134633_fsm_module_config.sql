@@ -28,3 +28,15 @@ CREATE OR REPLACE FUNCTION fsm_core.pg_system_queue_type()
 CREATE OR REPLACE FUNCTION fsm_core.pg_system_event_name()
   RETURNS text LANGUAGE sql IMMUTABLE AS
   $$ SELECT 'POSTGRES_INTERNAL_EVENT'::text $$;
+
+CREATE OR REPLACE FUNCTION fsm_core.api_system_queue_uuid()
+  RETURNS uuid LANGUAGE sql IMMUTABLE AS
+  $$ SELECT '00000000-0000-0000-0000-000000000001'::uuid $$;
+
+CREATE OR REPLACE FUNCTION fsm_core.api_system_queue_type()
+  RETURNS text LANGUAGE sql IMMUTABLE AS
+  $$ SELECT 'API_INTERNAL'::text $$;
+
+CREATE OR REPLACE FUNCTION fsm_core.api_system_event_name()
+  RETURNS text LANGUAGE sql IMMUTABLE AS
+  $$ SELECT 'API_INTERNAL_EVENT'::text $$;

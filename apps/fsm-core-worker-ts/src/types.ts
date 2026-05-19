@@ -1,18 +1,17 @@
 import type { Json } from "@fsm/db/database.types";
 
 export interface FsmQueueMessageEventData {
-  eventType: string;
-  eventPayload: Json;
-  actionType: string;
+  event_type: string;
+  event_payload: Json;
+  action_type: string;
 }
 
 export interface FsmQueueMessage {
-  eventData: FsmQueueMessageEventData;
-  fsmInstanceId: string;
-  fsmInstanceIdFsmType: string | null;
-  fsmInstanceIdFsmVersion: string | null;
-  sendToParentQueueId: string | null;
-  sendToParentQueueType: string | null;
-  sendToParentQueueIdMsgId: string | null;
-  sendToParentQueueIdEventName: string;
+  event_data: FsmQueueMessageEventData;
+  queue_id: string;
+  queue_type: string | null;
+  queue_version: string | null;
+  send_to_parent_queue_id: string | null;
+  send_to_parent_queue_type: string | null;
+  send_to_parent_queue_id_event_name: string;
 }
