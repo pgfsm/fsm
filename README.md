@@ -1,50 +1,106 @@
-# FSM: Finite State Machine Builder for Postgres
+# FSM Framework
 
-FSM is an open source project designed to help you build, manage, and operate finite state machines directly within PostgreSQL. It provides a robust framework for modeling stateful workflows, automating transitions, and tracking state changes in your database.
+A framework for running versioned finite state machines inside PostgreSQL, with a Hono/Deno REST API.
 
-## Features
+## What it is
 
-- Define states and transitions using SQL or API
-- Enforce state transition rules at the database level
-- Track history and audit state changes
-- Integrate with application logic for workflow automation
-- Extensible for custom actions and triggers
+FSMs are defined as JSON, compiled into database objects, and executed entirely inside PostgreSQL. The REST API creates instances and enqueues events; workers poll queues and drive transitions; PostgreSQL owns the state at every step.
 
-## Why FSM in Postgres?
+```
+Client
+  │
+  ▼
+REST API (Hono/Deno)          ← create instances, send events
+  │
+  ▼
+PostgreSQL (fsm_core schema)  ← FSM definitions, instance state, event queues (pgmq)
+  ▲
+  │
+Workers (Deno)                ← poll queues, run transitions, archive results
+```
 
-PostgreSQL is a powerful relational database with advanced procedural capabilities. By embedding FSM logic in Postgres, you gain:
+Each FSM instance owns a dedicated pgmq queue. Events are messages in that queue. Workers process one message at a time, run all triggered transitions (a macrostep), and write the new state back — atomically, inside a single PG function call.
 
-- Transactional guarantees for state changes
-- Centralized workflow management
-- Easy integration with existing data models
-- Performance and reliability
+## Quick start
 
+```bash
+# 1. Start Supabase (PostgreSQL + pgmq + ltree)
+cd packages/database-src && npm run supabase:start
 
-## Monorepo Structure & Language Management
+# 2. Start the API server (port 9999)
+cd apps/fsm-core-ts-hono-deno && deno run --allow-all --env-file=.env --watch main.ts
+```
 
-This repository is organized as a monorepo, containing multiple packages and components for building and integrating finite state machines across different environments.
+OpenAPI docs available at `http://localhost:9999/fsm/docs`.
 
-- **`packages/`**: Directory for shared libraries or reusable packages.
-- **`apps/`**: Directory for standalone applications.
+## Example: creditCheck
 
-We use [proto](https://moonrepo.dev/docs/proto/overview) to manage multiple programming languages and their versions within the repo. This ensures consistent development environments and smooth collaboration, regardless of whether you are working with SQL, JavaScript/Node.js, Python, or other supported languages.
+The `creditCheck` FSM (in `apps/fsm-core-example/fsm/creditCheck/v01/`) models a credit verification flow.
 
-**Key points:**
-- All language versions are defined and managed via proto configuration files.
-- Developers can easily install and switch between required language versions using proto commands.
-- This approach supports polyglot development and simplifies onboarding for contributors.
+### States
 
-See the `proto` documentation and the repo's configuration files for more details on supported languages and setup instructions.
+```
+┌─────────────────────────┐
+│   Entering Information  │  ← initial
+└──────────┬──────────────┘
+           │ Submit
+           ▼
+┌─────────────────────────┐
+│  Verifying Credentials  │  (invokes async actor)
+└────┬──────────────┬─────┘
+     │ done         │ error
+     ▼              ▼
+┌──────────────┐  ┌─────────────────────────┐
+│ Checking     │  │   Entering Information  │  (retry)
+│ Credit Scores│  └─────────────────────────┘
+│ (parallel)   │
+└──────────────┘
+```
 
+### Running it
 
-## Contributing
+```bash
+BASE=http://localhost:9999/fsm
 
-Contributions are welcome! Please open issues or submit pull requests for new features, bug fixes, or documentation improvements.
+# 1. Create an instance
+curl -s -X POST $BASE/fsm \
+  -H "Content-Type: application/json" \
+  -d '{"fsm_name": "creditCheck", "fsm_version": "v01", "fsm_context": {}}'
+# → { "id": "550e8400-...", "fsm_instance_status": "active", ... }
 
-## License
+INSTANCE_ID="550e8400-..."   # replace with the id from above
 
-This project is licensed under the MIT License.
+# 2. Start a worker for this instance
+curl -s -X POST $BASE/fsmworker \
+  -H "Content-Type: application/json" \
+  -d "{\"queue\": \"$INSTANCE_ID\"}"
 
----
+# 3. Send the Submit event
+curl -s -X POST $BASE/fsm/send \
+  -H "Content-Type: application/json" \
+  -d "{\"fsm_instance_id\": \"$INSTANCE_ID\", \"event_data\": {\"type\": \"Submit\"}}"
 
-For more details, see the [docs](docs/) or contact the maintainers.
+# 4. Check state
+curl -s $BASE/fsm | jq '.data[] | select(.id == "'$INSTANCE_ID'")'
+```
+
+## Project structure
+
+```
+apps/
+  fsm-core-ts-hono-deno/   REST API — see apps/fsm-core-ts-hono-deno/README.md
+  fsm-core-worker-ts/      Queue workers — see apps/fsm-core-worker-ts/README.md
+  fsm-core-db-ts/          Database access layer — see apps/fsm-core-db-ts/README.md
+  fsm-core-example/        Example FSM definitions — see apps/fsm-core-example/README.md
+packages/
+  database-src/            PostgreSQL schema + migrations — see packages/database-src/README.md
+  database-src-extension/  Rust PG extension (ltree + pgmq) — see packages/database-src-extension/README.md
+  fsm-compiler-ts/         FSM JSON compiler — see packages/fsm-compiler-ts/README.md
+```
+
+## Deeper reading
+
+- [FSM definition format](./docs/fsm-definition-format.md) — how to write `fsm.json`
+- [Execution model](./docs/execution-model.md) — how an event flows from API to archive
+- [PG→TS function mapping](./docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
+- [Context map](./CONTEXT-MAP.md) — domain language per package

@@ -1,83 +1,66 @@
-# FSM Compiler
+# fsm-compiler-ts — FSM Compiler
 
-This project is a TypeScript-based FSM (Finite State Machine) compiler built for Deno.
+Validates FSM JSON definitions and generates the TypeScript plugin artifacts (actions, guards, delays, actors stubs) that workers load at startup. Runs on Deno.
 
-## Overview
+## What it does
 
-The FSM Compiler transforms FSM schema definitions into code or artifacts suitable for integration with other systems, such as databases or application logic. It is designed to be fast, modular, and easy to use within Deno environments.
+**Input:** an `fsm.json` file in a versioned FSM folder  
+**Output:** a validated plugin — confirmed that every action, guard, delay, and actor referenced in the JSON has a matching TypeScript export
 
-## Features
-- Written in TypeScript, runs natively on Deno
-- Parses FSM schema files (JSON, YAML, or custom formats)
-- Generates code, SQL, or other artifacts for FSM integration
-- Extensible for custom output targets
-- CLI and API usage
+Unresolved references are reported as errors so they're caught before deployment, not at runtime.
 
-## Getting Started
+## How to run
 
-### Prerequisites
-- [Deno](https://deno.com/) (version 1.30+ recommended)
+```bash
+# Interactive CLI (dev mode with file watching)
+deno run --allow-all --watch src/main.ts
 
-### Installation
-No installation required. Run directly with Deno:
-
-```sh
-deno run --allow-read --allow-write src/main.ts <options>
+# One-shot validation + generation
+deno run --allow-all src/main.ts
 ```
 
-### Usage
+## Key exports
 
-#### CLI Example
-```sh
-deno run --allow-read --allow-write src/main.ts --input fsm.schema.json --output fsm.sql
-```
-
-#### API Example
 ```typescript
-import { compileFSM } from "./src/compiler.ts";
+import {
+  loadAndValidateFsmFromFolders,    // validate all FSMs in a folder tree
+  loadAndValidatePromiseFromFolders, // validate all promise actors in a folder tree
+  validateFsmPluginLoadFromFolder,   // validate one specific FSM plugin
+} from "@fsm/compiler";
 
-const schema = await Deno.readTextFile("fsm.schema.json");
-const result = compileFSM(schema);
-console.log(result);
+import type { WorkflowType } from "@fsm/compiler";
+// WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise"
 ```
 
-### Options
-- `--input <file>`: Path to FSM schema file
-- `--output <file>`: Path to output file (SQL, code, etc.)
-- `--format <type>`: Output format (sql, ts, json, etc.)
+The REST API and workers use these at startup to discover and validate FSM plugins before accepting requests.
 
-## Project Structure
-- `src/` — Main source code
-- `tests/` — Test cases and sample schemas
-- `README.md` — Project documentation
+## Plugin structure
 
-## Development
-- Use Deno for running, testing, and formatting
-- Run tests:
-  ```sh
-  deno test --allow-read
-  ```
-- Format code:
-  ```sh
-  deno fmt
-  ```
-
-
-### Deno Version Management
-The Deno version is managed by `.prototools`, which is created using the command:
+After running the compiler against an FSM definition, the version folder contains:
 
 ```
-proto install Deno --pin local
+fsm/<name>/v01/
+  fsm.json
+  xstate-fsm.json
+  typescript/
+    actions/index.ts   ← one export per action name in fsm.json
+    guards/index.ts    ← one export per guard name
+    delays/index.ts    ← one export per delay name
+    actors/index.ts    ← one export per actor src
 ```
 
-This ensures consistent Deno versioning across development environments.
+Generated stubs have `// TODO: implement` bodies — fill them in before running a worker against the FSM.
 
+## Tests
 
-## License
-MIT
+```bash
+deno test
+```
 
-## Author
-Niraj 
+## Deno version
 
----
-For more details, see the source code and comments in each module.
+Managed by `.prototools`. Install with:
+
+```bash
+proto install deno --pin local
+```

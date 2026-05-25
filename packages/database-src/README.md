@@ -1,51 +1,49 @@
+# database-src — PostgreSQL Schema & Migrations
 
-# database-src
+The PostgreSQL source of truth for the FSM framework. Contains schema files, migrations, Supabase configuration, and the generated TypeScript types consumed by `fsm-core-db-ts`.
 
-This package is used for the main PostgreSQL files for the FSM project.
+## What it produces
 
-## Purpose
-The `database-src` package manages PostgreSQL database schema and migration files for FSM.
+- **Migrations** — timestamped SQL files in `supabase/migrations/` that bring the database to the current state
+- **Generated types** — `database.types.ts` auto-generated from the live schema, consumed by `@fsm/db`
 
+## Key commands
 
-## Supabase CLI Migration
-Migrations are performed using Supabase CLI commands, which are integrated into npm scripts for automation and consistency. The package heavily relies on Supabase CLI for managing and migrating PostgreSQL files.
+```bash
+# Start local Supabase (PostgreSQL + pgmq + ltree)
+npm run supabase:start
 
----
-For more details, refer to the npm scripts and Supabase CLI documentation.
+# Reset DB and re-run all migrations from scratch
+npm run supabase:db:reset
 
+# Generate TypeScript types from the live schema — run after any PG change
+npm run supabase:gen:types
 
-## Important Notes / Migration Patch
+# Apply a schema diff: stop → clean volumes → diff → restart → regen types
+npm run supabase:restart:with:diff
 
-The migration file `20250602124504_pgmq.sql` is manually added to the migration folder. This patch is required to be run before any other SQL scripts when creating or migrating the PostgreSQL database. It ensures necessary setup or fixes are applied prior to other migrations.
-
-Always verify that `20250602124504_pgmq.sql` is executed first during the migration process.
-
-> **Note:** All force migration files are added manually in sequence as needed. These files will not follow the naming convention like `declarative_update`, and are intended for specific patching or forced migration requirements.
-
-## Node & NPM Scripts
-This package uses Node.js and npm scripts to handle PostgreSQL migrations via the Supabase CLI npm package.
-
-## NPM Scripts
-
-The following npm scripts are available for managing Supabase and PostgreSQL migrations:
-
-- `npm run supabase:init`: Creates a new Supabase project.
-- `npm run supabase:start`: Starts Supabase with debug mode enabled.
-- `npm run supabase:start:env`: Loads environment variables from `.env` and starts Supabase in debug mode.
-- `npm run supabase:stop`: Stops the Supabase instance.
-- `npm run supabase:db:diff:schemafolder:sql`: Runs `supabase db diff` with the `declarative_update` file and debug mode to generate schema differences.
-- `npm run supabase:db:reset`: Resets the Supabase database to its initial state.
-- `npm run supabase:db:migrate`: Applies all pending migrations using Supabase CLI.
-- `npm run supabase:docker:volume:clean`: Cleans up Docker volumes associated with the Supabase project.
-- `npm run supabase:gen:types`: Generates TypeScript types from the local database schema and writes them to `database.types.ts`.
-- `npm run supabase:restart:with:diff`: Stops Supabase, cleans Docker volumes, runs schema diff, restarts Supabase with environment variables, and regenerates TypeScript types.
-
-
-### Node Version Management
-The Node.js version is managed by `.prototools`, which is created using the command:
-
+# Generate a migration file from schema changes
+npm run supabase:db:diff:schemafolder:sql
 ```
+
+## How schema changes work
+
+1. Edit the relevant file in `supabase/schemas/`
+2. Run `npm run supabase:db:diff:schemafolder:sql` to generate a new migration under `supabase/migrations/`
+3. Run `npm run supabase:gen:types` to regenerate `database.types.ts`
+4. Update any TypeScript wrappers in `apps/fsm-core-db-ts/src/` that depend on the changed PG function signatures
+
+Schema files are the source; migrations are their output. Never hand-edit a migration to add schema logic — edit the schema file and diff.
+
+## Migration notes
+
+- `20250602124504_pgmq.sql` is manually added and must run before all other migrations — it patches pgmq setup required by subsequent scripts
+- Force migration files (not named `declarative_update`) are manually sequenced patches; they do not follow the standard diff flow
+
+## Node version
+
+Managed by `.prototools`. Install with:
+
+```bash
 proto install node 22 --pin local
 ```
-
-This ensures consistent Node.js versioning across development environments.
