@@ -100,7 +100,7 @@ packages/
 
 ## Deeper reading
 
-- [FSM definition format](./docs/fsm-definition-format.md) — how to write `fsm.json`
-- [Execution model](./docs/execution-model.md) — how an event flows from API to archive
-- [PG→TS function mapping](./docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
+- [FSM definition format](./packages/fsm-compiler-ts/docs/fsm-definition-format.md) — how to write `fsm.json`
+- [Execution model](./execution-model.md) — how an event flows from API to archive
+- [PG→TS function mapping](./packages/database-src/docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
 - [Context map](./CONTEXT-MAP.md) — domain language per package

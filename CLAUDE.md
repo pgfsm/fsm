@@ -106,7 +106,7 @@ PostgreSQL is the source of truth. TypeScript wrappers in `packages/fsm-core-db-
 - v1 functions still use `p_*` prefix — not to be changed (superseded by v2)
 
 ### Reference Document
-See `docs/pg-ts-function-mapping.md` for the complete PG→TS function mapping table, including:
+See `packages/database-src/docs/pg-ts-function-mapping.md` for the complete PG→TS function mapping table, including:
 - All 18 direct 1:1 mappings (Table 1)
 - TS functions not directly mapped to a PG function (Table 2)
 - Gap: PG functions with no TS wrapper (Table 3)

@@ -42,7 +42,7 @@ This starts a server that mounts all FSMs in this folder as plugin roots. See th
 
 ## Adding a new FSM
 
-1. Create `fsm/<yourFsmName>/v01/fsm.json` (see [FSM definition format](../../docs/fsm-definition-format.md))
+1. Create `fsm/<yourFsmName>/v01/fsm.json` (see [FSM definition format](../../packages/fsm-compiler-ts/docs/fsm-definition-format.md))
 2. Run the compiler to generate the TypeScript scaffold:
    ```bash
    cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts

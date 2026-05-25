@@ -40,6 +40,12 @@ Schema files are the source; migrations are their output. Never hand-edit a migr
 - `20250602124504_pgmq.sql` is manually added and must run before all other migrations — it patches pgmq setup required by subsequent scripts
 - Force migration files (not named `declarative_update`) are manually sequenced patches; they do not follow the standard diff flow
 
+## Reference docs
+
+- [PG→TS function mapping](./docs/pg-ts-function-mapping.md) — authoritative table of all PostgreSQL functions and their TypeScript wrappers
+- [PostgreSQL v1 functions](./docs/pg-v1-functions.md) — superseded v1 functions (no TS wrappers)
+- [v1 argument rename suggestions](./docs/pg-v1-argument-rename-suggestions.md) — suggested `p_*` → `input_*` renames for v1 functions
+
 ## Node version
 
 Managed by `.prototools`. Install with:

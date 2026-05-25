@@ -51,6 +51,10 @@ fsm/<name>/v01/
 
 Generated stubs have `// TODO: implement` bodies — fill them in before running a worker against the FSM.
 
+## Reference
+
+- [FSM definition format](./docs/fsm-definition-format.md) — full spec for `fsm.json` (states, transitions, guards, actions, actors, delays)
+
 ## Tests
 
 ```bash

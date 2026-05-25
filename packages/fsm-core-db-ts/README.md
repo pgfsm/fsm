@@ -34,7 +34,7 @@ Every exported function takes `deps: DBDeps` as its first argument — `DBDeps` 
 - The active PG function version is set by `FSM_SCHEMA_FN_VERSION` in `const.ts` (currently `v2`)
 - PostgreSQL parameters use the `input_*` prefix (e.g. `input_fsm_name`); TypeScript parameters drop it
 
-See [`docs/pg-ts-function-mapping.md`](../../docs/pg-ts-function-mapping.md) for the full mapping table.
+See [`pg-ts-function-mapping.md`](../database-src/docs/pg-ts-function-mapping.md) for the full mapping table.
 
 ## Key files
 
