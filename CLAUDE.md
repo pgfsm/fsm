@@ -42,7 +42,6 @@ Built with `pgrx` — see the package README for build instructions.
 ```
 apps/
   fsm-core-ts-hono-deno/   # Main REST API (Hono + Deno)
-  fsm-core-db-ts/          # Raw pg client helpers (TypeScript)
   fsm-core-db-py/          # Raw pg client helpers (Python)
   fsm-core-db-drizzle/     # [IGNORE] Drizzle ORM experiment for fsm-core-db-ts — not used for active work
   fsm-core-example/        # Example FSM definitions (credit check, car vitals, etc.)
@@ -50,6 +49,7 @@ packages/
   database-src/            # PostgreSQL migrations + Supabase config
   database-src-extension/  # Rust PostgreSQL extension (pgrx) using ltree + pgmq
   fsm-compiler-ts/         # JSON → database object compiler (TypeScript)
+  fsm-core-db-ts/          # Raw pg client helpers (TypeScript)
   fsm-compiler-py/         # JSON → database object compiler (Python)
 ```
 
@@ -93,7 +93,7 @@ FSMs are versioned JSON files in `apps/fsm-core-example/fsm/`. Each FSM folder (
 
 ## Naming Conventions
 
-PostgreSQL is the source of truth. TypeScript wrappers in `apps/fsm-core-db-ts/src/` must stay aligned with PG function names and parameter names.
+PostgreSQL is the source of truth. TypeScript wrappers in `packages/fsm-core-db-ts/src/` must stay aligned with PG function names and parameter names.
 
 ### PG → TS Function Name Rules
 - Strip `_v1` / `_v2` version suffix from TS names — version is driven by `FSM_SCHEMA_FN_VERSION = "v2"` in `const.ts`

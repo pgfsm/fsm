@@ -90,12 +90,12 @@ curl -s $BASE/fsm | jq '.data[] | select(.id == "'$INSTANCE_ID'")'
 apps/
   fsm-core-ts-hono-deno/   REST API — see apps/fsm-core-ts-hono-deno/README.md
   fsm-core-worker-ts/      Queue workers — see apps/fsm-core-worker-ts/README.md
-  fsm-core-db-ts/          Database access layer — see apps/fsm-core-db-ts/README.md
   fsm-core-example/        Example FSM definitions — see apps/fsm-core-example/README.md
 packages/
   database-src/            PostgreSQL schema + migrations — see packages/database-src/README.md
   database-src-extension/  Rust PG extension (ltree + pgmq) — see packages/database-src-extension/README.md
   fsm-compiler-ts/         FSM JSON compiler — see packages/fsm-compiler-ts/README.md
+  fsm-core-db-ts/          Database access layer — see packages/fsm-core-db-ts/README.md
 ```
 
 ## Deeper reading

@@ -1,6 +1,6 @@
 # PostgreSQL → TypeScript Function Mapping
 
-PostgreSQL (`packages/database-src/supabase/schemas/`) is the source of truth. TypeScript wrappers live in `apps/fsm-core-db-ts/src/`.
+PostgreSQL (`packages/database-src/supabase/schemas/`) is the source of truth. TypeScript wrappers live in `packages/fsm-core-db-ts/src/`.
 
 ---
 

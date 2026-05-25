@@ -31,7 +31,7 @@ npm run supabase:db:diff:schemafolder:sql
 1. Edit the relevant file in `supabase/schemas/`
 2. Run `npm run supabase:db:diff:schemafolder:sql` to generate a new migration under `supabase/migrations/`
 3. Run `npm run supabase:gen:types` to regenerate `database.types.ts`
-4. Update any TypeScript wrappers in `apps/fsm-core-db-ts/src/` that depend on the changed PG function signatures
+4. Update any TypeScript wrappers in `packages/fsm-core-db-ts/src/` that depend on the changed PG function signatures
 
 Schema files are the source; migrations are their output. Never hand-edit a migration to add schema logic — edit the schema file and diff.
 

@@ -1,6 +1,6 @@
 # PostgreSQL v1 Functions (Superseded by v2)
 
-These functions have no TypeScript wrappers by design — they are superseded by their `_v2` equivalents. The active TypeScript layer in `apps/fsm-core-db-ts/` targets v2 only (`FSM_SCHEMA_FN_VERSION = "v2"`).
+These functions have no TypeScript wrappers by design — they are superseded by their `_v2` equivalents. The active TypeScript layer in `packages/fsm-core-db-ts/` targets v2 only (`FSM_SCHEMA_FN_VERSION = "v2"`).
 
 | PostgreSQL Function | PG Input Arguments | Child PG Functions Called |
 |---|---|---|
