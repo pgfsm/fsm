@@ -40,3 +40,22 @@ CREATE OR REPLACE FUNCTION fsm_core.api_system_queue_type()
 CREATE OR REPLACE FUNCTION fsm_core.api_system_event_name()
   RETURNS text LANGUAGE sql IMMUTABLE AS
   $$ SELECT 'API_INTERNAL_EVENT'::text $$;
+
+CREATE TYPE fsm_core.fsm_event_data_v2 AS (
+    "eventType"    text,
+    "eventPayload" jsonb,
+    "actionType"   text
+);
+
+CREATE TYPE fsm_core.fsm_queue_msg_data_v2 AS (
+    "eventData"                    fsm_core.fsm_event_data_v2,
+    "queueId"                      text,
+    "queueType"                    text,
+    "queueVersion"                 text,
+    "sendToParentQueueId"          uuid,
+    "sendToParentQueueType"        text,
+    "sendToParentQueueIdEventName" text,
+    "queueMsgId"                   bigint,
+    "queueMsgDelay"                integer,
+    "queueFnName"                  text
+);

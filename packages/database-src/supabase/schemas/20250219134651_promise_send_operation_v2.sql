@@ -29,18 +29,18 @@ BEGIN
     END IF;
 
     queue_msg_data := jsonb_build_object(
-        'event_data', jsonb_build_object(
-            'event_type', input_event_name,
-            'event_payload', input_event_data,
-            'action_type', input_event_action_type
+        'eventData', jsonb_build_object(
+            'eventType',    input_event_name,
+            'eventPayload', input_event_data,
+            'actionType',   input_event_action_type
         ),
-        'queue_id', input_promise_queue_name,
-        'queue_fn_name', input_promise_fn_name,
-        'queue_type', input_promise_queue_type,
-        'queue_version', input_promise_queue_version,
-        'send_to_parent_queue_id', input_send_to_parent_queue_id,
-        'send_to_parent_queue_type', input_send_to_parent_queue_type,
-        'send_to_parent_queue_id_event_name', input_send_to_parent_queue_id_event_name
+        'queueId',                    input_promise_queue_name,
+        'queueFnName',                input_promise_fn_name,
+        'queueType',                  input_promise_queue_type,
+        'queueVersion',               input_promise_queue_version,
+        'sendToParentQueueId',        input_send_to_parent_queue_id,
+        'sendToParentQueueType',      input_send_to_parent_queue_type,
+        'sendToParentQueueIdEventName', input_send_to_parent_queue_id_event_name
     );
 
     BEGIN
@@ -54,11 +54,11 @@ BEGIN
         RAISE EXCEPTION 'Failed to send event to queue %', input_promise_queue_name;
     END IF;
 
-    -- Append queue_msg_id to queue_msg_data
-    queue_msg_data := queue_msg_data || jsonb_build_object('queue_msg_id', output_promise_queue_msg_id);
+    -- Append queueMsgId to queue_msg_data
+    queue_msg_data := queue_msg_data || jsonb_build_object('queueMsgId', output_promise_queue_msg_id);
 
-    -- Append queue_msg_delay to queue_msg_data
-    queue_msg_data := queue_msg_data || jsonb_build_object('queue_msg_delay', input_event_delay);
+    -- Append queueMsgDelay to queue_msg_data
+    queue_msg_data := queue_msg_data || jsonb_build_object('queueMsgDelay', input_event_delay);
 
 
     INSERT INTO fsm_core.fsm_promise_queue_event_logs (

@@ -114,8 +114,8 @@ export async function macrostepV2(
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
   const msgData = msg.message as unknown as FsmQueueMessage;
-  const eventType = msgData.event_data?.event_type;
-  const eventPayload = msgData.event_data?.event_payload ?? {};
+  const eventType = msgData.eventData?.eventType;
+  const eventPayload = msgData.eventData?.eventPayload ?? {};
 
   const macroSaveFnPayload = {
     remove_from_current_fsm_instance_queue_id: queueName,
@@ -287,7 +287,7 @@ export async function macrostepV2(
 
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
-    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.event_data?.event_payload);
+    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.eventData?.eventPayload);
 
   // get both removed and new_total_schedule_queue_data
   // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);

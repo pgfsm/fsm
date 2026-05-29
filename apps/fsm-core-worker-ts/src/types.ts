@@ -1,17 +1,5 @@
-import type { Json } from "@fsm/db/database.types";
+import type { Database } from "@fsm/db/database.types";
 
-export interface FsmQueueMessageEventData {
-  event_type: string;
-  event_payload: Json;
-  action_type: string;
-}
+export type FsmQueueMessageEventData = Database["fsm_core"]["CompositeTypes"]["fsm_event_data_v2"];
 
-export interface FsmQueueMessage {
-  event_data: FsmQueueMessageEventData;
-  queue_id: string;
-  queue_type: string | null;
-  queue_version: string | null;
-  send_to_parent_queue_id: string | null;
-  send_to_parent_queue_type: string | null;
-  send_to_parent_queue_id_event_name: string;
-}
+export type FsmQueueMessage = Database["fsm_core"]["CompositeTypes"]["fsm_queue_msg_data_v2"];

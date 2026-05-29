@@ -34,11 +34,11 @@ export async function processFSMPromiseQueueMessage(
   const execution_started_at = new Date().toISOString();
   const msg_id = msg.msg_id;
   const msgData = msg.message as unknown as FsmQueueMessage;
-  const send_to_parent_queue_id = msgData.send_to_parent_queue_id ?? "";
-  const send_to_parent_queue_id_msg_id = msgData.sendToParentQueueIdMsgId ?? "";
+  const send_to_parent_queue_id = msgData.sendToParentQueueId ?? "";
+  const send_to_parent_queue_id_msg_id = msgData.queueMsgId?.toString() ?? "";
   const event_name_base = msgData.sendToParentQueueIdEventName ?? "";
-  const event_action_type = msgData.event_data?.action_type ?? "";
-  const event_data_payload: Json = msgData.event_data?.event_payload ?? null;
+  const event_action_type = msgData.eventData?.actionType ?? "";
+  const event_data_payload: Json = msgData.eventData?.eventPayload ?? null;
 
   let send_event_name_to_parent_queue_id = event_name_base;
   let event_output: Json;
@@ -46,7 +46,7 @@ export async function processFSMPromiseQueueMessage(
 
   if (actorFn) {
     try {
-      const result = await actorFn(msgData.event_data?.event_payload ?? msgData.event_data?.event_payload);
+      const result = await actorFn(msgData.eventData?.eventPayload);
       send_event_name_to_parent_queue_id = "xstate.done.actor." + event_name_base;
       event_output = result as Json;
     } catch (err) {

@@ -1267,6 +1267,25 @@ export type Database = {
         descendant_states_to_enter: string[] | null
         descendant_states_for_default_entry: string[] | null
       }
+      fsm_event_data_v2: {
+        eventType: string | null
+        eventPayload: Json | null
+        actionType: string | null
+      }
+      fsm_queue_msg_data_v2: {
+        eventData:
+          | Database["fsm_core"]["CompositeTypes"]["fsm_event_data_v2"]
+          | null
+        queueId: string | null
+        queueType: string | null
+        queueVersion: string | null
+        sendToParentQueueId: string | null
+        sendToParentQueueType: string | null
+        sendToParentQueueIdEventName: string | null
+        queueMsgId: number | null
+        queueMsgDelay: number | null
+        queueFnName: string | null
+      }
     }
   }
   pgmq: {

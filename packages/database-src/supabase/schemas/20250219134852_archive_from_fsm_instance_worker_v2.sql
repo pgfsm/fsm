@@ -430,8 +430,8 @@ BEGIN
                     promise_queue_message := to_be_removed_promise_queue_msg_ids->i;
                     
                     IF (
-                        (promise_queue_entry->>'send_to_parent_queue_id_event_name')::text = (promise_queue_message->>'id')::text
-                        AND (promise_queue_entry->>'queue_fn_name')::text = (promise_queue_message->>'src')::text
+                        (promise_queue_entry->>'sendToParentQueueIdEventName')::text = (promise_queue_message->>'id')::text
+                        AND (promise_queue_entry->>'queueFnName')::text = (promise_queue_message->>'src')::text
                     ) THEN
                         remove_promise := true;
                         
@@ -458,8 +458,8 @@ BEGIN
             confirmed_match_for_promise := false;
             FOREACH promise_queue_entry IN ARRAY confirmed_removed_promise_queue_data LOOP
                 IF (
-                    (promise_queue_entry->>'send_to_parent_queue_id_event_name')::text = (promise_queue_message->>'id')::text
-                    AND (promise_queue_entry->>'queue_fn_name')::text = (promise_queue_message->>'src')::text
+                    (promise_queue_entry->>'sendToParentQueueIdEventName')::text = (promise_queue_message->>'id')::text
+                    AND (promise_queue_entry->>'queueFnName')::text = (promise_queue_message->>'src')::text
                 ) THEN
                     confirmed_match_for_promise := true;
                     EXIT;
@@ -499,8 +499,8 @@ BEGIN
             -- END;
             -- IF pq_name IS NOT NULL AND pq_name <> '' AND pq_msg_id IS NOT NULL THEN
                 PERFORM fsm_core.cancel_event_for_fsm_promise_type_worker_v2(
-                    promise_type_worker_name := (promise_queue_entry->>'queue_id')::text,
-                    queue_msg_id := (promise_queue_entry->>'queue_msg_id')::bigint
+                    promise_type_worker_name := (promise_queue_entry->>'queueId')::text,
+                    queue_msg_id := (promise_queue_entry->>'queueMsgId')::bigint
                 );
                 confirmed_removed_promise_queue_data_success := array_append(confirmed_removed_promise_queue_data_success, promise_queue_entry);
             -- END IF;
