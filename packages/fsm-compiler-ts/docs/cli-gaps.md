@@ -1,82 +1,82 @@
 # fsm-compiler-ts — CLI Gaps
 
-> **All gaps marked ❌ in sections 1–4 have been implemented.** Test coverage gaps (section 5) remain open.
-
 Audit of `src/cli/index.ts` against the actual function signatures in `src/index.ts`.
+
+Sections 1–4 are fully closed. Test coverage gaps (section 5) remain open.
 
 ---
 
 ## 1. Missing Flags per Command
 
 ### `generate`
-Calls: `generateFsmJSONFromFolders(folder, "fsm", [], showRecommendation)` (line 92)
+Calls: `generateFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs, showRecommendation)` (line 134)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ❌ hardcoded `"fsm"` | Cannot generate for `sharedFsm` or `sharedPromise` folders |
-| `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
+| `workflowType` | `-w, --workflow-type` | ✅ honours flag, defaults to `"fsm"` | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
 | `showRecommendation` | `-r, --show-recommendation` | ✅ | — |
 
 ### `generate-plugin`
-Calls: `generateFsmPluginFromFolders(folder, "fsm")` (line 95)
+Calls: `generateFsmPluginFromFolders(folder, workflowType ?? "fsm", skipDirs)` (line 137)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ❌ hardcoded `"fsm"` | Cannot generate plugins for `sharedFsm` folders |
-| `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
+| `workflowType` | `-w, --workflow-type` | ✅ honours flag, defaults to `"fsm"` | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
 
-### `clean`
-Calls: `deleteFsmJSONFromFolders(folder, "fsm")` (line 98)
-
-| Parameter | CLI Flag | Status | Impact |
-|---|---|---|---|
-| `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ❌ hardcoded `"fsm"` | Cannot clean `sharedFsm` or `sharedPromise` folders |
-| `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
-
-### `validate`
-Calls: `validateFsmPluginLoadFromFolders(folder, workflowType)` (line 101)
+### `delete`
+Calls: `deleteFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs)` (line 140)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ✅ | — |
-| `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
-| `availableActors` | `--available-actors` | ❌ hardcoded `[]` | External actor dependencies always reported as unresolved |
+| `workflowType` | `-w, --workflow-type` | ✅ honours flag, defaults to `"fsm"` | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+
+### `validate-plugin`
+Calls: `validateFsmPluginLoadFromFolders(folder, workflowType, skipDirs, availableActors)` (line 144)
+
+| Parameter | CLI Flag | Status | Impact |
+|---|---|---|---|
+| `folderPath` | `-f, --folder` | ✅ | — |
+| `workflowType` | `-w, --workflow-type` | ✅ | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+| `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()` | — |
 
 ### `load`
-Calls: `loadFsmJSONFromFolders(folder, workflowType, [], deps)` (line 105)
+Calls: `loadFsmJSONFromFolders(folder, workflowType, skipDirs, deps)` (line 154)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ✅ | — |
-| `skipDirs` | `--skip-dirs` | ❌ hardcoded `[]` | Cannot exclude subdirectories |
-| `deps` | env var `DATABASE_URL` | ⚠️ implicit | No early validation; fails mid-run if missing |
+| `workflowType` | `-w, --workflow-type` | ✅ | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+| `deps` | `-d, --db-url` or `DATABASE_URL` | ✅ `buildDeps()` prefers `--db-url`, falls back to env var, exits with clear error if neither set | — |
 
 ### `load-and-validate`
-Calls: `loadAndValidateFsmFromFolders(deps, folder, workflowType)` (line 110)
+Calls: `loadAndValidateFsmFromFolders(deps, folder, workflowType, skipDirs, availableActors)` (line 159)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
-| `deps` | env var `DATABASE_URL` | ⚠️ implicit | No early validation |
+| `deps` | `-d, --db-url` or `DATABASE_URL` | ✅ same as `load` | — |
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ✅ | — |
-| `skipDirs` | `--skip-dirs` | ❌ not passed | Cannot exclude subdirectories |
-| `availableActors` | `--available-actors` | ❌ not passed | External actor dependencies always unresolved |
+| `workflowType` | `-w, --workflow-type` | ✅ | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+| `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()` | — |
 
 ### `load-and-validate-promise`
-Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType)` (line 115)
+Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType, skipDirs, availableActors)` (line 165)
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
-| `deps` | env var `DATABASE_URL` | ⚠️ implicit | No early validation |
+| `deps` | `-d, --db-url` or `DATABASE_URL` | ✅ same as `load` | — |
 | `folderPath` | `-f, --folder` | ✅ | — |
-| `workflow_type` | `-w, --workflow-type` | ✅ | — |
-| `skipDirs` | `--skip-dirs` | ❌ not passed | Cannot exclude subdirectories |
-| `availableActors` | `--available-actors` | ❌ not passed | External actor dependencies always unresolved |
+| `workflowType` | `-w, --workflow-type` | ✅ | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+| `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()` | — |
 
 ---
 
@@ -84,8 +84,9 @@ Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType)` (line 115
 
 | Exported Function | CLI Command | Note |
 |---|---|---|
-| `validatePromisePluginLoadFromFolders` | *(none)* | Gap — `validateFsmPluginLoadFromFolders` has `validate`; this has no equivalent |
-| `addMissingFsmTypeToInvokeActor` | *(none)* | Intentional — internal transform, library-only |
+| `validateFsmPluginLoadFromFolders` | `validate-plugin` | ✅ |
+| `validatePromisePluginLoadFromFolders` | `validate-promise-plugin` | ✅ added |
+| `addMissingFsmTypeToInvokeActors` | *(none)* | Intentional — internal transform, library-only |
 | `normalizeActionsToObjects` | *(none)* | Intentional — internal transform, library-only |
 | `addActionNameFromDelay` | *(none)* | Intentional — internal transform, library-only |
 | `validateFsmPluginLoadFromFolder` | *(none)* | Intentional — single-folder variant called by the folders variant |
@@ -93,31 +94,29 @@ Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType)` (line 115
 | `validateLanguageModules` | *(none)* | Intentional — called internally by validate functions |
 | `isFunction`, `hasArity` | *(none)* | Intentional — utility predicates |
 
-**Suggested addition:** Add a `validate-promise` command that calls `validatePromisePluginLoadFromFolders`.
-
 ---
 
 ## 3. Input Validation Gaps
 
-| Gap | Location | Severity |
-|---|---|---|
-| `--workflow-type` accepts any string | line 68 | High — invalid types (e.g. `--workflow-type foobar`) silently pass validation and cause internal errors; should validate against `"fsm" \| "sharedFsm" \| "sharedPromise" \| "promise"` |
-| No check that `--folder` path exists | lines 72-81 | Medium — functions fail mid-execution with confusing directory errors instead of an upfront message |
-| No check for `DATABASE_URL` before DB commands | lines 83-116 | High — `buildDeps()` creates a Pool with `undefined` connection string; error surfaces on first query, not at startup |
+| Gap | Location | Status | Severity |
+|---|---|---|---|
+| `--workflow-type` accepts any string | startup (lines 87–91) | ✅ Fixed — validated against `VALID_WORKFLOW_TYPES` at startup, exits with error | High |
+| No check that `--folder` path exists | after missing-args block | ✅ Fixed — `Deno.stat(folder)` check exits with a clear error if missing or not a directory | Medium |
+| No early check for DB connection string | `buildDeps()` (lines 118–129) | ✅ Fixed — exits with a clear error message if neither `--db-url` nor `DATABASE_URL` is set | High |
 
 ---
 
 ## 4. Help Text Gaps
 
-Location: `src/cli/index.ts` lines 27-58.
+Location: `src/cli/index.ts` lines 32–73.
 
-| Issue | Severity |
+| Issue | Status |
 |---|---|
-| `-w, --workflow-type` documented as "required for validate, load, load-and-validate, load-and-validate-promise" — but `generate`, `generate-plugin`, and `clean` also accept it (it is just ignored, hardcoded to `"fsm"`) | Medium |
-| `--skip-dirs` flag does not exist in the CLI but is accepted by all underlying functions | High — users have no way to use this feature |
-| `--available-actors` flag does not exist in the CLI but is accepted by `validate`, `load-and-validate`, `load-and-validate-promise` | High — external actor dependencies always reported as unresolved |
-| `DATABASE_URL` env var requirement not mentioned for `load`, `load-and-validate`, `load-and-validate-promise` | High — silent failures when env var is missing |
-| `--show-recommendation` only applies to `generate` but help text does not say so | Low |
+| `--skip-dirs` flag missing from help and CLI | ✅ Fixed — flag exists, documented in help, passed to all commands |
+| `--available-actors` flag missing from help and CLI | ✅ Fixed — flag exists, documented in help, passed to validate and load-and-validate commands |
+| `DATABASE_URL` env var not mentioned for DB commands | ✅ Fixed — documented under `ENVIRONMENT` in help text |
+| `--show-recommendation` not scoped to `generate` in help | ✅ Fixed — help text notes it applies to `generate` only |
+| `-w` description says optional for `generate/delete` but omits `generate-plugin` | ✅ Fixed — now says "optional for generate, generate-plugin, delete" |
 
 ---
 
@@ -128,15 +127,20 @@ Test files: `test/cli.test.ts`, `src/cli/index-test.ts`.
 | Command / Scenario | Tested? |
 |---|---|
 | `--help` / `-h` | ✅ |
+| no args → help | ✅ |
 | `generate` (success) | ✅ |
 | `generate --show-recommendation` / `-r` | ✅ |
-| `validate` (success) | ✅ |
-| `validate -w` shorthand | ✅ |
-| `generate-plugin` | ❌ |
-| `clean` | ❌ |
-| `load` | ❌ (needs DB) |
-| `load-and-validate` | ❌ (needs DB) |
-| `load-and-validate-promise` | ❌ (needs DB) |
-| Invalid `--workflow-type` value | ❌ |
-| `--folder` path that does not exist | ❌ |
-| Missing `DATABASE_URL` for DB commands | ❌ |
+| `generate-plugin` | ✅ |
+| `delete` | ✅ |
+| `validate-plugin` (success) | ✅ |
+| `validate-plugin -w` shorthand | ✅ |
+| `validate-promise-plugin` | ✅ |
+| Invalid `--workflow-type` value | ✅ |
+| `--folder` path that does not exist | ✅ |
+| Missing DB connection string for DB commands | ✅ |
+| `--db-url` flag accepted and parsed | ✅ |
+| `--skip-dirs` flag | ✅ |
+| `--available-actors` flag | ✅ |
+| `load` (real DB) | ❌ (needs DB) |
+| `load-and-validate` (real DB) | ❌ (needs DB) |
+| `load-and-validate-promise` (real DB) | ❌ (needs DB) |

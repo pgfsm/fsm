@@ -11,6 +11,8 @@ async function generateLanguageFolders(
   delays: string[],
   actors: ActorReference[]
 ) {
+  // Deduplicates by src only — stub function name equals src, so actors sharing a src
+  // but differing in fsmType/fsmVersion must share one stub (duplicate exports would be a compile error).
   const actorNames = [...new Set(actors.map(a => a.src))];
   // 2.1 Create folders
   const actionsDir = `${basePath}/${lang}/actions`;

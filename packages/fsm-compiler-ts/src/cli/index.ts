@@ -51,7 +51,7 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder (required)
-  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
+  -w, --workflow-type <type>          Workflow type (optional for generate, generate-plugin, delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-plugin, validate-promise-plugin, load-and-validate, load-and-validate-promise)
@@ -73,7 +73,7 @@ EXAMPLES
 `);
 }
 
-if (args.help) {
+if (args.help || Deno.args.length === 0) {
   printHelp();
   Deno.exit(0);
 }
@@ -101,6 +101,19 @@ if (missing.length > 0) {
   console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
   printHelp();
   Deno.exit(1);
+}
+
+if (folder) {
+  try {
+    const stat = await Deno.stat(folder);
+    if (!stat.isDirectory) {
+      console.error(`Error: --folder "${folder}" is not a directory.`);
+      Deno.exit(1);
+    }
+  } catch {
+    console.error(`Error: --folder "${folder}" does not exist.`);
+    Deno.exit(1);
+  }
 }
 
 async function loadAvailableActors(): Promise<ActorReference[]> {

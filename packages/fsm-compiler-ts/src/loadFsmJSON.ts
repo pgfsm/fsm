@@ -23,8 +23,7 @@ async function loadFsmJSONFromFolder(
     // Call loadFsmStateFromJsonV2 and loadFsmTransitionFromJsonV2 with fsmData
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
-    const rootNodeText = null;
-    const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflowType, fsmName, fsmVersion);
+    const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, fsmName, fsmVersion);
     console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
     return fsmResult;
     
@@ -49,7 +48,7 @@ export async function loadFsmJSONFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   deps: DBDeps
-) {
+): Promise<any[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
   }
@@ -62,29 +61,25 @@ export async function loadFsmJSONFromFolders(
     console.log(`Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`);
   }
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
+  const folderResults: any[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {
         continue;
       }
-  
-
       const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
-      const folderResults = [];
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
-          if (subEntry.isDirectory) {
-            if (isVersionFolderName(subEntry.name)) {
-             
-              const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, deps);
-              folderResults.push(folderResult);
-              console.log(`Successfully loaded FSM from ${fsmDirPath}/${subEntry.name}`);
-            }else {
-              console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
-            }
+        if (subEntry.isDirectory) {
+          if (isVersionFolderName(subEntry.name)) {
+            const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, deps);
+            folderResults.push(folderResult);
+            console.log(`Successfully loaded FSM from ${fsmDirPath}/${subEntry.name}`);
+          } else {
+            console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
           }
+        }
       }
-      
-
     }
   }
+  return folderResults;
 }

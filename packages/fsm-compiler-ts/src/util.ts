@@ -10,6 +10,7 @@ export type InternalActor = {
   fsmVersion?: string;
   fsmAbsFolderPath: string;
   fsmRelativeFolderPath: string;
+  resolved: boolean;
 };
 
 export type ExternalActor = {

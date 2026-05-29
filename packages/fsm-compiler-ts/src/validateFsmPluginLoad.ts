@@ -53,7 +53,7 @@ export async function validateLanguageModules(
     const modulePath = `${modDir}/index.ts`;
     try {
       // Dynamic import of index.ts
-      const mod = await import(modulePath);
+      const mod = await import(`file://${modulePath}`);
       modules[modType.type] = mod;
       for (const name of modType.names) {
         // Check for method implementation
@@ -112,7 +112,7 @@ export async function validatePromisePluginLoadFromFolder(
   const modDir = `${absPath}/${lang}`;
   const modulePath = `${modDir}/index.ts`;
   try {
-    const mod = await import(modulePath);
+    const mod = await import(`file://${modulePath}`);
 
     if (typeof mod[dirName] !== "function") {
       console.log(`sharedPromise does not export '${dirName}' as a function.`);
@@ -319,7 +319,7 @@ export async function validateFsmPluginLoadFromFolder(
       );
       failedMethods.push({
         method: `${dependency.src}/${dependency.fsmVersion}`,
-        moduleType: dependency.fsmType,
+        moduleType: dependency.fsmType ?? "unknown",
         modulePath: "N/A - missing dependency",
       });
     }

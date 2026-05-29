@@ -52,13 +52,13 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
     console.log("[generate, no folder] ✅\n");
   }
 
-  // validate without --workflow-type
+  // validate-plugin without --workflow-type
   {
-    const { code, stderr } = await runCli(["validate", FSM_FOLDER]);
-    console.log("[validate, no --workflow-type] exit code:", code);
+    const { code, stderr } = await runCli(["validate-plugin", FSM_FOLDER]);
+    console.log("[validate-plugin, no --workflow-type] exit code:", code);
     console.assert(code === 1, "missing --workflow-type should exit 1");
     console.assert(stderr.includes("--workflow-type"), "should print workflow-type error");
-    console.log("[validate, no --workflow-type] ✅\n");
+    console.log("[validate-plugin, no --workflow-type] ✅\n");
   }
 
   // unknown command
@@ -87,12 +87,12 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
     console.log("[generate-plugin fsm] ✅\n");
   }
 
-  // validate — runs on example folder (no DB required)
+  // validate-plugin — runs on example folder (no DB required)
   {
-    const { code } = await runCli(["validate", FSM_FOLDER, "--workflow-type", "fsm"]);
-    console.log("[validate fsm] exit code:", code);
-    console.assert(code === 0, "validate should succeed");
-    console.log("[validate fsm] ✅\n");
+    const { code } = await runCli(["validate-plugin", FSM_FOLDER, "--workflow-type", "fsm"]);
+    console.log("[validate-plugin fsm] exit code:", code);
+    console.assert(code === 0, "validate-plugin should succeed");
+    console.log("[validate-plugin fsm] ✅\n");
   }
 
   console.log("=== CLI Tests complete ===");

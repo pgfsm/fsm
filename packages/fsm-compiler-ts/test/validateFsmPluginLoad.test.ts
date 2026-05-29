@@ -46,20 +46,22 @@ Deno.test("validateFsmPluginLoadFromFolder - returns defaults when fsm.json fail
     invalidFsmData,
     "testFsm",
     "v01",
-    "some/folder",
+    "/tmp/nonexistent/testFsm/v01",
+    "testFsm/v01",
+    "testParent",
     "/tmp/nonexistent",
-    "testFsm",
+    "testParent",
     "fsm",
     [],
   );
 
   assertEquals(result.fsmJsonPresent, true);
   assertEquals(result.fsmJsonFollowSchema, false);
-  assertEquals(result.moduleVerified, false);
+  assertEquals(result.isFsmModuleVerified, false);
   assertEquals(result.failedMethods, []);
-  assertEquals(result.requiredChildActors, []);
+  assertEquals(result.internalActors, []);
   assertEquals(result.externalActors, []);
-  assertEquals(result.resultValidateLanguageModules, undefined);
+  assertEquals(result.fsmModuleDefinition, undefined);
   assertEquals(result.fsmName, "testFsm");
   assertEquals(result.fsmVersion, "v01");
   assertEquals(result.fsmType, "fsm");

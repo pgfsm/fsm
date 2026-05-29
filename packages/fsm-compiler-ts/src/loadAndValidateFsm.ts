@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v1.json" with { type: "json" };
+import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType, type ActorReference } from "./util.ts";
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
@@ -168,7 +168,10 @@ export async function loadAndValidateFsmFromFolders(
                   folderResult,
                 );
 
-                allFolderResults.push({ ...folderResult, ...(fsmResult as object) });
+                allFolderResults.push({
+                  ...folderResult,
+                  ...(fsmResult != null && typeof fsmResult === "object" ? fsmResult : {}),
+                });
 
               } catch (err) {
                 if (err instanceof Deno.errors.NotFound) {
