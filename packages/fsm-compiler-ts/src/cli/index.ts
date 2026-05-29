@@ -14,7 +14,7 @@ import {
 import type { WorkflowType, ActorReference } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "folder", "workflow-type", "skip-dirs", "available-actors"],
+  string: ["command", "folder", "workflow-type", "skip-dirs", "available-actors", "db-url"],
   boolean: ["help", "show-recommendation"],
   alias: {
     h: "help",
@@ -24,6 +24,7 @@ const args = parseArgs(Deno.args, {
     r: "show-recommendation",
     s: "skip-dirs",
     a: "available-actors",
+    d: "db-url",
   },
 });
 
@@ -53,11 +54,13 @@ OPTIONS
   -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
-  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate, validate-promise, load-and-validate, load-and-validate-promise)
+  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-plugin, validate-promise-plugin, load-and-validate, load-and-validate-promise)
+  -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
   -h, --help                          Show this help message
 
 ENVIRONMENT
-  DATABASE_URL    Required for load, load-and-validate, load-and-validate-promise. Set in .env or environment.
+  DATABASE_URL    Fallback connection string for load, load-and-validate, load-and-validate-promise.
+                  Ignored if --db-url is provided.
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
@@ -65,8 +68,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
   deno run --allow-all src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-promise-plugin -f apps/fsm-core-example/sharedFSM -w sharedPromise
-  deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
-  deno run --allow-all src/cli/index.ts -c load-and-validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
+  deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
+  deno run --allow-all src/cli/index.ts -c load-and-validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise --db-url postgresql://user:pass@localhost:5432/db
 `);
 }
 
@@ -112,11 +115,13 @@ async function loadAvailableActors(): Promise<ActorReference[]> {
   }
 }
 
-async function buildDeps() {
-  dotenv.config({ path: ".env" });
-  const dbUrl = Deno.env.get("DATABASE_URL");
+async function buildDeps(connectionString?: string) {
+  const dbUrl = connectionString ?? (() => {
+    dotenv.config({ path: ".env" });
+    return Deno.env.get("DATABASE_URL");
+  })();
   if (!dbUrl) {
-    console.error("Error: DATABASE_URL environment variable is not set. Create a .env file or set it in your environment.");
+    console.error("Error: No database connection string provided. Use --db-url <url> or set DATABASE_URL in .env");
     Deno.exit(1);
   }
   const { Pool } = await import("pg");
@@ -145,18 +150,18 @@ try {
       break;
     }
     case "load": {
-      const deps = await buildDeps();
+      const deps = await buildDeps(args["db-url"]);
       await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
       break;
     }
     case "load-and-validate": {
-      const deps = await buildDeps();
+      const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
       await loadAndValidateFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
     case "load-and-validate-promise": {
-      const deps = await buildDeps();
+      const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
       await loadAndValidatePromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;

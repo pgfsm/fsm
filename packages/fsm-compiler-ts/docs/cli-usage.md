@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Deno** (see `.prototools` for pinned version)
-- **`.env` file** with `DATABASE_URL` set — required only for `load`, `load-and-validate`, `load-and-validate-promise`
+- **PostgreSQL connection string** — required for `load`, `load-and-validate`, `load-and-validate-promise`. Provide via `--db-url <url>` or set `DATABASE_URL` in a `.env` file (CLI arg takes precedence)
 - Run all commands from the **repo root**
 
 ## Invocation
@@ -21,6 +21,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | `--command <command>` | `-c` | Command to run (required) |
 | `--folder <folder>` | `-f` | Path to FSM folder, relative to repo root (required) |
 | `--workflow-type <type>` | `-w` | Workflow type — required for `validate-plugin`, `validate-promise-plugin`, `load`, `load-and-validate`, `load-and-validate-promise` |
+| `--db-url <url>` | `-d` | PostgreSQL connection string — overrides `DATABASE_URL` env var |
 | `--show-recommendation` | `-r` | Validate generated `fsm.json` against schema and print issues (`generate` only) |
 | `--help` | `-h` | Show help message |
 
@@ -113,46 +114,56 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ### `load`
 
-Load `fsm.json` files into the database. Requires `DATABASE_URL` in `.env`.
+Load `fsm.json` files into the database.
 
 ```bash
+# Pass connection string directly
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c load \
+  -f apps/fsm-core-example/fsm \
+  -w fsm \
+  --db-url postgresql://user:pass@localhost:5432/db
+
+# Or rely on DATABASE_URL in .env
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c load \
   -f apps/fsm-core-example/fsm \
   -w fsm
 ```
 
-**Required:** `-w / --workflow-type`, `DATABASE_URL` env var
+**Required:** `-w / --workflow-type`, and either `--db-url` or `DATABASE_URL` in `.env`
 
 ---
 
 ### `load-and-validate`
 
-Load FSM JSON into the database and verify plugin module exports in one step. Requires `DATABASE_URL` in `.env`.
+Load FSM JSON into the database and verify plugin module exports in one step.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c load-and-validate \
   -f apps/fsm-core-example/fsm \
-  -w fsm
+  -w fsm \
+  --db-url postgresql://user:pass@localhost:5432/db
 ```
 
-**Required:** `-w / --workflow-type`, `DATABASE_URL` env var
+**Required:** `-w / --workflow-type`, and either `--db-url` or `DATABASE_URL` in `.env`
 
 ---
 
 ### `load-and-validate-promise`
 
-Load a promise-based workflow folder into the database and verify exports. Requires `DATABASE_URL` in `.env`.
+Load a promise-based workflow folder into the database and verify exports.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c load-and-validate-promise \
   -f apps/fsm-core-example/sharedFSM \
-  -w sharedPromise
+  -w sharedPromise \
+  --db-url postgresql://user:pass@localhost:5432/db
 ```
 
-**Required:** `-w / --workflow-type`, `DATABASE_URL` env var
+**Required:** `-w / --workflow-type`, and either `--db-url` or `DATABASE_URL` in `.env`
 
 ---
 
@@ -169,7 +180,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-plugi
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
 
 # 4. Load into DB and verify
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
 ```
 
 ---

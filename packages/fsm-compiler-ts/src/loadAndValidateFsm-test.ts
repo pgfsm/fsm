@@ -1,10 +1,11 @@
 import dotenv from "dotenv";
 import { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from './loadAndValidateFsm.ts';
-import { pool } from "@fsm/db";
+import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });
 
 
+const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
 
 (async () => {
   
