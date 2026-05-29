@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 // Import Ajv for JSON schema validation
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType, type ActorReference, type FailedMethod, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
+import { isVersionFolderName, type WorkflowType, type ActorReference, type FailedMethod, type InternalActor, type ExternalActor, type FsmPluginValidationResult, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 import type { Json } from "@fsm/db/database.types";
 
 
@@ -97,13 +97,13 @@ export async function validatePromisePluginLoadFromFolder(
   parentRelPath: string,
   workflowType: WorkflowType,
   availableActors: ActorReference[],
-) {
+): Promise<FsmPluginValidationResult> {
   let fsmJsonPresent = false;
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
-  let internalActors: { src: string; fsmType: string; fsmVersion: string }[] = [];
-  let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
+  let internalActors: InternalActor[] = [];
+  let externalActors: ExternalActor[] = [];
   let failedMethods: FailedMethod[] = [];
 
   console.warn(`Skipping plugin validation for sharedPromise ${dirName}/${versionName} since it is only used as a dependency and not directly invoked.`);
@@ -153,7 +153,7 @@ export async function validatePromisePluginLoadFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   availableActors: ActorReference[] = [],
-) {
+): Promise<FsmPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
       `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
@@ -175,7 +175,7 @@ export async function validatePromisePluginLoadFromFolders(
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
 
-  const allFolderResults = [];
+  const allFolderResults: FsmPluginValidationResult[] = [];
   // check if absFolderPath exists and is a directory
   try {
     const stat = await Deno.stat(absFolderPath);
@@ -193,7 +193,7 @@ export async function validatePromisePluginLoadFromFolders(
         for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
-              
+
               const folderResult = await validatePromisePluginLoadFromFolder(
                 dirEntry.name,
                 subEntry.name,
@@ -241,13 +241,13 @@ export async function validateFsmPluginLoadFromFolder(
   parentRelPath: string,
   workflowType: WorkflowType,
   availableActors: ActorReference[],
-) {
+): Promise<FsmPluginValidationResult> {
   let fsmJsonPresent = true;
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
-  let internalActors: { src: string; fsmName: string; fsmType: string; fsmVersion: string; fsmAbsFolderPath: string; fsmRelativeFolderPath: string }[] = [];
-  let externalActors: { src: string; fsmType: string; fsmVersion: string, resolved: boolean }[] = [];
+  let internalActors: InternalActor[] = [];
+  let externalActors: ExternalActor[] = [];
   let failedMethods: FailedMethod[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
@@ -352,7 +352,7 @@ export async function validateFsmPluginLoadFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   availableActors: ActorReference[] = [],
-) {
+): Promise<FsmPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
       `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
@@ -374,7 +374,7 @@ export async function validateFsmPluginLoadFromFolders(
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
 
-  const allFolderResults = [];
+  const allFolderResults: FsmPluginValidationResult[] = [];
   // check if absFolderPath exists and is a directory
   try {
     const stat = await Deno.stat(absFolderPath);

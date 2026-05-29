@@ -3,6 +3,41 @@ export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 export type ActorReference = { src: string; fsmType?: string; fsmVersion?: string };
 export type FailedMethod = { method: string; moduleType: string; modulePath: string };
 
+export type InternalActor = {
+  src: string;
+  fsmName: string;
+  fsmType?: string;
+  fsmVersion?: string;
+  fsmAbsFolderPath: string;
+  fsmRelativeFolderPath: string;
+};
+
+export type ExternalActor = {
+  src: string;
+  fsmType?: string;
+  fsmVersion?: string;
+  resolved: boolean;
+};
+
+export type FsmPluginValidationResult = {
+  src: string;
+  fsmName: string;
+  fsmVersion: string;
+  fsmType: WorkflowType;
+  fsmAbsFolderPath: string;
+  fsmRelativeFolderPath: string;
+  fsmParentDirName: string;
+  fsmParentAbsFolderPath: string;
+  fsmParentRelativeFolderPath: string;
+  fsmJsonPresent: boolean;
+  fsmJsonFollowSchema: boolean;
+  isFsmModuleVerified: boolean;
+  fsmModuleDefinition: any;
+  failedMethods: FailedMethod[];
+  internalActors: InternalActor[];
+  externalActors: ExternalActor[];
+};
+
 export const DELAY_ACTION_NAME_PREFIX = "delay";
 
 export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);

@@ -1,114 +1,128 @@
 # fsm-compiler-ts — Naming Suggestions
 
-> **All suggestions in this document have been implemented.**
-
 Suggestions to improve consistency between source files, exported functions, CLI commands, and parameter names.
 
 ---
 
-## 1. Parameter Names — `workflow_type` → `workflowType`
+## Summary
 
-**Priority: Critical**
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | `workflow_type` → `workflowType` in all function params | ✅ Implemented |
+| 2 | `cleanFsmJSON.ts` / `clean` → `deleteFsmJSONFromFolders.ts` / `delete` | ✅ Implemented |
+| 3 | Strip `fsm` prefix from validation function parameters | ✅ Implemented |
+| 4 | Extract `FsmPluginValidationResult` named type | ✅ Implemented |
+| 5 | `addMissingFsmTypeToInvokeActor` → plural `...InvokeActors` | ✅ Implemented |
+| 6 | Add `validate-promise` CLI command for `validatePromisePluginLoadFromFolders` | ✅ Implemented |
+| 7 | `loadAndVerify*` → `loadAndValidate*` | ✅ Implemented |
+| 8 | CLI `validate` → `validate-plugin`, `validate-promise` → `validate-promise-plugin` | ✅ Implemented |
 
-Every public function in this package uses `workflow_type` (snake_case) as a parameter name, while every other parameter uses camelCase. This is the single most pervasive inconsistency.
+---
 
-| Function | File | Current Param | Suggested Param |
+## 1. `workflow_type` → `workflowType` ✅ Implemented
+
+Every public function previously used `workflow_type` (snake_case) while all other parameters were camelCase.
+
+| Function | File | Was | Is now | Status |
+|---|---|---|---|---|
+| `generateFsmJSONFromFolders` | `generateFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
+| `generateFsmJSONFromFolder` (internal) | `generateFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
+| `generateFsmPluginFromFolders` | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` | ✅ |
+| `generateFsmPluginFromFolder` (internal) | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` | ✅ |
+| `deleteFsmJSONFromFolders` | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` | ✅ |
+| `deleteFsmJSONFromFolder` (internal) | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` | ✅ |
+| `loadFsmJSONFromFolders` | `loadFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
+| `loadFsmJSONFromFolder` (internal) | `loadFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
+| `loadAndValidateFsmFromFolders` | `loadAndValidateFsm.ts` | `workflow_type` | `workflowType` | ✅ |
+| `loadAndValidatePromiseFromFolders` | `loadAndValidateFsm.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validateFsmPluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validateFsmPluginLoadFromFolder` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validatePromisePluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validatePromisePluginLoadFromFolder` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
+
+---
+
+## 2. File Name / CLI Command — `clean` → `delete` ✅ Implemented
+
+The file was named `cleanFsmJSON.ts` but exported `deleteFsmJSONFromFolders`. The CLI command was `clean`. All three used different verbs.
+
+| Layer | Was | Is now | Status |
 |---|---|---|---|
-| `generateFsmJSONFromFolders` | `generateFsmJSON.ts` | `workflow_type` | `workflowType` |
-| `generateFsmJSONFromFolder` (internal) | `generateFsmJSON.ts` | `workflow_type` | `workflowType` |
-| `generateFsmPluginFromFolders` | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` |
-| `generateFsmPluginFromFolder` (internal) | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` |
-| `deleteFsmJSONFromFolders` | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` |
-| `deleteFsmJSONFromFolder` (internal) | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` |
-| `loadFsmJSONFromFolders` | `loadFsmJSON.ts` | `workflow_type` | `workflowType` |
-| `loadFsmJSONFromFolder` (internal) | `loadFsmJSON.ts` | `workflow_type` | `workflowType` |
-| `loadAndVerifyFsmFromFolders` | `loadAndVerifyFsm.ts` | `workflow_type` | `workflowType` |
-| `loadAndVerifyPromiseFromFolders` | `loadAndVerifyFsm.ts` | `workflow_type` | `workflowType` |
-| `validateFsmPluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` |
-| `validateFsmPluginLoadFromFolder` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` |
-| `validatePromisePluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` |
-| `validatePromisePluginLoadFromFolder` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` |
+| File name | `cleanFsmJSON.ts` | `deleteFsmJSONFromFolders.ts` | ✅ |
+| Exported function | `deleteFsmJSONFromFolders` | *(unchanged)* | ✅ |
+| CLI command | `clean` | `delete` | ✅ |
 
 ---
 
-## 2. File Name vs Export Name Mismatch *(Implemented)*
+## 3. Strip `fsm` Prefix from Validation Function Parameters ✅ Implemented
 
-**Priority: Critical**
+`validateFsmPluginLoadFromFolder` and `validatePromisePluginLoadFromFolder` previously took 7+ parameters all prefixed with `fsm`. The function name already scopes them.
 
-The file was named `cleanFsmJSON.ts` but its exported function was `deleteFsmJSONFromFolders`. The CLI command was `clean`. All three used different verbs for the same operation.
-
-| Layer | Was | Is now |
+| Was | Is now | Status |
 |---|---|---|
-| File name | `cleanFsmJSON.ts` | `deleteFsmJSONFromFolders.ts` *(implemented)* |
-| Exported function | `deleteFsmJSONFromFolders` | *(unchanged)* |
-| CLI command | `clean` | `delete` *(implemented)* |
+| `fsmDirName` | `dirName` | ✅ |
+| `fsmVersionDirName` | `versionName` | ✅ |
+| `fsmAbsFolderPath` | `absPath` | ✅ |
+| `fsmRelativeFolderPath` | `relPath` | ✅ |
+| `fsmParentDirName` | `parentDirName` | ✅ |
+| `fsmParentAbsFolderPath` | `parentAbsPath` | ✅ |
+| `fsmParentRelativeFolderPath` | `parentRelPath` | ✅ |
 
 ---
 
-## 3. Redundant `fsm` Prefix in Validation Function Parameters
+## 4. Extract Named Types for Recurring Inline Shapes ✅ Implemented
 
-**Priority: Medium**
+Anonymous object shapes that appeared across multiple files are now named types in `util.ts` and exported from `index.ts`.
 
-`validateFsmPluginLoadFromFolder` and `validatePromisePluginLoadFromFolder` take 7+ parameters all prefixed with `fsm`. Since the function name already scopes these to FSM context, the prefix adds noise without clarity.
-
-| Current Param | Suggested Param |
-|---|---|
-| `fsmDirName` | `dirName` |
-| `fsmVersionDirName` | `versionName` |
-| `fsmAbsFolderPath` | `absPath` |
-| `fsmRelativeFolderPath` | `relPath` |
-| `fsmParentDirName` | `parentDirName` |
-| `fsmParentAbsFolderPath` | `parentAbsPath` |
-| `fsmParentRelativeFolderPath` | `parentRelPath` |
-
----
-
-## 4. Missing Named Types for Recurring Inline Shapes
-
-**Priority: Medium**
-
-Several anonymous object shapes appear across multiple files. Extracting them as named types in `util.ts` (or a new `types.ts`) would reduce repetition and improve IDE support.
-
-| Shape | Used In | Suggested Type Name |
+| Shape | Suggested Type Name | Status |
 |---|---|---|
-| `{ src: string; fsmType?: string; fsmVersion?: string }` | `validateFsmPluginLoad.ts`, `generateFsmPlugin.ts`, `loadAndVerifyFsm.ts` | `ActorReference` |
-| `{ method: string; moduleType: string; modulePath: string }` | `validateFsmPluginLoad.ts` (multiple functions) | `FailedMethod` |
-| `{ src: string; fsmName: string; fsmType: string; fsmVersion: string; fsmAbsFolderPath: string; fsmRelativeFolderPath: string; ... }` | return types in `validateFsmPluginLoad.ts` | `FsmPluginValidationResult` |
+| `{ src: string; fsmType?: string; fsmVersion?: string }` | `ActorReference` | ✅ — in `util.ts` |
+| `{ method: string; moduleType: string; modulePath: string }` | `FailedMethod` | ✅ — in `util.ts` |
+| Internal actor shape with `fsmName`, `fsmAbsFolderPath`, `fsmRelativeFolderPath` | `InternalActor` | ✅ — in `util.ts` |
+| External actor shape with `resolved: boolean` | `ExternalActor` | ✅ — in `util.ts` |
+| Full validation result returned by `validateFsmPluginLoadFromFolder` | `FsmPluginValidationResult` | ✅ — in `util.ts` |
+
+All four `validate*` functions in `validateFsmPluginLoad.ts` now have explicit `Promise<FsmPluginValidationResult>` / `Promise<FsmPluginValidationResult[]>` return types.
 
 ---
 
-## 5. `addMissingFsmTypeToInvokeActor` — Inconsistent Singular/Plural
+## 5. `addMissingFsmTypeToInvokeActor` → Plural ✅ Implemented
 
-**Priority: Low**
+All exported functions that process collections use the plural form. This function processes all `invoke` entries in a JSON tree but was named in the singular.
 
-All other exported functions that operate on collections use the plural form in their name (`generateFsmJSONFromFolders`, `validateFsmPluginLoadFromFolders`, etc.). This function processes all `invoke` entries in a JSON tree but its name is singular (`InvokeActor`).
-
-| Current | Suggested | Reason |
+| Was | Is now | Status |
 |---|---|---|
-| `addMissingFsmTypeToInvokeActor` | `addMissingFsmTypeToInvokeActors` | Plural to match processing-multiple-entries behaviour |
+| `addMissingFsmTypeToInvokeActor` | `addMissingFsmTypeToInvokeActors` | ✅ |
 
 ---
 
-## 6. `validatePromisePluginLoadFromFolders` — No CLI Command
+## 6. `validatePromisePluginLoadFromFolders` — Add CLI Command ✅ Implemented
 
-**Priority: Low**
+`validatePromisePluginLoadFromFolders` was exported but had no CLI command while its FSM counterpart had `validate`.
 
-`validatePromisePluginLoadFromFolders` is exported from `index.ts` but has no CLI command. By contrast, `validateFsmPluginLoadFromFolders` has the `validate` command. If promise validation is intentionally CLI-only via library, add a code comment. Otherwise, add a `validate-promise` CLI command for symmetry.
-
-| Exported Function | CLI Command |
-|---|---|
-| `validateFsmPluginLoadFromFolders` | `validate` ✅ |
-| `validatePromisePluginLoadFromFolders` | *(none)* ❌ |
-
----
-
-## 7. `loadAndVerify*` → `loadAndValidate*` *(Implemented)*
-
-**Priority: Medium**
-
-`verify` was the only verb in the package not aligned with `validate`. Renamed for consistency.
-
-| Old Name | New Name | File |
+| Exported Function | CLI Command | Status |
 |---|---|---|
-| `loadAndVerifyFsmFromFolders` | `loadAndValidateFsmFromFolders` | `loadAndValidateFsm.ts` (was `loadAndVerifyFsm.ts`) |
-| `loadAndVerifyPromiseFromFolders` | `loadAndValidatePromiseFromFolders` | `loadAndValidateFsm.ts` |
+| `validateFsmPluginLoadFromFolders` | `validate-plugin` | ✅ |
+| `validatePromisePluginLoadFromFolders` | `validate-promise-plugin` | ✅ |
+
+---
+
+## 7. `loadAndVerify*` → `loadAndValidate*` ✅ Implemented
+
+`verify` was the only verb in the package not aligned with `validate`.
+
+| Was | Is now | File | Status |
+|---|---|---|---|
+| `loadAndVerifyFsmFromFolders` | `loadAndValidateFsmFromFolders` | `loadAndValidateFsm.ts` (was `loadAndVerifyFsm.ts`) | ✅ |
+| `loadAndVerifyPromiseFromFolders` | `loadAndValidatePromiseFromFolders` | `loadAndValidateFsm.ts` | ✅ |
+
+---
+
+## 8. CLI Commands — `validate` → `validate-plugin` ✅ Implemented
+
+`validate` was ambiguous — it could mean "validate the fsm.json schema" or "validate the TypeScript plugin module exports". It's the latter. `validate-plugin` makes the target explicit. The sister command follows the same pattern for symmetry.
+
+| Was | Is now | Calls | Status |
+|---|---|---|---|
+| `validate` | `validate-plugin` | `validateFsmPluginLoadFromFolders` | ✅ |
+| `validate-promise` | `validate-promise-plugin` | `validatePromisePluginLoadFromFolders` | ✅ |

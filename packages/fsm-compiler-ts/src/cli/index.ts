@@ -38,8 +38,8 @@ COMMANDS
   generate                  Generate fsm.json from machine.ts files
   generate-plugin           Generate TypeScript plugin stubs from fsm.json
   delete                    Delete generated fsm.json / xstate-fsm.json files
-  validate                  Validate plugin load for an FSM folder
-  validate-promise          Validate plugin load for a sharedPromise folder
+  validate-plugin           Validate plugin load for an FSM folder
+  validate-promise-plugin   Validate plugin load for a sharedPromise folder
   load                      Load FSM JSON into the database
   load-and-validate         Load FSM JSON into DB and validate plugins
   load-and-validate-promise Load Promise workflow into DB and validate plugins
@@ -50,7 +50,7 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder (required)
-  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate, validate-promise, load, load-and-validate, load-and-validate-promise)
+  -w, --workflow-type <type>          Workflow type (optional for generate/delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate, validate-promise, load-and-validate, load-and-validate-promise)
@@ -63,8 +63,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm -w sharedFsm
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
-  deno run --allow-all src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
-  deno run --allow-all src/cli/index.ts -c validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
+  deno run --allow-all src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
+  deno run --allow-all src/cli/index.ts -c validate-promise-plugin -f apps/fsm-core-example/sharedFSM -w sharedPromise
   deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c load-and-validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise
 `);
@@ -87,7 +87,7 @@ if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
   Deno.exit(1);
 }
 
-const needsWorkflowType = ["validate", "validate-promise", "load", "load-and-validate", "load-and-validate-promise"];
+const needsWorkflowType = ["validate-plugin", "validate-promise-plugin", "load", "load-and-validate", "load-and-validate-promise"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
@@ -134,12 +134,12 @@ try {
     case "delete":
       await deleteFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs);
       break;
-    case "validate": {
+    case "validate-plugin": {
       const availableActors = await loadAvailableActors();
       await validateFsmPluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
       break;
     }
-    case "validate-promise": {
+    case "validate-promise-plugin": {
       const availableActors = await loadAvailableActors();
       await validatePromisePluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
       break;

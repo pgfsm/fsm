@@ -13,5 +13,5 @@ export {
 } from "./validateFsmPluginLoad.ts";
 export { deleteFsmJSONFromFolders } from "./deleteFsmJSONFromFolders.ts";
 export { isVersionFolderName, isValidDateFolderName, isTimestampFolderName, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX, replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "./util.ts";
-export type { ActorReference, FailedMethod } from "./util.ts";
+export type { ActorReference, FailedMethod, InternalActor, ExternalActor, FsmPluginValidationResult } from "./util.ts";
 export type { WorkflowType } from "./util.ts";

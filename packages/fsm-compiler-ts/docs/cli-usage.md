@@ -20,7 +20,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 |---|---|---|
 | `--command <command>` | `-c` | Command to run (required) |
 | `--folder <folder>` | `-f` | Path to FSM folder, relative to repo root (required) |
-| `--workflow-type <type>` | `-w` | Workflow type — required for `validate`, `load`, `load-and-validate`, `load-and-validate-promise` |
+| `--workflow-type <type>` | `-w` | Workflow type — required for `validate-plugin`, `validate-promise-plugin`, `load`, `load-and-validate`, `load-and-validate-promise` |
 | `--show-recommendation` | `-r` | Validate generated `fsm.json` against schema and print issues (`generate` only) |
 | `--help` | `-h` | Show help message |
 
@@ -90,19 +90,19 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-### `validate`
+### `validate-plugin`
 
 Validate that all TypeScript plugin modules (actions, guards, delays, actors) export the functions referenced in `fsm.json`. Does not require a database connection.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c validate \
+  -c validate-plugin \
   -f apps/fsm-core-example/fsm \
   -w fsm
 
 # Shared FSM folder
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c validate \
+  -c validate-plugin \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedFsm
 ```
@@ -166,7 +166,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate -f ap
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-plugin -f apps/fsm-core-example/fsm
 
 # 3. Validate plugin exports without DB
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate -f apps/fsm-core-example/fsm -w fsm
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
 
 # 4. Load into DB and verify
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm
@@ -180,6 +180,6 @@ See [cli-gaps.md](./cli-gaps.md) for the full audit. Key points:
 
 - `--workflow-type` is **ignored** for `generate`, `generate-plugin`, and `delete` — hardcoded to `"fsm"`
 - `--skip-dirs` flag does not exist — subdirectories cannot be excluded
-- `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate` and `load-and-validate`
-- `validatePromisePluginLoadFromFolders` has no CLI command — use the library API directly
+- `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate-plugin` and `load-and-validate`
+- `validatePromisePluginLoadFromFolders` is available as `validate-promise-plugin`
 - No early validation that `--folder` exists or that `DATABASE_URL` is set
