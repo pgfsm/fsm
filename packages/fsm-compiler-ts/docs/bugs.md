@@ -1,6 +1,6 @@
 # fsm-compiler-ts — Potential Bugs
 
-Source files audited: `src/generateFsmJSON.ts`, `src/generateFsmPlugin.ts`, `src/cleanFsmJSON.ts`, `src/loadFsmJSON.ts`, `src/loadAndVerifyFsm.ts`, `src/validateFsmPluginLoad.ts`, `src/util.ts`, `src/cli/index.ts`.
+Source files audited: `src/generateFsmJSON.ts`, `src/generateFsmPlugin.ts`, `src/deleteFsmJSONFromFolders.ts`, `src/loadFsmJSON.ts`, `src/loadAndValidateFsm.ts`, `src/validateFsmPluginLoad.ts`, `src/util.ts`, `src/cli/index.ts`.
 
 ---
 
@@ -148,14 +148,14 @@ If two actors share the same `src` string but differ in `fsmType` or `fsmVersion
 
 ## Bug #9 — Medium | `src/cli/index.ts:92, 95, 98` ✅ Fixed (as CLI gap)
 
-**`workflow_type` hardcoded as `"fsm"` for `generate`, `generate-plugin`, `clean`**
+**`workflow_type` hardcoded as `"fsm"` for `generate`, `generate-plugin`, `delete`**
 
 ```ts
 case "generate":
   await generateFsmJSONFromFolders(folder!, "fsm", [], args["show-recommendation"]);
 case "generate-plugin":
   await generateFsmPluginFromFolders(folder!, "fsm");
-case "clean":
+case "delete":
   await deleteFsmJSONFromFolders(folder!, "fsm");
 ```
 

@@ -76,13 +76,13 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-### `clean`
+### `delete`
 
 Delete all generated `fsm.json` and `xstate-fsm.json` files from a folder tree.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c clean \
+  -c delete \
   -f apps/fsm-core-example/fsm
 ```
 
@@ -178,7 +178,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-valid
 
 See [cli-gaps.md](./cli-gaps.md) for the full audit. Key points:
 
-- `--workflow-type` is **ignored** for `generate`, `generate-plugin`, and `clean` — hardcoded to `"fsm"`
+- `--workflow-type` is **ignored** for `generate`, `generate-plugin`, and `delete` — hardcoded to `"fsm"`
 - `--skip-dirs` flag does not exist — subdirectories cannot be excluded
 - `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate` and `load-and-validate`
 - `validatePromisePluginLoadFromFolders` has no CLI command — use the library API directly

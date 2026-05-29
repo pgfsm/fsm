@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { deleteFsmJSONFromFolders } from './deleteFsmJSON.ts';
+import { deleteFsmJSONFromFolders } from './deleteFsmJSONFromFolders.ts';
 
 dotenv.config({ path: "./../../.env" });
 

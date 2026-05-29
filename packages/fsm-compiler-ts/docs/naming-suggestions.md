@@ -18,8 +18,8 @@ Every public function in this package uses `workflow_type` (snake_case) as a par
 | `generateFsmJSONFromFolder` (internal) | `generateFsmJSON.ts` | `workflow_type` | `workflowType` |
 | `generateFsmPluginFromFolders` | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` |
 | `generateFsmPluginFromFolder` (internal) | `generateFsmPlugin.ts` | `workflow_type` | `workflowType` |
-| `deleteFsmJSONFromFolders` | `cleanFsmJSON.ts` | `workflow_type` | `workflowType` |
-| `deleteFsmJSONFromFolder` (internal) | `cleanFsmJSON.ts` | `workflow_type` | `workflowType` |
+| `deleteFsmJSONFromFolders` | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` |
+| `deleteFsmJSONFromFolder` (internal) | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` |
 | `loadFsmJSONFromFolders` | `loadFsmJSON.ts` | `workflow_type` | `workflowType` |
 | `loadFsmJSONFromFolder` (internal) | `loadFsmJSON.ts` | `workflow_type` | `workflowType` |
 | `loadAndVerifyFsmFromFolders` | `loadAndVerifyFsm.ts` | `workflow_type` | `workflowType` |
@@ -31,19 +31,17 @@ Every public function in this package uses `workflow_type` (snake_case) as a par
 
 ---
 
-## 2. File Name vs Export Name Mismatch — `cleanFsmJSON.ts` / `deleteFsmJSONFromFolders`
+## 2. File Name vs Export Name Mismatch *(Implemented)*
 
 **Priority: Critical**
 
-The file is named `cleanFsmJSON.ts` but its exported function is `deleteFsmJSONFromFolders`. The CLI command for this is `clean`. All three use different verbs for the same operation.
+The file was named `cleanFsmJSON.ts` but its exported function was `deleteFsmJSONFromFolders`. The CLI command was `clean`. All three used different verbs for the same operation.
 
-| Layer | Current | Suggested |
+| Layer | Was | Is now |
 |---|---|---|
-| File name | `cleanFsmJSON.ts` | `deleteFsmJSON.ts` |
-| Exported function | `deleteFsmJSONFromFolders` | *(keep — matches "delete" verb)* |
-| CLI command | `clean` | `delete` |
-
-Pick one verb — `delete` is the most precise. Rename the file and CLI command to match the function.
+| File name | `cleanFsmJSON.ts` | `deleteFsmJSONFromFolders.ts` *(implemented)* |
+| Exported function | `deleteFsmJSONFromFolders` | *(unchanged)* |
+| CLI command | `clean` | `delete` *(implemented)* |
 
 ---
 
