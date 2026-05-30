@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker, createAndStartPromiseWorker } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type"],
+  string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type", "db-url"],
   boolean: ["help", "validate-plugin"],
   alias: {
     h: "help",
@@ -14,6 +14,7 @@ const args = parseArgs(Deno.args, {
     v: "fsm-version",
     f: "fsm-folder-path",
     t: "promise-type",
+    d: "db-url",
   },
 });
 
@@ -38,6 +39,7 @@ OPTIONS
   -v, --fsm-version <version>       FSM version number (required)
   -f, --fsm-folder-path <path>      Absolute path to FSM folder for loading actions/guards/delays/actors (required)
   -t, --promise-type <type>         Promise actor type to invoke (required for start-promise-worker, create-and-start-promise-worker)
+  -d, --db-url <url>                Database connection URL (overrides DATABASE_URL from .env)
       --validate-plugin             Use validateFsmPluginLoadFromFolder instead of direct imports
   -h, --help                        Show this help message
 
@@ -61,6 +63,7 @@ const fsmName = args["fsm-name"];
 const fsmVersion = args["fsm-version"];
 const fsmFolderPath = args["fsm-folder-path"];
 const promiseType = args["promise-type"];
+const dbUrl = args["db-url"];
 
 const needsQueueName = ["start-worker", "start-worker-with-db-lock", "start-promise-worker", "create-and-start-promise-worker"];
 const needsPromiseType = ["start-promise-worker", "create-and-start-promise-worker"];
@@ -79,60 +82,113 @@ if (missing.length > 0) {
   Deno.exit(1);
 }
 
+try {
+  await Deno.stat(fsmFolderPath!);
+} catch {
+  console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
+  Deno.exit(1);
+}
+
 async function buildDeps() {
   dotenv.config({ path: ".env" });
   const { Pool } = await import("pg");
-  return { db: new Pool({ connectionString: Deno.env.get("DATABASE_URL") }), useSupabase: false };
+  return { db: new Pool({ connectionString: dbUrl ?? Deno.env.get("DATABASE_URL") }), useSupabase: false };
 }
 
 const verifiedModule = { fsmAbsFolderPath: fsmFolderPath };
 const validatePlugin = args["validate-plugin"] === true;
 
+// ── Graceful / force shutdown ────────────────────────────────────────────────
+
+const controller = new AbortController();
+let shutdownRequested = false;
+
+const onSignal = () => {
+  if (shutdownRequested) {
+    console.log("\nForce exit.");
+    Deno.exit(0);
+  }
+  shutdownRequested = true;
+  console.log("\nShutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
+  controller.abort();
+};
+
+Deno.addSignalListener("SIGINT", onSignal);
+Deno.addSignalListener("SIGTERM", onSignal);
+
+// Resolves once the abort signal fires (used to block fire-and-forget commands).
+const waitForAbort = () =>
+  new Promise<void>((resolve) =>
+    controller.signal.addEventListener("abort", resolve, { once: true })
+  );
+
+// ── Commands ─────────────────────────────────────────────────────────────────
+
 try {
   switch (command) {
     case "start-worker": {
       const deps = await buildDeps();
-      await startFSMWorker(deps, queueName!, fsmName!, Number(fsmVersion), verifiedModule, validatePlugin);
+      console.log(`Worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      await startFSMWorker(deps, queueName!, fsmName!, Number(fsmVersion), verifiedModule, validatePlugin, controller.signal);
       break;
     }
     case "start-worker-with-db-lock": {
       const deps = await buildDeps();
-      const activeLocks: Record<string, boolean> = {};
-      const acquired = await startFSMWorkerWithDBLock(deps, queueName!, fsmName!, Number(fsmVersion), activeLocks, verifiedModule, validatePlugin);
+      const acquired = await startFSMWorkerWithDBLock(
+        deps,
+        queueName!,
+        fsmName!,
+        Number(fsmVersion),
+        verifiedModule,
+        validatePlugin,
+        controller.signal,
+        () => console.log(`Worker for "${queueName}" stopped and DB lock released.`),
+      );
       if (!acquired) {
         console.error(`Error: Could not acquire DB lock for queue "${queueName}" — another worker may already hold it.`);
         Deno.exit(1);
       }
-      await new Promise(() => {});
+      console.log(`Worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      await waitForAbort();
       break;
     }
     case "start-promise-worker": {
       const deps = await buildDeps();
-      startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule).catch((err) => {
+      startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule, controller.signal).catch((err) => {
         console.error(`Promise worker for queue "${queueName}" stopped:`, err);
         Deno.exit(1);
       });
-      console.log(`Promise worker started for queue: ${queueName}`);
-      await new Promise(() => {});
+      console.log(`Promise worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      await waitForAbort();
       break;
     }
     case "create-and-start-promise-worker": {
       const deps = await buildDeps();
-      await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule);
-      console.log(`Promise worker started for queue: ${queueName}`);
-      await new Promise(() => {});
+      await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule, controller.signal);
+      console.log(`Promise worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      await waitForAbort();
       break;
     }
     case "create-and-start-worker": {
       const deps = await buildDeps();
-      const activeLocks: Record<string, boolean> = {};
-      const fsm_instance = await createAndStartFSMWorker(deps, fsmName!, fsmVersion!, verifiedModule, activeLocks, {}, validatePlugin);
+      let createdInstanceId: string | undefined;
+      const fsm_instance = await createAndStartFSMWorker(
+        deps,
+        fsmName!,
+        fsmVersion!,
+        verifiedModule,
+        {},
+        validatePlugin,
+        controller.signal,
+        () => console.log(`Worker for "${createdInstanceId}" stopped and DB lock released.`),
+      );
       if (!fsm_instance) {
         console.error(`Error: Failed to create FSM instance for "${fsmName}" v${fsmVersion}.`);
         Deno.exit(1);
       }
-      console.log(`FSM instance created: ${fsm_instance.fsm_instance_id}`);
-      await new Promise(() => {});
+      createdInstanceId = fsm_instance.fsm_instance_id;
+      console.log(`FSM instance created: ${createdInstanceId}. Press Ctrl+C to stop.`);
+      await waitForAbort();
       break;
     }
     default:
