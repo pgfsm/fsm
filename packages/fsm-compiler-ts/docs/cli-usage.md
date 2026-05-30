@@ -22,6 +22,8 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | `--folder <folder>` | `-f` | Path to FSM folder, relative to repo root (required) |
 | `--workflow-type <type>` | `-w` | Workflow type — required for `validate-plugin`, `validate-promise-plugin`, `load`, `load-and-validate`, `load-and-validate-promise` |
 | `--db-url <url>` | `-d` | PostgreSQL connection string — overrides `DATABASE_URL` env var |
+| `--skip-dirs <dirs>` | `-s` | Comma-separated subdirectory names to skip when walking `<folder>` |
+| `--available-actors <file>` | `-a` | Path to a JSON file listing actor names available to resolve (used by `validate-plugin`, `validate-promise-plugin`, `load-and-validate`, `load-and-validate-promise`) |
 | `--show-recommendation` | `-r` | Validate generated `fsm.json` against schema and print issues (`generate` only) |
 | `--help` | `-h` | Show help message |
 
@@ -57,7 +59,6 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   --show-recommendation
 ```
 
-> **Note:** `--workflow-type` is currently ignored for this command — it defaults to `"fsm"`. See [cli-gaps.md](./cli-gaps.md).
 
 ---
 
@@ -73,7 +74,6 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -f apps/fsm-core-example/fsm
 ```
 
-> **Note:** `--workflow-type` is currently ignored — defaults to `"fsm"`. See [cli-gaps.md](./cli-gaps.md).
 
 ---
 
@@ -87,7 +87,6 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -f apps/fsm-core-example/fsm
 ```
 
-> **Note:** `--workflow-type` is currently ignored — defaults to `"fsm"`. See [cli-gaps.md](./cli-gaps.md).
 
 ---
 
@@ -106,6 +105,27 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c validate-plugin \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedFsm
+```
+
+**Required:** `-w / --workflow-type`
+
+---
+
+### `validate-promise-plugin`
+
+Validate that all TypeScript plugin modules for a promise-based workflow export the functions referenced in the FSM definition. Does not require a database connection.
+
+```bash
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-promise-plugin \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise
+
+# Promise workflow folder
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-promise-plugin \
+  -f apps/fsm-core-example/promise \
+  -w promise
 ```
 
 **Required:** `-w / --workflow-type`
@@ -187,10 +207,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load-and-valid
 
 ## Known Limitations
 
-See [cli-gaps.md](./cli-gaps.md) for the full audit. Key points:
+See [cli-gaps.md](./cli-gaps.md) for the full audit.
 
-- `--workflow-type` is **ignored** for `generate`, `generate-plugin`, and `delete` — hardcoded to `"fsm"`
-- `--skip-dirs` flag does not exist — subdirectories cannot be excluded
-- `--available-actors` flag does not exist — external actor dependencies are always reported as unresolved by `validate-plugin` and `load-and-validate`
-- `validatePromisePluginLoadFromFolders` is available as `validate-promise-plugin`
-- No early validation that `--folder` exists or that `DATABASE_URL` is set
+- `load`, `load-and-validate`, and `load-and-validate-promise` require a live PostgreSQL connection and are not covered by automated tests
+- `--skip-dirs` accepts a single string value; to exclude multiple directories, pass a comma-separated list (e.g. `-s "node_modules,dist"`) — splitting is handled by the called functions
