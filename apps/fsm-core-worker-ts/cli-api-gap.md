@@ -9,7 +9,7 @@ This document maps the 5 CLI commands in `src/cli/index.ts` against the HTTP rou
 | CLI command | Underlying TS function | HTTP route | Status |
 |---|---|---|---|
 | `start-worker` | `startFSMWorker` | None dedicated | Low priority — deferred |
-| `start-worker-with-db-lock` | `startFSMWorkerWithDBLock` | `POST /fsmworker` | ✅ Implemented (bugs fixed — see Gap 5, 7) |
+| `start-worker-with-db-lock` | `startFSMWorkerWithDBLock` | `POST /fsm/start` | ✅ Implemented (bugs fixed — see Gap 5, 7) |
 | `start-promise-worker` | `startFSMPromiseWorker` | `POST /fsmpromise` | ✅ Implemented (bugs fixed — see Gap 4, 8) |
 | `create-and-start-worker` | `createAndStartFSMWorker` | `POST /fsm` (create handler) | ✅ Implemented via POST /fsm |
 | `create-and-start-promise-worker` | `createAndStartPromiseWorker` | `POST /fsmpromise/create-and-start` | ✅ Implemented |
@@ -73,7 +73,7 @@ startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_ve
 
 **Affected files:**
 - `apps/fsm-core-ts-hono-deno/routes/fsm/fsm.handlers.ts:57`
-- `apps/fsm-core-ts-hono-deno/routes/fsmworker/fsmworker.handlers.ts:75`
+- `apps/fsm-core-ts-hono-deno/routes/fsm/fsm.handlers.ts` (start handler, formerly fsmworker.handlers.ts:75)
 
 `c.get("verifiedModules")` always returns `undefined` at runtime. The middleware sets `"verifiedFsmModules"` (see `lib/types.ts` — `ContextVariableMap`).
 

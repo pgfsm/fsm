@@ -28,7 +28,6 @@ import env from "../env.ts";
 
 import index from "../routes/index.route.ts";
 import fsm from "../routes/fsm/fsm.index.ts";
-import fsmworker from "../routes/fsmworker/fsmworker.index.ts";
 import fsmpromise from "../routes/fsmpromise/fsmpromise.index.ts";
 
 export function createRouter() {
@@ -184,7 +183,6 @@ export default async function createApp(
   const routes = [
     index,
     fsm,
-    fsmworker,
     fsmpromise,
   ] as const;
 

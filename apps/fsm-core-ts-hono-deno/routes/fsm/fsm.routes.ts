@@ -96,6 +96,50 @@ export const send = createRoute({
   },
 });
 
+export const currentActive = createRoute({
+  path: "/fsm/currentActive",
+  method: "get",
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ data: z.record(z.boolean()) }),
+      "Active FSM worker locks",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
+export const start = createRoute({
+  path: "/fsm/start",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        queue: z.string().describe(
+          "The FSM instance ID (queue name) to start the worker for",
+        ),
+      }),
+      "The fsmworker configuration",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({}),
+      "Worker started successfully",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
 export type ListRoute = typeof list;
 export type CreateRoute = typeof create;
 export type SendRoute = typeof send;
+export type CurrentActiveRoute = typeof currentActive;
+export type StartRoute = typeof start;

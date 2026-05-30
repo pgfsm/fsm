@@ -134,9 +134,9 @@ export async function startFSMWorker(
                 macrostepV2Result.fsm_instance_data_save_fsm_state,
                 macrostepV2Result.fsm_instance_data_save_fsm_context,
                 macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
-                msgData.send_to_parent_queue_id ?? null,
-                msgData.send_to_parent_queue_type ?? null,
-                msgData.send_to_parent_queue_id_event_name ?? null,
+                msgData.sendToParentQueueId ?? null,
+                msgData.sendToParentQueueType ?? null,
+                msgData.sendToParentQueueIdEventName ?? null,
               );
               console.log("Message archived with result:", archiveResult);
             }

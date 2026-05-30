@@ -1,13 +1,15 @@
 /* eslint-disable ts/ban-ts-comment */
 /**
- * Tests for /fsm routes.
+ * Tests for /fsm routes (list, create, send, currentActive, start).
  * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs)
- *   - @fsm/worker (startFSMWorkerWithDBLock)
+ *   - @fsm/db (createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs,
+ *              getFsmDataResolveStateValue, listFsmInstances, getFSMData)
+ *   - @fsm/worker (startFSMWorkerWithDBLock, createAndStartFSMWorker)
  *   - middlewares/supabase (getSupabase)
+ *   - activeFSMLocks — shared module-level state tested across create/currentActive/start
  */
 import { testClient } from "hono/testing";
 import {
@@ -28,13 +30,20 @@ vi.mock("../../middlewares/supabase.ts", () => ({
 vi.mock("@fsm/db", () => ({
   createFsmInstanceFromName: vi.fn(),
   sendEventToFsmQueueWithEventLogs: vi.fn(),
+  getFsmDataResolveStateValue: vi.fn(),
+  listFsmInstances: vi.fn(),
+  getFSMData: vi.fn(),
+  API_SYSTEM_QUEUE_UUID: "system-uuid",
+  API_SYSTEM_QUEUE_TYPE: "system",
+  API_SYSTEM_EVENT_NAME: "system-event",
 }));
 
 vi.mock("@fsm/worker", () => ({
   startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
+  createAndStartFSMWorker: vi.fn(),
 }));
 
-import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs } from "@fsm/db";
+import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
 import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeFSMLocks } from "./fsm.handlers.ts";
@@ -249,6 +258,131 @@ describe("POST /fsm/send", () => {
         fsm_instance_id: "uuid-abc-123",
         event_data: { type: "START" },
       },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toBe("Unexpected error");
+  });
+});
+
+// ─── GET /fsm/currentActive ───────────────────────────────────────────────────
+
+describe("GET /fsm/currentActive", () => {
+  beforeEach(() => {
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+  });
+
+  it("returns 200 with an empty data object when no workers are active", async () => {
+    const res = await client.fsm.currentActive.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toHaveProperty("data");
+    expect(json.data).toEqual({});
+  });
+
+  it("reflects locks set via the shared activeFSMLocks object", async () => {
+    activeFSMLocks["some-queue-id"] = true;
+    const res = await client.fsm.currentActive.$get();
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toHaveProperty("some-queue-id", true);
+  });
+});
+
+// ─── POST /fsm/start ─────────────────────────────────────────────────────────
+
+describe("POST /fsm/start", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+  });
+
+  it("returns 422 when queue field is missing", async () => {
+    const res = await client.fsm.start.$post({
+      // @ts-expect-error — intentionally omitting required field
+      json: {},
+    });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error.issues[0].path[0]).toBe("queue");
+  });
+
+  it("returns 500 with 'Invalid queue id' when the queue is not a known FSM instance", async () => {
+    vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce(null);
+
+    const res = await client.fsm.start.$post({
+      json: { queue: "unknown-instance-id" },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid queue id");
+  });
+
+  it("returns 500 when a worker for that queue is already in activeFSMLocks", async () => {
+    const queueId = "uuid-already-running";
+    activeFSMLocks[queueId] = true;
+
+    vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce({
+      fsm_instance_row: {
+        fsm_instance_id: queueId,
+        fsm_name: "credit_check",
+        fsm_version: "v01",
+      },
+    } as never);
+
+    const res = await client.fsm.start.$post({
+      json: { queue: queueId },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("fsmworker already running");
+  });
+
+  it("returns 500 when tryFSMDBLock returns false (lock already held elsewhere)", async () => {
+    const queueId = "uuid-lock-taken";
+    vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce({
+      fsm_instance_row: {
+        fsm_instance_id: queueId,
+        fsm_name: "credit_check",
+        fsm_version: "v01",
+      },
+    } as never);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
+
+    const res = await client.fsm.start.$post({
+      json: { queue: queueId },
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("fsmworker already running");
+  });
+
+  it("returns 200 when worker starts successfully", async () => {
+    const queueId = "uuid-new-worker";
+    vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce({
+      fsm_instance_row: {
+        fsm_instance_id: queueId,
+        fsm_name: "credit_check",
+        fsm_version: "v01",
+      },
+    } as never);
+    vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
+
+    const res = await client.fsm.start.$post({
+      json: { queue: queueId },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({});
+  });
+
+  it("returns 500 with 'Unexpected error' when getFsmDataResolveStateValue throws", async () => {
+    vi.mocked(getFsmDataResolveStateValue).mockRejectedValueOnce(
+      new Error("DB timeout"),
+    );
+
+    const res = await client.fsm.start.$post({
+      json: { queue: "some-queue-id" },
     });
     expect(res.status).toBe(500);
     const json = await res.json();
