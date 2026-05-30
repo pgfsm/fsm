@@ -2,14 +2,17 @@ import * as HttpStatusCodes from "stoker/http-status-codes.ts";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
 
-import type { CreateRoute, CurrentActiveRoute, ListRoute, SendRoute, StartRoute } from "./fsm.routes.ts";
+import type { CreateRoute, CurrentActiveRoute, ListRoute, SendRoute, StartRoute, StopRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
 
 import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@fsm/db";
 
-export const activeFSMLocks: Record<string, boolean> = {};
+// lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
+// Entry is deleted by the onStop callback once the worker loop exits.
+type FsmWorkerEntry = { lock: boolean; controller: AbortController };
+export const activeWorkers: Record<string, FsmWorkerEntry> = {};
 
 export const list: AppRouteHandler<ListRoute> = async (c) => {
   const supabase = getSupabase(c);
@@ -50,16 +53,23 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       (m: any) => m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version,
     );
 
+    const controller = new AbortController();
+    let instanceId: string | null = null;
+
     const fsm_instance = await createAndStartFSMWorker(
       deps,
       input_fsm_name,
       input_fsm_version,
       matchedModule ?? {},
-      activeFSMLocks,
       input_fsm_context,
+      false,
+      controller.signal,
+      () => { if (instanceId) delete activeWorkers[instanceId]; },
     );
 
     if (fsm_instance) {
+      instanceId = fsm_instance.fsm_instance_id;
+      activeWorkers[instanceId] = { lock: true, controller };
       return c.json({ data: fsm_instance }, HttpStatusCodes.OK);
     } else {
       return c.json(
@@ -77,7 +87,10 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
 };
 
 export const currentActive: AppRouteHandler<CurrentActiveRoute> = async (c) => {
-  return c.json({ data: activeFSMLocks }, HttpStatusCodes.OK);
+  const data = Object.fromEntries(
+    Object.entries(activeWorkers).map(([k, v]) => [k, v.lock]),
+  );
+  return c.json({ data }, HttpStatusCodes.OK);
 };
 
 export const start: AppRouteHandler<StartRoute> = async (c) => {
@@ -107,7 +120,7 @@ export const start: AppRouteHandler<StartRoute> = async (c) => {
       );
     }
 
-    if (activeFSMLocks[queue]) {
+    if (activeWorkers[queue]) {
       return c.json(
         { error: `🚫 fsmworker already running for queue "${queue}"` },
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
@@ -121,17 +134,21 @@ export const start: AppRouteHandler<StartRoute> = async (c) => {
         m.fsmVersion === (fsmData.fsm_instance_row.fsm_version ?? ""),
     );
 
+    const controller = new AbortController();
+
     const started = await startFSMWorkerWithDBLock(
       deps,
       queue,
       fsmData.fsm_instance_row.fsm_name ?? "",
       fsmData.fsm_instance_row.fsm_version ?? "",
-      activeFSMLocks,
       matchedModule ?? {},
       false,
+      controller.signal,
+      () => delete activeWorkers[queue],
     );
 
     if (started) {
+      activeWorkers[queue] = { lock: true, controller };
       return c.json({}, HttpStatusCodes.OK);
     } else {
       return c.json(
@@ -146,6 +163,20 @@ export const start: AppRouteHandler<StartRoute> = async (c) => {
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
     );
   }
+};
+
+export const stop: AppRouteHandler<StopRoute> = async (c) => {
+  const { queue } = c.req.valid("json");
+  const entry = activeWorkers[queue];
+  if (!entry) {
+    return c.json(
+      { error: `No active worker for queue "${queue}"` },
+      HttpStatusCodes.NOT_FOUND,
+    );
+  }
+  entry.lock = false;
+  entry.controller.abort();
+  return c.json({}, HttpStatusCodes.OK);
 };
 
 export const send: AppRouteHandler<SendRoute> = async (c) => {

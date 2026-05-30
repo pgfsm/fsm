@@ -7,19 +7,26 @@ export async function startFSMWorkerWithDBLock(
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  activeLocks: Record<string, boolean>,
   verifiedModule?: VerifiedModule,
   validatePlugin?: boolean,
   signal?: AbortSignal,
+  onStop?: () => void,
 ): Promise<boolean> {
   if (await lockFsmInstance(deps, queueName)) {
-    activeLocks[queueName] = true;
-    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule, validatePlugin, signal).catch((err) => {
-      console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
-      delete activeLocks[queueName];
+    const cleanup = () => {
       unlockFsmInstance(deps, queueName);
-      console.log(`FSM Lock for queue "${queueName}" has been released.`);
-    });
+      onStop?.();
+    };
+    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule, validatePlugin, signal)
+      .then(() => {
+        console.log(`FSM Lock for queue "${queueName}" released after graceful stop.`);
+        cleanup();
+      })
+      .catch((err) => {
+        console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
+        console.log(`FSM Lock for queue "${queueName}" has been released.`);
+        cleanup();
+      });
     return true;
   }
   return false;

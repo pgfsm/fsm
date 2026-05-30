@@ -8,7 +8,8 @@ const router = createRouter()
   .openapi(routes.create, handlers.create)
   .openapi(routes.send, handlers.send)
   .openapi(routes.currentActive, handlers.currentActive)
-  .openapi(routes.start, handlers.start);
+  .openapi(routes.start, handlers.start)
+  .openapi(routes.stop, handlers.stop);
 // .openapi(routes.patch, handlers.patch)
 // .openapi(routes.remove, handlers.remove);
 

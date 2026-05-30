@@ -11,10 +11,10 @@ export async function createAndStartFSMWorker(
   fsm_name: string,
   fsm_version: string,
   matchedModule: VerifiedModule,
-  activeLocks: Record<string, boolean>,
   fsm_context: Json,
   validatePlugin?: boolean,
   signal?: AbortSignal,
+  onStop?: () => void,
 ) {
   const fsm_instance = await createFsmInstanceFromName(
     deps,
@@ -33,10 +33,10 @@ export async function createAndStartFSMWorker(
     fsm_instance.fsm_instance_id,
     fsm_name,
     fsm_instance.fsm_version,
-    activeLocks,
     matchedModule,
     validatePlugin,
     signal,
+    onStop,
   );
 
   if (!started) {

@@ -1,6 +1,6 @@
 /* eslint-disable ts/ban-ts-comment */
 /**
- * Tests for /fsm routes (list, create, send, currentActive, start).
+ * Tests for /fsm routes (list, create, send, currentActive, start, stop).
  * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
  * and NODE_ENV=test in .env.
  *
@@ -9,7 +9,7 @@
  *              getFsmDataResolveStateValue, listFsmInstances, getFSMData)
  *   - @fsm/worker (startFSMWorkerWithDBLock, createAndStartFSMWorker)
  *   - middlewares/supabase (getSupabase)
- *   - activeFSMLocks — shared module-level state tested across create/currentActive/start
+ *   - activeWorkers — shared module-level state (single source of truth for running workers)
  */
 import { testClient } from "hono/testing";
 import {
@@ -46,7 +46,7 @@ vi.mock("@fsm/worker", () => ({
 import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
 import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
-import { activeFSMLocks } from "./fsm.handlers.ts";
+import { activeWorkers } from "./fsm.handlers.ts";
 import router from "./fsm.index.ts";
 
 /** Minimal Hono app that injects a mock db into context. */
@@ -64,26 +64,31 @@ const client = testClient(makeTestApp());
 
 // ─── GET /fsm ────────────────────────────────────────────────────────────────
 
+import { listFsmInstances } from "@fsm/db";
+
 describe("GET /fsm", () => {
   beforeEach(() => {
-    // Reset shared lock state before each test.
-    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+    vi.clearAllMocks();
   });
 
-  it("returns 200 with an empty data object when no workers are active", async () => {
+  it("returns 200 with empty data when no instances exist", async () => {
+    vi.mocked(listFsmInstances).mockResolvedValueOnce([]);
     const res = await client.fsm.$get();
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toHaveProperty("data");
-    expect(json.data).toEqual({});
+    expect(json.data).toEqual([]);
   });
 
-  it("reflects active locks that were added externally", async () => {
-    activeFSMLocks["test-instance-id"] = true;
+  it("returns 200 with the list of FSM instances", async () => {
+    const mockInstances = [
+      { id: "uuid-1", fsm_name: "credit_check", fsm_version: "v01", fsm_instance_status: "active" },
+    ];
+    vi.mocked(listFsmInstances).mockResolvedValueOnce(mockInstances as never);
     const res = await client.fsm.$get();
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.data).toHaveProperty("test-instance-id", true);
+    expect(json.data).toEqual(mockInstances);
   });
 });
 
@@ -92,7 +97,6 @@ describe("GET /fsm", () => {
 describe("POST /fsm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
   });
 
   it("returns 422 when fsm_name is missing", async () => {
@@ -175,7 +179,7 @@ describe("POST /fsm", () => {
     expect(json.error).toBe("Unexpected error");
   });
 
-  it("does not add to activeFSMLocks when lock acquisition fails", async () => {
+  it("does not register a controller when lock acquisition fails", async () => {
     const mockInstance = { fsm_instance_id: "uuid-lock-fail", fsm_version: "v01" };
     vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce(mockInstance);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
@@ -183,8 +187,7 @@ describe("POST /fsm", () => {
     await client.fsm.$post({
       json: { fsm_name: "credit_check", fsm_version: "v01" },
     });
-    // Worker should NOT be registered in active locks when lock fails
-    expect(activeFSMLocks["uuid-lock-fail"]).toBeUndefined();
+    expect(activeWorkers["uuid-lock-fail"]).toBeUndefined();
   });
 });
 
@@ -269,7 +272,7 @@ describe("POST /fsm/send", () => {
 
 describe("GET /fsm/currentActive", () => {
   beforeEach(() => {
-    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+    Object.keys(activeWorkers).forEach((k) => delete activeWorkers[k]);
   });
 
   it("returns 200 with an empty data object when no workers are active", async () => {
@@ -280,8 +283,8 @@ describe("GET /fsm/currentActive", () => {
     expect(json.data).toEqual({});
   });
 
-  it("reflects locks set via the shared activeFSMLocks object", async () => {
-    activeFSMLocks["some-queue-id"] = true;
+  it("reflects workers registered in activeWorkers", async () => {
+    activeWorkers["some-queue-id"] = { lock: true, controller: new AbortController() };
     const res = await client.fsm.currentActive.$get();
     expect(res.status).toBe(200);
     const json = await res.json();
@@ -294,7 +297,7 @@ describe("GET /fsm/currentActive", () => {
 describe("POST /fsm/start", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(activeFSMLocks).forEach((k) => delete activeFSMLocks[k]);
+    Object.keys(activeWorkers).forEach((k) => delete activeWorkers[k]);
   });
 
   it("returns 422 when queue field is missing", async () => {
@@ -318,9 +321,9 @@ describe("POST /fsm/start", () => {
     expect(json.error).toContain("Invalid queue id");
   });
 
-  it("returns 500 when a worker for that queue is already in activeFSMLocks", async () => {
+  it("returns 500 when a worker for that queue is already in activeWorkers", async () => {
     const queueId = "uuid-already-running";
-    activeFSMLocks[queueId] = true;
+    activeWorkers[queueId] = { lock: true, controller: new AbortController() };
 
     vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce({
       fsm_instance_row: {
@@ -387,5 +390,51 @@ describe("POST /fsm/start", () => {
     expect(res.status).toBe(500);
     const json = await res.json();
     expect(json.error).toBe("Unexpected error");
+  });
+});
+
+// ─── POST /fsm/stop ──────────────────────────────────────────────────────────
+
+describe("POST /fsm/stop", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(activeWorkers).forEach((k) => delete activeWorkers[k]);
+  });
+
+  it("returns 404 when no worker is active for the given queue", async () => {
+    const res = await client.fsm.stop.$post({
+      json: { queue: "non-existent-queue" },
+    });
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error).toContain("No active worker");
+  });
+
+  it("returns 200 and marks lock=false when a worker is active", async () => {
+    const queueId = "uuid-running-worker";
+    const controller = new AbortController();
+    activeWorkers[queueId] = { lock: true, controller };
+
+    const res = await client.fsm.stop.$post({
+      json: { queue: queueId },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({});
+    expect(controller.signal.aborted).toBe(true);
+    // entry stays until onStop fires (async); lock flips to false immediately
+    expect(activeWorkers[queueId]).toBeDefined();
+    expect(activeWorkers[queueId].lock).toBe(false);
+  });
+
+  it("returns 200 on a second stop call (entry stays until onStop fires)", async () => {
+    const queueId = "uuid-stopped-twice";
+    activeWorkers[queueId] = { lock: true, controller: new AbortController() };
+
+    await client.fsm.stop.$post({ json: { queue: queueId } });
+
+    // entry is still present (onStop is async); second call is a no-op but succeeds
+    const res = await client.fsm.stop.$post({ json: { queue: queueId } });
+    expect(res.status).toBe(200);
   });
 });

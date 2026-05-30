@@ -138,8 +138,34 @@ export const start = createRoute({
   },
 });
 
+export const stop = createRoute({
+  path: "/fsm/stop",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        queue: z.string().describe("The FSM instance ID (queue name) to stop"),
+      }),
+      "The queue to stop",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({}), "Worker stopped successfully"),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({ error: z.string() }),
+      "No active worker for the given queue",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
 export type ListRoute = typeof list;
 export type CreateRoute = typeof create;
 export type SendRoute = typeof send;
 export type CurrentActiveRoute = typeof currentActive;
 export type StartRoute = typeof start;
+export type StopRoute = typeof stop;
