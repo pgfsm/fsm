@@ -1,5 +1,7 @@
 # fsm-compiler-ts CLI — Usage Reference
 
+**npm package:** `@pgfsm/compiler`
+
 ## Prerequisites
 
 - **Deno** (see `.prototools` for pinned version)

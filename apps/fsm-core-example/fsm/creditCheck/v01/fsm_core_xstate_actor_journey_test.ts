@@ -4,10 +4,10 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import { machineWithProvider } from "./machineWithProvider.ts";
-import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@fsm/worker";
+import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@pgfsm/worker";
 import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
 import type { DBDeps } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
+import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";

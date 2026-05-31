@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
 import { macrostep_v2 } from "../../../../fsm-core-ts-hono-deno/worker/fsmworker-helper.ts";
-import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@fsm/compiler";
+import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@pgfsm/compiler";
 
 const pool = new Pool({
   connectionString: Deno.env.get("DATABASE_URL"),

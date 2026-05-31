@@ -38,13 +38,13 @@ vi.mock("@pgfsm/db", () => ({
   API_SYSTEM_EVENT_NAME: "system-event",
 }));
 
-vi.mock("@fsm/worker", () => ({
+vi.mock("@pgfsm/worker", () => ({
   startFSMWorkerWithDBLock: vi.fn().mockResolvedValue(true),
   createAndStartFSMWorker: vi.fn(),
 }));
 
 import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
-import { startFSMWorkerWithDBLock } from "@fsm/worker";
+import { startFSMWorkerWithDBLock } from "@pgfsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeWorkers } from "./fsm.handlers.ts";
 import router from "./fsm.index.ts";

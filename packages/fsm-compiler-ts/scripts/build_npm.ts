@@ -12,7 +12,7 @@ await build({
     deno: true,
   },
   package: {
-    name: "@fsm/compiler",
+    name: "@pgfsm/compiler",
     version: Deno.args[0]?.replace(/^v/, "") ?? "0.0.0",
     description: "FSM JSON compiler for PostgreSQL-backed state machines",
     license: "MIT",

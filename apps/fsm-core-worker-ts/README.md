@@ -27,8 +27,8 @@ Workers are started via the REST API (`POST /fsm/fsmworker`, `POST /fsm/fsmpromi
 ## Exports
 
 ```typescript
-import { startFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
-import { createAndStartPromiseWorker } from "@fsm/worker";
+import { startFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
+import { createAndStartPromiseWorker } from "@pgfsm/worker";
 ```
 
 - `startFSMWorkerWithDBLock` — starts a worker and holds a PG advisory lock for the duration

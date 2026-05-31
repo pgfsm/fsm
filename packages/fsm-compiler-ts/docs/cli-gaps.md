@@ -1,5 +1,7 @@
 # fsm-compiler-ts — CLI Gaps
 
+**npm package:** `@pgfsm/compiler`
+
 Audit of `src/cli/index.ts` against the actual function signatures in `src/index.ts`.
 
 Sections 1–4 are fully closed. Test coverage gaps (section 5) remain open.

@@ -26,9 +26,9 @@ import {
   loadAndValidateFsmFromFolders,    // validate all FSMs in a folder tree
   loadAndValidatePromiseFromFolders, // validate all promise actors in a folder tree
   validateFsmPluginLoadFromFolder,   // validate one specific FSM plugin
-} from "@fsm/compiler";
+} from "@pgfsm/compiler";
 
-import type { WorkflowType } from "@fsm/compiler";
+import type { WorkflowType } from "@pgfsm/compiler";
 // WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise"
 ```
 

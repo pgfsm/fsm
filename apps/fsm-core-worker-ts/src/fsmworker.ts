@@ -9,8 +9,8 @@ import {
   getFsmDataResolveStateValue,
 } from "@pgfsm/db";
 
-import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
-import type { WorkflowType } from "@fsm/compiler";
+import { validateFsmPluginLoadFromFolder } from "@pgfsm/compiler";
+import type { WorkflowType } from "@pgfsm/compiler";
 
 import { macrostepV2 } from "./fsmworker-helper.ts";
 import type { FsmQueueMessage } from "./types.ts";

@@ -4,8 +4,8 @@ import { Pool } from "pg";
 import {
   loadAndValidateFsmFromFolders,
   loadAndValidatePromiseFromFolders,
-} from "@fsm/compiler";
-import { createAndStartPromiseWorker } from "@fsm/worker";
+} from "@pgfsm/compiler";
+import { createAndStartPromiseWorker } from "@pgfsm/worker";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 

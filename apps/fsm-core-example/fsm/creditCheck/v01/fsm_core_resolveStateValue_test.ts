@@ -6,7 +6,7 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
+import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";

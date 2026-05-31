@@ -4,9 +4,9 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
-import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
+import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
 import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
+import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
 import type { DBDeps } from "@pgfsm/db";
 
 const fsm_name = "creditCheck";

@@ -5,7 +5,7 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 import type { CreateRoute, CurrentActiveRoute, ListRoute, SendRoute, StartRoute, StopRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
+import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
 
 import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@pgfsm/db";
 

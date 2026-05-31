@@ -4,7 +4,7 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
-import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@fsm/compiler";
+import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@pgfsm/compiler";
 
 const pool = new Pool({
   connectionString: Deno.env.get("DATABASE_URL"),

@@ -1,5 +1,5 @@
 {
-  "name": "@fsm/worker",
+  "name": "@pgfsm/worker",
   "version": "0.1.0",
   "exports": {
     ".": "./src/index.ts"

@@ -5,7 +5,7 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 import type { CreateAndStartRoute, ListRoute, StartRoute, StopRoute } from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { createAndStartPromiseWorker, startFSMPromiseWorker } from "@fsm/worker";
+import { createAndStartPromiseWorker, startFSMPromiseWorker } from "@pgfsm/worker";
 import { pgmqQueueExists } from "@pgfsm/db";
 
 // lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
