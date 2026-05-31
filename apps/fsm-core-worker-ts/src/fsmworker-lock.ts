@@ -1,5 +1,5 @@
-import type { DBDeps } from "@fsm/db";
-import { lockFsmInstance, unlockFsmInstance } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
+import { lockFsmInstance, unlockFsmInstance } from "@pgfsm/db";
 import { startFSMWorker, type VerifiedModule } from "./fsmworker.ts";
 
 export async function startFSMWorkerWithDBLock(

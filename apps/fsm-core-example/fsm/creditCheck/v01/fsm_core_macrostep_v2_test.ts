@@ -4,11 +4,11 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
-import { resolveStateValue } from "@fsm/db";
+import { resolveStateValue } from "@pgfsm/db";
 import { macrostep_v2 } from "@fsm/worker";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
 import { Json } from "@fsm/db/database.types";
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";

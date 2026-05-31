@@ -1,7 +1,7 @@
 import type { Database, Json } from "@fsm/db/database.types";
 type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 import type { FsmQueueMessage } from "./types.ts";
 
 export type FsmModuleDefinition = {
@@ -14,7 +14,7 @@ export type FsmModuleDefinition = {
 import {
   microstep,
   selectAllTransitions,
-} from "@fsm/db";
+} from "@pgfsm/db";
 
 /**
  * Splits the input array into two arrays based on matching event types.

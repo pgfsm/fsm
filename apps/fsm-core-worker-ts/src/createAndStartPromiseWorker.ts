@@ -1,5 +1,5 @@
-import type { DBDeps } from "@fsm/db";
-import { createPgmqQueue } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
+import { createPgmqQueue } from "@pgfsm/db";
 import { startFSMPromiseWorker } from "./fsmpromiseworker.ts";
 import type { VerifiedModule } from "./fsmworker.ts";
 

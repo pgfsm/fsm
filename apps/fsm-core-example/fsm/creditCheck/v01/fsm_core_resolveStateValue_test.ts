@@ -5,7 +5,7 @@ import { Pool } from "pg";
 /// <reference lib="deno.ns" />
 
 import machineConfig from "./machine.ts";
-import { resolveStateValue } from "@fsm/db";
+import { resolveStateValue } from "@pgfsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
 
 const fsm_name = "creditCheck";

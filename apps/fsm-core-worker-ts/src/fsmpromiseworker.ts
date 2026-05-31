@@ -1,8 +1,8 @@
 import type { Database } from "@fsm/db/database.types";
 
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 
-import { readMessage, pgmqQueueExists, archiveEventFromFsmPromiseTypeWorker, getFsmDataResolveStateValue } from "@fsm/db";
+import { readMessage, pgmqQueueExists, archiveEventFromFsmPromiseTypeWorker, getFsmDataResolveStateValue } from "@pgfsm/db";
 
 import { processFSMPromiseQueueMessage } from "./fsmpromiseworker-helper.ts";
 import type { VerifiedModule } from "./fsmworker.ts";

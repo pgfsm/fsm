@@ -1,13 +1,13 @@
 import type { Database } from "@fsm/db/database.types";
 
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 
-import { readMessage } from "@fsm/db";
+import { readMessage } from "@pgfsm/db";
 
 import {
   archiveEventFromFsmTypeWorker,
   getFsmDataResolveStateValue,
-} from "@fsm/db";
+} from "@pgfsm/db";
 
 import { validateFsmPluginLoadFromFolder } from "@fsm/compiler";
 import type { WorkflowType } from "@fsm/compiler";

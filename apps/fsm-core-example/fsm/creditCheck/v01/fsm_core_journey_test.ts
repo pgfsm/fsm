@@ -5,9 +5,9 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
-import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
+import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";

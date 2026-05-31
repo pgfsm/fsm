@@ -1,6 +1,6 @@
 import type { Database, Json } from "@fsm/db/database.types";
 
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 import type { FsmQueueMessage } from "./types.ts";
 
 export type FSMPromiseArchiveData = {

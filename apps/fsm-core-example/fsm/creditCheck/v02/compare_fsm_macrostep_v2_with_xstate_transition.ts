@@ -3,7 +3,7 @@ import { diff } from "json-diff-ts";
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
-import { resolveStateValue } from "@fsm/db";
+import { resolveStateValue } from "@pgfsm/db";
 import { macrostep_v2 } from "../../../../fsm-core-ts-hono-deno/worker/fsmworker-helper.ts";
 import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@fsm/compiler";
 

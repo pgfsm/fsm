@@ -28,7 +28,7 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("@fsm/db", () => ({
+vi.mock("@pgfsm/db", () => ({
   pgmqQueueExists: vi.fn(),
 }));
 
@@ -36,7 +36,7 @@ vi.mock("../../../fsm-core-worker-ts/src/index.ts", () => ({
   startFSMPromiseWorker: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { pgmqQueueExists } from "@fsm/db";
+import { pgmqQueueExists } from "@pgfsm/db";
 import { startFSMPromiseWorker } from "../../../fsm-core-worker-ts/src/index.ts";
 import { createRouter } from "../../lib/create-app.ts";
 import { activePromiseLocks } from "./fsmpromise.handlers.ts";

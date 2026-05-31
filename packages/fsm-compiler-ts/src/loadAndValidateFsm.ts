@@ -8,7 +8,7 @@ import { isVersionFolderName, type WorkflowType, type ActorReference } from "./u
 
 import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
 import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
-import { loadFsmFromJson, type DBDeps } from "@fsm/db";
+import { loadFsmFromJson, type DBDeps } from "@pgfsm/db";
 
 export async function loadAndValidatePromiseFromFolders(
   deps: DBDeps,

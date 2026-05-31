@@ -6,7 +6,7 @@ import type { CreateAndStartRoute, ListRoute, StartRoute, StopRoute } from "./fs
 import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartPromiseWorker, startFSMPromiseWorker } from "@fsm/worker";
-import { pgmqQueueExists } from "@fsm/db";
+import { pgmqQueueExists } from "@pgfsm/db";
 
 // lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
 // Entry is deleted by the onStop callback / .then()/.catch() cleanup once the worker loop exits.

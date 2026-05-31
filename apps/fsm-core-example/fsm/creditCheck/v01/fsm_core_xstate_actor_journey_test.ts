@@ -5,8 +5,8 @@ import { Pool } from "pg";
 
 import { machineWithProvider } from "./machineWithProvider.ts";
 import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@fsm/worker";
-import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
-import type { DBDeps } from "@fsm/db";
+import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
+import type { DBDeps } from "@pgfsm/db";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@fsm/compiler";
 
 const fsm_name = "creditCheck";

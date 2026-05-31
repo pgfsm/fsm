@@ -21,9 +21,9 @@ import {
   sendEventToFsmQueueWithEventLogs,
   archiveEventFromFsmTypeWorker,
   microstep,
-} from "@fsm/db";
+} from "@pgfsm/db";
 
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 ```
 
 Every exported function takes `deps: DBDeps` as its first argument — `DBDeps` wraps the database client and is the only coupling point between TypeScript and PostgreSQL.

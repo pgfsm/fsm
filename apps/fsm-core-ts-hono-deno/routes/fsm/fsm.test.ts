@@ -27,7 +27,7 @@ vi.mock("../../middlewares/supabase.ts", () => ({
   supabaseMiddleware: vi.fn(() => (_c: unknown, next: () => void) => next()),
 }));
 
-vi.mock("@fsm/db", () => ({
+vi.mock("@pgfsm/db", () => ({
   createFsmInstanceFromName: vi.fn(),
   sendEventToFsmQueueWithEventLogs: vi.fn(),
   getFsmDataResolveStateValue: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock("@fsm/worker", () => ({
   createAndStartFSMWorker: vi.fn(),
 }));
 
-import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@fsm/db";
+import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "@fsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeWorkers } from "./fsm.handlers.ts";
@@ -64,7 +64,7 @@ const client = testClient(makeTestApp());
 
 // ─── GET /fsm ────────────────────────────────────────────────────────────────
 
-import { listFsmInstances } from "@fsm/db";
+import { listFsmInstances } from "@pgfsm/db";
 
 describe("GET /fsm", () => {
   beforeEach(() => {

@@ -3,7 +3,7 @@ import { diff } from "json-diff-ts";
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
-import { resolveStateValue } from "@fsm/db";
+import { resolveStateValue } from "@pgfsm/db";
 import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@fsm/compiler";
 
 const pool = new Pool({

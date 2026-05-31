@@ -7,7 +7,7 @@ import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@fsm/worker";
 
-import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@fsm/db";
+import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@pgfsm/db";
 
 // lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
 // Entry is deleted by the onStop callback once the worker loop exits.

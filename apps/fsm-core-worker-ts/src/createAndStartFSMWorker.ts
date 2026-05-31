@@ -1,6 +1,6 @@
-import type { DBDeps } from "@fsm/db";
+import type { DBDeps } from "@pgfsm/db";
 import type { Json } from "@fsm/db/database.types";
-import { createFsmInstanceFromName } from "@fsm/db";
+import { createFsmInstanceFromName } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker-lock.ts";
 import type { VerifiedModule } from "./fsmworker.ts";
 
