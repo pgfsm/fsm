@@ -38,6 +38,14 @@ pip-log.txt
 pip-delete-this-directory.txt
 .ipynb_checkpoints/
 
+# --- npm / deno pack artifacts ---
+*.tgz
 
+# --- OS ---
+.DS_Store
+Thumbs.db
 
-
+# --- Editor ---
+.idea/
+*.swp
+*.swo
