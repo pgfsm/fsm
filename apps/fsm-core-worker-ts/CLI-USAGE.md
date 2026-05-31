@@ -96,7 +96,7 @@ deno task cli \
 
 Start a promise (actor) worker on an existing PGMQ promise queue. Invokes the named actor function for each queued message.
 
-**HTTP equivalent:** `POST /fsmpromise`
+**HTTP equivalent:** `POST /fsmpromise/start`
 ```json
 {
   "promise_name": "checkBureau_v01",
@@ -290,7 +290,8 @@ The API server (`apps/fsm-core-ts-hono-deno`) exposes HTTP equivalents for most 
 | `GET /fsm/currentActive` | — | — |
 | `POST /fsm/send` | — | `{ fsm_instance_id, event_data }` |
 | `GET /fsmpromise` | — | — |
-| `POST /fsmpromise` | `start-promise-worker` | `{ promise_name, promise_type, promise_version, fsm_name, fsm_version }` |
+| `POST /fsmpromise/start` | `start-promise-worker` | `{ promise_name, promise_type, promise_version, fsm_name, fsm_version }` |
+| `POST /fsmpromise/stop` | Ctrl+C (graceful) | `{ queue }` |
 | `POST /fsmpromise/create-and-start` | `create-and-start-promise-worker` | `{ queue_name, fsm_name, promise_type, fsm_version }` |
 
 ---

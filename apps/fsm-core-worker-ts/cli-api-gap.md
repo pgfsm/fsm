@@ -10,7 +10,7 @@ This document maps the 5 CLI commands in `src/cli/index.ts` against the HTTP rou
 |---|---|---|---|
 | `start-worker` | `startFSMWorker` | None dedicated | Low priority — deferred |
 | `start-worker-with-db-lock` | `startFSMWorkerWithDBLock` | `POST /fsm/start` | ✅ Implemented (bugs fixed — see Gap 5, 7) |
-| `start-promise-worker` | `startFSMPromiseWorker` | `POST /fsmpromise` | ✅ Implemented (bugs fixed — see Gap 4, 8) |
+| `start-promise-worker` | `startFSMPromiseWorker` | `POST /fsmpromise/start` | ✅ Implemented (bugs fixed — see Gap 4, 8) |
 | `create-and-start-worker` | `createAndStartFSMWorker` | `POST /fsm` (create handler) | ✅ Implemented via POST /fsm |
 | `create-and-start-promise-worker` | `createAndStartPromiseWorker` | `POST /fsmpromise/create-and-start` | ✅ Implemented |
 
@@ -69,7 +69,7 @@ Creates a PGMQ queue and starts a promise (actor) worker.
 
 ---
 
-## Gap 4 — `POST /fsmpromise` broken arg mapping ✅ Fixed
+## Gap 4 — `POST /fsmpromise/start` broken arg mapping ✅ Fixed
 
 **File:** `apps/fsm-core-ts-hono-deno/routes/fsmpromise/fsmpromise.handlers.ts`
 
@@ -195,6 +195,22 @@ Deno.addSignalListener("SIGTERM", onSignal);
 
 ---
 
+## Gap 12 — `POST /fsmpromise/start` blocks forever + no AbortController in promise handlers ✅ Fixed
+
+**Files:** `apps/fsm-core-ts-hono-deno/routes/fsmpromise/fsmpromise.handlers.ts`, `apps/fsm-core-worker-ts/src/createAndStartPromiseWorker.ts`
+
+Three problems mirroring what was fixed for `/fsm`:
+
+1. **`start` handler blocks forever.** `await startFSMPromiseWorker(...)` blocks the HTTP response indefinitely — the worker is an infinite loop and no signal was passed. Fix: check queue existence via `pgmqQueueExists`, then fire the worker in the background (not awaited), same fire-and-forget pattern as the FSM handlers.
+
+2. **`activePromiseLocks: Record<string, boolean>` has no `AbortController`.** Replace with `activePromiseWorkers: Record<string, { lock: boolean; controller: AbortController }>`. Add duplicate-running check to `start` and `createAndStart` handlers. `GET /fsmpromise` now projects to `{ [key]: lock }`.
+
+3. **No stop route.** Added `POST /fsmpromise/stop` (mirrors `POST /fsm/stop`): sets `lock = false`, calls `controller.abort()`, returns 200. Returns 404 if no active worker found.
+
+`createAndStartPromiseWorker` gained `onStop?: () => void` — called in `.then()/.catch()` cleanup when the worker loop exits.
+
+---
+
 ## Summary
 
 | Gap | Priority | Status |
@@ -202,7 +218,7 @@ Deno.addSignalListener("SIGTERM", onSignal);
 | Gap 1: `start-worker` no dedicated route | Low | Deferred |
 | Gap 2: `createAndStartFSMWorker` via `POST /fsm` | High | ✅ Fixed |
 | Gap 3: `POST /fsmpromise/create-and-start` | High | ✅ Fixed |
-| Gap 4: `POST /fsmpromise` arg mapping | High | ✅ Fixed |
+| Gap 4: `POST /fsmpromise/start` arg mapping | High | ✅ Fixed |
 | Gap 5: `verifiedModules` → `verifiedFsmModules` | Critical | ✅ Fixed |
 | Gap 6: `false` as `fsm_context` | High | ✅ Fixed |
 | Gap 7: `isFSMInstancePresent` misuse | Critical | ✅ Fixed |
@@ -210,3 +226,4 @@ Deno.addSignalListener("SIGTERM", onSignal);
 | Gap 9: no `--db-url` flag in worker CLI | Low | ✅ Fixed |
 | Gap 10: no `--fsm-folder-path` existence check | Low | ✅ Fixed |
 | Gap 11: no SIGINT/SIGTERM signal handlers in CLI | Medium | ✅ Fixed |
+| Gap 12: `POST /fsmpromise/start` blocks + no AbortController + no stop route | High | ✅ Fixed |

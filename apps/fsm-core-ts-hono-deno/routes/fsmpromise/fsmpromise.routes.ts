@@ -25,8 +25,8 @@ export const list = createRoute({
   },
 });
 
-export const create = createRoute({
-  path: "/fsmpromise",
+export const start = createRoute({
+  path: "/fsmpromise/start",
   method: "post",
   request: {
     body: jsonContentRequired(
@@ -80,6 +80,32 @@ export const createAndStart = createRoute({
   },
 });
 
+export const stop = createRoute({
+  path: "/fsmpromise/stop",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        queue: z.string().describe("The promise queue name to stop"),
+      }),
+      "The queue to stop",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({}), "Worker stopped successfully"),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({ error: z.string() }),
+      "No active promise worker for the given queue",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
 export type ListRoute = typeof list;
-export type CreateRoute = typeof create;
+export type StartRoute = typeof start;
 export type CreateAndStartRoute = typeof createAndStart;
+export type StopRoute = typeof stop;

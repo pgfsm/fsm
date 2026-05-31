@@ -11,22 +11,19 @@ export async function createAndStartPromiseWorker(
   fsm_promise_version: string,
   verifiedModule?: VerifiedModule,
   signal?: AbortSignal,
+  onStop?: () => void,
 ): Promise<boolean> {
-  // 1. Create the PGMQ queue
   await createPgmqQueue(deps, queueName);
 
-  // 2. Fire the promise worker loop in the background (do not await — the loop runs indefinitely)
-  startFSMPromiseWorker(
-    deps,
-    queueName,
-    fsm_promise_name,
-    fsm_promise_type,
-    fsm_promise_version,
-    verifiedModule,
-    signal,
-  ).catch((err) => {
-    console.error(`Promise worker for queue "${queueName}" stopped:`, err);
-  });
+  startFSMPromiseWorker(deps, queueName, fsm_promise_name, fsm_promise_type, fsm_promise_version, verifiedModule, signal)
+    .then(() => {
+      console.log(`Promise worker for queue "${queueName}" stopped gracefully.`);
+      onStop?.();
+    })
+    .catch((err) => {
+      console.error(`Promise worker for queue "${queueName}" stopped:`, err);
+      onStop?.();
+    });
 
   return true;
 }
