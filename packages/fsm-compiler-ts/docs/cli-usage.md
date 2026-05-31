@@ -19,7 +19,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | Flag | Alias | Description |
 |---|---|---|
 | `--command <command>` | `-c` | Command to run (required) |
-| `--folder <folder>` | `-f` | Path to FSM folder, relative to repo root (required) |
+| `--folder <folder>` | `-f` | Path to FSM folder, `.ts` file, or `.json` file (required; files accepted for `generate` only) |
 | `--workflow-type <type>` | `-w` | Workflow type — required for `validate-plugin`, `validate-promise-plugin`, `load`, `load-and-validate`, `load-and-validate-promise` |
 | `--db-url <url>` | `-d` | PostgreSQL connection string — overrides `DATABASE_URL` env var |
 | `--skip-dirs <dirs>` | `-s` | Comma-separated subdirectory names to skip when walking `<folder>` |
@@ -42,12 +42,14 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 
 ### `generate`
 
-Generate `fsm.json` and `xstate-fsm.json` from `machine.ts` files.
+Compiles FSM source into `fsm.json` and `xstate-fsm.json`. Accepts three input types detected from the `-f` path:
 
-Walks `<folder>`, finds every versioned subdirectory (e.g. `creditCheck/v01/`), imports `machine.ts`, and writes `fsm.json` and `xstate-fsm.json` alongside it.
+- **Directory** — walks the tree, finds every versioned subdirectory (e.g. `creditCheck/v01/`), and compiles each `machine.ts` found
+- **`.ts` file** — compiles that single `machine.ts` directly; version is derived from the parent directory name
+- **`.json` file** — reads the raw XState config, generates a `machine.ts` wrapper alongside it (skipped if one already exists), then compiles
 
 ```bash
-# Generate for standard FSM folder
+# Generate for standard FSM folder (walks all versioned subdirectories)
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate \
   -f apps/fsm-core-example/fsm
@@ -57,6 +59,16 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate \
   -f apps/fsm-core-example/fsm \
   --show-recommendation
+
+# Generate from a single machine.ts file
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c generate \
+  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
+
+# Generate from a raw XState config.json
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c generate \
+  -f apps/fsm-core-example/fsm/creditCheck/v01/config.json
 ```
 
 

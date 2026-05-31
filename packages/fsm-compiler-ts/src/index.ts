@@ -1,4 +1,4 @@
-export { generateFsmJSONFromFolders, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generateFsmJSON.ts";
+export { generateFsmJSONFromFolders, generateFsmJSONFromMachineFile, generateFsmJSONFromConfigFile, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generateFsmJSON.ts";
 export { generateFsmPluginFromFolders } from "./generateFsmPlugin.ts";
 export { loadFsmJSONFromFolders } from "./loadFsmJSON.ts";
 export { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from "./loadAndValidateFsm.ts";

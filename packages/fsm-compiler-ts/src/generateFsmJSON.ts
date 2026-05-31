@@ -250,23 +250,27 @@ export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion:
 }
 
 
-async function generateFsmJSONFromFolder(
-  dirEntryName: string,
-  dirEntryNameVersion: string,
-  folderPath: string,
+/**
+ * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
+ * and writes fsm.json + xstate-fsm.json alongside it.
+ * @param absFolderPath Absolute path to the versioned FSM directory (e.g. /…/creditCheck/v01)
+ * @param version Version string (e.g. "v01") used when filling in missing fsmVersion on invoke actors
+ * @param workflowType Workflow type for the FSM
+ * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
+ */
+export async function generateFsmJSONFromMachineFile(
   absFolderPath: string,
-  parentSource: string,
-  workflowType: WorkflowType,
+  version: string,
+  _workflowType: WorkflowType,
   showRecommendation: boolean = false,
 ) {
-  
-  const createMachinePath = `${absFolderPath}/machine.ts`;
+  const machineTsPath = `${absFolderPath}/machine.ts`;
   try {
-    await Deno.stat(createMachinePath);
-    const module = await import(`file://${createMachinePath}`);
+    await Deno.stat(machineTsPath);
+    const module = await import(`file://${machineTsPath}`);
     const machineConfig = module.default;
     if (!machineConfig) {
-      console.error(`No valid export found in ${createMachinePath}`);
+      console.error(`No valid export found in ${machineTsPath}`);
       return;
     }
     if (
@@ -277,7 +281,6 @@ async function generateFsmJSONFromFolder(
       // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON = machineConfig.toJSON();
       writeFileSync(`${absFolderPath}/xstate-fsm.json`, JSON.stringify(xstateFsmJSON, null, 2));
-      // console.log(`Wrote xstate-fsm.json to ${absFolderPath}/xstate-fsm.json`);
 
       // step 2 — removeNullActions (pure): strip null entries from all action arrays
       const cleanedJSON = removeNullActions(xstateFsmJSON);
@@ -289,14 +292,10 @@ async function generateFsmJSONFromFolder(
       const enrichedJSON = addActionNameFromDelay(normalizedJSON);
 
       // step 5 — addMissingFsmTypeToInvokeActors (pure): fill in fsmType/fsmVersion on invoke entries
-      const { fulljson: fsmJSON, childActorsInfo } = addMissingFsmTypeToInvokeActors(enrichedJSON, dirEntryNameVersion);
+      const { fulljson: fsmJSON } = addMissingFsmTypeToInvokeActors(enrichedJSON, version);
 
       // step 6 — write fsm.json
       writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
-      // console.log(`Wrote fsm.json to ${absFolderPath}/fsm.json`);
-      // if (childActorsInfo.length > 0) {
-      //   console.log('Child actor info:', childActorsInfo);
-      // }
 
       // step 7 — (optional) validate fsm.json against schema and show recommendations
       if (showRecommendation) {
@@ -313,16 +312,79 @@ async function generateFsmJSONFromFolder(
         }
       }
     } else {
-      console.error(`Export in ${createMachinePath} is not a valid xstate machine config`);
+      console.error(`Export in ${machineTsPath} is not a valid xstate machine config`);
     }
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`machine.ts is missing in ${absFolderPath}/${dirEntryName}`);
+      console.log(`machine.ts is missing in ${absFolderPath}`);
     } else {
-      console.error(`Failed to import or process ${createMachinePath}:`, err);
+      console.error(`Failed to import or process ${machineTsPath}:`, err);
     }
   }
+}
 
+/**
+ * Reads a raw XState config.json, writes a machine.ts wrapper alongside it,
+ * then delegates to generateFsmJSONFromMachineFile to produce fsm.json + xstate-fsm.json.
+ *
+ * Skips writing machine.ts if one already exists (logs a warning).
+ *
+ * @param configJsonPath Absolute path to config.json
+ * @param workflowType Workflow type for the FSM
+ * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
+ */
+export async function generateFsmJSONFromConfigFile(
+  configJsonPath: string,
+  workflowType: WorkflowType,
+  showRecommendation: boolean = false,
+) {
+  const absFolderPath = configJsonPath.replace(/\/config\.json$/, "");
+  const version = absFolderPath.split("/").at(-1) ?? "v01";
+
+  let config: Record<string, unknown>;
+  try {
+    const configText = await Deno.readTextFile(configJsonPath);
+    config = JSON.parse(configText);
+  } catch (err) {
+    console.error(`Failed to read config.json at ${configJsonPath}:`, err);
+    return;
+  }
+
+  const machineTsPath = `${absFolderPath}/machine.ts`;
+  try {
+    await Deno.stat(machineTsPath);
+    console.warn(`machine.ts already exists at ${machineTsPath} — skipping generation, using existing file`);
+  } catch {
+    // machine.ts does not exist — generate a wrapper from config.json
+    const id = typeof config.id === "string" ? config.id : version;
+    const machineTsContent = [
+      `import config from "./config.json" with { type: "json" };`,
+      ``,
+      `export default {`,
+      `  id: "${id}",`,
+      `  config,`,
+      `  toJSON() { return config; },`,
+      `};`,
+      ``,
+    ].join("\n");
+    await Deno.writeTextFile(machineTsPath, machineTsContent);
+    console.log(`Generated machine.ts from config.json at ${machineTsPath}`);
+  }
+
+  await generateFsmJSONFromMachineFile(absFolderPath, version, workflowType, showRecommendation);
+}
+
+
+async function generateFsmJSONFromFolder(
+  _dirEntryName: string,
+  dirEntryNameVersion: string,
+  _folderPath: string,
+  absFolderPath: string,
+  _parentSource: string,
+  workflowType: WorkflowType,
+  showRecommendation: boolean = false,
+) {
+  await generateFsmJSONFromMachineFile(absFolderPath, dirEntryNameVersion, workflowType, showRecommendation);
 }
 
 

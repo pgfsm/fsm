@@ -3,7 +3,9 @@ import dotenv from "dotenv";
 
 import {
   deleteFsmJSONFromFolders,
+  generateFsmJSONFromConfigFile,
   generateFsmJSONFromFolders,
+  generateFsmJSONFromMachineFile,
   generateFsmPluginFromFolders,
   loadAndValidateFsmFromFolders,
   loadAndValidatePromiseFromFolders,
@@ -36,7 +38,7 @@ USAGE
   deno run --allow-all src/cli/index.ts -c <command> -f <folder> [options]
 
 COMMANDS
-  generate                  Generate fsm.json from machine.ts files
+  generate                  Generate fsm.json from a folder, a .ts file, or a .json file
   generate-plugin           Generate TypeScript plugin stubs from fsm.json
   delete                    Delete generated fsm.json / xstate-fsm.json files
   validate-plugin           Validate plugin load for an FSM folder
@@ -50,7 +52,7 @@ WORKFLOW TYPES
 
 OPTIONS
   -c, --command <command>             Command to run (required)
-  -f, --folder <folder>               Path to FSM folder (required)
+  -f, --folder <folder>               Path to FSM folder, .ts file, or .json file (required; files accepted for generate only)
   -w, --workflow-type <type>          Workflow type (optional for generate, generate-plugin, delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
@@ -66,6 +68,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm -w sharedFsm
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
+  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
+  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/config.json
   deno run --allow-all src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-promise-plugin -f apps/fsm-core-example/sharedFSM -w sharedPromise
   deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
@@ -106,7 +110,8 @@ if (missing.length > 0) {
 if (folder) {
   try {
     const stat = await Deno.stat(folder);
-    if (!stat.isDirectory) {
+    // generate accepts .ts/.json files too; all other commands require a directory
+    if (command !== "generate" && !stat.isDirectory) {
       console.error(`Error: --folder "${folder}" is not a directory.`);
       Deno.exit(1);
     }
@@ -143,9 +148,25 @@ async function buildDeps(connectionString?: string) {
 
 try {
   switch (command) {
-    case "generate":
-      await generateFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs, args["show-recommendation"]);
+    case "generate": {
+      const stat = await Deno.stat(folder!);
+      if (stat.isFile) {
+        const absPath = folder!.startsWith("/") ? folder! : `${Deno.cwd()}/${folder!}`;
+        if (folder!.endsWith(".ts")) {
+          const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
+          const version = absDir.split("/").at(-1) ?? "v01";
+          await generateFsmJSONFromMachineFile(absDir, version, workflowType ?? "fsm", args["show-recommendation"]);
+        } else if (folder!.endsWith(".json")) {
+          await generateFsmJSONFromConfigFile(absPath, workflowType ?? "fsm", args["show-recommendation"]);
+        } else {
+          console.error(`Error: --folder "${folder}" is not a recognized type. Use a .ts file, a .json file, or a directory.`);
+          Deno.exit(1);
+        }
+      } else {
+        await generateFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs, args["show-recommendation"]);
+      }
       break;
+    }
     case "generate-plugin":
       await generateFsmPluginFromFolders(folder!, workflowType ?? "fsm", skipDirs);
       break;

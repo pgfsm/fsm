@@ -9,14 +9,20 @@ Sections 1–4 are fully closed. Test coverage gaps (section 5) remain open.
 ## 1. Missing Flags per Command
 
 ### `generate`
-Calls: `generateFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs, showRecommendation)` (line 134)
+
+Path-aware routing — detects input type from `Deno.stat` + file extension:
+
+- **directory** → `generateFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs, showRecommendation)`
+- **`.ts` file** → `generateFsmJSONFromMachineFile(absDir, version, workflowType ?? "fsm", showRecommendation)`
+- **`.json` file** → `generateFsmJSONFromConfigFile(absPath, workflowType ?? "fsm", showRecommendation)`
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
-| `folderPath` | `-f, --folder` | ✅ | — |
+| `folderPath` / `absDir` / `absPath` | `-f, --folder` | ✅ | — |
 | `workflowType` | `-w, --workflow-type` | ✅ honours flag, defaults to `"fsm"` | — |
-| `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
+| `skipDirs` | `-s, --skip-dirs` | ✅ passed through (directory mode only) | — |
 | `showRecommendation` | `-r, --show-recommendation` | ✅ | — |
+| Path type detection | (inferred from `Deno.stat` + extension) | ✅ | — |
 
 ### `generate-plugin`
 Calls: `generateFsmPluginFromFolders(folder, workflowType ?? "fsm", skipDirs)` (line 137)
@@ -86,6 +92,8 @@ Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType, skipDirs, 
 |---|---|---|
 | `validateFsmPluginLoadFromFolders` | `validate-plugin` | ✅ |
 | `validatePromisePluginLoadFromFolders` | `validate-promise-plugin` | ✅ added |
+| `generateFsmJSONFromMachineFile` | `generate` (when `-f` is a `.ts` file) | ✅ |
+| `generateFsmJSONFromConfigFile` | `generate` (when `-f` is a `.json` file) | ✅ |
 | `addMissingFsmTypeToInvokeActors` | *(none)* | Intentional — internal transform, library-only |
 | `normalizeActionsToObjects` | *(none)* | Intentional — internal transform, library-only |
 | `addActionNameFromDelay` | *(none)* | Intentional — internal transform, library-only |
@@ -103,6 +111,7 @@ Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType, skipDirs, 
 | `--workflow-type` accepts any string | startup (lines 87–91) | ✅ Fixed — validated against `VALID_WORKFLOW_TYPES` at startup, exits with error | High |
 | No check that `--folder` path exists | after missing-args block | ✅ Fixed — `Deno.stat(folder)` check exits with a clear error if missing or not a directory | Medium |
 | No early check for DB connection string | `buildDeps()` (lines 118–129) | ✅ Fixed — exits with a clear error message if neither `--db-url` nor `DATABASE_URL` is set | High |
+| `--folder` rejected non-directories for `generate` | stat check block | ✅ Fixed — `isDirectory` assertion skipped when `command === "generate"` | Medium |
 
 ---
 
@@ -141,6 +150,8 @@ Test files: `test/cli.test.ts`, `src/cli/index-test.ts`.
 | `--db-url` flag accepted and parsed | ✅ |
 | `--skip-dirs` flag | ✅ |
 | `--available-actors` flag | ✅ |
+| `generate` with `.ts` file path | ❌ (not yet tested) |
+| `generate` with `.json` file path | ❌ (not yet tested) |
 | `load` (real DB) | ❌ (needs DB) |
 | `load-and-validate` (real DB) | ❌ (needs DB) |
 | `load-and-validate-promise` (real DB) | ❌ (needs DB) |
