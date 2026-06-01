@@ -178,7 +178,8 @@ proto install rust --pin local
 
 This ensures consistent Rust versioning across development environments.
 
+---
 
+### Testing
 
-
-cargo pgrx package --pg-config /Users/nirajmadanmohan.kashyap/.pgrx/15.16/pgrx-install/bin/pg_config --package fsm_core
+See [`TESTING.md`](./TESTING.md) for the full testing guide covering pgrx unit tests, pg_regress, interactive smoke tests, and how to build and validate the packaged extension.
