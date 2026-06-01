@@ -1,0 +1,80 @@
+name: npm publish
+
+on:
+  push:
+    tags:
+      - 'compiler-v[0-9]*'
+      - 'db-v[0-9]*'
+      - 'worker-v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        options:
+          - compiler
+          - db
+          - worker
+          - all
+
+jobs:
+  publish:
+    name: publish ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: compiler
+            path: packages/fsm-compiler-ts
+            tag_prefix: compiler-v
+          - id: db
+            path: packages/fsm-core-db-ts
+            tag_prefix: db-v
+          - id: worker
+            path: apps/fsm-core-worker-ts
+            tag_prefix: worker-v
+
+    steps:
+      - name: Gate — decide if this package should publish
+        id: gate
+        run: |
+          SHOULD_RUN=false
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            if [[ "${{ github.ref }}" == refs/tags/${{ matrix.tag_prefix }}* ]]; then
+              SHOULD_RUN=true
+            fi
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            INPUT="${{ inputs.package }}"
+            if [[ "$INPUT" == "all" || "$INPUT" == "${{ matrix.id }}" ]]; then
+              SHOULD_RUN=true
+            fi
+          fi
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.should_run == 'true'
+
+      - uses: denoland/setup-deno@v2
+        if: steps.gate.outputs.should_run == 'true'
+        with:
+          deno-version: 2.8.1
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.should_run == 'true'
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Pack
+        if: steps.gate.outputs.should_run == 'true'
+        working-directory: ${{ matrix.path }}
+        run: deno pack
+
+      - name: Publish
+        if: steps.gate.outputs.should_run == 'true'
+        working-directory: ${{ matrix.path }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish $(ls *.tgz) --access public
