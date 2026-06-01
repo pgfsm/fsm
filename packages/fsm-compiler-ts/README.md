@@ -23,8 +23,8 @@ deno run --allow-all src/main.ts
 
 ```typescript
 import {
-  loadAndValidateFsmFromFolders,    // validate all FSMs in a folder tree
-  loadAndValidatePromiseFromFolders, // validate all promise actors in a folder tree
+  validateAndLoadFsmFromFolders,    // validate all FSMs in a folder tree, then load if valid
+  validateAndLoadPromiseFromFolders, // validate all promise actors in a folder tree, then load if valid
   validateFsmPluginLoadFromFolder,   // validate one specific FSM plugin
 } from "@pgfsm/compiler";
 

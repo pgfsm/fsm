@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from './load-and-validate-fsm.ts';
+import { validateAndLoadFsmFromFolders, validateAndLoadPromiseFromFolders } from './load-and-validate-fsm.ts';
 import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });
@@ -29,10 +29,10 @@ const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
   const skipSharedFSMDirs = [""];
   const skipFSMDirs = ["",""];
 
-  const outputSharedPromise = await loadAndValidatePromiseFromFolders(deps, sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
-  const outputSharedFSM = await loadAndValidateFsmFromFolders(deps, sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, outputSharedPromise);
-  // pass pure array of outputSharedFSM and outputSharedPromise to validateFsmPluginLoadFromFolders to resolve dependencies for FSM plugins. 
-  const outputFSM = await loadAndValidateFsmFromFolders(deps, fsmfolderPath, "fsm", skipFSMDirs, [...outputSharedPromise, ...outputSharedFSM]);
+  const outputSharedPromise = await validateAndLoadPromiseFromFolders(deps, sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
+  const outputSharedFSM = await validateAndLoadFsmFromFolders(deps, sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, outputSharedPromise);
+  // pass pure array of outputSharedFSM and outputSharedPromise to validateFsmPluginLoadFromFolders to resolve dependencies for FSM plugins.
+  const outputFSM = await validateAndLoadFsmFromFolders(deps, fsmfolderPath, "fsm", skipFSMDirs, [...outputSharedPromise, ...outputSharedFSM]);
   console.log("final output:", outputFSM);
 })();
 

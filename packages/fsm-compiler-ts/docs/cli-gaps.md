@@ -64,8 +64,8 @@ Calls: `loadFsmJSONFromFolders(folder, workflowType, skipDirs, deps)` (line 154)
 | `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
 | `deps` | `-d, --db-url` or `DATABASE_URL` | ✅ `buildDeps()` prefers `--db-url`, falls back to env var, exits with clear error if neither set | — |
 
-### `load-and-validate`
-Calls: `loadAndValidateFsmFromFolders(deps, folder, workflowType, skipDirs, availableActors)` (line 159)
+### `validate-and-load`
+Calls: `validateAndLoadFsmFromFolders(deps, folder, workflowType, skipDirs, availableActors)`
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
@@ -75,8 +75,8 @@ Calls: `loadAndValidateFsmFromFolders(deps, folder, workflowType, skipDirs, avai
 | `skipDirs` | `-s, --skip-dirs` | ✅ parsed and passed through | — |
 | `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()` | — |
 
-### `load-and-validate-promise`
-Calls: `loadAndValidatePromiseFromFolders(deps, folder, workflowType, skipDirs, availableActors)` (line 165)
+### `validate-and-load-promise`
+Calls: `validateAndLoadPromiseFromFolders(deps, folder, workflowType, skipDirs, availableActors)`
 
 | Parameter | CLI Flag | Status | Impact |
 |---|---|---|---|
@@ -124,7 +124,7 @@ Location: `src/cli/index.ts` lines 32–73.
 | Issue | Status |
 |---|---|
 | `--skip-dirs` flag missing from help and CLI | ✅ Fixed — flag exists, documented in help, passed to all commands |
-| `--available-actors` flag missing from help and CLI | ✅ Fixed — flag exists, documented in help, passed to validate and load-and-validate commands |
+| `--available-actors` flag missing from help and CLI | ✅ Fixed — flag exists, documented in help, passed to validate and validate-and-load commands |
 | `DATABASE_URL` env var not mentioned for DB commands | ✅ Fixed — documented under `ENVIRONMENT` in help text |
 | `--show-recommendation` not scoped to `generate` in help | ✅ Fixed — help text notes it applies to `generate` only |
 | `-w` description says optional for `generate/delete` but omits `generate-plugin` | ✅ Fixed — now says "optional for generate, generate-plugin, delete" |
@@ -155,5 +155,5 @@ Test files: `test/cli.test.ts`, `src/cli/index-test.ts`.
 | `generate` with `.ts` file path | ❌ (not yet tested) |
 | `generate` with `.json` file path | ❌ (not yet tested) |
 | `load` (real DB) | ❌ (needs DB) |
-| `load-and-validate` (real DB) | ❌ (needs DB) |
-| `load-and-validate-promise` (real DB) | ❌ (needs DB) |
+| `validate-and-load` (real DB) | ❌ (needs DB) |
+| `validate-and-load-promise` (real DB) | ❌ (needs DB) |

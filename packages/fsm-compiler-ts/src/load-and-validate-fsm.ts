@@ -10,7 +10,7 @@ import { validateFsmPluginLoadFromFolder } from "./validate-fsm-plugin-load.ts";
 import { validatePromisePluginLoadFromFolder } from "./validate-fsm-plugin-load.ts";
 import { loadFsmFromJson, type DBDeps } from "@pgfsm/db";
 
-export async function loadAndValidatePromiseFromFolders(
+export async function validateAndLoadPromiseFromFolders(
   deps: DBDeps,
   folderPath: string,
   workflowType: WorkflowType,
@@ -93,7 +93,7 @@ export async function loadAndValidatePromiseFromFolders(
   return allFolderResults;
 }
 
-export async function loadAndValidateFsmFromFolders(
+export async function validateAndLoadFsmFromFolders(
   deps: DBDeps,
   folderPath: string,
   workflowType: WorkflowType,
@@ -144,11 +144,7 @@ export async function loadAndValidateFsmFromFolders(
                 const fsmJson = `${fsmDirPath}/${subEntry.name}/fsm.json`;
                 await Deno.stat(fsmJson);
 
-                // Load fsm.json for DB ingestion
                 const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
-                const rootNodeText = null;
-                const fsmResult = await loadFsmFromJson(deps, fsmData, rootNodeText, workflowType, dirEntry.name, subEntry.name);
-                console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
 
                 const folderResult = await validateFsmPluginLoadFromFolder(
                   fsmData,
@@ -168,10 +164,16 @@ export async function loadAndValidateFsmFromFolders(
                   folderResult,
                 );
 
-                allFolderResults.push({
-                  ...folderResult,
-                  ...(fsmResult != null && typeof fsmResult === "object" ? fsmResult : {}),
-                });
+                if (folderResult.isFsmModuleVerified) {
+                  const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, dirEntry.name, subEntry.name);
+                  console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
+                  allFolderResults.push({
+                    ...folderResult,
+                    ...(fsmResult != null && typeof fsmResult === "object" ? fsmResult : {}),
+                  });
+                } else {
+                  allFolderResults.push(folderResult);
+                }
 
               } catch (err) {
                 if (err instanceof Deno.errors.NotFound) {
@@ -179,8 +181,8 @@ export async function loadAndValidateFsmFromFolders(
                 } else {
                   console.error(`Failed to import or process ${fsmDirPath}/${subEntry.name}:`, err);
                 }
-              }  
-             
+              }
+
             } else {
               console.log(
                 `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
@@ -191,11 +193,11 @@ export async function loadAndValidateFsmFromFolders(
       }
     }
     console.log("All folder validation results:", allFolderResults);
-    
+
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
     console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
-  }  
-  
+  }
+
   return allFolderResults;
 }

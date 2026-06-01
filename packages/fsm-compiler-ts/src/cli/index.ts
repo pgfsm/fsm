@@ -7,8 +7,8 @@ import {
   generateFsmJSONFromFolders,
   generateFsmJSONFromMachineFile,
   generateFsmPluginFromFolders,
-  loadAndValidateFsmFromFolders,
-  loadAndValidatePromiseFromFolders,
+  validateAndLoadFsmFromFolders,
+  validateAndLoadPromiseFromFolders,
   loadFsmJSONFromFolders,
   validateFsmPluginLoadFromFolders,
   validatePromisePluginLoadFromFolders,
@@ -44,8 +44,8 @@ COMMANDS
   validate-plugin           Validate plugin load for an FSM folder
   validate-promise-plugin   Validate plugin load for a sharedPromise folder
   load                      Load FSM JSON into the database
-  load-and-validate         Load FSM JSON into DB and validate plugins
-  load-and-validate-promise Load Promise workflow into DB and validate plugins
+  validate-and-load         Validate FSM plugins then load into DB if validation passes
+  validate-and-load-promise Validate Promise plugins then load into DB if validation passes
 
 WORKFLOW TYPES
   fsm | sharedFsm | sharedPromise | promise
@@ -53,15 +53,15 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder, .ts file, or .json file (required; files accepted for generate only)
-  -w, --workflow-type <type>          Workflow type (optional for generate, generate-plugin, delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, load-and-validate, load-and-validate-promise)
+  -w, --workflow-type <type>          Workflow type (optional for generate, generate-plugin, delete, defaults to "fsm"; required for validate-plugin, validate-promise-plugin, load, validate-and-load, validate-and-load-promise)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
-  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-plugin, validate-promise-plugin, load-and-validate, load-and-validate-promise)
+  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-plugin, validate-promise-plugin, validate-and-load, validate-and-load-promise)
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
   -h, --help                          Show this help message
 
 ENVIRONMENT
-  DATABASE_URL    Fallback connection string for load, load-and-validate, load-and-validate-promise.
+  DATABASE_URL    Fallback connection string for load, validate-and-load, validate-and-load-promise.
                   Ignored if --db-url is provided.
 
 EXAMPLES
@@ -72,8 +72,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/config.json
   deno run --allow-all src/cli/index.ts -c validate-plugin -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-promise-plugin -f apps/fsm-core-example/sharedFSM -w sharedPromise
-  deno run --allow-all src/cli/index.ts -c load-and-validate -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
-  deno run --allow-all src/cli/index.ts -c load-and-validate-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise --db-url postgresql://user:pass@localhost:5432/db
+  deno run --allow-all src/cli/index.ts -c validate-and-load -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
+  deno run --allow-all src/cli/index.ts -c validate-and-load-promise -f apps/fsm-core-example/sharedFSM -w sharedPromise --db-url postgresql://user:pass@localhost:5432/db
 `);
 }
 
@@ -94,7 +94,7 @@ if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
   Deno.exit(1);
 }
 
-const needsWorkflowType = ["validate-plugin", "validate-promise-plugin", "load", "load-and-validate", "load-and-validate-promise"];
+const needsWorkflowType = ["validate-plugin", "validate-promise-plugin", "load", "validate-and-load", "validate-and-load-promise"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
@@ -188,16 +188,16 @@ try {
       await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
       break;
     }
-    case "load-and-validate": {
+    case "validate-and-load": {
       const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
-      await loadAndValidateFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await validateAndLoadFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
-    case "load-and-validate-promise": {
+    case "validate-and-load-promise": {
       const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
-      await loadAndValidatePromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await validateAndLoadPromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
       break;
     }
     default:
