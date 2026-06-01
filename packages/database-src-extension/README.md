@@ -36,17 +36,17 @@ The extension provides custom functionality to support FSM operations directly w
 	- Get the installed PostgreSQL version for pg15:
 		```sh
 		cargo pgrx info version pg15
-		# Output: 15.16
+		# Output: 15.18
 		```
 	- Get the installation path for pg15:
 		```sh
 		cargo pgrx info path pg15
-		# Output: $HOME/.pgrx/15.16/pgrx-install
+		# Output: $HOME/.pgrx/15.18/pgrx-install
 		```
 	- Get the pg_config path for pg15:
 		```sh
 		cargo pgrx info pg-config pg15
-		# Output: $HOME/.pgrx/15.16/pgrx-install/bin/pg_config
+		# Output: $HOME/.pgrx/15.18/pgrx-install/bin/pg_config
 		```
         
 	#### Connect to pg15 and check extensions
@@ -105,7 +105,7 @@ Before starting the extension in a development environment, ensure the following
 		uvx pgxnclient install --help
 
 		# Install pgmq extension specifying the pg_config path
-		uvx pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config"
+		uvx pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.18/pgrx-install/bin/pg_config"
 		```
 
 	  - **b. Clone and build from source:**
@@ -154,7 +154,7 @@ To run and test your extension during development:
 3. **Package the extension**
    
    	```sh
-    cargo pgrx package --pg-config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config" 
+    cargo pgrx package --pg-config "$HOME/.pgrx/15.18/pgrx-install/bin/pg_config" 
 	```
 
 Refer to your extension's source code for more available functions and usage examples.

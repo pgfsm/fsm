@@ -34,6 +34,8 @@ source ~/.zshrc
 To install the pgrx toolchain for building PostgreSQL extensions in Rust, run:
 
 ```sh
-cargo install cargo-pgrx
+cargo install --locked cargo-pgrx --version "=0.18.1"
 ```
+
+The version must match the `pgrx` dependency pinned in `fsm_core/Cargo.toml`. If you bump `pgrx` in Cargo.toml, update this command to match.
 

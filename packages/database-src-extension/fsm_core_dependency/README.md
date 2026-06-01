@@ -31,7 +31,7 @@ pgxnclient download pgmq
 
 #### 4. Install pgmq extension specifying the pg_config path
 ```sh	
-pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config"
+pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.18/pgrx-install/bin/pg_config"
 ```
 
 You can now use the downloaded pgmq extension files as needed for fsm_core development.

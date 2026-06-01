@@ -4,19 +4,24 @@
 
 Before running any tests, ensure:
 
-1. **pgrx initialized** — run once to download and configure a local PostgreSQL instance:
+1. **cargo-pgrx installed** — the version must match `pgrx = "=0.18.1"` in `fsm_core/Cargo.toml`:
+   ```sh
+   cargo install --locked cargo-pgrx --version "=0.18.1"
+   ```
+
+2. **pgrx initialized** — run once to download and configure a local PostgreSQL instance:
    ```sh
    cargo pgrx init --pg15 download
    ```
 
-2. **pgmq installed** into the pgrx-managed PostgreSQL instance (required at runtime by `fsm_core`):
+3. **pgmq installed** into the pgrx-managed PostgreSQL instance (required at runtime by `fsm_core`):
    ```sh
-   uvx pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config"
+   uvx pgxnclient install pgmq --pg_config "$HOME/.pgrx/15.18/pgrx-install/bin/pg_config"
    ```
    To find the exact PostgreSQL version and pg_config path:
    ```sh
-   cargo pgrx info version pg15    # e.g. 15.16
-   cargo pgrx info pg-config pg15  # e.g. $HOME/.pgrx/15.16/pgrx-install/bin/pg_config
+   cargo pgrx info version pg15    # e.g. 15.18
+   cargo pgrx info pg-config pg15  # e.g. $HOME/.pgrx/15.18/pgrx-install/bin/pg_config
    ```
 
 All commands below should be run from `packages/database-src-extension/fsm_core/`.
@@ -121,7 +126,7 @@ NOTICE:  Hello, BOB!
 To produce an installable extension package:
 
 ```sh
-cargo pgrx package --pg-config "$HOME/.pgrx/15.16/pgrx-install/bin/pg_config"
+cargo pgrx package --pg-config "$HOME/.pgrx/15.18/pgrx-install/bin/pg_config"
 ```
 
 Output is written to `target/release/fsm_core-pg15/`. The package directory will contain:
