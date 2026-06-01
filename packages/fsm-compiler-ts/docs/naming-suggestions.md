@@ -33,8 +33,8 @@ Every public function previously used `workflow_type` (snake_case) while all oth
 | `deleteFsmJSONFromFolder` (internal) | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` | ✅ |
 | `loadFsmJSONFromFolders` | `loadFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
 | `loadFsmJSONFromFolder` (internal) | `loadFsmJSON.ts` | `workflow_type` | `workflowType` | ✅ |
-| `validateAndLoadFsmFromFolders` | `load-and-validate-fsm.ts` | `workflow_type` | `workflowType` | ✅ |
-| `validateAndLoadPromiseFromFolders` | `load-and-validate-fsm.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validateAndLoadFsmFromFolders` | `validate-and-load-fsm.ts` | `workflow_type` | `workflowType` | ✅ |
+| `validateAndLoadPromiseFromFolders` | `validate-and-load-fsm.ts` | `workflow_type` | `workflowType` | ✅ |
 | `validateFsmPluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
 | `validateFsmPluginLoadFromFolder` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |
 | `validatePromisePluginLoadFromFolders` | `validateFsmPluginLoad.ts` | `workflow_type` | `workflowType` | ✅ |

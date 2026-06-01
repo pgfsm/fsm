@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { validateAndLoadFsmFromFolders, validateAndLoadPromiseFromFolders } from './load-and-validate-fsm.ts';
+import { validateAndLoadFsmFromFolders, validateAndLoadPromiseFromFolders } from './validate-and-load-fsm.ts';
 import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });

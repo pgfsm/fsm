@@ -1,7 +1,7 @@
 export { generateFsmJSONFromFolders, generateFsmJSONFromMachineFile, generateFsmJSONFromConfigFile, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generate-fsm-json.ts";
 export { generateFsmPluginFromFolders } from "./generate-fsm-plugin.ts";
 export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
-export { validateAndLoadFsmFromFolders, validateAndLoadPromiseFromFolders } from "./load-and-validate-fsm.ts";
+export { validateAndLoadFsmFromFolders, validateAndLoadPromiseFromFolders } from "./validate-and-load-fsm.ts";
 export {
   validateFsmPluginLoadFromFolders,
   validateFsmPluginLoadFromFolder,
