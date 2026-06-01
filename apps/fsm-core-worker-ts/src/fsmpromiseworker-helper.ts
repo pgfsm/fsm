@@ -1,4 +1,4 @@
-import type { Database, Json } from "@fsm/db/database.types";
+import type { Database, Json } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
 import type { FsmQueueMessage } from "./types.ts";

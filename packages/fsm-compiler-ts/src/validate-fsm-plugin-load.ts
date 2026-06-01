@@ -5,7 +5,7 @@ import { writeFileSync } from "node:fs";
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType, type ActorReference, type FailedMethod, type InternalActor, type ExternalActor, type FsmPluginValidationResult, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
-import type { Json } from "@fsm/db/database.types";
+import type { Json } from "@pgfsm/db/database.types";
 
 
 // validators.ts

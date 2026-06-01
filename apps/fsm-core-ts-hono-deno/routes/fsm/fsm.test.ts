@@ -5,9 +5,9 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs,
+ *   - @pgfsm/db (createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs,
  *              getFsmDataResolveStateValue, listFsmInstances, getFSMData)
- *   - @fsm/worker (startFSMWorkerWithDBLock, createAndStartFSMWorker)
+ *   - @pgfsm/worker (startFSMWorkerWithDBLock, createAndStartFSMWorker)
  *   - middlewares/supabase (getSupabase)
  *   - activeWorkers — shared module-level state (single source of truth for running workers)
  */

@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
-import type { Json } from "@fsm/db/database.types";
+import type { Json } from "@pgfsm/db/database.types";
 
 /**
  * Pure function — returns a new FSM JSON object with all null values removed

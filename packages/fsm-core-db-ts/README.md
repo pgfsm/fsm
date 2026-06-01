@@ -13,7 +13,7 @@ TypeScript wrappers over the PostgreSQL functions in the `fsm_core` schema. The 
 
 ## How it's consumed
 
-Import from the package alias `@fsm/db`:
+Import from the package alias `@pgfsm/db`:
 
 ```typescript
 import {

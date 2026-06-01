@@ -7,7 +7,7 @@ import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
 import { macrostep_v2 } from "@pgfsm/worker";
 import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
-import { Json } from "@fsm/db/database.types";
+import { Json } from "@pgfsm/db/database.types";
 import type { DBDeps } from "@pgfsm/db";
 
 const fsm_name = "creditCheck";

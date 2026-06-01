@@ -5,7 +5,7 @@ The PostgreSQL source of truth for the FSM framework. Contains schema files, mig
 ## What it produces
 
 - **Migrations** — timestamped SQL files in `supabase/migrations/` that bring the database to the current state
-- **Generated types** — `database.types.ts` auto-generated from the live schema, consumed by `@fsm/db`
+- **Generated types** — `database.types.ts` auto-generated from the live schema, consumed by `@pgfsm/db`
 
 ## Key commands
 

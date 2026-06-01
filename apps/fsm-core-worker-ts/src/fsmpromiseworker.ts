@@ -1,4 +1,4 @@
-import type { Database } from "@fsm/db/database.types";
+import type { Database } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
 

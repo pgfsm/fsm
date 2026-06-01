@@ -1,6 +1,6 @@
-# API ↔ @fsm/worker Integration Gaps
+# API ↔ @pgfsm/worker Integration Gaps
 
-This document records all bugs and gaps found between `apps/fsm-core-ts-hono-deno` and the `@fsm/worker` package (`apps/fsm-core-worker-ts`).
+This document records all bugs and gaps found between `apps/fsm-core-ts-hono-deno` and the `@pgfsm/worker` package (`apps/fsm-core-worker-ts`).
 
 ---
 
@@ -20,7 +20,7 @@ This document records all bugs and gaps found between `apps/fsm-core-ts-hono-den
 
 ---
 
-## @fsm/worker exports usage
+## @pgfsm/worker exports usage
 
 ### Used by API server
 

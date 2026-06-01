@@ -1,4 +1,4 @@
-import type { Database, Json } from "@fsm/db/database.types";
+import type { Database, Json } from "@pgfsm/db/database.types";
 type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
 import type { DBDeps } from "@pgfsm/db";

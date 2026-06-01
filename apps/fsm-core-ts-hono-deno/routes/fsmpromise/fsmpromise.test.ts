@@ -5,7 +5,7 @@
  * and NODE_ENV=test in .env.
  *
  * Mocked dependencies:
- *   - @fsm/db (pgmqQueueExists)
+ *   - @pgfsm/db (pgmqQueueExists)
  *   - fsm-core-worker-ts/src/index (startFSMPromiseWorker)
  *   - middlewares/supabase (getSupabase)
  *
