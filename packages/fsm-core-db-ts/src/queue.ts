@@ -88,7 +88,7 @@ export async function pgmqQueueExists(
       SELECT * FROM ${LIST_QUEUES_FN}();
     `;
     const res = await deps.db.query<DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"]>(text);
-    const rows = res.rows ?? [];
+    const rows: DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"][] = res.rows ?? [];
     return rows.some((r) => r?.queue_name === queueName);
   } catch (err) {
     console.error("Error in pgmqQueueExists:", err);
