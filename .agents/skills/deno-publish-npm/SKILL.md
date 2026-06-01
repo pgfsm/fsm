@@ -34,7 +34,26 @@ npm publish ./<scope>-<package-name>-<version>.tgz
 *Flag Warning:* If the package utilizes a scope and is being uploaded for the first time, append the `--access=public` flag to prevent private package configuration errors.
 
 ## 5. Maintenance and Version Bumping
-For subsequent updates, instruct the user to strictly follow this command sequence to ensure files stay synced with the project manifest:
+For subsequent updates follow this sequence to keep the tarball in sync with `deno.json`:
+
 1. `deno bump-version patch` (or `minor` / `major`)
 2. `deno pack`
-3. `npm publish ./<generated-archive>.tgz`
+3. Confirm the new tarball name — `deno pack` derives it from `deno.json` automatically:
+   - Strip the `@scope/` prefix and replace `/` with `-`
+   - Append the version
+   - Example: `@pgfsm/db` at `0.2.0` → `pgfsm-db-0.2.0.tgz`
+   - Or just run `ls *.tgz` in the package directory to see the exact filename
+4. Publish using the command in **Section 6** below, substituting `$(ls *.tgz)` for the filename
+
+## 6. Manual Publish with Auth Token
+To publish directly from the terminal without a pre-configured `.npmrc`, pass the registry auth token inline. Run this from inside the package directory after `deno pack`:
+
+```bash
+npm publish $(ls *.tgz) --access=public --//registry.npmjs.org/:_authToken=npm_***
+```
+
+`$(ls *.tgz)` picks up whatever tarball `deno pack` just generated — no need to hardcode the name.
+
+Replace `npm_***` with your npm access token (generate one at npmjs.com → Account → Access Tokens → Classic Token → Automation or Publish scope).
+
+> The token is passed as a config key scoped to the registry URL — this avoids writing credentials to disk and works without a logged-in npm session.
