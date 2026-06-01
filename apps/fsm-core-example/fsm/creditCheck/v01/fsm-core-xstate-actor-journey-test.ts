@@ -3,7 +3,7 @@ import { diff } from "json-diff-ts";
 import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
-import { machineWithProvider } from "./machineWithProvider.ts";
+import { machineWithProvider } from "./machine-with-provider.ts";
 import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@pgfsm/worker";
 import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
 import type { DBDeps } from "@pgfsm/db";
@@ -76,7 +76,6 @@ Deno.test({
         fsm_name,
         fsm_version,
         verifiedModule,
-        activeLocks,
         input_fsm_context,
         false,
         controller.signal,

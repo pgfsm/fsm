@@ -10,7 +10,7 @@
     "cli": "deno run --allow-all src/cli/index.ts",
     "test": "deno test --allow-all test/",
     "test:watch": "deno test --allow-all --watch test/",
-    "build:npm": "deno run --allow-all --allow-read --allow-write --allow-env --allow-run scripts/build_npm.ts"
+    "build:npm": "deno run --allow-all --allow-read --allow-write --allow-env --allow-run scripts/build-npm.ts"
   },
   "imports": {
     "@deno/dnt": "jsr:@deno/dnt@^0.41.3",
