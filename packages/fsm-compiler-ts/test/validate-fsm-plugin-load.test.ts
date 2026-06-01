@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { hasArity, isFunction, validateFsmPluginLoadFromFolder } from "../src/validateFsmPluginLoad.ts";
+import { hasArity, isFunction, validateFsmPluginLoadFromFolder } from "../src/validate-fsm-plugin-load.ts";
 
 // isFunction
 Deno.test("isFunction - returns true for functions", () => {

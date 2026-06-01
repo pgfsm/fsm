@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { addMissingFsmTypeToInvokeActors, generateFsmJSONFromFolders, normalizeActionsToObjects } from "../src/generateFsmJSON.ts";
+import { addMissingFsmTypeToInvokeActors, generateFsmJSONFromFolders, normalizeActionsToObjects } from "../src/generate-fsm-json.ts";
 
 // --- addMissingFsmTypeToInvokeActors unit tests ---
 

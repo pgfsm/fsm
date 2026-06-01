@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { loadFsmJSONFromFolders } from './loadFsmJSON.ts';
+import { loadFsmJSONFromFolders } from './load-fsm-json.ts';
 
 import { Pool } from "pg";
 

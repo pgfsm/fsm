@@ -1,9 +1,11 @@
 import dotenv from "dotenv";
-import { validateFsmPluginLoadFromFolders, validatePromisePluginLoadFromFolders } from './validateFsmPluginLoad.ts';
+import { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from './load-and-validate-fsm.ts';
+import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });
 
 
+const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
 
 (async () => {
   
@@ -11,29 +13,26 @@ dotenv.config({ path: "./../../.env" });
   // const sharedPromisefolderPath = 'packages/fsm-compiler-ts/src/example/sharedPromise';
   // const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
   // const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
+  
   const sharedPromisefolderPath = 'apps/fsm-core-example/sharedPromise';
   const sharedFSMfolderPath = 'apps/fsm-core-example/sharedFSM';
   const fsmfolderPath = 'apps/fsm-core-example/fsm';
-  // try {
-  //   const stat = await Deno.stat(folderPath);
-  //   if (!stat.isDirectory) {
-  //     throw new Error(`Provided path '${folderPath}' is not a directory.`);
-  //   }
-  // } catch (err) {
-  //   throw new Error(`Directory '${folderPath}' does not exist.`);
-  // }
- 
+  
+
+  const deps = {
+    db: pool,
+  };
 
   // const skipSharedFSMDirs = ["vitalsWorkflow"];
   // const skipFSMDirs = ["carVitals","taskMachineConfig"];
   const skipSharedPromiseDirs = [""];
   const skipSharedFSMDirs = [""];
   const skipFSMDirs = ["",""];
-  const outputSharedPromise = await validatePromisePluginLoadFromFolders(sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
-  const outputSharedFSM = await validateFsmPluginLoadFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, outputSharedPromise);
+
+  const outputSharedPromise = await loadAndValidatePromiseFromFolders(deps, sharedPromisefolderPath, "sharedPromise", skipSharedPromiseDirs, []);
+  const outputSharedFSM = await loadAndValidateFsmFromFolders(deps, sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs, outputSharedPromise);
   // pass pure array of outputSharedFSM and outputSharedPromise to validateFsmPluginLoadFromFolders to resolve dependencies for FSM plugins. 
-  const outputFSM = await validateFsmPluginLoadFromFolders(fsmfolderPath, "fsm", skipFSMDirs, [...outputSharedPromise, ...outputSharedFSM]);
+  const outputFSM = await loadAndValidateFsmFromFolders(deps, fsmfolderPath, "fsm", skipFSMDirs, [...outputSharedPromise, ...outputSharedFSM]);
   console.log("final output:", outputFSM);
-  
 })();
 

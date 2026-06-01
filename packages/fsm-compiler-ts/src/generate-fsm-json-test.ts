@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { generateFsmJSONFromFolders } from './generateFsmJSON.ts';
+import { generateFsmJSONFromFolders } from './generate-fsm-json.ts';
 
 dotenv.config({ path: "./../../.env" });
 

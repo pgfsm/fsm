@@ -6,8 +6,8 @@ import Ajv from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { isVersionFolderName, type WorkflowType, type ActorReference } from "./util.ts";
 
-import { validateFsmPluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
-import { validatePromisePluginLoadFromFolder } from "./validateFsmPluginLoad.ts";
+import { validateFsmPluginLoadFromFolder } from "./validate-fsm-plugin-load.ts";
+import { validatePromisePluginLoadFromFolder } from "./validate-fsm-plugin-load.ts";
 import { loadFsmFromJson, type DBDeps } from "@pgfsm/db";
 
 export async function loadAndValidatePromiseFromFolders(

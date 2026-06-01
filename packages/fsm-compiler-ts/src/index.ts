@@ -1,7 +1,7 @@
-export { generateFsmJSONFromFolders, generateFsmJSONFromMachineFile, generateFsmJSONFromConfigFile, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generateFsmJSON.ts";
-export { generateFsmPluginFromFolders } from "./generateFsmPlugin.ts";
-export { loadFsmJSONFromFolders } from "./loadFsmJSON.ts";
-export { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from "./loadAndValidateFsm.ts";
+export { generateFsmJSONFromFolders, generateFsmJSONFromMachineFile, generateFsmJSONFromConfigFile, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generate-fsm-json.ts";
+export { generateFsmPluginFromFolders } from "./generate-fsm-plugin.ts";
+export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
+export { loadAndValidateFsmFromFolders, loadAndValidatePromiseFromFolders } from "./load-and-validate-fsm.ts";
 export {
   validateFsmPluginLoadFromFolders,
   validateFsmPluginLoadFromFolder,
@@ -10,8 +10,8 @@ export {
   validateLanguageModules,
   isFunction,
   hasArity,
-} from "./validateFsmPluginLoad.ts";
-export { deleteFsmJSONFromFolders } from "./deleteFsmJSONFromFolders.ts";
+} from "./validate-fsm-plugin-load.ts";
+export { deleteFsmJSONFromFolders } from "./delete-fsm-json-from-folders.ts";
 export { isVersionFolderName, isValidDateFolderName, isTimestampFolderName, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX, replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "./util.ts";
 export type { ActorReference, FailedMethod, InternalActor, ExternalActor, FsmPluginValidationResult } from "./util.ts";
 export type { WorkflowType } from "./util.ts";
