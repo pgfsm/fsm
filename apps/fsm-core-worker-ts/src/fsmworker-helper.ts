@@ -117,6 +117,11 @@ export async function macrostepV2(
   const eventType = msgData.eventData?.eventType;
   const eventPayload = msgData.eventData?.eventPayload ?? {};
 
+  if (!eventType) {
+    console.error("No eventType found in message data.");
+    return;
+  }
+
   const macroSaveFnPayload = {
     remove_from_current_fsm_instance_queue_id: queueName,
     remove_current_queue_msg_id: msg.msg_id,
