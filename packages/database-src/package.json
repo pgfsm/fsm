@@ -1,5 +1,5 @@
 {
-  "name": "fsm-database-sql",
+  "name": "fsm_core",
   "version": "1.0.0",
   "description": "This package is used for the main PostgreSQL files for the FSM project.",
   "main": "index.js",
@@ -18,7 +18,8 @@
     "supabase:gen:types": "supabase gen types typescript --local --schema public,fsm_core,pgmq > database.types.ts",
     "supabase:db:addfakeusers": "tsx create-fake-user.ts",
     "supabase:db:deletefakeusers": "tsx delete-fake-user.ts",
-    "supabase:restart:with:diff": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types"
+    "supabase:restart:with:diff": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types",
+    "supabase:restart:with:diff:manualrelease": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types"
   },
   "author": "Niraj Kashyap",
   "license": "MIT",
