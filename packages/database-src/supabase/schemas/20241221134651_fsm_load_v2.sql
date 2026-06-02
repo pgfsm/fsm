@@ -384,12 +384,14 @@ BEGIN
         );
     END IF;
 
-    SELECT config_value
-    INTO schema_json
-    FROM fsm_core.config_store
-    WHERE config_name = 'fsm_schema'
-    ORDER BY config_version DESC
-    LIMIT 1;
+    -- SELECT config_value
+    -- INTO schema_json
+    -- FROM fsm_core.config_store
+    -- WHERE config_name = 'fsm_schema'
+    -- ORDER BY config_version DESC
+    -- LIMIT 1;
+
+    schema_json := fsm_core.fsm_json_schema();
 
     IF schema_json IS NULL THEN
         RAISE EXCEPTION 'Missing fsm_schema in fsm_core.config_store for % version %', input_fsm_name, input_fsm_version;

@@ -13,14 +13,14 @@ BEGIN
 END
 $$;
 
+
+-- note pg_jsonschema EXTENSION need schmea so using fsm_core and creating EXTENSION here
+CREATE EXTENSION IF NOT EXISTS pg_jsonschema WITH SCHEMA fsm_core VERSION '0.3.3';
+
+
 CREATE FUNCTION fsm_core.hello(input_text TEXT)
 RETURNS void AS $$
 BEGIN
     RAISE NOTICE 'Hello, %!', input_text;
 END;
 $$ LANGUAGE plpgsql;
-
--- note pg_jsonschema EXTENSION need schmea so using fsm_core and creating EXTENSION here
-CREATE EXTENSION IF NOT EXISTS pg_jsonschema WITH SCHEMA fsm_core VERSION '0.3.3';
-
-

@@ -9,24 +9,6 @@ export type Json =
 export type Database = {
   fsm_core: {
     Tables: {
-      config_store: {
-        Row: {
-          config_name: string | null
-          config_value: Json
-          config_version: number
-        }
-        Insert: {
-          config_name?: string | null
-          config_value: Json
-          config_version?: never
-        }
-        Update: {
-          config_name?: string | null
-          config_value?: Json
-          config_version?: never
-        }
-        Relationships: []
-      }
       fsm_instance: {
         Row: {
           childrens: Json | null
@@ -454,21 +436,6 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
-      archive:
-        | {
-            Args: {
-              queue_name: string
-              msg_id: number
-            }
-            Returns: boolean
-          }
-        | {
-            Args: {
-              queue_name: string
-              msg_ids: number[]
-            }
-            Returns: number[]
-          }
       archive_event_from_fsm_promise_type_worker_v2: {
         Args: {
           input_promise_queue_name: string
@@ -587,12 +554,6 @@ export type Database = {
         }
         Returns: string[]
       }
-      create: {
-        Args: {
-          queue_name: string
-        }
-        Returns: undefined
-      }
       create_fsm_instance_from_name_v2: {
         Args: {
           input_fsm_name: string
@@ -633,27 +594,6 @@ export type Database = {
           from_source_fsm_instance_id: string
         }
         Returns: Json
-      }
-      delete:
-        | {
-            Args: {
-              queue_name: string
-              msg_id: number
-            }
-            Returns: boolean
-          }
-        | {
-            Args: {
-              queue_name: string
-              msg_ids: number[]
-            }
-            Returns: number[]
-          }
-      drop_queue: {
-        Args: {
-          queue_name: string
-        }
-        Returns: boolean
       }
       fsm_get_all_state_nodes_v1: {
         Args: {
@@ -702,6 +642,10 @@ export type Database = {
           input_state_path: unknown
         }
         Returns: string[]
+      }
+      fsm_json_schema: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       fsm_worker_v1: {
         Args: {
@@ -870,10 +814,6 @@ export type Database = {
         }
         Returns: string[]
       }
-      list_queues: {
-        Args: Record<PropertyKey, never>
-        Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
-      }
       load_fsm_from_json_v2: {
         Args: {
           json_input: Json
@@ -1011,26 +951,6 @@ export type Database = {
             }
             Returns: boolean
           }
-      pop: {
-        Args: {
-          queue_name: string
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
-      }
-      purge_queue: {
-        Args: {
-          queue_name: string
-        }
-        Returns: number[]
-      }
-      read: {
-        Args: {
-          queue_name: string
-          vt: number
-          qty: number
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
-      }
       remove_hashtag_from_text: {
         Args: {
           input_text: string
@@ -1127,14 +1047,6 @@ export type Database = {
           target: string[] | null
         }[]
       }
-      send: {
-        Args: {
-          queue_name: string
-          msg: Json
-          delay?: number
-        }
-        Returns: number[]
-      }
       send_event_to_fsm_queue_with_event_logs_v2: {
         Args: {
           input_fsm_instance_id: string
@@ -1193,14 +1105,6 @@ export type Database = {
           from_source_fsm_instance_id: string
         }
         Returns: Json
-      }
-      set_vt: {
-        Args: {
-          queue_name: string
-          msg_id: number
-          vt_offset: number
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       sql_lca_for_transition: {
         Args: {
@@ -1546,57 +1450,11 @@ export type Database = {
         }
         Returns: undefined
       }
-      archive:
-        | {
-            Args: {
-              queue_name: string
-              message_id: number
-            }
-            Returns: boolean
-          }
-        | {
-            Args: {
-              queue_name: string
-              message_ids: number[]
-            }
-            Returns: number[]
-          }
-      create: {
-        Args: {
-          queue_name: string
-        }
-        Returns: undefined
-      }
-      delete:
-        | {
-            Args: {
-              queue_name: string
-              message_id: number
-            }
-            Returns: boolean
-          }
-        | {
-            Args: {
-              queue_name: string
-              message_ids: number[]
-            }
-            Returns: number[]
-          }
-      drop_queue: {
-        Args: {
-          queue_name: string
-        }
-        Returns: boolean
-      }
       lca: {
         Args: {
           "": unknown[]
         }
         Returns: unknown
-      }
-      list_queues: {
-        Args: Record<PropertyKey, never>
-        Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][]
       }
       lquery_in: {
         Args: {
@@ -1711,42 +1569,6 @@ export type Database = {
           "": unknown
         }
         Returns: number
-      }
-      pop: {
-        Args: {
-          queue_name: string
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
-      }
-      purge_queue: {
-        Args: {
-          queue_name: string
-        }
-        Returns: number[]
-      }
-      read: {
-        Args: {
-          queue_name: string
-          vt: number
-          qty: number
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
-      }
-      send: {
-        Args: {
-          queue_name: string
-          msg: Json
-          delay?: number
-        }
-        Returns: number[]
-      }
-      set_vt: {
-        Args: {
-          queue_name: string
-          message_id: number
-          vt_offset: number
-        }
-        Returns: Database["pgmq"]["CompositeTypes"]["message_record"][]
       }
       test_event_transition_for_exit_v2: {
         Args: {
