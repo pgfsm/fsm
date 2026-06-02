@@ -12,6 +12,7 @@
     "supabase:start:env": "dotenv -e ./../../.env -- npm run supabase:start",
     "supabase:stop": "supabase stop",
     "supabase:db:diff:schemafolder:sql": "supabase db diff -f declarative_update --debug",
+    "supabase:db:diff:schemafolder:sql:manualrelease": "supabase db diff -f $(tsx script.ts) --debug",
     "supabase:db:reset": "supabase db reset",
     "supabase:db:migrate": "supabase migration up",
     "supabase:docker:volume:clean": "VOLUME=$(docker volume ls -q --filter label=com.supabase.cli.project=database-src); if [ -n \"$VOLUME\" ]; then docker volume rm $VOLUME; else echo 'No matching docker volume to remove.'; fi",
@@ -19,7 +20,7 @@
     "supabase:db:addfakeusers": "tsx create-fake-user.ts",
     "supabase:db:deletefakeusers": "tsx delete-fake-user.ts",
     "supabase:restart:with:diff": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types",
-    "supabase:restart:with:diff:manualrelease": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types"
+    "supabase:restart:with:diff:manualrelease": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:manualrelease && npm run supabase:start:env && npm run supabase:gen:types"
   },
   "author": "Niraj Kashyap",
   "license": "MIT",

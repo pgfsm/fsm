@@ -35,6 +35,32 @@ npm run supabase:db:diff:schemafolder:sql
 
 Schema files are the source; migrations are their output. Never hand-edit a migration to add schema logic — edit the schema file and diff.
 
+## Manual release
+
+Use `supabase:restart:with:diff:manualrelease` to generate a versioned migration file and bump `package.json`. The filename is computed by `script.ts` based on whether a release file already exists in `supabase/migrations/`.
+
+Pass the bump type via `--bumptype`:
+
+```bash
+# patch bump: fsm_core--1.0.0--1.0.1.sql
+npm run supabase:restart:with:diff:manualrelease --bumptype=patch
+
+# minor bump: fsm_core--1.0.0--1.1.0.sql
+npm run supabase:restart:with:diff:manualrelease --bumptype=minor
+
+# major bump: fsm_core--1.0.0--2.0.0.sql
+npm run supabase:restart:with:diff:manualrelease --bumptype=major
+
+# no arg — defaults to minor
+npm run supabase:restart:with:diff:manualrelease
+```
+
+**First run** (no existing `fsm_core--<version>.sql` in migrations): creates `fsm_core--<version>.sql` with no version bump.
+
+**Subsequent runs**: bumps `package.json` version and creates `fsm_core--<old>--<new>.sql` as an upgrade script.
+
+The bump type is passed via `process.env.npm_config_bumptype` which npm propagates automatically across the script chain.
+
 ## Migration notes
 
 - `20250602124504_pgmq.sql` is manually added and must run before all other migrations — it patches pgmq setup required by subsequent scripts
