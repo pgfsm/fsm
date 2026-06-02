@@ -338,3 +338,14 @@ $$ LANGUAGE plpgsql;
 --     'creditCheck',
 --     'v3'
 -- );
+
+
+CREATE OR REPLACE FUNCTION fsm_core.hello(input_text text)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RAISE NOTICE 'new Hello, %!', input_text;
+END;
+$function$
+;
