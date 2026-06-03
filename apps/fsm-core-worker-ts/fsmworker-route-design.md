@@ -1,8 +1,10 @@
-# FSMWorker Route Design — Separate vs. Merged
+# FSMWorker Route Design — Current Architecture
 
-## Question
+## Decision
 
-Should `apps/fsm-core-ts-hono-deno/routes/fsmworker/` be a separate route module, or should its handlers be merged into `routes/fsm/`?
+Worker routes were **merged into `/fsm`** (commit `2d6f83a`). The `/routes/fsmworker/` directory exists but is empty.
+
+`/fsmpromise` remained a separate route prefix (unchanged).
 
 ---
 
@@ -10,81 +12,39 @@ Should `apps/fsm-core-ts-hono-deno/routes/fsmworker/` be a separate route module
 
 | Route | Handler file | Responsibility |
 |---|---|---|
-| `GET /fsm` | `fsm.handlers.ts` | Returns active FSM locks (⚠️ wrong — see issue below) |
-| `POST /fsm` | `fsm.handlers.ts` | Creates FSM instance + starts worker |
+| `GET /fsm` | `fsm.handlers.ts` | ⚠️ Returns activeWorkers (wrong — should return FSM instances from DB) |
+| `POST /fsm` | `fsm.handlers.ts` | Creates FSM instance + starts worker with DB lock |
 | `POST /fsm/send` | `fsm.handlers.ts` | Sends event to a running FSM instance |
-| `GET /fsmworker` | `fsmworker.handlers.ts` | Returns active FSM worker locks |
-| `POST /fsmworker` | `fsmworker.handlers.ts` | Starts worker for an existing FSM instance |
-| `POST /fsmworker/create-and-start` | `fsmworker.handlers.ts` | Creates instance + starts worker |
-| `GET /fsmpromise` | `fsmpromise.handlers.ts` | Returns active promise worker locks |
-| `POST /fsmpromise` | `fsmpromise.handlers.ts` | Starts promise worker for existing queue |
-| `POST /fsmpromise/create-and-start` | `fsmpromise.handlers.ts` | Creates queue + starts promise worker |
+| `GET /fsm/currentActive` | `fsm.handlers.ts` | Returns active worker locks (in-memory map projection) |
+| `POST /fsm/start` | `fsm.handlers.ts` | Starts worker for an existing FSM instance (with DB lock) |
+| `POST /fsm/stop` | `fsm.handlers.ts` | Stops a running worker (aborts its AbortController) |
+| `GET /fsmpromise` | `fsmpromise.handlers.ts` | Returns active promise workers (in-memory map projection) |
+| `POST /fsmpromise/start` | `fsmpromise.handlers.ts` | Starts promise worker for existing queue |
+| `POST /fsmpromise/create-and-start` | `fsmpromise.handlers.ts` | Creates PGMQ queue + starts promise worker |
+| `POST /fsmpromise/stop` | `fsmpromise.handlers.ts` | Stops a running promise worker |
 
 ---
 
-## Recommendation: Keep fsmworker as a **separate route**
+## Open Design Issues
 
-### Rationale
-
-**1. Separation of concerns**
-- `/fsm` → FSM instance lifecycle: creating instances and sending events to them
-- `/fsmworker` → Worker process control: attaching/detaching the execution loop to an existing instance
-- `/fsmpromise` → Actor/promise worker control: same pattern as fsmworker but for promise queues
-
-These are genuinely different concerns. An FSM instance can exist without a worker running. The worker is the execution engine, not the instance itself.
-
-**2. Consistent pattern**
-`/fsmpromise` is already separate. Merging `fsmworker` into `fsm` would break the symmetry and leave `fsmpromise` as an odd-one-out.
-
-**3. Extensibility**
-Worker-specific operations (pause, resume, worker health, queue depth) belong naturally in `/fsmworker`, not `/fsm`. Keeping the route separate allows this without polluting the instance lifecycle API.
-
-**4. Merging creates ambiguity**
-If merged, `POST /fsm` would need to handle two cases:
-- Create new instance (current behavior)
-- Attach worker to existing instance
-
-Distinguishing these by body shape is fragile; distinct routes are clearer.
-
----
-
-## Design Issues to Fix (Deferred)
-
-These are problems in the current architecture that should be addressed in a future refactor — they are **not** implemented in this session.
+These problems were identified when the routes were merged and are deferred to a future session.
 
 ### Issue 1: `GET /fsm` returns the wrong data
 
-`GET /fsm` currently returns `activeFSMLocks`. It should return a list of FSM instances from the database. `activeFSMLocks` (the in-memory map of running workers) belongs exclusively on `GET /fsmworker`.
+`GET /fsm` currently returns `activeWorkers` (the in-memory map of running workers). It should return a list of FSM instances from the `fsm_instance` table. Active worker state belongs exclusively on `GET /fsm/currentActive`, which was added as the correct home for that data.
 
 **Fix (future):**
-- `GET /fsm` → query `fsm_instance` table and return rows
-- `GET /fsmworker` → return `activeFSMLocks` (already correct)
+- `GET /fsm` → query `fsm_instance` table via `listFsmInstances()` and return rows
+- `GET /fsm/currentActive` → returns `activeWorkers` projection (already correct)
 
-### Issue 2: `activeFSMLocks` is owned by the wrong module
+### Issue 2: `activeWorkers` ownership
 
-`activeFSMLocks` is defined in `fsm.handlers.ts` and imported by `fsmworker.handlers.ts`. This creates a dependency from worker to instance handler, which is backwards — the worker owns lock state, not the instance.
+`activeWorkers` is defined in `fsm.handlers.ts` even though it tracks worker execution state, not FSM instance state. This is a minor conceptual mismatch introduced by the merge.
 
-**Fix (future):** Move `activeFSMLocks` to a shared module (e.g., `lib/worker-state.ts`) and import it in both `fsm.handlers.ts` and `fsmworker.handlers.ts`. This eliminates the circular-feeling import.
-
-```
-lib/
-  worker-state.ts   # export const activeFSMLocks: Record<string, boolean> = {}
-routes/
-  fsm/
-    fsm.handlers.ts    # import { activeFSMLocks } from "../../lib/worker-state.ts"
-  fsmworker/
-    fsmworker.handlers.ts  # import { activeFSMLocks } from "../../lib/worker-state.ts"
-```
+**Fix (future):** Move `activeWorkers` to a shared module (e.g., `lib/worker-state.ts`) if `fsmworker` routes are ever re-split out, or leave it in `fsm.handlers.ts` as-is since the merge makes it the single handler file.
 
 ---
 
-## Summary
+## Pre-merge rationale (for reference)
 
-| Criterion | Keep Separate | Merge into /fsm |
-|---|---|---|
-| Separation of concerns | ✅ Clear boundary | ❌ Mixed |
-| API clarity for clients | ✅ Distinct intent | ❌ Overloaded |
-| Consistency with /fsmpromise | ✅ Same pattern | ❌ Inconsistent |
-| Current implementation effort | ✅ Low (bug fixes only) | ❌ High (refactor) |
-
-**Decision: Keep separate. Fix the data bugs (`GET /fsm` wrong return, `activeFSMLocks` ownership) in a future session.**
+Before the merge, the recommendation was to keep `/fsmworker` separate from `/fsm` based on separation of concerns (`/fsm` = instance lifecycle, `/fsmworker` = worker process control) and consistency with `/fsmpromise`. The merge was made to simplify the API surface — callers now work with a single `/fsm` prefix for all FSM-related operations.
