@@ -1,10 +1,11 @@
 ## FSM Postgres Extension
 
-This project is a PostgreSQL extension for FSM (Finite State Machine).
+> **Not currently used.** The project uses SQL/PL/pgSQL migrations in `packages/database-src/` instead. This Rust/pgrx extension was explored but not adopted — see the [Extension Language ADR](../database-src/docs/extension-creation-approach-adr.md) for the decision rationale.
+
+This project is a PostgreSQL extension for FSM (Finite State Machine) built with Rust via pgrx.
 
 ### About
 The extension provides custom functionality to support FSM operations directly within a PostgreSQL database environment.
-
 
 ### Getting Started
 
