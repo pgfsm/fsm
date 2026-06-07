@@ -23,7 +23,7 @@
     "supabase:restart:with:diff:manualrelease": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:manualrelease && npm run supabase:start:env && npm run supabase:gen:types"
   },
   "author": "Niraj Kashyap",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "dotenv": "^16.5.0",
