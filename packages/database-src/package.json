@@ -14,7 +14,7 @@
     "supabase:start:env": "dotenv -e ./../../.env -- npm run supabase:start",
     "supabase:stop": "supabase stop",
     "supabase:db:diff:schemafolder:sql": "supabase db diff -f declarative_update --debug",
-    "supabase:db:diff:schemafolder:sql:manualrelease": "supabase db diff -f $(tsx script.ts) --debug",
+    "supabase:db:diff:schemafolder:sql:manualrelease": "NEXT_VERSION=$(tsx get-next-pkg-version.ts) && supabase db diff -f $NEXT_VERSION --debug",
     "supabase:db:reset": "supabase db reset",
     "supabase:db:migrate": "supabase migration up",
     "supabase:docker:volume:clean": "VOLUME=$(docker volume ls -q --filter label=com.supabase.cli.project=database-src); if [ -n \"$VOLUME\" ]; then docker volume rm $VOLUME; else echo 'No matching docker volume to remove.'; fi",
