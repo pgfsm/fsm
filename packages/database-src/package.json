@@ -7,6 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "loadenvandprintenv": "dotenv -e ./../../.env -- npm run printenv",
     "printenv": "echo $SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+    "getExistingHighestVersion": "tsx get-existing-highest-pkg-version.ts",
+    "getNextVersion": "tsx get-next-pkg-version.ts",
     "supabase:init": "supabase init",
     "supabase:start": "supabase start --debug",
     "supabase:start:env": "dotenv -e ./../../.env -- npm run supabase:start",
