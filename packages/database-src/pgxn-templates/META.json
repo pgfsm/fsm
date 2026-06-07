@@ -1,0 +1,48 @@
+{
+  "name": "{{NAME}}",
+  "abstract": "{{DESCRIPTION}}",
+  "version": "{{VERSION}}",
+  "maintainer": [
+    "{{AUTHOR}} <niraj.38.re@gmail.com>"
+  ],
+  "license": "{{LICENSE_PGXN}}",
+  "provides": {
+    "{{NAME}}": {
+      "abstract": "{{DESCRIPTION}}",
+      "file": "{{NAME}}--{{VERSION}}.sql",
+      "version": "{{VERSION}}"
+    }
+  },
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "PostgreSQL": "15.0.0",
+        "ltree": "1.2.0",
+        "pgmq": "1.4.4"
+      }
+    }
+  },
+  "resources": {
+    "bugtracker": {
+      "web": "https://github.com/nirajkashyap/fsm/issues/"
+    },
+    "repository": {
+      "url": "git://github.com/nirajkashyap/fsm.git",
+      "web": "https://github.com/nirajkashyap/fsm/",
+      "type": "git"
+    }
+  },
+  "generated_by": "{{AUTHOR}}",
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  },
+  "tags": [
+    "finite state machine",
+    "fsm",
+    "state machine",
+    "workflow",
+    "orchestrator",
+    "orchestration"
+  ]
+}

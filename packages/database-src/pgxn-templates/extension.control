@@ -1,0 +1,7 @@
+comment = '{{DESCRIPTION}}'
+default_version = '{{VERSION}}'
+schema = '{{NAME}}'
+relocatable = false
+superuser = true
+trusted = false
+requires = 'ltree, pgmq'
