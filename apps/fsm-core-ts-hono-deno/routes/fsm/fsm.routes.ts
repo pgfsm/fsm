@@ -37,6 +37,29 @@ export const list = createRoute({
   },
 });
 
+export const getOne = createRoute({
+  path: "/fsm/:id",
+  method: "get",
+  request: { params: IdParamsSchema },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({
+        data: z.object({
+          fsm_instance_row: z.record(z.unknown()),
+          resolved_state_value: z.unknown(),
+        }),
+      }),
+      "FSM instance with resolved state",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(notFoundSchema, "FSM instance not found"),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
 export const create = createRoute({
   path: "/fsm",
   method: "post",
@@ -112,14 +135,14 @@ export const currentActive = createRoute({
   },
 });
 
-export const start = createRoute({
-  path: "/fsm/start",
+export const resume = createRoute({
+  path: "/fsm/resume",
   method: "post",
   request: {
     body: jsonContentRequired(
       z.object({
         queue: z.string().describe(
-          "The FSM instance ID (queue name) to start the worker for",
+          "The FSM instance ID (queue name) to resume the worker for",
         ),
       }),
       "The fsmworker configuration",
@@ -129,7 +152,7 @@ export const start = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       z.object({}),
-      "Worker started successfully",
+      "Worker resumed successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       z.object({ error: z.string() }),
@@ -164,8 +187,9 @@ export const stop = createRoute({
 });
 
 export type ListRoute = typeof list;
+export type GetOneRoute = typeof getOne;
 export type CreateRoute = typeof create;
 export type SendRoute = typeof send;
 export type CurrentActiveRoute = typeof currentActive;
-export type StartRoute = typeof start;
+export type ResumeRoute = typeof resume;
 export type StopRoute = typeof stop;

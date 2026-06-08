@@ -12,11 +12,12 @@ Worker routes were **merged into `/fsm`** (commit `2d6f83a`). The `/routes/fsmwo
 
 | Route | Handler file | Responsibility |
 |---|---|---|
-| `GET /fsm` | `fsm.handlers.ts` | ⚠️ Returns activeWorkers (wrong — should return FSM instances from DB) |
+| `GET /fsm` | `fsm.handlers.ts` | List all FSM instances from DB |
+| `GET /fsm/:id` | `fsm.handlers.ts` | Get single FSM instance + resolved state by ID |
 | `POST /fsm` | `fsm.handlers.ts` | Creates FSM instance + starts worker with DB lock |
 | `POST /fsm/send` | `fsm.handlers.ts` | Sends event to a running FSM instance |
 | `GET /fsm/currentActive` | `fsm.handlers.ts` | Returns active worker locks (in-memory map projection) |
-| `POST /fsm/start` | `fsm.handlers.ts` | Starts worker for an existing FSM instance (with DB lock) |
+| `POST /fsm/resume` | `fsm.handlers.ts` | Re-attaches worker to an existing stopped instance (state preserved) |
 | `POST /fsm/stop` | `fsm.handlers.ts` | Stops a running worker (aborts its AbortController) |
 | `GET /fsmpromise` | `fsmpromise.handlers.ts` | Returns active promise workers (in-memory map projection) |
 | `POST /fsmpromise/start` | `fsmpromise.handlers.ts` | Starts promise worker for existing queue |
@@ -25,19 +26,24 @@ Worker routes were **merged into `/fsm`** (commit `2d6f83a`). The `/routes/fsmwo
 
 ---
 
-## Open Design Issues
+## Resolved Issues
 
-These problems were identified when the routes were merged and are deferred to a future session.
+### ~~Issue 1: `GET /fsm` returns the wrong data~~ ✅ Resolved
 
-### Issue 1: `GET /fsm` returns the wrong data
+Handler calls `listFsmInstances()` and returns rows from the `fsm_instance` table. `GET /fsm/currentActive` holds active worker state (in-memory map projection).
 
-`GET /fsm` currently returns `activeWorkers` (the in-memory map of running workers). It should return a list of FSM instances from the `fsm_instance` table. Active worker state belongs exclusively on `GET /fsm/currentActive`, which was added as the correct home for that data.
+`GET /fsm/:id` was added to fetch a single instance by ID via `getFsmDataResolveStateValue()`, returning both the full instance row and the resolved state value.
 
-**Fix (future):**
-- `GET /fsm` → query `fsm_instance` table via `listFsmInstances()` and return rows
-- `GET /fsm/currentActive` → returns `activeWorkers` projection (already correct)
+### ~~Issue 2: `POST /fsm/start` naming~~ ✅ Resolved → renamed to `POST /fsm/resume`
 
-### Issue 2: `activeWorkers` ownership
+`start` was ambiguous alongside `POST /fsm` (create + start new). `resume` is semantically accurate: the FSM instance state is preserved in DB, and the worker is re-attached to continue processing from that saved state. `restart` was rejected because it implies a state reset (stop + reset + start), which is not what happens here.
+
+The triad is now unambiguous:
+- `POST /fsm` — create a new instance and start its worker
+- `POST /fsm/resume` — re-attach a worker to an existing stopped instance
+- `POST /fsm/stop` — stop a running worker (instance state preserved)
+
+### Issue 3: `activeWorkers` ownership
 
 `activeWorkers` is defined in `fsm.handlers.ts` even though it tracks worker execution state, not FSM instance state. This is a minor conceptual mismatch introduced by the merge.
 

@@ -1,6 +1,6 @@
 /* eslint-disable ts/ban-ts-comment */
 /**
- * Tests for /fsm routes (list, create, send, currentActive, start, stop).
+ * Tests for /fsm routes (list, create, send, currentActive, resume, stop).
  * Requires vitest (add to deno.json imports: "vitest": "npm:vitest@^2")
  * and NODE_ENV=test in .env.
  *
@@ -292,16 +292,16 @@ describe("GET /fsm/currentActive", () => {
   });
 });
 
-// ─── POST /fsm/start ─────────────────────────────────────────────────────────
+// ─── POST /fsm/resume ────────────────────────────────────────────────────────
 
-describe("POST /fsm/start", () => {
+describe("POST /fsm/resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.keys(activeWorkers).forEach((k) => delete activeWorkers[k]);
   });
 
   it("returns 422 when queue field is missing", async () => {
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       // @ts-expect-error — intentionally omitting required field
       json: {},
     });
@@ -313,7 +313,7 @@ describe("POST /fsm/start", () => {
   it("returns 500 with 'Invalid queue id' when the queue is not a known FSM instance", async () => {
     vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce(null);
 
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       json: { queue: "unknown-instance-id" },
     });
     expect(res.status).toBe(500);
@@ -333,7 +333,7 @@ describe("POST /fsm/start", () => {
       },
     } as never);
 
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       json: { queue: queueId },
     });
     expect(res.status).toBe(500);
@@ -352,7 +352,7 @@ describe("POST /fsm/start", () => {
     } as never);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
 
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       json: { queue: queueId },
     });
     expect(res.status).toBe(500);
@@ -360,7 +360,7 @@ describe("POST /fsm/start", () => {
     expect(json.error).toContain("fsmworker already running");
   });
 
-  it("returns 200 when worker starts successfully", async () => {
+  it("returns 200 when worker resumes successfully", async () => {
     const queueId = "uuid-new-worker";
     vi.mocked(getFsmDataResolveStateValue).mockResolvedValueOnce({
       fsm_instance_row: {
@@ -371,7 +371,7 @@ describe("POST /fsm/start", () => {
     } as never);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(true);
 
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       json: { queue: queueId },
     });
     expect(res.status).toBe(200);
@@ -384,7 +384,7 @@ describe("POST /fsm/start", () => {
       new Error("DB timeout"),
     );
 
-    const res = await client.fsm.start.$post({
+    const res = await client.fsm.resume.$post({
       json: { queue: "some-queue-id" },
     });
     expect(res.status).toBe(500);

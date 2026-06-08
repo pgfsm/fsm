@@ -2,7 +2,7 @@ import * as HttpStatusCodes from "stoker/http-status-codes.ts";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
 
-import type { CreateRoute, CurrentActiveRoute, ListRoute, SendRoute, StartRoute, StopRoute } from "./fsm.routes.ts";
+import type { CreateRoute, CurrentActiveRoute, GetOneRoute, ListRoute, ResumeRoute, SendRoute, StopRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
@@ -25,6 +25,29 @@ export const list: AppRouteHandler<ListRoute> = async (c) => {
 
   const instances = await listFsmInstances(deps);
   return c.json({ data: instances }, HttpStatusCodes.OK);
+};
+
+export const getOne: AppRouteHandler<GetOneRoute> = async (c) => {
+  const supabase = getSupabase(c);
+  const db = c.get("db");
+  const deps = {
+    db: db,
+    useSupabase: true,
+    supabase: supabase,
+  };
+
+  const { id } = c.req.valid("param");
+
+  try {
+    const result = await getFsmDataResolveStateValue(deps, id);
+    if (!result) {
+      return c.json({ message: "FSM instance not found" }, HttpStatusCodes.NOT_FOUND);
+    }
+    return c.json({ data: result }, HttpStatusCodes.OK);
+  } catch (_err) {
+    console.log("Error in getOne handler:", _err);
+    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+  }
 };
 
 export const create: AppRouteHandler<CreateRoute> = async (c) => {
@@ -93,7 +116,7 @@ export const currentActive: AppRouteHandler<CurrentActiveRoute> = async (c) => {
   return c.json({ data }, HttpStatusCodes.OK);
 };
 
-export const start: AppRouteHandler<StartRoute> = async (c) => {
+export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
   const supabase = getSupabase(c);
   const db = c.get("db");
   const deps = {
@@ -157,7 +180,7 @@ export const start: AppRouteHandler<StartRoute> = async (c) => {
       );
     }
   } catch (_err) {
-    console.log("Error in start handler:", _err);
+    console.log("Error in resume handler:", _err);
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
