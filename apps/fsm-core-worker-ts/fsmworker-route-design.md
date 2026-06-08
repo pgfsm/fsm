@@ -20,7 +20,7 @@ Worker routes were **merged into `/fsm`** (commit `2d6f83a`). The `/routes/fsmwo
 | `POST /fsm/resume` | `fsm.handlers.ts` | Re-attaches worker to an existing stopped instance (state preserved) |
 | `POST /fsm/stop` | `fsm.handlers.ts` | Stops a running worker (aborts its AbortController) |
 | `GET /fsmpromise` | `fsmpromise.handlers.ts` | Returns active promise workers (in-memory map projection) |
-| `POST /fsmpromise/start` | `fsmpromise.handlers.ts` | Starts promise worker for existing queue |
+| `POST /fsmpromise/resume` | `fsmpromise.handlers.ts` | Re-attaches promise worker to an existing queue (state preserved) |
 | `POST /fsmpromise/create-and-start` | `fsmpromise.handlers.ts` | Creates PGMQ queue + starts promise worker |
 | `POST /fsmpromise/stop` | `fsmpromise.handlers.ts` | Stops a running promise worker |
 
@@ -34,14 +34,18 @@ Handler calls `listFsmInstances()` and returns rows from the `fsm_instance` tabl
 
 `GET /fsm/:id` was added to fetch a single instance by ID via `getFsmDataResolveStateValue()`, returning both the full instance row and the resolved state value.
 
-### ~~Issue 2: `POST /fsm/start` naming~~ ✅ Resolved → renamed to `POST /fsm/resume`
+### ~~Issue 2: `start` naming~~ ✅ Resolved → renamed to `resume` across all prefixes
 
-`start` was ambiguous alongside `POST /fsm` (create + start new). `resume` is semantically accurate: the FSM instance state is preserved in DB, and the worker is re-attached to continue processing from that saved state. `restart` was rejected because it implies a state reset (stop + reset + start), which is not what happens here.
+`start` was ambiguous alongside `POST /fsm` and `POST /fsmpromise/create-and-start` (both create + start new). `resume` is semantically accurate: state is preserved in DB, and the worker is re-attached to continue processing from that saved state. `restart` was rejected because it implies a state reset (stop + reset + start), which is not what happens here.
 
-The triad is now unambiguous:
-- `POST /fsm` — create a new instance and start its worker
-- `POST /fsm/resume` — re-attach a worker to an existing stopped instance
-- `POST /fsm/stop` — stop a running worker (instance state preserved)
+Applied to both route prefixes:
+- `POST /fsm/resume` — re-attach a worker to an existing stopped FSM instance
+- `POST /fsmpromise/resume` — re-attach a promise worker to an existing queue
+
+The pattern is now consistent:
+- `POST /fsm` / `POST /fsmpromise/create-and-start` — create new + start worker
+- `POST /*/resume` — re-attach worker to stopped instance/queue
+- `POST /*/stop` — stop running worker (state preserved)
 
 ### Issue 3: `activeWorkers` ownership
 

@@ -2,7 +2,7 @@ import * as HttpStatusCodes from "stoker/http-status-codes.ts";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
 
-import type { CreateAndStartRoute, ListRoute, StartRoute, StopRoute } from "./fsmpromise.routes.ts";
+import type { CreateAndStartRoute, ListRoute, ResumeRoute, StopRoute } from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
 import { createAndStartPromiseWorker, startFSMPromiseWorker } from "@pgfsm/worker";
@@ -20,7 +20,7 @@ export const list: AppRouteHandler<ListRoute> = async (c) => {
   return c.json({ data }, HttpStatusCodes.OK);
 };
 
-export const start: AppRouteHandler<StartRoute> = async (c) => {
+export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
   const supabase = getSupabase(c);
   const db = c.get("db");
   const deps = {
@@ -70,7 +70,7 @@ export const start: AppRouteHandler<StartRoute> = async (c) => {
     activePromiseWorkers[promise_name] = { lock: true, controller };
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in create handler:", _err);
+    console.log("Error in resume handler:", _err);
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,

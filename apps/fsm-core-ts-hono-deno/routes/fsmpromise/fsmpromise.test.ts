@@ -70,16 +70,16 @@ describe("GET /fsmpromise", () => {
   });
 });
 
-// ─── POST /fsmpromise ────────────────────────────────────────────────────────
+// ─── POST /fsmpromise/resume ─────────────────────────────────────────────────
 
-describe("POST /fsmpromise", () => {
+describe("POST /fsmpromise/resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.keys(activePromiseLocks).forEach((k) => delete activePromiseLocks[k]);
   });
 
   it("returns 422 when promise_name is missing", async () => {
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       // @ts-expect-error — intentionally omitting required field
       json: { promise_version: "v01" },
     });
@@ -89,7 +89,7 @@ describe("POST /fsmpromise", () => {
   });
 
   it("returns 422 when promise_version is missing", async () => {
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       // @ts-expect-error — intentionally omitting required field
       json: { promise_name: "credit_promise" },
     });
@@ -99,7 +99,7 @@ describe("POST /fsmpromise", () => {
   });
 
   it("returns 422 when body is empty", async () => {
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       // @ts-expect-error
       json: {},
     });
@@ -110,7 +110,7 @@ describe("POST /fsmpromise", () => {
     // Note: handler intentionally returns HTTP 200 even when the queue is missing.
     vi.mocked(pgmqQueueExists).mockResolvedValueOnce(false);
 
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       json: { promise_name: "credit_promise", promise_version: "v01" },
     });
     expect(res.status).toBe(200);
@@ -121,7 +121,7 @@ describe("POST /fsmpromise", () => {
   it("does not start a worker when PGMQ queue does not exist", async () => {
     vi.mocked(pgmqQueueExists).mockResolvedValueOnce(false);
 
-    await client.fsmpromise.$post({
+    await client.fsmpromise.resume.$post({
       json: { promise_name: "credit_promise", promise_version: "v01" },
     });
     expect(startFSMPromiseWorker).not.toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe("POST /fsmpromise", () => {
   it("returns 200 with success data and starts worker when queue exists", async () => {
     vi.mocked(pgmqQueueExists).mockResolvedValueOnce(true);
 
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       json: { promise_name: "credit_promise", promise_version: "v01" },
     });
     expect(res.status).toBe(200);
@@ -147,7 +147,7 @@ describe("POST /fsmpromise", () => {
   it("returns 500 with 'Unexpected error' when pgmqQueueExists throws", async () => {
     vi.mocked(pgmqQueueExists).mockRejectedValueOnce(new Error("DB error"));
 
-    const res = await client.fsmpromise.$post({
+    const res = await client.fsmpromise.resume.$post({
       json: { promise_name: "credit_promise", promise_version: "v01" },
     });
     expect(res.status).toBe(500);

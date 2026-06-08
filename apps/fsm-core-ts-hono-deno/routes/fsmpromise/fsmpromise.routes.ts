@@ -25,8 +25,8 @@ export const list = createRoute({
   },
 });
 
-export const start = createRoute({
-  path: "/fsmpromise/start",
+export const resume = createRoute({
+  path: "/fsmpromise/resume",
   method: "post",
   request: {
     body: jsonContentRequired(
@@ -44,7 +44,7 @@ export const start = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       z.object({}),
-      "Promise worker started successfully",
+      "Promise worker resumed successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       z.object({ error: z.string() }),
@@ -106,6 +106,6 @@ export const stop = createRoute({
 });
 
 export type ListRoute = typeof list;
-export type StartRoute = typeof start;
+export type ResumeRoute = typeof resume;
 export type CreateAndStartRoute = typeof createAndStart;
 export type StopRoute = typeof stop;
