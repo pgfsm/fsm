@@ -39,8 +39,7 @@ DB layer (packages/fsm-core-db-ts)
 
 | File | Purpose |
 |---|---|
-| `src/fsmworker.ts` | `startFSMWorker()` — polling loop |
-| `src/fsmworker-lock.ts` | `startFSMWorkerWithDBLock()` — acquires PG advisory lock |
+| `src/fsmworker.ts` | `startFSMWorker()` — polling loop; `startFSMWorkerWithDBLock()` — acquires PG advisory lock |
 | `src/fsmworker-helper.ts` | `macrostepV2()` — orchestrates one full processing cycle |
 | `src/create-and-start-fsm-worker.ts` | `createAndStartFSMWorker()` — creates instance + starts worker |
 | `src/fsmpromiseworker.ts` | `startFSMPromiseWorker()` — promise worker polling loop |

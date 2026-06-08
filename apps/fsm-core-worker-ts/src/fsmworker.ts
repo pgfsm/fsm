@@ -2,7 +2,7 @@ import type { Database } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
 
-import { readMessage } from "@pgfsm/db";
+import { lockFsmInstance, readMessage, unlockFsmInstance } from "@pgfsm/db";
 
 import {
   archiveEventFromFsmTypeWorker,
@@ -143,7 +143,7 @@ export async function startFSMWorker(
             // await archiveMessage(deps, queueName, msg.msg_id || 1);
           }else{
             console.warn("⚠️ No result from macrostepV2, skipping archiving.");
-            
+
           }
         } catch (err) {
           console.error("❌ Error processing FSM message:", err);
@@ -151,4 +151,34 @@ export async function startFSMWorker(
       }
     }
   }
+}
+
+export async function startFSMWorkerWithDBLock(
+  deps: DBDeps,
+  queueName: string,
+  fsm_name: string,
+  fsm_version: number | string,
+  verifiedModule?: VerifiedModule,
+  validatePlugin?: boolean,
+  signal?: AbortSignal,
+  onStop?: () => void,
+): Promise<boolean> {
+  if (await lockFsmInstance(deps, queueName)) {
+    const cleanup = () => {
+      unlockFsmInstance(deps, queueName);
+      onStop?.();
+    };
+    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule, validatePlugin, signal)
+      .then(() => {
+        console.log(`FSM Lock for queue "${queueName}" released after graceful stop.`);
+        cleanup();
+      })
+      .catch((err) => {
+        console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
+        console.log(`FSM Lock for queue "${queueName}" has been released.`);
+        cleanup();
+      });
+    return true;
+  }
+  return false;
 }
