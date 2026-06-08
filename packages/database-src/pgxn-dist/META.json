@@ -1,16 +1,16 @@
 {
-  "name": "{{NAME}}",
-  "abstract": "{{DESCRIPTION}}",
-  "version": "{{VERSION}}",
+  "name": "fsm_core",
+  "abstract": "This package is used for the main PostgreSQL files for the FSM project.",
+  "version": "1.1.0",
   "maintainer": [
-    "{{AUTHOR}} <niraj.38.re@gmail.com>"
+    "Niraj Kashyap <niraj.38.re@gmail.com>"
   ],
-  "license": "{{LICENSE_PGXN}}",
+  "license": "apache_2_0",
   "provides": {
-    "{{NAME}}": {
-      "abstract": "{{DESCRIPTION}}",
-      "file": "{{PROVIDES_FILE}}",
-      "version": "{{VERSION}}"
+    "fsm_core": {
+      "abstract": "This package is used for the main PostgreSQL files for the FSM project.",
+      "file": "fsm_core--1.0.0.sql",
+      "version": "1.1.0"
     }
   },
   "prereqs": {
@@ -32,7 +32,7 @@
       "type": "git"
     }
   },
-  "generated_by": "{{AUTHOR}}",
+  "generated_by": "Niraj Kashyap",
   "meta-spec": {
     "version": "1.0.0",
     "url": "https://pgxn.org/meta/spec.txt"
