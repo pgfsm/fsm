@@ -5,7 +5,7 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 import type { CreateRoute, CurrentActiveRoute, GetOneRoute, ListRoute, ResumeRoute, SendRoute, StopRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
+import { createAndStartFSMWorker, startFSMWorkerWithDBLock, stopFSMWorker } from "@pgfsm/worker";
 
 import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@pgfsm/db";
 
@@ -199,6 +199,10 @@ export const stop: AppRouteHandler<StopRoute> = async (c) => {
   }
   entry.lock = false;
   entry.controller.abort();
+  const db = c.get("db");
+  if (db) {
+    await stopFSMWorker({ db }, queue);
+  }
   return c.json({}, HttpStatusCodes.OK);
 };
 

@@ -1,7 +1,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
-import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker, createAndStartPromiseWorker } from "../index.ts";
+import { startFSMWorker, startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker, createAndStartPromiseWorker, stopFSMWorker } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
   string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type", "db-url"],
@@ -26,29 +26,31 @@ USAGE
   deno run --allow-all src/cli/index.ts -c <command> [options]
 
 COMMANDS
-  start-worker                      Start FSM queue worker (requires -q)
-  start-worker-with-db-lock         Start FSM worker with DB advisory lock (requires -q)
+  resume-worker                     Resume FSM worker on an existing queue (requires -q)
+  resume-worker-with-db-lock        Resume FSM worker with DB advisory lock on an existing queue (requires -q)
   start-promise-worker              Start FSM promise worker for existing queue (requires -q, -t)
   create-and-start-worker           Create FSM instance + queue and start worker with DB lock
   create-and-start-promise-worker   Create PGMQ queue and start promise worker (requires -q, -t)
+  stop-worker                       Send stop signal to a running worker via pg_notify (requires -q)
 
 OPTIONS
   -c, --command <command>           Command to run (required)
-  -q, --queue-name <queueName>      Queue name (required for start-worker, start-worker-with-db-lock, start-promise-worker, create-and-start-promise-worker)
-  -n, --fsm-name <name>             FSM name (required)
-  -v, --fsm-version <version>       FSM version number (required)
-  -f, --fsm-folder-path <path>      Absolute path to FSM folder for loading actions/guards/delays/actors (required)
+  -q, --queue-name <queueName>      Queue name (required for most commands)
+  -n, --fsm-name <name>             FSM name (required except for stop-worker)
+  -v, --fsm-version <version>       FSM version number (required except for stop-worker)
+  -f, --fsm-folder-path <path>      Absolute path to FSM folder for loading actions/guards/delays/actors (required except for stop-worker)
   -t, --promise-type <type>         Promise actor type to invoke (required for start-promise-worker, create-and-start-promise-worker)
   -d, --db-url <url>                Database connection URL (overrides DATABASE_URL from .env)
       --validate-plugin             Use validateFsmPluginLoadFromFolder instead of direct imports
   -h, --help                        Show this help message
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts -c start-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c start-worker-with-db-lock -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
+  deno run --allow-all src/cli/index.ts -c resume-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm
+  deno run --allow-all src/cli/index.ts -c resume-worker-with-db-lock -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
   deno run --allow-all src/cli/index.ts -c start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
   deno run --allow-all src/cli/index.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
   deno run --allow-all src/cli/index.ts -c create-and-start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
+  deno run --allow-all src/cli/index.ts -c stop-worker -q <instance-uuid>
 `);
 }
 
@@ -65,16 +67,19 @@ const fsmFolderPath = args["fsm-folder-path"];
 const promiseType = args["promise-type"];
 const dbUrl = args["db-url"];
 
-const needsQueueName = ["start-worker", "start-worker-with-db-lock", "start-promise-worker", "create-and-start-promise-worker"];
+const needsQueueName = ["resume-worker", "resume-worker-with-db-lock", "start-promise-worker", "create-and-start-promise-worker", "stop-worker"];
 const needsPromiseType = ["start-promise-worker", "create-and-start-promise-worker"];
+const needsFsmDetails = ["resume-worker", "resume-worker-with-db-lock", "start-promise-worker", "create-and-start-promise-worker", "create-and-start-worker"];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
 if (command && needsQueueName.includes(command) && !queueName) missing.push("--queue-name");
 if (command && needsPromiseType.includes(command) && !promiseType) missing.push("--promise-type");
-if (!fsmName) missing.push("--fsm-name");
-if (!fsmVersion) missing.push("--fsm-version");
-if (!fsmFolderPath) missing.push("--fsm-folder-path");
+if (command && needsFsmDetails.includes(command)) {
+  if (!fsmName) missing.push("--fsm-name");
+  if (!fsmVersion) missing.push("--fsm-version");
+  if (!fsmFolderPath) missing.push("--fsm-folder-path");
+}
 
 if (missing.length > 0) {
   console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
@@ -82,11 +87,13 @@ if (missing.length > 0) {
   Deno.exit(1);
 }
 
-try {
-  await Deno.stat(fsmFolderPath!);
-} catch {
-  console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
-  Deno.exit(1);
+if (fsmFolderPath) {
+  try {
+    await Deno.stat(fsmFolderPath);
+  } catch {
+    console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
+    Deno.exit(1);
+  }
 }
 
 async function buildDeps() {
@@ -126,13 +133,13 @@ const waitForAbort = () =>
 
 try {
   switch (command) {
-    case "start-worker": {
+    case "resume-worker": {
       const deps = await buildDeps();
-      console.log(`Worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      console.log(`Worker resumed for queue: ${queueName}. Press Ctrl+C to stop.`);
       await startFSMWorker(deps, queueName!, fsmName!, Number(fsmVersion), verifiedModule, validatePlugin, controller.signal);
       break;
     }
-    case "start-worker-with-db-lock": {
+    case "resume-worker-with-db-lock": {
       const deps = await buildDeps();
       const acquired = await startFSMWorkerWithDBLock(
         deps,
@@ -148,7 +155,7 @@ try {
         console.error(`Error: Could not acquire DB lock for queue "${queueName}" — another worker may already hold it.`);
         Deno.exit(1);
       }
-      console.log(`Worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      console.log(`Worker resumed for queue: ${queueName}. Press Ctrl+C to stop.`);
       await waitForAbort();
       break;
     }
@@ -189,6 +196,12 @@ try {
       createdInstanceId = fsm_instance.fsm_instance_id;
       console.log(`FSM instance created: ${createdInstanceId}. Press Ctrl+C to stop.`);
       await waitForAbort();
+      break;
+    }
+    case "stop-worker": {
+      const deps = await buildDeps();
+      await stopFSMWorker(deps, queueName!);
+      console.log(`Stop signal sent for worker queue: ${queueName}`);
       break;
     }
     default:

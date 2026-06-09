@@ -5,3 +5,5 @@ export { macrostepV2, runActionImplementation, splitByEventTypes, splitBySendEve
 export { startFSMPromiseWorker } from "./fsmpromiseworker.ts";
 export { createAndStartPromiseWorker } from "./create-and-start-promise-worker.ts";
 export { processFSMPromiseQueueMessage, type FSMPromiseArchiveData } from "./fsmpromiseworker-helper.ts";
+export { stopFSMWorker } from "./stop-fsm-worker.ts";
+export { pgListenerForWorkerStopEvent } from "./pg-listener-for-worker-stop-event.ts";

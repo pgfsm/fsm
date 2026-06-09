@@ -5,7 +5,8 @@ import {
   validateAndLoadFsmFromFolders,
   validateAndLoadPromiseFromFolders,
 } from "@pgfsm/compiler";
-import { createAndStartPromiseWorker } from "@pgfsm/worker";
+import { createAndStartPromiseWorker, pgListenerForWorkerStopEvent } from "@pgfsm/worker";
+import { activeWorkers } from "../routes/fsm/fsm.handlers.ts";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 
@@ -138,6 +139,14 @@ export default async function createApp(
         console.warn(`⚠️ Could not start promise worker for "${actor.src}":`, err);
       }
     }
+
+    await pgListenerForWorkerStopEvent(pool, (queueName) => {
+      if (activeWorkers[queueName]) {
+        activeWorkers[queueName].lock = false;
+        activeWorkers[queueName].controller.abort();
+      }
+    });
+    console.log("✅ PG LISTEN active on channel: fsm_worker_stop");
 
   }
 
