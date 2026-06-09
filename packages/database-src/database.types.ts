@@ -1118,6 +1118,12 @@ export type Database = {
         }
         Returns: unknown
       }
+      stop_event_for_fsm_worker_v2: {
+        Args: {
+          input_fsm_instance_id: string
+        }
+        Returns: Json
+      }
       test_event_transition_for_entry_v1: {
         Args: {
           event_name: string
