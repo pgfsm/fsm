@@ -1,78 +1,9 @@
-CREATE OR REPLACE FUNCTION fsm_core.cancel_event_for_fsm_promise_type_worker_v2(
-    promise_type_worker_name text,
-    queue_msg_id bigint
-) 
-RETURNS jsonb 
-
-AS $$
-DECLARE
-   archive_result BOOLEAN;
-BEGIN
-   --  1. Remove queue_msg_id from the promise_type_worker_name queue using PGMQ
-   -- IF promise_type_worker_name IS NOT NULL AND promise_type_worker_name <> '' AND queue_msg_id IS NOT NULL THEN
-    
-       archive_result := pgmq.archive(queue_name := promise_type_worker_name, msg_id := queue_msg_id);
-   -- ELSE
-   --    archive_result := false;
-   -- END IF;
-
-    -- 2. Notify all workers via pg_notify (only when queue name present)
-    -- IF promise_type_worker_name IS NOT NULL AND promise_type_worker_name <> '' THEN
-        PERFORM pg_notify('fsm_promise_worker_' || promise_type_worker_name, COALESCE(queue_msg_id::text, ''));
-    -- END IF;
-
-    -- 3. Log event to fsm_promise_queue_event_logs (allow null queue id but record name)
-    INSERT INTO fsm_core.fsm_promise_queue_event_logs (
-        event_name,
-        event_data,
-        promise_queue_name,
-        promise_queue_msg_id,
-        -- send_to_parent_queue_id,
-        -- send_to_parent_queue_id_msg_id,
-        event_status,
-        execution_finished_at
-    ) VALUES (
-        'cancel',
-        NULL,
-        promise_type_worker_name,
-        queue_msg_id,
-        'canceled',
-        now()
-    );
-
-    RETURN jsonb_build_object(
-        'archive_result', archive_result,
-        'promise_queue_name', promise_type_worker_name,
-        'queue_msg_id', queue_msg_id,
-        'status', 'canceled'
-    );
-END;
-$$ LANGUAGE plpgsql;
-
--- SELECT fsm_core.cancel_event_for_fsm_promise_type_worker_v2('creditCheck_v01_verifyCredentials', 1::BIGINT);
-
-
-
--- select fsm_core.send_event_to_fsm_promise_queue_from_fsm_instance_id_v2(
---     'verifyCredentials',
---     jsonb_build_object('userId', '123'),
---     'verifyCredentials',
---     '0ac587cb-cd00-47bb-b0ad-87185954bfb1'::uuid
--- );
-    -- check and create promise type promise_queue_name queue if not exists.  PGMQ Create queue
-    -- send event to promise type promise_queue_name. PGMQ send event to queue
-    -- return queue_msg_id  for future cancel use in ( xstate.stopChild)
-    -- optional: log event to promise_queue_event_logs
-    -- optional: return message to start promise_queue_name worker if promise_queue_name was not exist 
--- return { promise_queue_name : 'fetchTask' , queue_msg_id : 1 , start_promise_worker: true | false, number_of_workers_currently_running?(optional): 5 }
-
-
 -- ============================================================
--- 3. create_promise_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
+-- 1. create_promise_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
 --    Routes promise/sharedPromise events to promise queue.
 --    Checks queue existence, creates if missing, returns send result.
 -- ============================================================
-DROP FUNCTION IF EXISTS fsm_core.send_event_to_promise_queue_from_fsm_instance_id_v2(text, jsonb, text, text, text, text, text, text, text, text, uuid);
+DROP FUNCTION IF EXISTS fsm_core.create_promise_queue_and_send_event_from_fsm_instance_id_v2(text, jsonb, text, text, text, text, text, text, text, text, uuid);
 CREATE OR REPLACE FUNCTION fsm_core.create_promise_queue_and_send_event_from_fsm_instance_id_v2(
     event_name text,
     event_input jsonb,
@@ -132,7 +63,7 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================
--- 4. create_fsm_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
+-- 2. create_fsm_queue_and_send_event_from_fsm_instance_id_v2 (renamed)
 --    Routes childFsm events: generates UUID child queue,
 --    creates it, sends event, returns send result.
 -- ============================================================
@@ -178,7 +109,7 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================
--- 6. send_event_to_queue_from_fsm_instance_id_v2
+-- 3. send_event_to_queue_from_fsm_instance_id_v2
 --    Fix: pgmq.create (was fsm_core.create), real queue_exists check,
 --         delegate to sub-functions, remove dead RETURN at end
 -- ============================================================

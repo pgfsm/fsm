@@ -302,3 +302,22 @@ export async function sendEventToFsmQueueWithEventLogs(
     throw new Error("Failed to send FSM event", { cause: err });
   }
 }
+
+export async function stopEventForFsmWorker(
+  deps: DBDeps,
+  input_fsm_instance_id: string, // uuid — regen types after migration: DatabaseGenerated["fsm_core"]["Functions"]["stop_event_for_fsm_worker_v2"]["Args"]["input_fsm_instance_id"]
+): Promise<Json> {
+  try {
+    const STOP_EVENT_FN = `${FSM_SCHEMA}.stop_event_for_fsm_worker_${FSM_SCHEMA_FN_VERSION}`;
+    const text = `
+      SELECT ${STOP_EVENT_FN}(
+        $1::uuid
+      ) AS result;
+    `;
+    const res = await deps.db.query<{ result: Json }>(text, [input_fsm_instance_id]);
+    return res.rows?.[0]?.result ?? null;
+  } catch (err) {
+    console.error("Error in stopEventForFsmWorker:", err);
+    throw new Error("Failed to stop FSM worker event", { cause: err });
+  }
+}
