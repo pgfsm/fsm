@@ -29,60 +29,13 @@ export async function startFSMWorker(
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  verifiedModule?: VerifiedModule,
-  validatePlugin?: boolean,
+  fsmModuleDefinition?: any,
   signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
   console.log(
     `👷 Started FSM worker for queue: ${queueName} with fsm_name ${fsm_name} and fsm_version ${fsm_version}`,
   );
-
-  // Load fsmModuleDefinition once using verifiedModule paths
-  let fsmModuleDefinition: any = undefined;
-  if (verifiedModule?.fsmAbsFolderPath) {
-    try {
-      if (validatePlugin) {
-        const fsmJsonPath = `${verifiedModule.fsmAbsFolderPath}/fsm.json`;
-        const fsmJsonText = await Deno.readTextFile(fsmJsonPath);
-        const fsmData = JSON.parse(fsmJsonText);
-        const result = await validateFsmPluginLoadFromFolder(
-          fsmData,
-          fsm_name,
-          String(fsm_version),
-          verifiedModule.fsmAbsFolderPath,
-          verifiedModule.fsmRelativeFolderPath ?? "",
-          verifiedModule.fsmParentDirName ?? "",
-          verifiedModule.fsmParentAbsFolderPath ?? "",
-          verifiedModule.fsmParentRelativeFolderPath ?? "",
-          (verifiedModule.fsmType ?? "fsm") as WorkflowType,
-          [],
-        );
-        fsmModuleDefinition = result.fsmModuleDefinition;
-        console.log(`📦 Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for ${fsm_name}/${fsm_version}`);
-      } else {
-        const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
-        const [actions, guards, delays, actors] = await Promise.allSettled([
-          import(`${base}/actions/index.ts`),
-          import(`${base}/guards/index.ts`),
-          import(`${base}/delays/index.ts`),
-          import(`${base}/actors/index.ts`),
-        ]);
-        fsmModuleDefinition = {
-          actions: actions.status === "fulfilled" ? actions.value : null,
-          guards: guards.status === "fulfilled" ? guards.value : null,
-          delays: delays.status === "fulfilled" ? delays.value : null,
-          actors: actors.status === "fulfilled" ? actors.value : null,
-        };
-        console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
-      }
-    } catch (err) {
-      console.warn(
-        `⚠️ Could not load fsmModuleDefinition for ${fsm_name}/${fsm_version}:`,
-        err,
-      );
-    }
-  }
 
   while (!signal?.aborted) {
     const messages = await readMessage(deps, queueName, visibilityTimeout);
@@ -162,23 +115,72 @@ export async function startFSMWorkerWithDBLock(
   validatePlugin?: boolean,
   signal?: AbortSignal,
   onStop?: () => void,
-): Promise<boolean> {
-  if (await lockFsmInstance(deps, queueName)) {
-    const cleanup = () => {
-      unlockFsmInstance(deps, queueName);
-      onStop?.();
-    };
-    startFSMWorker(deps, queueName, fsm_name, fsm_version, verifiedModule, validatePlugin, signal)
-      .then(() => {
-        console.log(`FSM Lock for queue "${queueName}" released after graceful stop.`);
-        cleanup();
-      })
-      .catch((err) => {
-        console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
-        console.log(`FSM Lock for queue "${queueName}" has been released.`);
-        cleanup();
-      });
-    return true;
+): Promise<{ status: "success" | "fail"; message: string }> {
+  let fsmModuleDefinition: any = undefined;
+  if (verifiedModule?.fsmAbsFolderPath) {
+    try {
+      if (validatePlugin) {
+        const fsmJsonPath = `${verifiedModule.fsmAbsFolderPath}/fsm.json`;
+        const fsmJsonText = await Deno.readTextFile(fsmJsonPath);
+        const fsmData = JSON.parse(fsmJsonText);
+        const result = await validateFsmPluginLoadFromFolder(
+          fsmData,
+          fsm_name,
+          String(fsm_version),
+          verifiedModule.fsmAbsFolderPath,
+          verifiedModule.fsmRelativeFolderPath ?? "",
+          verifiedModule.fsmParentDirName ?? "",
+          verifiedModule.fsmParentAbsFolderPath ?? "",
+          verifiedModule.fsmParentRelativeFolderPath ?? "",
+          (verifiedModule.fsmType ?? "fsm") as WorkflowType,
+          [],
+        );
+        fsmModuleDefinition = result.fsmModuleDefinition;
+        console.log(`📦 Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for ${fsm_name}/${fsm_version}`);
+      } else {
+        const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
+        const [actions, guards, delays, actors] = await Promise.allSettled([
+          import(`${base}/actions/index.ts`),
+          import(`${base}/guards/index.ts`),
+          import(`${base}/delays/index.ts`),
+          import(`${base}/actors/index.ts`),
+        ]);
+        fsmModuleDefinition = {
+          actions: actions.status === "fulfilled" ? actions.value : null,
+          guards: guards.status === "fulfilled" ? guards.value : null,
+          delays: delays.status === "fulfilled" ? delays.value : null,
+          actors: actors.status === "fulfilled" ? actors.value : null,
+        };
+        console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
+      }
+    } catch (err) {
+      console.warn(
+        `⚠️ Could not load fsmModuleDefinition for ${fsm_name}/${fsm_version}:`,
+        err,
+      );
+    }
   }
-  return false;
+
+  if (!fsmModuleDefinition) {
+    return { status: "fail", message: `Failed to load module for ${fsm_name}/${fsm_version}` };
+  }
+
+  if (!(await lockFsmInstance(deps, queueName))) {
+    return { status: "fail", message: `Failed to acquire lock for queue "${queueName}" — another worker may already hold it` };
+  }
+
+  const cleanup = () => {
+    unlockFsmInstance(deps, queueName);
+    onStop?.();
+  };
+  try {
+    await startFSMWorker(deps, queueName, fsm_name, fsm_version, fsmModuleDefinition, signal);
+    console.log(`FSM Lock for queue "${queueName}" released after graceful stop.`);
+  } catch (err) {
+    console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
+    console.log(`FSM Lock for queue "${queueName}" has been released.`);
+  } finally {
+    cleanup();
+  }
+  return { status: "success", message: `Worker for queue "${queueName}" started successfully.` };
 }

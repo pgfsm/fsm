@@ -4,6 +4,7 @@ import { createFsmInstanceFromName } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock, type VerifiedModule } from "./fsmworker.ts";
 
 type FsmInstanceResult = { fsm_instance_id: string; fsm_version: string } & Record<string, Json>;
+type WorkerResult = { status: "success" | "fail"; message: string };
 
 export async function createAndStartFSMWorker(
   deps: DBDeps,
@@ -14,7 +15,7 @@ export async function createAndStartFSMWorker(
   validatePlugin?: boolean,
   signal?: AbortSignal,
   onStop?: () => void,
-) {
+): Promise<{ fsm_instance: FsmInstanceResult | null; workerResult: WorkerResult | null }> {
   const fsm_instance = await createFsmInstanceFromName(
     deps,
     fsm_name,
@@ -24,10 +25,10 @@ export async function createAndStartFSMWorker(
   ) as FsmInstanceResult | null;
 
   if (!fsm_instance || !fsm_instance.fsm_instance_id) {
-    return null;
+    return { fsm_instance: null, workerResult: null };
   }
 
-  const started = await startFSMWorkerWithDBLock(
+  const workerResult = await startFSMWorkerWithDBLock(
     deps,
     fsm_instance.fsm_instance_id,
     fsm_name,
@@ -38,9 +39,5 @@ export async function createAndStartFSMWorker(
     onStop,
   );
 
-  if (!started) {
-    console.error(`🚫 FSM Worker already running for queue "${fsm_instance.fsm_instance_id}"`);
-  }
-
-  return fsm_instance;
+  return { fsm_instance, workerResult };
 }

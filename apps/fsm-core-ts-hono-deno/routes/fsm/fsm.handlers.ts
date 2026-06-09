@@ -79,7 +79,7 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
     const controller = new AbortController();
     let instanceId: string | null = null;
 
-    const fsm_instance = await createAndStartFSMWorker(
+    const { fsm_instance, workerResult } = await createAndStartFSMWorker(
       deps,
       input_fsm_name,
       input_fsm_version,
@@ -90,16 +90,16 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
       () => { if (instanceId) delete activeWorkers[instanceId]; },
     );
 
-    if (fsm_instance) {
-      instanceId = fsm_instance.fsm_instance_id;
-      activeWorkers[instanceId] = { lock: true, controller };
-      return c.json({ data: fsm_instance }, HttpStatusCodes.OK);
-    } else {
+    if (!fsm_instance) {
       return c.json(
         { error: "FSM instance creation failed" },
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+
+    instanceId = fsm_instance.fsm_instance_id;
+    activeWorkers[instanceId] = { lock: true, controller };
+    return c.json({ data: { fsm_instance, workerResult } }, HttpStatusCodes.OK);
   } catch (_err) {
     console.log("Error in create handler:", _err);
     return c.json(
@@ -159,7 +159,7 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
 
     const controller = new AbortController();
 
-    const started = await startFSMWorkerWithDBLock(
+    const workerResult = await startFSMWorkerWithDBLock(
       deps,
       queue,
       fsmData.fsm_instance_row.fsm_name ?? "",
@@ -170,15 +170,15 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
       () => delete activeWorkers[queue],
     );
 
-    if (started) {
-      activeWorkers[queue] = { lock: true, controller };
-      return c.json({}, HttpStatusCodes.OK);
-    } else {
+    if (workerResult.status === "fail") {
       return c.json(
-        { error: `🚫 fsmworker already running for queue "${queue}"` },
+        { error: workerResult.message },
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+
+    activeWorkers[queue] = { lock: true, controller };
+    return c.json({ data: workerResult }, HttpStatusCodes.OK);
   } catch (_err) {
     console.log("Error in resume handler:", _err);
     return c.json(
