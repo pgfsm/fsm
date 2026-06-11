@@ -1,15 +1,10 @@
 // apps/host/app.ts
 import { Hono } from "hono";
-import { Pool } from "pg";
 import createApp from "../fsm-core-ts-hono-deno/lib/create-app.ts";
-
-const pool = new Pool({
-  connectionString: Deno.env.get("DATABASE_URL"),
-});
 
 const urlPathPrefix = "/fsm";
 
-const fsmRouter = await createApp(pool, urlPathPrefix, {
+const fsmRouter = await createApp(urlPathPrefix, {
   sharedPromise: {
     folderPath: new URL("../fsm-core-example/sharedPromise", import.meta.url).pathname,
     skipDirs: [],

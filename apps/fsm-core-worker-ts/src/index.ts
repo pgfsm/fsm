@@ -7,3 +7,5 @@ export { createAndStartPromiseWorker } from "./create-and-start-promise-worker.t
 export { processFSMPromiseQueueMessage, type FSMPromiseArchiveData } from "./fsmpromiseworker-helper.ts";
 export { stopFSMWorker } from "./stop-fsm-worker.ts";
 export { pgListenerForWorkerStopEvent } from "./pg-listener-for-worker-stop-event.ts";
+export { bootstrapFsmModules } from "./bootstrap-fsm-modules.ts";
+export type { FsmFolderConfig, FsmStartupConfig, VerifiedFsmModule, FsmWorkerEntry, BootstrapOptions, BootstrapResult } from "./bootstrap-fsm-modules.ts";

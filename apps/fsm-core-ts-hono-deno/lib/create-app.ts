@@ -1,11 +1,6 @@
 import type { Schema } from "hono";
 import { cors } from "hono/cors";
-import { Pool } from "pg";
-import {
-  validateAndLoadFsmFromFolders,
-  validateAndLoadPromiseFromFolders,
-} from "@pgfsm/compiler";
-import { createAndStartPromiseWorker, pgListenerForWorkerStopEvent } from "@pgfsm/worker";
+import { bootstrapFsmModules, pgListenerForWorkerStopEvent } from "@pgfsm/worker";
 import { activeWorkers } from "../routes/fsm/fsm.handlers.ts";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
@@ -23,7 +18,7 @@ import configureOpenAPI from "./configure-open-api.ts";
 
 import { pinoLogger } from "./../middlewares/pino-logger.ts";
 
-import type { AppBindings, AppOpenAPI, FsmStartupConfig } from "./types.ts";
+import type { AppBindings, AppOpenAPI, FsmStartupConfig, VerifiedFsmModule } from "./types.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
@@ -39,11 +34,21 @@ export function createRouter() {
 }
 
 export default async function createApp(
-  pool?: Pool,
   basePath = "",
   fsmConfig?: FsmStartupConfig,
 ) {
-  
+  const { pool, verifiedFsmModules } = await bootstrapFsmModules(
+    env.DATABASE_URL,
+    fsmConfig,
+    {
+      onWorkerStop: (queueName) => {
+        if (activeWorkers[queueName]) {
+          activeWorkers[queueName].lock = false;
+          activeWorkers[queueName].controller.abort();
+        }
+      },
+    },
+  );
 
   pool.on("connect", () => {
     console.log("Database on connect event");
@@ -55,101 +60,6 @@ export default async function createApp(
     console.error("Database error event:", err);
   });
 
-  let verifiedFsmModules: any[] = [];
-  let verifiedPromiseModules: any[] = [];
-  if (fsmConfig && pool) {
-    const client = await pool.connect();
-    client.release();
-    const deps = { db: pool };
-
-    const outputSharedPromise = fsmConfig.sharedPromise
-      ? await validateAndLoadPromiseFromFolders(
-          deps,
-          fsmConfig.sharedPromise.folderPath,
-          "sharedPromise",
-          fsmConfig.sharedPromise.skipDirs ?? [],
-          [],
-        )
-      : [];
-    const verifiedSharedPromise = outputSharedPromise.filter((m) => m.isFsmModuleVerified === true)  
-
-    const outputSharedFsm = fsmConfig.sharedFsm
-      ? await validateAndLoadFsmFromFolders(
-          deps,
-          fsmConfig.sharedFsm.folderPath,
-          "sharedFsm",
-          fsmConfig.sharedFsm.skipDirs ?? [],
-          outputSharedPromise,
-        )
-      : [];
-    const verifiedSharedFsm = outputSharedFsm.filter((m) => m.isFsmModuleVerified === true)  
-    
-    
-    const outputFsm = fsmConfig.fsm
-      ? await validateAndLoadFsmFromFolders(
-          deps,
-          fsmConfig.fsm.folderPath,
-          "fsm",
-          fsmConfig.fsm.skipDirs ?? [],
-          [...outputSharedPromise, ...outputSharedFsm],
-        )
-      : [];
-    const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);  
-
-    verifiedFsmModules = [
-      ...verifiedSharedPromise,
-      ...verifiedSharedFsm,
-      ...verifiedFsm,
-    ]
-    .map((m) => ({ fsmName: m.fsmName, fsmVersion: m.fsmVersion, fsmType: m.fsmType, fsmAbsFolderPath: m.fsmAbsFolderPath, fsmRelativeFolderPath: m.fsmRelativeFolderPath, fsmParentDirName : m.fsmParentDirName, fsmParentAbsFolderPath: m.fsmParentAbsFolderPath, fsmParentRelativeFolderPath: m.fsmParentRelativeFolderPath, internalActors: m.internalActors }));
-
-    // Merge internalActors from verifiedSharedFsm and verifiedFsm into one flat array,
-    // each with its own AbortController for graceful shutdown
-    const allInternalActors = [
-      ...verifiedSharedFsm,
-      ...verifiedFsm,
-    ].flatMap((fsm) =>
-      (fsm.internalActors ?? []).map((actor) => ({
-        src: actor.src,
-        fsmName: actor.fsmName,
-        fsmType: actor.fsmType,
-        fsmVersion: actor.fsmVersion,
-        parentFsmName: fsm.fsmName,
-        parentFsmVersion: fsm.fsmVersion,
-        fsmAbsFolderPath: fsm.fsmAbsFolderPath as string,
-        controller: new AbortController(),
-      }))
-    );
-
-    const promiseDeps = { db: pool, useSupabase: false };
-
-    for (const actor of allInternalActors) {
-      try {
-        await createAndStartPromiseWorker(
-          promiseDeps,
-          `${actor.parentFsmName}_${actor.parentFsmVersion}_${actor.src}`,
-          actor.src,
-          actor.fsmType,
-          actor.fsmVersion,
-          { fsmAbsFolderPath: actor.fsmAbsFolderPath },
-          actor.controller.signal,
-        );
-        console.log(`✅ Promise worker started for actor: ${actor.src}`);
-      } catch (err) {
-        console.warn(`⚠️ Could not start promise worker for "${actor.src}":`, err);
-      }
-    }
-
-    await pgListenerForWorkerStopEvent(pool, (queueName) => {
-      if (activeWorkers[queueName]) {
-        activeWorkers[queueName].lock = false;
-        activeWorkers[queueName].controller.abort();
-      }
-    });
-    console.log("✅ PG LISTEN active on channel: fsm_worker_stop");
-
-  }
-
   const app = createRouter();
 
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
@@ -159,7 +69,6 @@ export default async function createApp(
     });
     return corsMiddlewareHandler(c, next);
   });
-  
 
   app.use("*", (c, next) => {
     c.set("fsmConfig", fsmConfig);
@@ -170,20 +79,16 @@ export default async function createApp(
   if (env.DB_TYPE === "supabase") {
     app.use("*", supabaseMiddleware());
   } else if (env.DB_TYPE === "postgres") {
-    if (pool) {
-      app.use("*", (c, next) => {
-        c.set("db", pool);
-        return next();
-      });
-    }
+    app.use("*", (c, next) => {
+      c.set("db", pool);
+      return next();
+    });
   } else if (env.DB_TYPE === "supabase_and_postgres") {
     app.use("*", supabaseMiddleware());
-    if (pool) {
-      app.use("*", (c, next) => {
-        c.set("db", pool);
-        return next();
-      });
-    }
+    app.use("*", (c, next) => {
+      c.set("db", pool);
+      return next();
+    });
   }
 
   app.notFound(notFound);

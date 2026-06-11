@@ -1,18 +1,9 @@
 import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
 import type { Schema } from "hono";
 import type { PinoLogger } from "hono-pino";
-import { int } from "drizzle-orm/mysql-core";
 
-export type FsmFolderConfig = {
-  folderPath: string;
-  skipDirs?: string[];
-};
-
-export type FsmStartupConfig = {
-  sharedPromise?: FsmFolderConfig;
-  sharedFsm?: FsmFolderConfig;
-  fsm?: FsmFolderConfig;
-};
+export type { FsmFolderConfig, FsmStartupConfig, VerifiedFsmModule } from "@pgfsm/worker";
+import type { FsmStartupConfig, VerifiedFsmModule } from "@pgfsm/worker";
 
 export interface AppBindings {
   Bindings: {
@@ -23,16 +14,7 @@ export interface AppBindings {
     supabase: any;
     logger: PinoLogger;
     fsmConfig: FsmStartupConfig | undefined;
-    verifiedFsmModules: {
-      fsmName: string;
-      fsmVersion: string;
-      fsmType: string;
-      fsmAbsFolderPath: string;
-      fsmRelativeFolderPath: string;
-      fsmParentAbsFolderPath: string;
-      fsmParentRelativeFolderPath: string;
-      internalActors: any;
-    }[];
+    verifiedFsmModules: VerifiedFsmModule[];
   };
 }
 

@@ -1,7 +1,15 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
-import { startFSMWorkerWithDBLock, startFSMPromiseWorker, createAndStartFSMWorker, createAndStartPromiseWorker, stopFSMWorker } from "../index.ts";
+import {
+  startFSMWorkerWithDBLock,
+  startFSMPromiseWorker,
+  createAndStartFSMWorker,
+  createAndStartPromiseWorker,
+  stopFSMWorker,
+  bootstrapFsmModules,
+} from "../index.ts";
+import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
 
 const args = parseArgs(Deno.args, {
   string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type", "db-url"],
@@ -94,13 +102,6 @@ if (fsmFolderPath) {
   }
 }
 
-async function buildDeps() {
-  dotenv.config({ path: ".env" });
-  const { Pool } = await import("pg");
-  return { db: new Pool({ connectionString: dbUrl ?? Deno.env.get("DATABASE_URL") }), useSupabase: false };
-}
-
-const verifiedModule = { fsmAbsFolderPath: fsmFolderPath };
 const validatePlugin = args["validate-plugin"] === true;
 
 // ── Graceful / force shutdown ────────────────────────────────────────────────
@@ -127,12 +128,43 @@ const waitForAbort = () =>
     controller.signal.addEventListener("abort", () => resolve(), { once: true })
   );
 
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+
+dotenv.config({ path: ".env" });
+const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
+
+// activeWorkers tracks running workers so pgListenerForWorkerStopEvent can stop them
+const activeWorkers: Record<string, FsmWorkerEntry> = {};
+
+// Bootstrap is skipped for stop-worker — it only needs a bare DB connection
+let pool: Awaited<ReturnType<typeof bootstrapFsmModules>>["pool"] | undefined;
+let verifiedFsmModules: Awaited<ReturnType<typeof bootstrapFsmModules>>["verifiedFsmModules"] = [];
+
+if (command && needsFsmDetails.includes(command)) {
+  const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath! } };
+  const result = await bootstrapFsmModules(resolvedDbUrl, fsmConfig, {
+    onWorkerStop: (queueName) => {
+      if (activeWorkers[queueName]) {
+        activeWorkers[queueName].lock = false;
+        activeWorkers[queueName].controller.abort();
+      }
+    },
+  });
+  pool = result.pool;
+  verifiedFsmModules = result.verifiedFsmModules;
+}
+
+const deps = { db: pool!, useSupabase: false };
+const verifiedModule = verifiedFsmModules.find(
+  (m) => m.fsmName === fsmName && m.fsmVersion === String(fsmVersion),
+) ?? { fsmAbsFolderPath: fsmFolderPath };
+
 // ── Commands ─────────────────────────────────────────────────────────────────
 
 try {
   switch (command) {
     case "resume-worker": {
-      const deps = await buildDeps();
+      activeWorkers[queueName!] = { lock: true, controller };
       const result = await startFSMWorkerWithDBLock(
         deps,
         queueName!,
@@ -141,7 +173,10 @@ try {
         verifiedModule,
         validatePlugin,
         controller.signal,
-        () => console.log(`Worker for "${queueName}" stopped and DB lock released.`),
+        () => {
+          delete activeWorkers[queueName!];
+          console.log(`Worker for "${queueName}" stopped and DB lock released.`);
+        },
       );
       if (result.status === "fail") {
         console.error(`Error: ${result.message}`);
@@ -150,7 +185,7 @@ try {
       break;
     }
     case "start-promise-worker": {
-      const deps = await buildDeps();
+      activeWorkers[queueName!] = { lock: true, controller };
       startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule, controller.signal).catch((err) => {
         console.error(`Promise worker for queue "${queueName}" stopped:`, err);
         Deno.exit(1);
@@ -160,14 +195,13 @@ try {
       break;
     }
     case "create-and-start-promise-worker": {
-      const deps = await buildDeps();
+      activeWorkers[queueName!] = { lock: true, controller };
       await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule, controller.signal);
       console.log(`Promise worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
       await waitForAbort();
       break;
     }
     case "create-and-start-worker": {
-      const deps = await buildDeps();
       let createdInstanceId: string | undefined;
       const { fsm_instance, workerResult } = await createAndStartFSMWorker(
         deps,
@@ -177,13 +211,17 @@ try {
         {},
         validatePlugin,
         controller.signal,
-        () => console.log(`Worker for "${createdInstanceId}" stopped and DB lock released.`),
+        () => {
+          if (createdInstanceId) delete activeWorkers[createdInstanceId];
+          console.log(`Worker for "${createdInstanceId}" stopped and DB lock released.`);
+        },
       );
       if (!fsm_instance) {
         console.error(`Error: Failed to create FSM instance for "${fsmName}" v${fsmVersion}.`);
         Deno.exit(1);
       }
       createdInstanceId = fsm_instance.fsm_instance_id;
+      activeWorkers[createdInstanceId] = { lock: true, controller };
       console.log(`FSM instance created: ${createdInstanceId}.`);
       if (workerResult?.status === "fail") {
         console.error(`Error: ${workerResult.message}`);
@@ -192,9 +230,11 @@ try {
       break;
     }
     case "stop-worker": {
-      const deps = await buildDeps();
-      await stopFSMWorker(deps, queueName!);
+      const { Pool } = await import("pg");
+      const stopPool = new Pool({ connectionString: resolvedDbUrl });
+      await stopFSMWorker({ db: stopPool, useSupabase: false }, queueName!);
       console.log(`Stop signal sent for worker queue: ${queueName}`);
+      await stopPool.end();
       break;
     }
     default:
