@@ -1,5 +1,7 @@
 import { Pool } from "pg";
 import type { PoolConfig } from "pg";
+
+export type DbConfig = PoolConfig & { connectionString: string };
 import {
   validateAndLoadFsmFromFolders,
   validateAndLoadPromiseFromFolders,
@@ -33,7 +35,6 @@ export type VerifiedFsmModule = {
 export type FsmWorkerEntry = { lock: boolean; controller: AbortController };
 
 export type BootstrapOptions = {
-  poolConfig?: PoolConfig;
   onWorkerStop?: (queueName: string) => void;
 };
 
@@ -43,11 +44,11 @@ export type BootstrapResult = {
 };
 
 export async function bootstrapFsmModules(
-  dbUrl: string,
+  dbConfig: DbConfig,
   fsmConfig?: FsmStartupConfig,
   options?: BootstrapOptions,
 ): Promise<BootstrapResult> {
-  const pool = new Pool({ connectionString: dbUrl, ...options?.poolConfig });
+  const pool = new Pool(dbConfig);
 
   let verifiedFsmModules: VerifiedFsmModule[] = [];
 

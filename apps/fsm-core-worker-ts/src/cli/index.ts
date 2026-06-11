@@ -142,7 +142,7 @@ let verifiedFsmModules: Awaited<ReturnType<typeof bootstrapFsmModules>>["verifie
 
 if (command && needsFsmDetails.includes(command)) {
   const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath! } };
-  const result = await bootstrapFsmModules(resolvedDbUrl, fsmConfig, {
+  const result = await bootstrapFsmModules({ connectionString: resolvedDbUrl }, fsmConfig, {
     onWorkerStop: (queueName) => {
       if (activeWorkers[queueName]) {
         activeWorkers[queueName].lock = false;

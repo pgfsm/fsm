@@ -38,7 +38,7 @@ export default async function createApp(
   fsmConfig?: FsmStartupConfig,
 ) {
   const { pool, verifiedFsmModules } = await bootstrapFsmModules(
-    env.DATABASE_URL,
+    { connectionString: env.DATABASE_URL },
     fsmConfig,
     {
       onWorkerStop: (queueName) => {
