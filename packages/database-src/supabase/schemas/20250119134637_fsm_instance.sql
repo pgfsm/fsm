@@ -22,7 +22,12 @@ create table fsm_core.fsm_instance (
   parent uuid default '00000000-0000-0000-0000-000000000001', -- Self-reference, 00000000-0000-0000-0000-000000000001 for system
   childrens jsonb,    
   started_at timestamp with time zone default now(),
-  ended_at timestamp with time zone
+  ended_at timestamp with time zone,
+
+  worker_locked          boolean DEFAULT false,
+  worker_locked_by       text,
+  worker_locked_at       timestamp with time zone,
+  worker_lock_expires_at timestamp with time zone
   
 );
 

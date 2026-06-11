@@ -27,6 +27,10 @@ export type Database = {
           started_at: string | null
           total_promise_queue_data: Json | null
           total_schedule_queue_data: Json | null
+          worker_lock_expires_at: string | null
+          worker_locked: boolean | null
+          worker_locked_at: string | null
+          worker_locked_by: string | null
         }
         Insert: {
           childrens?: Json | null
@@ -45,6 +49,10 @@ export type Database = {
           started_at?: string | null
           total_promise_queue_data?: Json | null
           total_schedule_queue_data?: Json | null
+          worker_lock_expires_at?: string | null
+          worker_locked?: boolean | null
+          worker_locked_at?: string | null
+          worker_locked_by?: string | null
         }
         Update: {
           childrens?: Json | null
@@ -63,6 +71,10 @@ export type Database = {
           started_at?: string | null
           total_promise_queue_data?: Json | null
           total_schedule_queue_data?: Json | null
+          worker_lock_expires_at?: string | null
+          worker_locked?: boolean | null
+          worker_locked_at?: string | null
+          worker_locked_by?: string | null
         }
         Relationships: []
       }

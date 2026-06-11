@@ -1,9 +1,39 @@
-CREATE OR REPLACE FUNCTION fsm_core.stop_event_for_fsm_worker_v2(
-    input_fsm_instance_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-AS $$
+alter table "fsm_core"."fsm_instance" add column "worker_lock_expires_at" timestamp with time zone;
+
+alter table "fsm_core"."fsm_instance" add column "worker_locked" boolean default false;
+
+alter table "fsm_core"."fsm_instance" add column "worker_locked_at" timestamp with time zone;
+
+alter table "fsm_core"."fsm_instance" add column "worker_locked_by" text;
+
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION fsm_core.lock_fsm_instance(input_fsm_instance_id uuid, input_locked_by text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    updated_count INTEGER;
+BEGIN
+    UPDATE fsm_core.fsm_instance
+    SET
+        worker_locked          = TRUE,
+        worker_locked_by       = input_locked_by,
+        worker_locked_at       = now(),
+        worker_lock_expires_at = NULL
+    WHERE id = input_fsm_instance_id
+      AND (worker_locked = FALSE OR worker_locked IS NULL);
+
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    RETURN updated_count > 0;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION fsm_core.stop_event_for_fsm_worker_v2(input_fsm_instance_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     instance_row  fsm_core.fsm_instance%ROWTYPE;
     unlock_result boolean;
@@ -73,5 +103,29 @@ BEGIN
         )
     );
 END;
-$$;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION fsm_core.unlock_fsm_instance(input_fsm_instance_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+    updated_count INTEGER;
+BEGIN
+    UPDATE fsm_core.fsm_instance
+    SET
+        worker_locked          = FALSE,
+        worker_locked_by       = NULL,
+        worker_locked_at       = NULL,
+        worker_lock_expires_at = NULL
+    WHERE id = input_fsm_instance_id
+      AND worker_locked = TRUE;
+
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    RETURN updated_count > 0;
+END;
+$function$
+;
+
 
