@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+
+const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
 // Import Ajv for JSON schema validation
 import Ajv from "ajv";
@@ -28,11 +31,9 @@ export async function validateAndLoadPromiseFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(
-      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
-    );
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -68,26 +69,21 @@ export async function validateAndLoadPromiseFromFolders(
                 workflowType,
                 availableActors,
               );
-              console.log(
-                `Validation result for ${dirEntry.name}/${subEntry.name}:`,
-                folderResult,
-              );
+              logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
               
               allFolderResults.push(folderResult);
             } else {
-              console.log(
-                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
-              );
+              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
             }
           }
         }
       }
     }
-    console.log("All folder validation results:", allFolderResults);
+    logger.info("All folder validation results: {results}", { results: allFolderResults });
     
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
   }  
   
   return allFolderResults;
@@ -111,11 +107,9 @@ export async function validateAndLoadFsmFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(
-      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
-    );
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -166,7 +160,7 @@ export async function validateAndLoadFsmFromFolders(
 
                 if (folderResult.isFsmModuleVerified) {
                   const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, dirEntry.name, subEntry.name);
-                  console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
+                  logger.info("Successfully loaded FSM from {path}: {result}", { path: fsmJson, result: fsmResult });
                   allFolderResults.push({
                     ...folderResult,
                     ...(fsmResult != null && typeof fsmResult === "object" ? fsmResult : {}),
@@ -177,26 +171,24 @@ export async function validateAndLoadFsmFromFolders(
 
               } catch (err) {
                 if (err instanceof Deno.errors.NotFound) {
-                  console.log(`fsm.json is missing in ${fsmDirPath}/${subEntry.name}`);
+                  logger.info("fsm.json is missing in {path}", { path: `${fsmDirPath}/${subEntry.name}` });
                 } else {
-                  console.error(`Failed to import or process ${fsmDirPath}/${subEntry.name}:`, err);
+                  logger.error("Failed to import or process {path}: {error}", { path: `${fsmDirPath}/${subEntry.name}`, error: err });
                 }
               }
 
             } else {
-              console.log(
-                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
-              );
+              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
             }
           }
         }
       }
     }
-    console.log("All folder validation results:", allFolderResults);
+    logger.info("All folder validation results: {results}", { results: allFolderResults });
 
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
   }
 
   return allFolderResults;

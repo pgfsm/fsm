@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database as DatabaseGenerated, Json } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
+
+const logger = getLogger(["@pgfsm/db", "instance"]);
 
 import { FSM_SCHEMA, FSM_SCHEMA_FN_VERSION } from "./const.ts";
 import { toJsonbParam } from "./pg-utils.ts";
@@ -30,7 +33,7 @@ export async function listFsmInstances(
     const result = await deps.db.query<FsmInstanceRow>(text);
     return Array.isArray(result.rows) ? result.rows : [];
   } catch (err) {
-    console.error("Error in listFsmInstances:", err);
+    logger.error("Error in listFsmInstances: {error}", { error: err });
     throw new Error("Failed to list FSM instances", { cause: err });
   }
 }
@@ -49,7 +52,7 @@ export async function isFSMInstancePresent(
     const result = await deps.db.query<{ id: string }>(text, [queue]);
     return Array.isArray(result.rows) ? result.rows.length > 0 : !!result.rows;
   } catch (err) {
-    console.error("Error in isFSMInstancePresent:", err);
+    logger.error("Error in isFSMInstancePresent: {error}", { error: err });
     throw new Error("Failed to check FSM instance presence", { cause: err });
   }
 }
@@ -78,7 +81,7 @@ export async function createFsmInstanceFromName(
     );
     return result.rows && result.rows[0] ? result.rows[0].instance_result : null;
   } catch (err) {
-    console.error("Error in createFsmInstanceFromName:", err);
+    logger.error("Error in createFsmInstanceFromName: {error}", { error: err });
     throw new Error("Failed to create FSM instance from name", { cause: err });
   }
 }
@@ -142,7 +145,7 @@ export async function archiveEventFromFsmTypeWorker(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in archiveEventFromFsmTypeWorker:", err);
+    logger.error("Error in archiveEventFromFsmTypeWorker: {error}", { error: err });
     throw new Error("Failed to archive event from FSM type worker", { cause: err });
   }
 }
@@ -208,7 +211,7 @@ export async function archiveEventFromFsmPromiseTypeWorker(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in archiveEventFromFsmPromiseTypeWorker:", err);
+    logger.error("Error in archiveEventFromFsmPromiseTypeWorker: {error}", { error: err });
     throw new Error("Failed to archive event from FSM promise type worker", { cause: err });
   }
 }
@@ -231,7 +234,7 @@ export async function getFSMData(
     }
     return null;
   } catch (err) {
-    console.error("Error in getFSMData:", err);
+    logger.error("Error in getFSMData: {error}", { error: err });
     throw new Error("Failed to get FSM data", { cause: err });
   }
 }
@@ -249,7 +252,7 @@ export async function getFsmDataResolveStateValue(
     if (!res.rows || res.rows.length === 0) return null;
     return res.rows[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in getFsmDataResolveStateValue:", err);
+    logger.error("Error in getFsmDataResolveStateValue: {error}", { error: err });
     throw new Error("Failed to get FSM data and resolve state value", { cause: err });
   }
 }
@@ -298,7 +301,7 @@ export async function sendEventToFsmQueueWithEventLogs(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in sendEventToFsmQueueWithEventLogs:", err);
+    logger.error("Error in sendEventToFsmQueueWithEventLogs: {error}", { error: err });
     throw new Error("Failed to send FSM event", { cause: err });
   }
 }
@@ -317,7 +320,7 @@ export async function stopEventForFsmWorker(
     const res = await deps.db.query<{ result: Json }>(text, [input_fsm_instance_id]);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in stopEventForFsmWorker:", err);
+    logger.error("Error in stopEventForFsmWorker: {error}", { error: err });
     throw new Error("Failed to stop FSM worker event", { cause: err });
   }
 }

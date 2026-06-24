@@ -1,6 +1,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
+import { configureWorkerLogger } from "../logger.ts";
 import { runFsmDispatchDaemon } from "../run-fsm-dispatch-daemon.ts";
 import type { FsmStartupConfig } from "../bootstrap-fsm-modules.ts";
 
@@ -67,6 +68,7 @@ try {
 }
 
 dotenv.config({ path: ".env" });
+await configureWorkerLogger();
 const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
 
 const controller = new AbortController();

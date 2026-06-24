@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database as DatabaseGenerated } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
+
+const logger = getLogger(["@pgfsm/db", "queue"]);
 
 import { QUEUE_SCHEMA } from "./const.ts";
 
@@ -37,7 +40,7 @@ export async function readMessage(
     >(text, [queueName, vt, qty]);
     return res.rows ?? [];
   } catch (err) {
-    console.error("Error in readMessage:", err);
+    logger.error("Error in readMessage: {error}", { error: err });
     return [];
   }
 }
@@ -56,7 +59,7 @@ export async function deleteMessage(
     `;
     await deps.db.query(text, [queueName, msgId]);
   } catch (err) {
-    console.error("Error in deleteMessage:", err);
+    logger.error("Error in deleteMessage: {error}", { error: err });
   }
 }
 
@@ -74,7 +77,7 @@ export async function archiveMessage(
     `;
     await deps.db.query(text, [queueName, msgId]);
   } catch (err) {
-    console.error("Error in archiveMessage:", err);
+    logger.error("Error in archiveMessage: {error}", { error: err });
   }
 }
 
@@ -91,7 +94,7 @@ export async function pgmqQueueExists(
     const rows: DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"][] = res.rows ?? [];
     return rows.some((r) => r?.queue_name === queueName);
   } catch (err) {
-    console.error("Error in pgmqQueueExists:", err);
+    logger.error("Error in pgmqQueueExists: {error}", { error: err });
     return false;
   }
 }

@@ -1,3 +1,4 @@
+export { configureCompilerLogger, type LogLevel } from "./logger.ts";
 export { generateFsmJSONFromFolders, generateFsmJSONFromMachineFile, generateFsmJSONFromConfigFile, addMissingFsmTypeToInvokeActors, normalizeActionsToObjects, addActionNameFromDelay } from "./generate-fsm-json.ts";
 export { generateFsmPluginFromFolders } from "./generate-fsm-plugin.ts";
 export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";

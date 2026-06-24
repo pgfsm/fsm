@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database as DatabaseGenerated } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
+
+const logger = getLogger(["@pgfsm/db", "lock"]);
 
 import { FSM_SCHEMA } from "./const.ts";
 
@@ -21,7 +24,7 @@ export async function lockFsmInstance(
     const res = await deps.db.query<{ locked: boolean }>(text, values);
     return res.rows?.[0]?.locked === true;
   } catch (err) {
-    console.error("Error in lockFsmInstance:", err);
+    logger.error("Error in lockFsmInstance: {error}", { error: err });
 
     throw new Error("Failed to acquire FSM DB lock", { cause: err });
   }
@@ -41,7 +44,7 @@ export async function unlockFsmInstance(
     const res = await deps.db.query<{ unlocked: boolean }>(text, [input_fsm_instance_id]);
     return res.rows?.[0]?.unlocked === true;
   } catch (err) {
-    console.error("Error in unlockFsmInstance:", err);
+    logger.error("Error in unlockFsmInstance: {error}", { error: err });
     throw new Error("Failed to release FSM DB lock", { cause: err });
   }
 }

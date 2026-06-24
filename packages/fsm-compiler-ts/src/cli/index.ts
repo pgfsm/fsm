@@ -1,6 +1,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
+import { configureCompilerLogger } from "../logger.ts";
 import {
   deleteFsmJSONFromFolders,
   generateFsmJSONFromConfigFile,
@@ -145,6 +146,8 @@ async function buildDeps(connectionString?: string) {
   const { Pool } = await import("pg");
   return { db: new Pool({ connectionString: dbUrl }) };
 }
+
+await configureCompilerLogger();
 
 try {
   switch (command) {

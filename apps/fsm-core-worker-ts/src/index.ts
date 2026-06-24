@@ -1,3 +1,4 @@
+export { configureWorkerLogger, type LogLevel } from "./logger.ts";
 export { startFSMWorker, startFSMWorkerWithDBLock, type VerifiedModule } from "./fsmworker.ts";
 export type { FsmQueueMessage, FsmQueueMessageEventData } from "./types.ts";
 export { createAndStartFSMWorker } from "./create-and-start-fsm-worker.ts";

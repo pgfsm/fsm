@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+
+const logger = getLogger(["@pgfsm/compiler", "plugin"]);
 import { isVersionFolderName, type WorkflowType, type ActorReference, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
 
 // Helper: Generate language folders and create modules for each action/guard
@@ -95,9 +98,9 @@ async function generateFsmPluginFromFolder(
 
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}`);
+      logger.info("fsm.json is missing in {path}", { path: `${absFolderPath}/${dirEntryName}` });
     } else {
-      console.error(`Failed to import or process ${fsmJson}:`, err);
+      logger.error("Failed to import or process {path}: {error}", { path: fsmJson, error: err });
     }
   }
 
@@ -117,9 +120,9 @@ export async function generateFsmPluginFromFolders(
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`);
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(`Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`);
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
@@ -136,7 +139,7 @@ export async function generateFsmPluginFromFolders(
             if (isVersionFolderName(subEntry.name)) {
               await generateFsmPluginFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType);
             }else {
-              console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
+              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
             }
           }
         }

@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database as DatabaseGenerated, Json } from "./database.types.ts";
 import type { DBDeps } from "./custom-type.ts";
+
+const logger = getLogger(["@pgfsm/db", "helper"]);
 import { FSM_SCHEMA, FSM_SCHEMA_FN_VERSION } from "./const.ts";
 import { toJsonbParam } from "./pg-utils.ts";
 
@@ -30,7 +33,7 @@ export async function loadFsmStateFromJson(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in loadFsmStateFromJson:", err);
+    logger.error("Error in loadFsmStateFromJson: {error}", { error: err });
     throw new Error("Failed to load FSM state from JSON", { cause: err });
   }
 }
@@ -61,7 +64,7 @@ export async function loadFsmTransitionFromJson(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in loadFsmTransitionFromJson:", err);
+    logger.error("Error in loadFsmTransitionFromJson: {error}", { error: err });
     throw new Error("Failed to load FSM transition from JSON", { cause: err });
   }
 }
@@ -89,7 +92,7 @@ export async function loadFsmFromJson(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in loadFsmFromJson:", err);
+    logger.error("Error in loadFsmFromJson: {error}", { error: err });
     throw new Error("Failed to load FSM from JSON", { cause: err });
   }
 }
@@ -120,7 +123,7 @@ export async function resolveStateValue(
     if (!res.rows || res.rows.length === 0) return null;
     return res.rows[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in resolveStateValue:", err);
+    logger.error("Error in resolveStateValue: {error}", { error: err });
     throw new Error("Failed to resolve state value", { cause: err });
   }
 }
@@ -188,7 +191,7 @@ export async function microstep(
       }
     );
   } catch (err) {
-    console.error("Error in microstep:", err);
+    logger.error("Error in microstep: {error}", { error: err });
     throw new Error("Failed to perform microstep", { cause: err });
   }
 }
@@ -219,7 +222,7 @@ export async function selectAllTransitions(
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
-    console.error("Error in selectAllTransitions:", err);
+    logger.error("Error in selectAllTransitions: {error}", { error: err });
     throw new Error("Failed to select transitions", { cause: err });
   }
 }

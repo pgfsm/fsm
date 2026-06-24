@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { Pool } from "pg";
 import type { PoolConfig } from "pg";
+
+const logger = getLogger(["@pgfsm/worker", "bootstrap"]);
 
 export type DbConfig = PoolConfig & { connectionString: string };
 import {
@@ -139,16 +142,16 @@ export async function bootstrapFsmModules(
           { fsmAbsFolderPath: actor.fsmAbsFolderPath },
           actor.controller.signal,
         );
-        console.log(`✅ Promise worker started for actor: ${actor.src}`);
+        logger.info("Promise worker started for actor: {src}", { src: actor.src });
       } catch (err) {
-        console.warn(`⚠️ Could not start promise worker for "${actor.src}":`, err);
+        logger.warning("Could not start promise worker for {src}: {error}", { src: actor.src, error: err });
       }
     }
   }
 
   if (options?.onWorkerStop) {
     await pgListenerForWorkerStopEvent(pool, options.onWorkerStop);
-    console.log("✅ PG LISTEN active on channel: fsm_worker_stop");
+    logger.info("PG LISTEN active on channel: fsm_worker_stop");
   }
 
   return { pool, verifiedFsmModules };

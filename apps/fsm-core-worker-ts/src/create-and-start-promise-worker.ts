@@ -1,4 +1,7 @@
+import { getLogger } from "@logtape/logtape";
 import type { DBDeps } from "@pgfsm/db";
+
+const logger = getLogger(["@pgfsm/worker", "promise"]);
 import { createPgmqQueue } from "@pgfsm/db";
 import { startFSMPromiseWorker } from "./fsmpromiseworker.ts";
 import type { VerifiedModule } from "./fsmworker.ts";
@@ -17,11 +20,11 @@ export async function createAndStartPromiseWorker(
 
   startFSMPromiseWorker(deps, queueName, fsm_promise_name, fsm_promise_type, fsm_promise_version, verifiedModule, signal)
     .then(() => {
-      console.log(`Promise worker for queue "${queueName}" stopped gracefully.`);
+      logger.info("Promise worker for queue {queueName} stopped gracefully", { queueName });
       onStop?.();
     })
     .catch((err) => {
-      console.error(`Promise worker for queue "${queueName}" stopped:`, err);
+      logger.error("Promise worker for queue {queueName} stopped: {error}", { queueName, error: err });
       onStop?.();
     });
 

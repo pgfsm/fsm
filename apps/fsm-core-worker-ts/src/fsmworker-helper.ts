@@ -1,7 +1,11 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database, Json } from "@pgfsm/db/database.types";
 type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
 import type { DBDeps } from "@pgfsm/db";
+
+const logger = getLogger(["@pgfsm/worker", "macrostep"]);
+const actionsLogger = getLogger(["@pgfsm/worker", "macrostep", "actions"]);
 import type { FsmQueueMessage } from "./types.ts";
 
 export type FsmModuleDefinition = {
@@ -77,7 +81,7 @@ export async function runActionImplementation(
   current_context: Json,
   meta: { deps: DBDeps; queueName: string; msg: Database["pgmq"]["CompositeTypes"]["message_record"] },
 ): Promise<Json> {
-  console.log(`Running ${actionKind} action:`, action);
+  actionsLogger.info("Running {kind} action: {action}", { kind: actionKind, action });
   try {
     const actionName = action.type || action.action_type || action.name;
     if (actionsModule && typeof actionsModule[actionName] === "function") {
@@ -93,7 +97,7 @@ export async function runActionImplementation(
       }
     }
   } catch (err) {
-    console.error(`Error executing ${actionKind} action implementation:`, err);
+    actionsLogger.error("Error executing {kind} action implementation: {error}", { kind: actionKind, error: err });
   }
   return current_context;
 }
@@ -118,7 +122,7 @@ export async function macrostepV2(
   const eventPayload = msgData.eventData?.eventPayload ?? {};
 
   if (!eventType) {
-    console.error("No eventType found in message data.");
+    logger.error("No eventType found in message data");
     return;
   }
 
@@ -166,7 +170,7 @@ export async function macrostepV2(
       fsmVersion.toString(),
     )) as FsmTransitionRow[] | null;
     if (!allTransitions || allTransitions.length === 0) {
-      console.error("No transitions found for the given FSM name and version.");
+      logger.error("No transitions found for the given FSM name and version");
       // TODO check if eventType is xstate.error.actor  we may want to pust FSM to error state
       // stateUtils.ts > code 1676 to 1685 for reference on how to handle xstate.error.actor event
       return;
@@ -192,28 +196,24 @@ export async function macrostepV2(
               );
               if (eval_result) filteredTransitions.push(transition);
             } else {
-              console.error(`Guard function "${condObj.type}" not found in module.`);
+              logger.error("Guard function {guard} not found in module", { guard: condObj.type });
             }
           } else {
-            console.error("Condition object does not have a type key:", condObj);
+            logger.error("Condition object does not have a type key: {cond}", { cond: condObj });
           }
         } else {
-          console.error("Condition is neither string nor object:", transition.cond);
+          logger.error("Condition is neither string nor object: {cond}", { cond: transition.cond });
         }
       }
 
       if (filteredTransitions.length === 0) {
-        console.error(
-          "No valid transitions found for the given event and state.",
-        );
+        logger.error("No valid transitions found for the given event and state");
         return;
       } else if (filteredTransitions.length > 1) {
-        console.error(
-          "Multiple valid transitions found for the given event and state. Ambiguous transition.",
-        );
+        logger.error("Multiple valid transitions found for the given event and state. Ambiguous transition");
         return;
       } else {
-        console.log("Selected Transition:", filteredTransitions[0]);
+        logger.info("Selected Transition: {transition}", { transition: filteredTransitions[0] });
         selectedTransition = filteredTransitions[0];
       }
     }

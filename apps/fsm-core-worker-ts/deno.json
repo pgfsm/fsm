@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "imports": {
+    "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
     "@std/cli": "jsr:@std/cli@1",
     "@types/pg": "npm:@types/pg@^8.15.2",
     "dotenv": "npm:dotenv@^16.5.0",

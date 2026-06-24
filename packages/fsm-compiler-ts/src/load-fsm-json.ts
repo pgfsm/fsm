@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+
+const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { loadFsmFromJson, type DBDeps } from "@pgfsm/db";
 
@@ -24,14 +27,14 @@ async function loadFsmJSONFromFolder(
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
     const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, fsmName, fsmVersion);
-    console.log(`Successfully loaded FSM from ${fsmJson}:`, fsmResult);
+    logger.info("Successfully loaded FSM from {path}: {result}", { path: fsmJson, result: fsmResult });
     return fsmResult;
     
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`fsm.json is missing in ${absFolderPath}/${dirEntryName}`);
+      logger.info("fsm.json is missing in {path}", { path: `${absFolderPath}/${dirEntryName}` });
     } else {
-      console.error(`Failed to import or process ${fsmJson}:`, err);
+      logger.error("Failed to import or process {path}: {error}", { path: fsmJson, error: err });
     }
   }
 
@@ -56,9 +59,9 @@ export async function loadFsmJSONFromFolders(
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`);
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(`Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`);
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
   const folderResults: any[] = [];
@@ -73,9 +76,9 @@ export async function loadFsmJSONFromFolders(
           if (isVersionFolderName(subEntry.name)) {
             const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, deps);
             folderResults.push(folderResult);
-            console.log(`Successfully loaded FSM from ${fsmDirPath}/${subEntry.name}`);
+            logger.info("Successfully loaded FSM from {path}", { path: `${fsmDirPath}/${subEntry.name}` });
           } else {
-            console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
+            logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
           }
         }
       }

@@ -1,6 +1,9 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
+
+const logger = getLogger(["@pgfsm/worker", "promise"]);
 
 import { readMessage, pgmqQueueExists, archiveEventFromFsmPromiseTypeWorker, getFsmDataResolveStateValue } from "@pgfsm/db";
 
@@ -19,7 +22,7 @@ export async function startFSMPromiseWorker(
 ): Promise<boolean> {
   const queueExists = await pgmqQueueExists(deps, queueName);
   if (!queueExists) {
-    console.warn(`PGMQ queue for promise "${queueName}" does not exist.`);
+    logger.warning("PGMQ queue for promise {queueName} does not exist", { queueName });
     return false;
   }
   const visibilityTimeout = 30;
@@ -43,10 +46,7 @@ export async function startFSMPromiseWorker(
      
       
     } catch (err) {
-      console.warn(
-        `⚠️ Could not load fsmModuleDefinition for ${fsm_promise_type} at ${fsm_promise_name}/${fsm_promise_version}:`,
-        err,
-      );
+      logger.warning("Could not load fsmModuleDefinition for {type} at {name}/{version}: {error}", { type: fsm_promise_type, name: fsm_promise_name, version: fsm_promise_version, error: err });
     }
   }
 
@@ -60,7 +60,7 @@ export async function startFSMPromiseWorker(
     for (const msg of messages) {
       if (msg.message && msg.msg_id) {
         try {
-          console.log("✅ Processing Promise message:", msg.message);
+          logger.info("Processing Promise message: {message}", { message: msg.message });
 
           // const fsmDataWithResolvedStateValue =
           //   await getFsmDataResolveStateValue(deps, queueName);
@@ -102,7 +102,7 @@ export async function startFSMPromiseWorker(
                 archiveData.event_output,
                 archiveData.error_message,
               );
-              console.log("Message archived with result:", archiveResult);
+              logger.info("Message archived with result: {result}", { result: archiveResult });
             }
            
           // }else{
@@ -110,7 +110,7 @@ export async function startFSMPromiseWorker(
             
           // }
         } catch (err) {
-          console.error("❌ Error processing Promise message:", err);
+          logger.error("Error processing Promise message: {error}", { error: err });
         }
       }
     }

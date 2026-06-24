@@ -1,3 +1,4 @@
+export { configureDbLogger, type LogLevel } from "./logger.ts";
 // Expose all methods from db implementation
 export * from "./const.ts";
 export * from "./pg-client.ts";

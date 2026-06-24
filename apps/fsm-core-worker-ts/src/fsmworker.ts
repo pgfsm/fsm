@@ -1,6 +1,9 @@
+import { getLogger } from "@logtape/logtape";
 import type { Database } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
+
+const logger = getLogger(["@pgfsm/worker", "worker"]);
 
 import { lockFsmInstance, readMessage, unlockFsmInstance } from "@pgfsm/db";
 
@@ -33,9 +36,7 @@ export async function startFSMWorker(
   signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
-  console.log(
-    `👷 Started FSM worker for queue: ${queueName} with fsm_name ${fsm_name} and fsm_version ${fsm_version}`,
-  );
+  logger.info("Started FSM worker for queue: {queueName} with fsm_name {fsmName} and fsm_version {fsmVersion}", { queueName, fsmName: fsm_name, fsmVersion: fsm_version });
 
   while (!signal?.aborted) {
     const messages = await readMessage(deps, queueName, visibilityTimeout);
@@ -47,15 +48,12 @@ export async function startFSMWorker(
     for (const msg of messages) {
       if (msg.message && msg.msg_id) {
         try {
-          console.log("✅ Processing FSM message:", msg.message);
+          logger.info("Processing FSM message: {message}", { message: msg.message });
           const msgData = msg.message as unknown as FsmQueueMessage;
 
           const fsmDataWithResolvedStateValue =
             await getFsmDataResolveStateValue(deps, queueName);
-          console.log(
-            "Initial FSM state from DB:",
-            fsmDataWithResolvedStateValue,
-          );
+          logger.info("Initial FSM state from DB: {state}", { state: fsmDataWithResolvedStateValue });
 
           // Here you would process the message
           //
@@ -71,7 +69,7 @@ export async function startFSMWorker(
               fsm_version,
               fsmModuleDefinition,
             );
-            console.log("Macrostep result:", macrostepV2Result);
+            logger.info("Macrostep result: {result}", { result: macrostepV2Result });
             if (macrostepV2Result) {
               const archiveResult = await archiveEventFromFsmTypeWorker(
                 deps,
@@ -91,15 +89,15 @@ export async function startFSMWorker(
                 msgData.sendToParentQueueType ?? null,
                 msgData.sendToParentQueueIdEventName ?? null,
               );
-              console.log("Message archived with result:", archiveResult);
+              logger.info("Message archived with result: {result}", { result: archiveResult });
             }
             // await archiveMessage(deps, queueName, msg.msg_id || 1);
           }else{
-            console.warn("⚠️ No result from macrostepV2, skipping archiving.");
+            logger.warning("No result from macrostepV2, skipping archiving");
 
           }
         } catch (err) {
-          console.error("❌ Error processing FSM message:", err);
+          logger.error("Error processing FSM message: {error}", { error: err });
         }
       }
     }
@@ -136,7 +134,7 @@ export async function startFSMWorkerWithDBLock(
           [],
         );
         fsmModuleDefinition = result.fsmModuleDefinition;
-        console.log(`📦 Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for ${fsm_name}/${fsm_version}`);
+        logger.info("Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for {fsmName}/{fsmVersion}", { fsmName: fsm_name, fsmVersion: fsm_version });
       } else {
         const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
         const [actions, guards, delays, actors] = await Promise.allSettled([
@@ -151,13 +149,10 @@ export async function startFSMWorkerWithDBLock(
           delays: delays.status === "fulfilled" ? delays.value : null,
           actors: actors.status === "fulfilled" ? actors.value : null,
         };
-        console.log(`📦 Loaded fsmModuleDefinition for ${fsm_name}/${fsm_version}`);
+        logger.info("Loaded fsmModuleDefinition for {fsmName}/{fsmVersion}", { fsmName: fsm_name, fsmVersion: fsm_version });
       }
     } catch (err) {
-      console.warn(
-        `⚠️ Could not load fsmModuleDefinition for ${fsm_name}/${fsm_version}:`,
-        err,
-      );
+      logger.warning("Could not load fsmModuleDefinition for {fsmName}/{fsmVersion}: {error}", { fsmName: fsm_name, fsmVersion: fsm_version, error: err });
     }
   }
 
@@ -175,10 +170,10 @@ export async function startFSMWorkerWithDBLock(
   };
   try {
     await startFSMWorker(deps, queueName, fsm_name, fsm_version, fsmModuleDefinition, signal);
-    console.log(`FSM Lock for queue "${queueName}" released after graceful stop.`);
+    logger.info("FSM Lock for queue {queueName} released after graceful stop", { queueName });
   } catch (err) {
-    console.error(`FSM Worker for queue "${queueName}" stopped:`, err);
-    console.log(`FSM Lock for queue "${queueName}" has been released.`);
+    logger.error("FSM Worker for queue {queueName} stopped: {error}", { queueName, error: err });
+    logger.info("FSM Lock for queue {queueName} has been released", { queueName });
   } finally {
     cleanup();
   }

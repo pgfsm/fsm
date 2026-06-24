@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+
+const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
 // Import Ajv for JSON schema validation
 import { Ajv } from "ajv";
@@ -58,21 +61,14 @@ export async function validateLanguageModules(
       for (const name of modType.names) {
         // Check for method implementation
         if (typeof mod[name] !== "function") {
-          console.log(
-            `${modType.type} does not export '${name}' as a function.`,
-          );
+          logger.info("{moduleType} does not export {name} as a function", { moduleType: modType.type, name });
           failedMethods.push({ method: name, moduleType: modType.type, modulePath: modulePath });
         } else {
-          console.log(
-            `${modType.type} exports '${name}' as a function.`,
-          );
+          logger.info("{moduleType} exports {name} as a function", { moduleType: modType.type, name });
         }
       }
     } catch (err) {
-      console.error(
-        `Failed to import module for ${modType.type} from ${modulePath}:`,
-        err,
-      );
+      logger.error("Failed to import module for {moduleType} from {modulePath}: {error}", { moduleType: modType.type, modulePath, error: err });
       modules[modType.type] = null;
       // If module import fails, all methods in this moduleType are considered failed
       for (const name of modType.names) {
@@ -106,7 +102,7 @@ export async function validatePromisePluginLoadFromFolder(
   let externalActors: ExternalActor[] = [];
   let failedMethods: FailedMethod[] = [];
 
-  console.warn(`Skipping plugin validation for sharedPromise ${dirName}/${versionName} since it is only used as a dependency and not directly invoked.`);
+  logger.warning("Skipping plugin validation for sharedPromise {dirName}/{versionName} since it is only used as a dependency and not directly invoked", { dirName, versionName });
   const lang = "typescript";
 
   const modDir = `${absPath}/${lang}`;
@@ -115,16 +111,16 @@ export async function validatePromisePluginLoadFromFolder(
     const mod = await import(`file://${modulePath}`);
 
     if (typeof mod[dirName] !== "function") {
-      console.log(`sharedPromise does not export '${dirName}' as a function.`);
+      logger.info("sharedPromise does not export {name} as a function", { name: dirName });
       failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
     } else {
-      console.log(`sharedPromise exports '${dirName}' as a function.`);
+      logger.info("sharedPromise exports {name} as a function", { name: dirName });
       fsmModuleDefinition = mod;
       isFsmModuleVerified = true;
     }
 
   } catch (err) {
-    console.error(`Failed to import module for sharedPromise from ${modulePath}:`, err);
+    logger.error("Failed to import module for sharedPromise from {modulePath}: {error}", { modulePath, error: err });
     failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
   }
 
@@ -165,11 +161,9 @@ export async function validatePromisePluginLoadFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(
-      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
-    );
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -205,26 +199,21 @@ export async function validatePromisePluginLoadFromFolders(
                 workflowType,
                 availableActors,
               );
-              console.log(
-                `Validation result for ${dirEntry.name}/${subEntry.name}:`,
-                folderResult,
-              );
+              logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
               
               allFolderResults.push(folderResult);
             } else {
-              console.log(
-                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
-              );
+              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
             }
           }
         }
       }
     }
-    console.log("All folder validation results:", allFolderResults);
+    logger.info("All folder validation results: {results}", { results: allFolderResults });
     
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
   }  
   
   return allFolderResults;
@@ -260,7 +249,7 @@ export async function validateFsmPluginLoadFromFolder(
   const valid = validate(fsmData);
   fsmJsonFollowSchema = !!valid;
   if (!valid) {
-    console.error("fsm.json validation failed:", validate.errors);
+    logger.error("fsm.json validation failed: {errors}", { errors: validate.errors });
     return {
       src: dirName,
       fsmName: dirName,
@@ -314,9 +303,7 @@ export async function validateFsmPluginLoadFromFolder(
       const expectedFolderPath = dependency.fsmVersion
         ? `${dependency.src}/${dependency.fsmVersion}`
         : dependency.src;
-      console.error(
-        `Missing dependency: ${expectedFolderPath} (fsmType: ${dependency.fsmType}) required by ${dirName}/${versionName}`,
-      );
+      logger.error("Missing dependency: {dep} (fsmType: {fsmType}) required by {dirName}/{versionName}", { dep: expectedFolderPath, fsmType: dependency.fsmType, dirName, versionName });
       failedMethods.push({
         method: `${dependency.src}/${dependency.fsmVersion}`,
         moduleType: dependency.fsmType ?? "unknown",
@@ -364,11 +351,9 @@ export async function validateFsmPluginLoadFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(
-      `Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`,
-    );
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -418,23 +403,21 @@ export async function validateFsmPluginLoadFromFolders(
 
                 allFolderResults.push(folderResult);
               } catch (err) {
-                console.error(`Failed to validate ${fsmDirPath}/${subEntry.name}:`, err);
+                logger.error("Failed to validate {path}: {error}", { path: `${fsmDirPath}/${subEntry.name}`, error: err });
               }  
              
             } else {
-              console.log(
-                `Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`,
-              );
+              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
             }
           }
         }
       }
     }
-    console.log("All folder validation results:", allFolderResults);
+    logger.info("All folder validation results: {results}", { results: allFolderResults });
     
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    console.error(`Error occurred while reading directory '${absFolderPath}':`, err);
+    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
   }  
   
   return allFolderResults;

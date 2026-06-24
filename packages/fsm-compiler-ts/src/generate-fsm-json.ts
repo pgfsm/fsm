@@ -1,5 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
+
+const logger = getLogger(["@pgfsm/compiler", "generate"]);
 import { Ajv } from "ajv";
 import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
 import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
@@ -270,7 +273,7 @@ export async function generateFsmJSONFromMachineFile(
     const module = await import(`file://${machineTsPath}`);
     const machineConfig = module.default;
     if (!machineConfig) {
-      console.error(`No valid export found in ${machineTsPath}`);
+      logger.error("No valid export found in {path}", { path: machineTsPath });
       return;
     }
     if (
@@ -303,22 +306,19 @@ export async function generateFsmJSONFromMachineFile(
         const validate = ajv.compile(machineSchema);
         const valid = validate(fsmJSON);
         if (!valid) {
-          console.warn(`[recommendation] fsm.json schema issues in ${absFolderPath}/fsm.json:`);
-          for (const err of validate.errors ?? []) {
-            console.warn(`  - ${err.instancePath || "/"} ${err.message} (${JSON.stringify(err.params)})`);
-          }
+          logger.warning("[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}", { path: absFolderPath, errors: validate.errors });
         } else {
-          console.log(`[recommendation] fsm.json passes schema validation ✓`);
+          logger.info("[recommendation] fsm.json passes schema validation in {path}", { path: absFolderPath });
         }
       }
     } else {
-      console.error(`Export in ${machineTsPath} is not a valid xstate machine config`);
+      logger.error("Export in {path} is not a valid xstate machine config", { path: machineTsPath });
     }
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      console.log(`machine.ts is missing in ${absFolderPath}`);
+      logger.info("machine.ts is missing in {path}", { path: absFolderPath });
     } else {
-      console.error(`Failed to import or process ${machineTsPath}:`, err);
+      logger.error("Failed to import or process {path}: {error}", { path: machineTsPath, error: err });
     }
   }
 }
@@ -346,14 +346,14 @@ export async function generateFsmJSONFromConfigFile(
     const configText = await Deno.readTextFile(configJsonPath);
     config = JSON.parse(configText);
   } catch (err) {
-    console.error(`Failed to read config.json at ${configJsonPath}:`, err);
+    logger.error("Failed to read config.json at {path}: {error}", { path: configJsonPath, error: err });
     return;
   }
 
   const machineTsPath = `${absFolderPath}/machine.ts`;
   try {
     await Deno.stat(machineTsPath);
-    console.warn(`machine.ts already exists at ${machineTsPath} — skipping generation, using existing file`);
+    logger.warning("machine.ts already exists at {path} — skipping generation, using existing file", { path: machineTsPath });
   } catch {
     // machine.ts does not exist — generate a wrapper from config.json
     const id = typeof config.id === "string" ? config.id : version;
@@ -368,7 +368,7 @@ export async function generateFsmJSONFromConfigFile(
       ``,
     ].join("\n");
     await Deno.writeTextFile(machineTsPath, machineTsContent);
-    console.log(`Generated machine.ts from config.json at ${machineTsPath}`);
+    logger.info("Generated machine.ts from config.json at {path}", { path: machineTsPath });
   }
 
   await generateFsmJSONFromMachineFile(absFolderPath, version, workflowType, showRecommendation);
@@ -401,9 +401,9 @@ export async function generateFsmJSONFromFolders(
     throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`);
   }
   if (folderPath.startsWith("/")) {
-    console.log(`Importing workflows from absolute path: ${folderPath}`);
+    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
   } else {
-    console.log(`Importing workflows from relative path: ${folderPath} to ${Deno.cwd()}`);
+    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
   }
   const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
@@ -419,7 +419,7 @@ export async function generateFsmJSONFromFolders(
           if (isVersionFolderName(subEntry.name)) {
             await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, showRecommendation);
           } else {
-            console.log(`Skipping non-versioned folder: ${subEntry.name} in ${fsmDirPath}`);
+            logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
           }
         }
       }

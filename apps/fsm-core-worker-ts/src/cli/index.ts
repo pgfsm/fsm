@@ -1,6 +1,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 
+import { configureWorkerLogger } from "../logger.ts";
 import {
   startFSMWorkerWithDBLock,
   startFSMPromiseWorker,
@@ -131,6 +132,7 @@ const waitForAbort = () =>
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
 dotenv.config({ path: ".env" });
+await configureWorkerLogger();
 const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
 
 // activeWorkers tracks running workers so pgListenerForWorkerStopEvent can stop them

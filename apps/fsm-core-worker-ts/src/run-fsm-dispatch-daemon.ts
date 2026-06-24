@@ -1,4 +1,7 @@
+import { getLogger } from "@logtape/logtape";
 import type { DbConfig, FsmStartupConfig, VerifiedFsmModule } from "./bootstrap-fsm-modules.ts";
+
+const logger = getLogger(["@pgfsm/worker", "dispatcher"]);
 import { bootstrapFsmModules } from "./bootstrap-fsm-modules.ts";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import { archiveMessage, readMessage } from "@pgfsm/db";
@@ -91,9 +94,7 @@ export async function runFsmDispatchDaemon(
     }
   });
 
-  console.log(
-    `Dispatcher ready. Polling "${DISPATCH_QUEUE}" (maxConcurrency=${maxConcurrency}, vt=${vt}s)...`,
-  );
+  logger.info("Dispatcher ready. Polling {queue} (maxConcurrency={maxConcurrency}, vt={vt}s)", { queue: DISPATCH_QUEUE, maxConcurrency, vt });
 
   while (!signal?.aborted) {
     // Backpressure: don't dequeue work we have no slot to run.
@@ -129,9 +130,7 @@ export async function runFsmDispatchDaemon(
     );
 
     if (!module) {
-      console.warn(
-        `[dispatcher] No verified module for ${fsmName}@${fsmVersion} (instance ${instanceId}). Message re-appears after vt=${vt}s.`,
-      );
+      logger.warning("No verified module for {fsmName}@{fsmVersion} (instance {instanceId}). Message re-appears after vt={vt}s", { fsmName, fsmVersion, instanceId, vt });
       sem.release();
       continue;
     }
@@ -152,11 +151,11 @@ export async function runFsmDispatchDaemon(
     )
       .then((result) => {
         if (result.status === "fail") {
-          console.warn(`[dispatcher] Worker for instance ${instanceId} did not start: ${result.message}`);
+          logger.warning("Worker for instance {instanceId} did not start: {message}", { instanceId, message: result.message });
         }
       })
       .catch((err) => {
-        console.error(`[dispatcher] Worker for instance ${instanceId} crashed:`, err);
+        logger.error("Worker for instance {instanceId} crashed: {error}", { instanceId, error: err });
       })
       .finally(() => {
         activeWorkers.delete(instanceId);
@@ -164,7 +163,7 @@ export async function runFsmDispatchDaemon(
       });
 
     await archiveMessage(deps, DISPATCH_QUEUE, Number(msg.msg_id));
-    console.log(`[dispatcher] Leased instance ${instanceId} (${fsmName}@${fsmVersion})`);
+    logger.info("Leased instance {instanceId} ({fsmName}@{fsmVersion})", { instanceId, fsmName, fsmVersion });
   }
 
   // Graceful drain: abort any stragglers and wait for slots to free.
@@ -176,5 +175,5 @@ export async function runFsmDispatchDaemon(
   }
 
   await pool.end();
-  console.log("Dispatcher stopped.");
+  logger.info("Dispatcher stopped");
 }
