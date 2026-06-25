@@ -16,6 +16,7 @@
     "@logtape/hono": "jsr:@logtape/hono@^2.2",
     "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
     "@logtape/otel": "jsr:@logtape/otel@^2.2",
+    "@opentelemetry/api": "npm:@opentelemetry/api@^1",
     "hono-pino": "npm:hono-pino@^0.8.0",
     "json-diff-ts": "npm:json-diff-ts@^4.9.1",
     "pg": "npm:pg@^8.16.0",
