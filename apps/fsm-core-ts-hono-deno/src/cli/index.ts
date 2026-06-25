@@ -1,6 +1,11 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
+import { getLogger } from "@logtape/logtape";
+import { configureApiLogger } from "../../logger.ts";
 import type { FsmStartupConfig } from "../../lib/types.ts";
+
+const logger = getLogger(["@pgfsm/api", "cli"]);
+await configureApiLogger();
 
 const args = parseArgs(Deno.args, {
   string: [
@@ -22,7 +27,7 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 fsm-server — FSM Hono server CLI
 
 USAGE
@@ -78,7 +83,7 @@ if (args["db-url"]) Deno.env.set("DATABASE_URL", args["db-url"]);
 if (args["port"]) Deno.env.set("PORT", String(port));
 
 if (!dbUrl) {
-  console.error("Error: --db-url is required (or set DATABASE_URL in the env file).\n");
+  logger.error("--db-url is required (or set DATABASE_URL in the env file).");
   printHelp();
   Deno.exit(1);
 }
@@ -93,7 +98,7 @@ for (const [flag, path] of pathsToCheck) {
   try {
     await Deno.stat(path);
   } catch {
-    console.error(`Error: ${flag} "${path}" does not exist.`);
+    logger.error("{flag} path does not exist: {path}", { flag, path });
     Deno.exit(1);
   }
 }
@@ -124,11 +129,11 @@ let shutdownRequested = false;
 
 const onSignal = () => {
   if (shutdownRequested) {
-    console.log("\nForce exit.");
+    logger.info("Force exit.");
     Deno.exit(0);
   }
   shutdownRequested = true;
-  console.log("\nShutdown requested — stopping server gracefully. Ctrl+C again to force exit...");
+  logger.info("Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...");
 };
 
 Deno.addSignalListener("SIGINT", onSignal);
@@ -141,15 +146,15 @@ const fsmRouter = await createApp(pool, urlPathPrefix, fsmConfig);
 const host = new Hono();
 host.route(urlPathPrefix, fsmRouter);
 
-console.log(`Starting FSM server on port ${port} with prefix "${urlPathPrefix}"...`);
+logger.info("Starting FSM server on port {port} with prefix {prefix}", { port, prefix: urlPathPrefix });
 Deno.serve({ port }, host.fetch);
 
 self.addEventListener("error", (event) => {
-  console.error("Uncaught exception:", event.error);
+  logger.error("Uncaught exception: {error}", { error: event.error });
   event.preventDefault();
 });
 
 self.addEventListener("unhandledrejection", (event) => {
-  console.error("Unhandled promise rejection:", event.reason);
+  logger.error("Unhandled promise rejection: {reason}", { reason: event.reason });
   event.preventDefault();
 });

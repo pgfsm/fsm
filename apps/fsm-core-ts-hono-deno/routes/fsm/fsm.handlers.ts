@@ -1,6 +1,9 @@
 import * as HttpStatusCodes from "stoker/http-status-codes.ts";
+import { getLogger } from "@logtape/logtape";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
+
+const logger = getLogger(["@pgfsm/api", "fsm"]);
 
 import type { CreateRoute, CurrentActiveRoute, GetOneRoute, ListRoute, ResumeRoute, SendRoute, StopRoute } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
@@ -45,7 +48,7 @@ export const getOne: AppRouteHandler<GetOneRoute> = async (c) => {
     }
     return c.json({ data: result }, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in getOne handler:", _err);
+    logger.error("Error in getOne handler: {error}", { error: _err });
     return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
@@ -101,7 +104,7 @@ export const create: AppRouteHandler<CreateRoute> = async (c) => {
     activeWorkers[instanceId] = { lock: true, controller };
     return c.json({ data: { fsm_instance, workerResult } }, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in create handler:", _err);
+    logger.error("Error in create handler: {error}", { error: _err });
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
@@ -180,7 +183,7 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
     activeWorkers[queue] = { lock: true, controller };
     return c.json({ data: workerResult }, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in resume handler:", _err);
+    logger.error("Error in resume handler: {error}", { error: _err });
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
@@ -247,7 +250,7 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
 
     return c.json({ data: instance }, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in send handler:", _err);
+    logger.error("Error in send handler: {error}", { error: _err });
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,

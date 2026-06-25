@@ -1,6 +1,9 @@
 import * as HttpStatusCodes from "stoker/http-status-codes.ts";
+import { getLogger } from "@logtape/logtape";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
+
+const logger = getLogger(["@pgfsm/api", "fsmpromise"]);
 
 import type { CreateAndStartRoute, ListRoute, ResumeRoute, StopRoute } from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
@@ -63,14 +66,14 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
     startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_version, matchedModule, controller.signal)
       .then(() => { delete activePromiseWorkers[promise_name]; })
       .catch((err) => {
-        console.error(`Promise worker for "${promise_name}" stopped:`, err);
+        logger.error("Promise worker for {name} stopped: {error}", { name: promise_name, error: err });
         delete activePromiseWorkers[promise_name];
       });
 
     activePromiseWorkers[promise_name] = { lock: true, controller };
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in resume handler:", _err);
+    logger.error("Error in resume handler: {error}", { error: _err });
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
@@ -124,7 +127,7 @@ export const createAndStart: AppRouteHandler<CreateAndStartRoute> = async (c) =>
     activePromiseWorkers[queue_name] = { lock: true, controller };
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {
-    console.log("Error in createAndStart handler:", _err);
+    logger.error("Error in createAndStart handler: {error}", { error: _err });
     return c.json(
       { error: "Unexpected error" },
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
