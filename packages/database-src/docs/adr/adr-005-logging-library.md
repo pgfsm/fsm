@@ -24,6 +24,22 @@ A secondary requirement was **zero-npm for library code** — the packages targe
 
 ---
 
+## Pino → LogTape Level Mapping Reference
+
+| Pino level | LogTape level | Notes |
+|---|---|---|
+| `trace` | — | No equivalent; LogTape's finest level is `debug` |
+| `debug` | `debug` | Direct match |
+| `info` | `info` | Direct match |
+| `warn` | `warning` | Renamed — Pino uses `warn`, LogTape uses `warning` |
+| `error` | `error` | Direct match |
+| `fatal` | `fatal` | Direct match |
+| `silent` | `silent` (custom) | LogTape has no built-in silent; mapped to a noop sink at `fatal` level so nothing is emitted |
+
+The `LOG_LEVEL` env var in this project uses LogTape names. If migrating a `.env` file from a Pino-based setup, rename `warn` → `warning`, and replace `trace` with `debug`.
+
+---
+
 ## Decision
 
 We adopt **LogTape** (`jsr:@logtape/logtape@^2.2`) as the logging library across all three packages.
