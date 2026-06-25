@@ -3,6 +3,8 @@
  * Run from repo root: deno run --allow-all packages/fsm-compiler-ts/src/index-test.ts
  */
 
+import { getLogger } from "@logtape/logtape";
+import { configureCompilerLogger } from "./logger.ts";
 import {
   addMissingFsmTypeToInvokeActors,
   deleteFsmJSONFromFolders,
@@ -23,10 +25,12 @@ import {
   validatePromisePluginLoadFromFolders,
 } from "./index.ts";
 
-(async () => {
-  console.log("=== index.ts exports ===\n");
+const logger = getLogger(["@pgfsm/compiler", "test"]);
+await configureCompilerLogger();
 
-  // Verify all exports are functions
+(async () => {
+  logger.info("=== index.ts exports ===");
+
   const exports = {
     generateFsmJSONFromFolders,
     addMissingFsmTypeToInvokeActors,
@@ -48,31 +52,29 @@ import {
   };
 
   for (const [name, fn] of Object.entries(exports)) {
-    console.assert(typeof fn === "function", `${name} should be a function`);
-    console.log(`  ✅ ${name}`);
+    if (typeof fn !== "function") logger.error("{name} should be a function", { name });
+    logger.info("  {name}", { name });
   }
 
-  // Spot-check util functions
-  console.assert(isVersionFolderName("v01") === true, "v01 is a valid version folder");
-  console.assert(isVersionFolderName("v99") === true, "v99 is a valid version folder");
-  console.assert(isVersionFolderName("v1") === false, "v1 is not a valid version folder");
-  console.assert(isVersionFolderName("abc") === false, "abc is not a valid version folder");
-  console.log("\n  ✅ isVersionFolderName checks pass");
+  if (isVersionFolderName("v01") !== true) logger.error("v01 is a valid version folder");
+  if (isVersionFolderName("v99") !== true) logger.error("v99 is a valid version folder");
+  if (isVersionFolderName("v1") !== false) logger.error("v1 is not a valid version folder");
+  if (isVersionFolderName("abc") !== false) logger.error("abc is not a valid version folder");
+  logger.info("  isVersionFolderName checks pass");
 
-  console.assert(isValidDateFolderName("2024-01-15-10-30") === true, "valid date folder");
-  console.assert(isValidDateFolderName("not-a-date") === false, "invalid date folder");
-  console.log("  ✅ isValidDateFolderName checks pass");
+  if (isValidDateFolderName("2024-01-15-10-30") !== true) logger.error("valid date folder");
+  if (isValidDateFolderName("not-a-date") !== false) logger.error("invalid date folder");
+  logger.info("  isValidDateFolderName checks pass");
 
-  console.assert(isTimestampFolderName("20240115103000") === true, "valid timestamp folder");
-  console.assert(isTimestampFolderName("2024") === false, "invalid timestamp folder");
-  console.log("  ✅ isTimestampFolderName checks pass");
+  if (isTimestampFolderName("20240115103000") !== true) logger.error("valid timestamp folder");
+  if (isTimestampFolderName("2024") !== false) logger.error("invalid timestamp folder");
+  logger.info("  isTimestampFolderName checks pass");
 
-  // isFunction / hasArity checks
-  console.assert(isFunction(() => {}) === true, "arrow fn is a function");
-  console.assert(isFunction(42) === false, "number is not a function");
-  console.assert(hasArity(2)((_a: unknown, _b: unknown) => {}) === true, "arity 2 matches");
-  console.assert(hasArity(2)((_a: unknown) => {}) === false, "arity 1 does not match 2");
-  console.log("  ✅ isFunction / hasArity checks pass");
+  if (isFunction(() => {}) !== true) logger.error("arrow fn is a function");
+  if (isFunction(42) !== false) logger.error("number is not a function");
+  if (hasArity(2)((_a: unknown, _b: unknown) => {}) !== true) logger.error("arity 2 matches");
+  if (hasArity(2)((_a: unknown) => {}) !== false) logger.error("arity 1 does not match 2");
+  logger.info("  isFunction / hasArity checks pass");
 
-  console.log("\n=== index.ts exports complete ===");
+  logger.info("=== index.ts exports complete ===");
 })();

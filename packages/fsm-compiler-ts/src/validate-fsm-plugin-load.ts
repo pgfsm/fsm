@@ -396,10 +396,7 @@ export async function validateFsmPluginLoadFromFolders(
                   availableActors,
                 );
 
-                console.log(
-                  `Validation result for ${dirEntry.name}/${subEntry.name}:`,
-                  folderResult,
-                );
+                logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
 
                 allFolderResults.push(folderResult);
               } catch (err) {

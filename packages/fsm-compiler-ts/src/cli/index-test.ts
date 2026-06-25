@@ -3,9 +3,14 @@
  * Run from repo root: deno run --allow-all packages/fsm-compiler-ts/src/cli/index-test.ts
  */
 
+import { getLogger } from "@logtape/logtape";
+import { configureCompilerLogger } from "../logger.ts";
+
+const logger = getLogger(["@pgfsm/compiler", "test"]);
+await configureCompilerLogger();
+
 const CLI = "packages/fsm-compiler-ts/src/cli/index.ts";
 const FSM_FOLDER = "apps/fsm-core-example/fsm";
-const SHARED_FSM_FOLDER = "apps/fsm-core-example/sharedFSM";
 
 async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   const cmd = new Deno.Command(Deno.execPath(), {
@@ -22,78 +27,78 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
 }
 
 (async () => {
-  console.log("=== CLI Tests ===\n");
+  logger.info("=== CLI Tests ===");
 
   // --help
   {
     const { code, stdout } = await runCli(["--help"]);
-    console.log("[--help] exit code:", code);
-    console.assert(code === 0, "--help should exit 0");
-    console.assert(stdout.includes("fsm-compiler"), "--help should print usage");
-    console.assert(stdout.includes("generate"), "--help should list generate command");
-    console.log("[--help] ✅\n");
+    logger.info("[--help] exit code: {code}", { code });
+    if (code !== 0) logger.error("--help should exit 0");
+    if (!stdout.includes("fsm-compiler")) logger.error("--help should print usage");
+    if (!stdout.includes("generate")) logger.error("--help should list generate command");
+    logger.info("[--help] done");
   }
 
   // no args → help
   {
     const { code, stdout } = await runCli([]);
-    console.log("[no args] exit code:", code);
-    console.assert(code === 0, "no args should exit 0 with help");
-    console.assert(stdout.includes("USAGE"), "no args should print USAGE");
-    console.log("[no args] ✅\n");
+    logger.info("[no args] exit code: {code}", { code });
+    if (code !== 0) logger.error("no args should exit 0 with help");
+    if (!stdout.includes("USAGE")) logger.error("no args should print USAGE");
+    logger.info("[no args] done");
   }
 
   // missing folder
   {
     const { code, stderr } = await runCli(["generate"]);
-    console.log("[generate, no folder] exit code:", code);
-    console.assert(code === 1, "missing folder should exit 1");
-    console.assert(stderr.includes("<folder>"), "should print folder error");
-    console.log("[generate, no folder] ✅\n");
+    logger.info("[generate, no folder] exit code: {code}", { code });
+    if (code !== 1) logger.error("missing folder should exit 1");
+    if (!stderr.includes("--folder")) logger.error("should print folder error");
+    logger.info("[generate, no folder] done");
   }
 
   // validate-plugin without --workflow-type
   {
     const { code, stderr } = await runCli(["validate-plugin", FSM_FOLDER]);
-    console.log("[validate-plugin, no --workflow-type] exit code:", code);
-    console.assert(code === 1, "missing --workflow-type should exit 1");
-    console.assert(stderr.includes("--workflow-type"), "should print workflow-type error");
-    console.log("[validate-plugin, no --workflow-type] ✅\n");
+    logger.info("[validate-plugin, no --workflow-type] exit code: {code}", { code });
+    if (code !== 1) logger.error("missing --workflow-type should exit 1");
+    if (!stderr.includes("--workflow-type")) logger.error("should print workflow-type error");
+    logger.info("[validate-plugin, no --workflow-type] done");
   }
 
   // unknown command
   {
     const { code, stderr } = await runCli(["unknown-cmd", FSM_FOLDER]);
-    console.log("[unknown command] exit code:", code);
-    console.assert(code === 1, "unknown command should exit 1");
-    console.assert(stderr.includes("Unknown command"), "should print unknown command error");
-    console.log("[unknown command] ✅\n");
+    logger.info("[unknown command] exit code: {code}", { code });
+    if (code !== 1) logger.error("unknown command should exit 1");
+    if (!stderr.includes("Unknown command")) logger.error("should print unknown command error");
+    logger.info("[unknown command] done");
   }
 
   // generate — runs on example folder (no DB required)
   {
     const { code, stdout } = await runCli(["generate", FSM_FOLDER]);
-    console.log("[generate fsm] exit code:", code);
-    console.log("[generate fsm] stdout:", stdout.slice(0, 200));
-    console.assert(code === 0, "generate should succeed");
-    console.log("[generate fsm] ✅\n");
+    logger.info("[generate fsm] exit code: {code}", { code });
+    logger.info("[generate fsm] stdout: {stdout}", { stdout: stdout.slice(0, 200) });
+    if (code !== 0) logger.error("generate should succeed");
+    logger.info("[generate fsm] done");
   }
 
   // generate-plugin — runs on example folder (no DB required)
   {
     const { code } = await runCli(["generate-plugin", FSM_FOLDER]);
-    console.log("[generate-plugin fsm] exit code:", code);
-    console.assert(code === 0, "generate-plugin should succeed");
-    console.log("[generate-plugin fsm] ✅\n");
+    logger.info("[generate-plugin fsm] exit code: {code}", { code });
+    if (code !== 0) logger.error("generate-plugin should succeed");
+    logger.info("[generate-plugin fsm] done");
   }
 
   // validate-plugin — runs on example folder (no DB required)
   {
     const { code } = await runCli(["validate-plugin", FSM_FOLDER, "--workflow-type", "fsm"]);
-    console.log("[validate-plugin fsm] exit code:", code);
-    console.assert(code === 0, "validate-plugin should succeed");
-    console.log("[validate-plugin fsm] ✅\n");
+    logger.info("[validate-plugin fsm] exit code: {code}", { code });
+    if (code !== 0) logger.error("validate-plugin should succeed");
+    logger.info("[validate-plugin fsm] done");
   }
 
-  console.log("=== CLI Tests complete ===");
+  logger.info("=== CLI Tests complete ===");
 })();

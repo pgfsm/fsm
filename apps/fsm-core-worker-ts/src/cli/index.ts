@@ -1,6 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
-
+import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import {
   startFSMWorkerWithDBLock,
@@ -11,6 +11,9 @@ import {
   bootstrapFsmModules,
 } from "../index.ts";
 import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
+
+const logger = getLogger(["@pgfsm/worker", "cli"]);
+await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type", "db-url"],
@@ -28,7 +31,7 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 fsm-worker — FSM worker CLI
 
 USAGE
@@ -89,7 +92,7 @@ if (command && needsFsmDetails.includes(command)) {
 }
 
 if (missing.length > 0) {
-  console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
+  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
   printHelp();
   Deno.exit(1);
 }
@@ -98,7 +101,7 @@ if (fsmFolderPath) {
   try {
     await Deno.stat(fsmFolderPath);
   } catch {
-    console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
+    logger.error("--fsm-folder-path does not exist: {path}", { path: fsmFolderPath });
     Deno.exit(1);
   }
 }
@@ -112,11 +115,11 @@ let shutdownRequested = false;
 
 const onSignal = () => {
   if (shutdownRequested) {
-    console.log("\nForce exit.");
+    logger.info("Force exit.");
     Deno.exit(0);
   }
   shutdownRequested = true;
-  console.log("\nShutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
+  logger.info("Shutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
   controller.abort();
 };
 
@@ -132,7 +135,6 @@ const waitForAbort = () =>
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
 dotenv.config({ path: ".env" });
-await configureWorkerLogger();
 const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
 
 // activeWorkers tracks running workers so pgListenerForWorkerStopEvent can stop them
@@ -177,11 +179,11 @@ try {
         controller.signal,
         () => {
           delete activeWorkers[queueName!];
-          console.log(`Worker for "${queueName}" stopped and DB lock released.`);
+          logger.info("Worker for {queueName} stopped and DB lock released.", { queueName });
         },
       );
       if (result.status === "fail") {
-        console.error(`Error: ${result.message}`);
+        logger.error("Error: {message}", { message: result.message });
         Deno.exit(1);
       }
       break;
@@ -189,17 +191,17 @@ try {
     case "start-promise-worker": {
       activeWorkers[queueName!] = { lock: true, controller };
       startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule, controller.signal).catch((err) => {
-        console.error(`Promise worker for queue "${queueName}" stopped:`, err);
+        logger.error("Promise worker for queue {queueName} stopped: {error}", { queueName, error: err });
         Deno.exit(1);
       });
-      console.log(`Promise worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      logger.info("Promise worker started for queue: {queueName}. Press Ctrl+C to stop.", { queueName });
       await waitForAbort();
       break;
     }
     case "create-and-start-promise-worker": {
       activeWorkers[queueName!] = { lock: true, controller };
       await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule, controller.signal);
-      console.log(`Promise worker started for queue: ${queueName}. Press Ctrl+C to stop.`);
+      logger.info("Promise worker started for queue: {queueName}. Press Ctrl+C to stop.", { queueName });
       await waitForAbort();
       break;
     }
@@ -215,18 +217,18 @@ try {
         controller.signal,
         () => {
           if (createdInstanceId) delete activeWorkers[createdInstanceId];
-          console.log(`Worker for "${createdInstanceId}" stopped and DB lock released.`);
+          logger.info("Worker for {instanceId} stopped and DB lock released.", { instanceId: createdInstanceId });
         },
       );
       if (!fsm_instance) {
-        console.error(`Error: Failed to create FSM instance for "${fsmName}" v${fsmVersion}.`);
+        logger.error("Failed to create FSM instance for {fsmName} v{fsmVersion}.", { fsmName, fsmVersion });
         Deno.exit(1);
       }
       createdInstanceId = fsm_instance.fsm_instance_id;
       activeWorkers[createdInstanceId] = { lock: true, controller };
-      console.log(`FSM instance created: ${createdInstanceId}.`);
+      logger.info("FSM instance created: {instanceId}.", { instanceId: createdInstanceId });
       if (workerResult?.status === "fail") {
-        console.error(`Error: ${workerResult.message}`);
+        logger.error("Error: {message}", { message: workerResult.message });
         Deno.exit(1);
       }
       break;
@@ -235,18 +237,18 @@ try {
       const { Pool } = await import("pg");
       const stopPool = new Pool({ connectionString: resolvedDbUrl });
       await stopFSMWorker({ db: stopPool, useSupabase: false }, queueName!);
-      console.log(`Stop signal sent for worker queue: ${queueName}`);
+      logger.info("Stop signal sent for worker queue: {queueName}", { queueName });
       await stopPool.end();
       break;
     }
     default:
-      console.error(`Error: Unknown command "${command}"\n`);
+      logger.error("Unknown command: {command}", { command });
       printHelp();
       Deno.exit(1);
   }
 
-  console.log(`\nCommand "${command}" completed.`);
+  logger.info("Command {command} completed.", { command });
 } catch (err) {
-  console.error(`\nCommand "${command}" failed:`, err);
+  logger.error("Command {command} failed: {error}", { command, error: err });
   Deno.exit(1);
 }

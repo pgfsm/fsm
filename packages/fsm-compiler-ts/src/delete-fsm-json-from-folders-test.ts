@@ -30,6 +30,6 @@ dotenv.config({ path: "./../../.env" });
   const outputFSM = await deleteFsmJSONFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
 
 
-  // console.log("✅ All workflows inserted successfully");
+  
 })();
 

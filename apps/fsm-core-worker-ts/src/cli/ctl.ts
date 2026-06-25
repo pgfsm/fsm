@@ -1,7 +1,8 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { Pool } from "pg";
-
+import { getLogger } from "@logtape/logtape";
+import { configureWorkerLogger } from "../logger.ts";
 import {
   bootstrapFsmModules,
   startFSMWorkerWithDBLock,
@@ -10,6 +11,9 @@ import {
 import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
 import { createFsmInstanceFromName } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
+
+const logger = getLogger(["@pgfsm/worker", "ctl"]);
+await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "context", "db-url"],
@@ -26,7 +30,7 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 fsm-worker ctl — FSM control CLI
 
 USAGE
@@ -90,7 +94,7 @@ if (command === "stop") {
 }
 
 if (missing.length > 0) {
-  console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
+  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
   printHelp();
   Deno.exit(1);
 }
@@ -99,7 +103,7 @@ if (fsmFolderPath) {
   try {
     await Deno.stat(fsmFolderPath);
   } catch {
-    console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
+    logger.error("--fsm-folder-path does not exist: {path}", { path: fsmFolderPath });
     Deno.exit(1);
   }
 }
@@ -114,11 +118,11 @@ let shutdownRequested = false;
 
 const onSignal = () => {
   if (shutdownRequested) {
-    console.log("\nForce exit.");
+    logger.info("Force exit.");
     Deno.exit(0);
   }
   shutdownRequested = true;
-  console.log("\nShutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
+  logger.info("Shutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
   controller.abort();
 };
 
@@ -135,7 +139,7 @@ try {
         try {
           context = JSON.parse(contextArg);
         } catch {
-          console.error(`Error: --context is not valid JSON: ${contextArg}`);
+          logger.error("--context is not valid JSON: {context}", { context: contextArg });
           Deno.exit(1);
         }
       }
@@ -144,10 +148,10 @@ try {
       const result = await createFsmInstanceFromName(deps, fsmName!, fsmVersion!, context, true) as Record<string, Json> | null;
       await pool.end();
       if (!result || !result["fsm_instance_id"]) {
-        console.error("Error: Failed to create FSM instance.");
+        logger.error("Failed to create FSM instance.");
         Deno.exit(1);
       }
-      console.log(result["fsm_instance_id"]);
+      logger.info(result["fsm_instance_id"]);
       break;
     }
 
@@ -184,11 +188,11 @@ try {
         controller.signal,
         () => {
           delete activeWorkers[queueName!];
-          console.log(`Worker for "${queueName}" stopped and DB lock released.`);
+          logger.info("Worker for {queueName} stopped and DB lock released.", { queueName });
         },
       );
       if (result.status === "fail") {
-        console.error(`Error: ${result.message}`);
+        logger.error("Error: {message}", { message: result.message });
         Deno.exit(1);
       }
       break;
@@ -197,19 +201,19 @@ try {
     case "stop": {
       const pool = new Pool({ connectionString: resolvedDbUrl });
       await stopFSMWorker({ db: pool, useSupabase: false }, queueName!);
-      console.log(`Stop signal sent for worker queue: ${queueName}`);
+      logger.info("Stop signal sent for worker queue: {queueName}", { queueName });
       await pool.end();
       break;
     }
 
     default:
-      console.error(`Error: Unknown command "${command}"\n`);
+      logger.error("Unknown command: {command}", { command });
       printHelp();
       Deno.exit(1);
   }
 
-  console.log(`\nCommand "${command}" completed.`);
+  logger.info("Command {command} completed.", { command });
 } catch (err) {
-  console.error(`\nCommand "${command}" failed:`, err);
+  logger.error("Command {command} failed: {error}", { command, error: err });
   Deno.exit(1);
 }

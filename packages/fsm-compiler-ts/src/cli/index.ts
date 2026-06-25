@@ -1,6 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
-
+import { getLogger } from "@logtape/logtape";
 import { configureCompilerLogger } from "../logger.ts";
 import {
   deleteFsmJSONFromFolders,
@@ -15,6 +15,9 @@ import {
   validatePromisePluginLoadFromFolders,
 } from "../index.ts";
 import type { WorkflowType, ActorReference } from "../index.ts";
+
+const logger = getLogger(["@pgfsm/compiler", "cli"]);
+await configureCompilerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["command", "folder", "workflow-type", "skip-dirs", "available-actors", "db-url"],
@@ -32,7 +35,7 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 fsm-compiler — FSM JSON compiler CLI
 
 USAGE
@@ -90,7 +93,7 @@ const skipDirs = args["skip-dirs"] ? args["skip-dirs"].split(",").map((s: string
 
 const VALID_WORKFLOW_TYPES: string[] = ["fsm", "sharedFsm", "sharedPromise", "promise"];
 if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
-  console.error(`Error: Invalid --workflow-type "${workflowType}". Must be one of: ${VALID_WORKFLOW_TYPES.join(", ")}\n`);
+  logger.error("Invalid --workflow-type: {workflowType}. Must be one of: {valid}", { workflowType, valid: VALID_WORKFLOW_TYPES.join(", ") });
   printHelp();
   Deno.exit(1);
 }
@@ -103,7 +106,7 @@ if (!folder) missing.push("--folder");
 if (command && needsWorkflowType.includes(command) && !workflowType) missing.push("--workflow-type");
 
 if (missing.length > 0) {
-  console.error(`Error: Missing required arguments: ${missing.join(", ")}\n`);
+  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
   printHelp();
   Deno.exit(1);
 }
@@ -113,11 +116,11 @@ if (folder) {
     const stat = await Deno.stat(folder);
     // generate accepts .ts/.json files too; all other commands require a directory
     if (command !== "generate" && !stat.isDirectory) {
-      console.error(`Error: --folder "${folder}" is not a directory.`);
+      logger.error("--folder is not a directory: {folder}", { folder });
       Deno.exit(1);
     }
   } catch {
-    console.error(`Error: --folder "${folder}" does not exist.`);
+    logger.error("--folder does not exist: {folder}", { folder });
     Deno.exit(1);
   }
 }
@@ -129,7 +132,7 @@ async function loadAvailableActors(): Promise<ActorReference[]> {
     const content = await Deno.readTextFile(actorsFile);
     return JSON.parse(content) as ActorReference[];
   } catch (err) {
-    console.error(`Error: Failed to read --available-actors file "${actorsFile}":`, err);
+    logger.error("Failed to read --available-actors file {actorsFile}: {error}", { actorsFile, error: err });
     Deno.exit(1);
   }
 }
@@ -140,14 +143,12 @@ async function buildDeps(connectionString?: string) {
     return Deno.env.get("DATABASE_URL");
   })();
   if (!dbUrl) {
-    console.error("Error: No database connection string provided. Use --db-url <url> or set DATABASE_URL in .env");
+    logger.error("No database connection string provided. Use --db-url <url> or set DATABASE_URL in .env");
     Deno.exit(1);
   }
   const { Pool } = await import("pg");
   return { db: new Pool({ connectionString: dbUrl }) };
 }
-
-await configureCompilerLogger();
 
 try {
   switch (command) {
@@ -162,7 +163,7 @@ try {
         } else if (folder!.endsWith(".json")) {
           await generateFsmJSONFromConfigFile(absPath, workflowType ?? "fsm", args["show-recommendation"]);
         } else {
-          console.error(`Error: --folder "${folder}" is not a recognized type. Use a .ts file, a .json file, or a directory.`);
+          logger.error("--folder is not a recognized type. Use a .ts file, a .json file, or a directory: {folder}", { folder });
           Deno.exit(1);
         }
       } else {
@@ -204,13 +205,13 @@ try {
       break;
     }
     default:
-      console.error(`Error: Unknown command "${command}"\n`);
+      logger.error("Unknown command: {command}", { command });
       printHelp();
       Deno.exit(1);
   }
 
-  console.log(`\nCommand "${command}" completed successfully.`);
+  logger.info("Command {command} completed successfully.", { command });
 } catch (err) {
-  console.error(`\nCommand "${command}" failed:`, err);
+  logger.error("Command {command} failed: {error}", { command, error: err });
   Deno.exit(1);
 }

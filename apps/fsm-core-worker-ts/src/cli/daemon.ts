@@ -1,9 +1,12 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
-
+import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { runFsmDispatchDaemon } from "../run-fsm-dispatch-daemon.ts";
 import type { FsmStartupConfig } from "../bootstrap-fsm-modules.ts";
+
+const logger = getLogger(["@pgfsm/worker", "daemon"]);
+await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["fsm-folder-path", "db-url", "max-concurrency"],
@@ -17,7 +20,7 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  console.log(`
+  logger.info(`
 fsm-worker daemon — FSM dispatcher daemon
 
 USAGE
@@ -50,12 +53,12 @@ const maxConcurrencyArg = args["max-concurrency"];
 const DEFAULT_MAX_CONCURRENCY = 8;
 const maxConcurrency = maxConcurrencyArg ? Number(maxConcurrencyArg) : DEFAULT_MAX_CONCURRENCY;
 if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
-  console.error(`Error: --max-concurrency must be a positive integer, got "${maxConcurrencyArg}".`);
+  logger.error("--max-concurrency must be a positive integer, got: {value}", { value: maxConcurrencyArg });
   Deno.exit(1);
 }
 
 if (!fsmFolderPath) {
-  console.error("Error: --fsm-folder-path is required\n");
+  logger.error("--fsm-folder-path is required");
   printHelp();
   Deno.exit(1);
 }
@@ -63,12 +66,11 @@ if (!fsmFolderPath) {
 try {
   await Deno.stat(fsmFolderPath);
 } catch {
-  console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
+  logger.error("--fsm-folder-path does not exist: {path}", { path: fsmFolderPath });
   Deno.exit(1);
 }
 
 dotenv.config({ path: ".env" });
-await configureWorkerLogger();
 const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
 
 const controller = new AbortController();
@@ -76,11 +78,11 @@ let shutdownRequested = false;
 
 const onSignal = () => {
   if (shutdownRequested) {
-    console.log("\nForce exit.");
+    logger.info("Force exit.");
     Deno.exit(0);
   }
   shutdownRequested = true;
-  console.log("\nShutdown requested — stopping daemon gracefully. Ctrl+C again to force exit...");
+  logger.info("Shutdown requested — stopping daemon gracefully. Ctrl+C again to force exit...");
   controller.abort();
 };
 
@@ -100,8 +102,8 @@ try {
     fsmConfig,
     { signal: controller.signal, maxConcurrency },
   );
-  console.log("\nDaemon stopped.");
+  logger.info("Daemon stopped.");
 } catch (err) {
-  console.error("\nDaemon failed:", err);
+  logger.error("Daemon failed: {error}", { error: err });
   Deno.exit(1);
 }

@@ -153,10 +153,7 @@ export async function validateAndLoadFsmFromFolders(
                   availableActors,
                 );
 
-                console.log(
-                  `Validation result for ${dirEntry.name}/${subEntry.name}:`,
-                  folderResult,
-                );
+                logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
 
                 if (folderResult.isFsmModuleVerified) {
                   const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, dirEntry.name, subEntry.name);

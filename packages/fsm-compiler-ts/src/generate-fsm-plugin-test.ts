@@ -21,6 +21,6 @@ dotenv.config({ path: "./../../.env" });
   // const skipFSMDirs = [];
   const outputSharedFSM = await generateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs);
   const outputFSM = await generateFsmPluginFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
-  // console.log("✅ All workflows inserted successfully");
+  
 })();
 
