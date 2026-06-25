@@ -22,6 +22,9 @@ const EnvSchema = z.object({
   DATABASE_AUTH_TOKEN: z.string().optional(),
   CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
   PARSEFSM: z.string().optional().default("false"),
+  OTEL_DENO: z.string().optional().default("false"),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_SERVICE_NAME: z.string().default("pgfsm-api"),
 }).superRefine((input, ctx) => {
   if (input.NODE_ENV === "production" && !input.DATABASE_AUTH_TOKEN) {
     ctx.addIssue({

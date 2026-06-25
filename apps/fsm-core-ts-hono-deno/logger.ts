@@ -4,6 +4,7 @@ import {
   type LogRecord,
   type Sink,
 } from "@logtape/logtape";
+import { getOpenTelemetrySink } from "@logtape/otel";
 // import { AsyncLocalStorage } from "node:async_hooks";
 import env from "./env.ts";
 
@@ -37,12 +38,12 @@ export type LogLevel = "debug" | "info" | "warning" | "error" | "fatal" | "silen
 type ActiveLevel = "debug" | "info" | "warning" | "error" | "fatal";
 
 // "silent" maps to a noop sink at the highest active level so nothing is emitted.
-// All other levels pass through to the console sink.
-function makeLoggerEntry(category: string[], level: LogLevel) {
+// All other levels pass through to the provided active sinks.
+function makeLoggerEntry(category: string[], level: LogLevel, activeSinks: string[]) {
   if (level === "silent") {
     return { category, lowestLevel: "fatal" as const, sinks: ["noop"] };
   }
-  return { category, lowestLevel: level as ActiveLevel, sinks: ["console"] };
+  return { category, lowestLevel: level as ActiveLevel, sinks: activeSinks };
 }
 
 export async function configureApiLogger(): Promise<void> {
@@ -58,14 +59,20 @@ export async function configureApiLogger(): Promise<void> {
   const consoleSink = isTerminal ? getSummaryConsoleSink() : getConsoleSink();
   const noopSink: Sink = () => {};
 
+  const otlpEndpoint = env!.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const otelEnabled = env!.OTEL_DENO === "true" && !!otlpEndpoint;
+  const activeSinks = otelEnabled ? ["console", "otel"] : ["console"];
+  const sinks: Record<string, Sink> = { console: consoleSink, noop: noopSink };
+  if (otelEnabled) sinks.otel = getOpenTelemetrySink();
+
   await configure({
     // contextLocalStorage: new AsyncLocalStorage(),
-    sinks: { console: consoleSink, noop: noopSink },
+    sinks,
     loggers: [
-      makeLoggerEntry(["@pgfsm/api"],      levels.api),
-      makeLoggerEntry(["@pgfsm/worker"],   levels.worker),
-      makeLoggerEntry(["@pgfsm/compiler"], levels.compiler),
-      makeLoggerEntry(["@pgfsm/db"],       levels.db),
+      makeLoggerEntry(["@pgfsm/api"],      levels.api,      activeSinks),
+      makeLoggerEntry(["@pgfsm/worker"],   levels.worker,   activeSinks),
+      makeLoggerEntry(["@pgfsm/compiler"], levels.compiler, activeSinks),
+      makeLoggerEntry(["@pgfsm/db"],       levels.db,       activeSinks),
       metaLogger,
     ],
   });
