@@ -81,6 +81,21 @@ export async function archiveMessage(
   }
 }
 
+export async function sendMessage(
+  deps: DBDeps,
+  queueName: string,
+  message: unknown,
+): Promise<bigint | null> {
+  try {
+    const text = `SELECT ${QUEUE_SCHEMA}.send($1::text, $2::jsonb) AS msg_id`;
+    const res = await deps.db.query<{ msg_id: bigint }>(text, [queueName, JSON.stringify(message)]);
+    return res.rows?.[0]?.msg_id ?? null;
+  } catch (err) {
+    logger.error("Error in sendMessage: {error}", { error: err });
+    throw new Error("Failed to send message to queue", { cause: err });
+  }
+}
+
 export async function pgmqQueueExists(
   deps: DBDeps,
   queueName: string,

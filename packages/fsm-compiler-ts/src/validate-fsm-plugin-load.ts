@@ -279,13 +279,14 @@ export async function validateFsmPluginLoadFromFolder(
   internalActors = actors.filter(actor => actor.fsmType === 'promise').map(actor => ({ ...actor, resolved: true, fsmName: actor.src, fsmAbsFolderPath: absPath, fsmRelativeFolderPath: relPath }));
   externalActors = actors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
 
+  // Actors are resolved via internalActors/externalActors below; skip module validation here
   const outputValidateLanguageModules = await validateLanguageModules(
     absPath,
     "typescript",
     actions,
     guards,
     delays,
-    actors,
+    [],
   );
   failedMethods = outputValidateLanguageModules.failedMethods;
   fsmModuleDefinition = outputValidateLanguageModules.modules;

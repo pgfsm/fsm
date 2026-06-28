@@ -186,6 +186,60 @@ export const stop = createRoute({
   },
 });
 
+export const createAndDispatch = createRoute({
+  path: "/fsm/dispatch",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        fsm_name: z.string().describe("The FSM definition name"),
+        fsm_version: z.string().describe("The FSM version"),
+        fsm_context: z.record(z.unknown()).optional().describe(
+          "Initial FSM context (defaults to {})",
+        ),
+      }),
+      "The fsm configuration",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ data: z.object({ fsm_instance: z.unknown() }) }),
+      "FSM instance created and enqueued to daemon start queue",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
+export const resumeViaDispatch = createRoute({
+  path: "/fsm/resume-dispatch",
+  method: "post",
+  request: {
+    body: jsonContentRequired(
+      z.object({
+        queue: z.string().describe(
+          "The FSM instance ID to enqueue for resume",
+        ),
+      }),
+      "The fsmworker configuration",
+    ),
+  },
+  tags,
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ data: z.object({ queued: z.boolean(), queue: z.string() }) }),
+      "Resume enqueued to daemon resume queue",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({ error: z.string() }),
+      "Error",
+    ),
+  },
+});
+
 export type ListRoute = typeof list;
 export type GetOneRoute = typeof getOne;
 export type CreateRoute = typeof create;
@@ -193,3 +247,5 @@ export type SendRoute = typeof send;
 export type CurrentActiveRoute = typeof currentActive;
 export type ResumeRoute = typeof resume;
 export type StopRoute = typeof stop;
+export type CreateAndDispatchRoute = typeof createAndDispatch;
+export type ResumeViaDispatchRoute = typeof resumeViaDispatch;

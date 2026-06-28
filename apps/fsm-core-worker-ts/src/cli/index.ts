@@ -9,6 +9,7 @@ import {
   createAndStartPromiseWorker,
   stopFSMWorker,
   bootstrapFsmModules,
+  pgListenerForWorkerStopEvent,
 } from "../index.ts";
 import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
 
@@ -146,16 +147,16 @@ let verifiedFsmModules: Awaited<ReturnType<typeof bootstrapFsmModules>>["verifie
 
 if (command && needsFsmDetails.includes(command)) {
   const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath! } };
-  const result = await bootstrapFsmModules({ connectionString: resolvedDbUrl }, fsmConfig, {
-    onWorkerStop: (queueName) => {
-      if (activeWorkers[queueName]) {
-        activeWorkers[queueName].lock = false;
-        activeWorkers[queueName].controller.abort();
-      }
-    },
-  });
+  const result = await bootstrapFsmModules({ connectionString: resolvedDbUrl }, fsmConfig);
   pool = result.pool;
   verifiedFsmModules = result.verifiedFsmModules;
+  await pgListenerForWorkerStopEvent(pool, (queueName) => {
+    if (activeWorkers[queueName]) {
+      activeWorkers[queueName].lock = false;
+      activeWorkers[queueName].controller.abort();
+    }
+  });
+  logger.info("PG LISTEN active on channel: fsm_worker_stop");
 }
 
 const deps = { db: pool!, useSupabase: false };

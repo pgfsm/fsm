@@ -45,15 +45,13 @@ export default async function createApp(
   const { pool, verifiedFsmModules } = await bootstrapFsmModules(
     { connectionString: env.DATABASE_URL },
     fsmConfig,
-    {
-      onWorkerStop: (queueName) => {
-        if (activeWorkers[queueName]) {
-          activeWorkers[queueName].lock = false;
-          activeWorkers[queueName].controller.abort();
-        }
-      },
-    },
   );
+  await pgListenerForWorkerStopEvent(pool, (queueName) => {
+    if (activeWorkers[queueName]) {
+      activeWorkers[queueName].lock = false;
+      activeWorkers[queueName].controller.abort();
+    }
+  });
 
   pool.on("connect", () => {
     logger.debug("Database pool: new connection established");
