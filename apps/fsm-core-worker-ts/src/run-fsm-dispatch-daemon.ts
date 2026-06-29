@@ -6,6 +6,7 @@ const logger = getLogger(["@pgfsm/worker", "dispatcher"]);
 import { bootstrapFsmModules } from "./bootstrap-fsm-modules.ts";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import { archiveMessage, readMessage } from "@pgfsm/db";
+import type { Pool } from "pg";
 
 const DISPATCH_QUEUE_START = "master_worker_dispatch_queue_start";
 const DISPATCH_QUEUE_RESUME = "master_worker_dispatch_queue_resume";
@@ -51,27 +52,37 @@ class Semaphore {
 
 type ActiveWorker = { controller: AbortController };
 
+export type DaemonOptions = {
+  signal?: AbortSignal;
+  visibilityTimeout?: number;
+  maxConcurrency?: number;
+  /** Called when a fsm_worker_stop pg_notify fires, after the daemon's own abort. */
+  onWorkerStop?: (instanceId: string) => void;
+};
+
+export type DaemonHandle = {
+  pool: Pool;
+  verifiedFsmModules: VerifiedFsmModule[];
+  /** Resolves when the daemon exits cleanly. Does NOT close the pool. */
+  daemon: Promise<void>;
+  getActiveWorkerIds: () => string[];
+};
+
 /**
  * FSM dispatch daemon (KB-001 §3.1 / §5.1).
  *
- * Replaces the previous "spawn one `Deno.Command` child process per dispatch
- * message" model — which made connections/processes scale with the number of
- * live instances — with a bounded standing fleet:
+ * Sets up the daemon (bootstraps modules, wires pg LISTEN, spawns actor
+ * processes) and returns immediately with a handle. The caller owns the pool
+ * and must close it after `daemon` resolves.
  *
- *   - one shared pg Pool (from bootstrap) for every instance it drives;
- *   - a semaphore caps concurrent instances at `maxConcurrency`;
- *   - each instance is leased in-process via `startFSMWorkerWithDBLock`
- *     (atomic `lock_fsm_instance`), so connections scale with fleet size, not
- *     instance count;
- *   - the pg LISTEN stop signal aborts the matching instance's worker;
- *   - on shutdown all in-flight workers are aborted and drained before the
- *     pool closes.
+ * Use `runFsmDispatchDaemon` for standalone CLI use where pool lifecycle is
+ * managed automatically.
  */
-export async function runFsmDispatchDaemon(
+export async function startFsmDispatchDaemon(
   dbConfig: DbConfig,
   fsmConfig: FsmStartupConfig,
-  options?: { signal?: AbortSignal; visibilityTimeout?: number; maxConcurrency?: number },
-): Promise<void> {
+  options?: DaemonOptions,
+): Promise<DaemonHandle> {
   const signal = options?.signal;
   const vt = options?.visibilityTimeout ?? DEFAULT_VT;
   const maxConcurrency = options?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
@@ -85,13 +96,12 @@ export async function runFsmDispatchDaemon(
   // Step 2: spawn a separate Deno process for each internal (promise) actor across
   // all verified FSM modules. Each process owns its own poll loop and lifecycle,
   // keeping actor execution isolated from the orchestrator fleet (KB-001 §3.2).
-  const actorProcesses: Deno.ChildProcess[] = [];
   const cliScriptPath = new URL("./cli/index.ts", import.meta.url).pathname;
 
   for (const fsm of verifiedFsmModules) {
     for (const actor of (fsm.internalActors ?? [])) {
       const queueName = `${fsm.fsmName}_${fsm.fsmVersion}_${actor.src}`;
-      const proc = new Deno.Command(Deno.execPath(), {
+      new Deno.Command(Deno.execPath(), {
         args: [
           "run", "--allow-all",
           cliScriptPath,
@@ -106,7 +116,6 @@ export async function runFsmDispatchDaemon(
         stdout: "inherit",
         stderr: "inherit",
       }).spawn();
-      actorProcesses.push(proc);
       logger.info("Spawned actor process for {src} (queue: {queue})", { src: actor.src, queue: queueName });
     }
   }
@@ -123,7 +132,15 @@ export async function runFsmDispatchDaemon(
     }
   });
 
-  // Steps 3 & 4 share one semaphore and activeWorkers map so total concurrency
+  // Step 3: wire the pg LISTEN stop signal before starting loops so no stop
+  // events are missed between setup and the first poll iteration.
+  await pgListenerForWorkerStopEvent(pool, (instanceId) => {
+    activeWorkers.get(instanceId)?.controller.abort();
+    options?.onWorkerStop?.(instanceId);
+  });
+  logger.info("PG LISTEN active on channel: fsm_worker_stop");
+
+  // Steps 4 & 5 share one semaphore and activeWorkers map so total concurrency
   // is bounded across both queues together.
   const runDispatchLoop = async (queue: string) => {
     logger.info("Polling {queue} (maxConcurrency={maxConcurrency}, vt={vt}s)", { queue, maxConcurrency, vt });
@@ -199,27 +216,43 @@ export async function runFsmDispatchDaemon(
     }
   };
 
-  // Step 3: poll master_worker_dispatch_queue_start — new FSM instances.
-  // Step 4: poll master_worker_dispatch_queue_resume — instances resuming after an await.
-  // pg_notify("fsm_worker_stop", <instance_id>) → abort just that worker.
-  await pgListenerForWorkerStopEvent(pool, (queueName) => {
-    activeWorkers.get(queueName)?.controller.abort();
-  });
-  logger.info("PG LISTEN active on channel: fsm_worker_stop");
-
-  await Promise.all([
+  // Step 4: poll master_worker_dispatch_queue_start — new FSM instances.
+  // Step 5: poll master_worker_dispatch_queue_resume — instances resuming after an await.
+  const daemon = Promise.all([
     runDispatchLoop(DISPATCH_QUEUE_START),
     runDispatchLoop(DISPATCH_QUEUE_RESUME),
-  ]);
+  ]).then(async () => {
+    // Graceful drain: abort any stragglers and wait for slots to free.
+    for (const { controller } of activeWorkers.values()) {
+      controller.abort();
+    }
+    while (activeWorkers.size > 0) {
+      await sleep(DRAIN_POLL_MS);
+    }
+    logger.info("Dispatcher stopped");
+  });
 
-  // Graceful drain: abort any stragglers and wait for slots to free.
-  for (const { controller } of activeWorkers.values()) {
-    controller.abort();
-  }
-  while (activeWorkers.size > 0) {
-    await sleep(DRAIN_POLL_MS);
-  }
+  return {
+    pool,
+    verifiedFsmModules,
+    daemon,
+    getActiveWorkerIds: () => [...activeWorkers.keys()],
+  };
+}
 
+/**
+ * Standalone daemon entry point for CLI use. Starts the daemon, awaits it,
+ * then closes the pool. Prefer `startFsmDispatchDaemon` when embedding the
+ * daemon inside another process (e.g. the API server) so the caller controls
+ * pool lifecycle.
+ */
+export async function runFsmDispatchDaemon(
+  dbConfig: DbConfig,
+  fsmConfig: FsmStartupConfig,
+  options?: DaemonOptions,
+): Promise<void> {
+  const { pool, daemon } = await startFsmDispatchDaemon(dbConfig, fsmConfig, options);
+  await daemon;
   await pool.end();
-  logger.info("Dispatcher stopped");
+  logger.info("Pool closed");
 }

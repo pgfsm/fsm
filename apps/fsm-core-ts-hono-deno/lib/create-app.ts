@@ -1,8 +1,8 @@
 import type { Schema } from "hono";
 import { cors } from "hono/cors";
 import { getLogger } from "@logtape/logtape";
-import { bootstrapFsmModules, pgListenerForWorkerStopEvent } from "@pgfsm/worker";
-import { activeWorkers } from "../routes/fsm/fsm.handlers.ts";
+import { startFsmDispatchDaemon } from "@pgfsm/worker";
+import { activeWorkers } from "../routes/fsm/fsm.handlers.inprocess.ts";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
 
@@ -42,16 +42,19 @@ export default async function createApp(
   basePath = "",
   fsmConfig?: FsmStartupConfig,
 ) {
-  const { pool, verifiedFsmModules } = await bootstrapFsmModules(
+  const { pool, verifiedFsmModules, daemon } = await startFsmDispatchDaemon(
     { connectionString: env.DATABASE_URL },
     fsmConfig,
+    {
+      onWorkerStop: (instanceId) => {
+        if (activeWorkers[instanceId]) {
+          activeWorkers[instanceId].lock = false;
+          activeWorkers[instanceId].controller.abort();
+        }
+      },
+    },
   );
-  await pgListenerForWorkerStopEvent(pool, (queueName) => {
-    if (activeWorkers[queueName]) {
-      activeWorkers[queueName].lock = false;
-      activeWorkers[queueName].controller.abort();
-    }
-  });
+  daemon.catch((err) => logger.error("Dispatch daemon error: {error}", { error: err }));
 
   pool.on("connect", () => {
     logger.debug("Database pool: new connection established");
