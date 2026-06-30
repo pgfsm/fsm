@@ -36,7 +36,7 @@ function printHelp(): void {
 fsm-worker — FSM worker CLI
 
 USAGE
-  deno run --allow-all src/cli/index.ts -c <command> [options]
+  deno run --allow-all src/cli/worker.ts -c <command> [options]
 
 COMMANDS
   resume-worker                     Resume FSM worker with DB advisory lock on an existing queue (requires -q)
@@ -57,11 +57,11 @@ OPTIONS
   -h, --help                        Show this help message
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts -c resume-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
-  deno run --allow-all src/cli/index.ts -c start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
-  deno run --allow-all src/cli/index.ts -c create-and-start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
-  deno run --allow-all src/cli/index.ts -c stop-worker -q <instance-uuid>
+  deno run --allow-all src/cli/worker.ts -c resume-worker -q creditCheck_v01 -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
+  deno run --allow-all src/cli/worker.ts -c start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
+  deno run --allow-all src/cli/worker.ts -c create-and-start-worker -n creditCheck -v 1 -f /abs/path/to/fsm --validate-plugin
+  deno run --allow-all src/cli/worker.ts -c create-and-start-promise-worker -q checkBureau_v01 -n checkBureau -v 1 -t checkBureau -f /abs/path/to/fsm
+  deno run --allow-all src/cli/worker.ts -c stop-worker -q <instance-uuid>
 `);
 }
 

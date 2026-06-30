@@ -2,42 +2,43 @@ import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
-import { runFsmDispatchDaemon } from "../run-fsm-dispatch-daemon.ts";
+import { runFsmlet } from "../fsmlet.ts";
 import type { FsmStartupConfig } from "../bootstrap-fsm-modules.ts";
 
-const logger = getLogger(["@pgfsm/worker", "daemon"]);
+const logger = getLogger(["@pgfsm/fsmlet", "cli"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
-  string: ["fsm-folder-path", "db-url", "max-concurrency"],
+  string: ["fsm-folder-path", "db-url", "max-concurrency", "fsmlet-id"],
   boolean: ["help"],
   alias: {
     h: "help",
     f: "fsm-folder-path",
     d: "db-url",
     m: "max-concurrency",
+    i: "fsmlet-id",
   },
 });
 
 function printHelp(): void {
   logger.info(`
-fsm-worker daemon — FSM dispatcher daemon
+fsmlet — FSM node agent (kubelet equivalent)
 
 USAGE
-  deno run --allow-all src/cli/daemon.ts -f <fsm-folder-path> [options]
+  deno run --allow-all src/cli/fsmlet.ts -f <fsm-folder-path> [options]
 
 OPTIONS
   -f, --fsm-folder-path <path>   Absolute path to FSM folder (required)
   -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
   -m, --max-concurrency <n>      Max FSM instances driven concurrently (default 8)
+  -i, --fsmlet-id <id>           Stable fsmlet identity (default: random UUID per startup)
   -h, --help                     Show this help message
 
 DESCRIPTION
-  Bootstraps FSM modules, sets up the worker-stop listener, then polls
-  master_worker_dispatch_queue and drives each new FSM instance in-process
-  on a bounded standing fleet (KB-001 §3.1). One shared pg Pool serves the
-  whole fleet, so connection count scales with --max-concurrency, not with
-  the number of live instances.
+  Registers itself in fsm_daemon_node, creates its private pgmq queues, then
+  polls daemon_{id}_start and daemon_{id}_resume. The fsmscheduler routes
+  messages here based on module availability and capacity. Sends heartbeats
+  every 5 s so the scheduler can score this node. Deregisters cleanly on shutdown.
 `);
 }
 
@@ -49,6 +50,7 @@ if (args.help) {
 const fsmFolderPath = args["fsm-folder-path"];
 const dbUrl = args["db-url"];
 const maxConcurrencyArg = args["max-concurrency"];
+const fsmletId = args["fsmlet-id"] ?? Deno.env.get("FSMLET_ID");
 
 const DEFAULT_MAX_CONCURRENCY = 8;
 const maxConcurrency = maxConcurrencyArg ? Number(maxConcurrencyArg) : DEFAULT_MAX_CONCURRENCY;
@@ -82,7 +84,7 @@ const onSignal = () => {
     Deno.exit(0);
   }
   shutdownRequested = true;
-  logger.info("Shutdown requested — stopping daemon gracefully. Ctrl+C again to force exit...");
+  logger.info("Shutdown requested — stopping fsmlet gracefully. Ctrl+C again to force exit...");
   controller.abort();
 };
 
@@ -92,18 +94,17 @@ Deno.addSignalListener("SIGTERM", onSignal);
 const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath } };
 
 // Size the shared pool for the fleet: one connection per concurrent worker,
-// plus the dedicated LISTEN connection (pgListenerForWorkerStopEvent) and a
-// little headroom. KB-001 §3.4 — keep this small and front it with a pooler.
+// plus the dedicated LISTEN connection and a little headroom. KB-001 §3.4.
 const poolMax = maxConcurrency + 4;
 
 try {
-  await runFsmDispatchDaemon(
+  await runFsmlet(
     { connectionString: resolvedDbUrl, max: poolMax },
     fsmConfig,
-    { signal: controller.signal, maxConcurrency },
+    { signal: controller.signal, maxConcurrency, fsmletId },
   );
-  logger.info("Daemon stopped.");
+  logger.info("Fsmlet stopped.");
 } catch (err) {
-  logger.error("Daemon failed: {error}", { error: err });
+  logger.error("Fsmlet failed: {error}", { error: err });
   Deno.exit(1);
 }

@@ -1,7 +1,7 @@
 import type { Schema } from "hono";
 import { cors } from "hono/cors";
 import { getLogger } from "@logtape/logtape";
-import { startFsmDispatchDaemon } from "@pgfsm/worker";
+import { startFsmlet } from "@pgfsm/worker";
 import { activeWorkers } from "../routes/fsm/fsm.handlers.inprocess.ts";
 
 export type { FsmFolderConfig, FsmStartupConfig } from "./types.ts";
@@ -42,7 +42,7 @@ export default async function createApp(
   basePath = "",
   fsmConfig?: FsmStartupConfig,
 ) {
-  const { pool, verifiedFsmModules, daemon } = await startFsmDispatchDaemon(
+  const { pool, verifiedFsmModules, daemon } = await startFsmlet(
     { connectionString: env.DATABASE_URL },
     fsmConfig,
     {

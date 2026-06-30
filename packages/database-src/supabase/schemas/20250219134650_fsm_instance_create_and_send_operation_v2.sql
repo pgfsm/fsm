@@ -128,7 +128,6 @@ DECLARE
     fsm_instance_id uuid;
     send_event_result jsonb := NULL;
     derived_fsm_type text;
-    dispatch_queue_exists boolean;
     fsm_instance_row      fsm_core.fsm_instance;
 BEGIN
     -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json and get fsm_type
@@ -164,18 +163,12 @@ BEGIN
     FROM fsm_core.fsm_transitions t
     WHERE t.fsm_name = input_fsm_name AND t.fsm_version = input_fsm_version;
 
-    -- 4. Send to master_worker_dispatch_queue (create queue first if it does not exist)
-    SELECT EXISTS (
-        SELECT 1 FROM pgmq.list_queues() WHERE queue_name = 'master_worker_dispatch_queue'
-    ) INTO dispatch_queue_exists;
-
-    IF NOT dispatch_queue_exists THEN
-        PERFORM pgmq.create(queue_name := 'master_worker_dispatch_queue');
-    END IF;
-
-    PERFORM pgmq.send(
-        queue_name := 'master_worker_dispatch_queue',
-        msg        := to_jsonb(fsm_instance_row)
+    -- 4. Enqueue to fsm_dispatch_queue and notify the fsmscheduler.
+    PERFORM fsm_core.enqueue_fsm_dispatch_v2(
+        fsm_instance_id::text,
+        input_fsm_name,
+        input_fsm_version,
+        'start'
     );
 
     -- 5. Optionally create pgmq queue and send initial event

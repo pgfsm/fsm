@@ -9,5 +9,5 @@ export * from "./fsm-instance.ts";
 export * from "./fsm-instance-lock.ts";
 
 export type { Json } from "./database.types.ts";
-
-// If there are additional files, add them here
+export { enqueueDispatch, resumeEventForFsmWorker } from "./fsm-scheduler.ts";
+export type { FsmDispatchType, ResumeEventResult } from "./fsm-scheduler.ts";

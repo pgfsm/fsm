@@ -3,14 +3,13 @@ import { getLogger } from "@logtape/logtape";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
 import type { CreateAndDispatchRoute, ResumeViaDispatchRoute } from "./fsm.routes.ts";
-import { getSupabase } from "../../middlewares/supabase.ts";
-import { createFsmInstanceFromName, sendMessage, getFsmDataResolveStateValue } from "@pgfsm/db";
+import { createFsmInstanceFromName, enqueueDispatch, resumeEventForFsmWorker } from "@pgfsm/db";
+import type { Json } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/api", "fsm.dispatch"]);
 
-const DISPATCH_QUEUE_RESUME = "master_worker_dispatch_queue_resume";
-
-// createAndDispatch: creates FSM instance and enqueues it to the daemon start queue.
+// createAndDispatch: creates FSM instance then enqueues to the scheduler via
+// fsm_dispatch_queue. The scheduler selects a fsmlet and routes the work.
 export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> = async (c) => {
   const db = c.get("db");
   const deps = { db, useSupabase: false };
@@ -24,17 +23,20 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> = async 
       return c.json({ error: "Missing fsm_name" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
     }
 
+    // false = do not auto-enqueue to pgmq; we enqueue to fsm_dispatch_queue below.
     const fsm_instance = await createFsmInstanceFromName(
       deps,
       input_fsm_name,
       input_fsm_version,
-      input_fsm_context,
-      true,
-    );
+      input_fsm_context as Json,
+      false,
+    ) as Record<string, string> | null;
 
-    if (!fsm_instance) {
+    if (!fsm_instance?.fsm_instance_id) {
       return c.json({ error: "FSM instance creation failed" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
     }
+
+    await enqueueDispatch(deps, fsm_instance.fsm_instance_id, input_fsm_name, input_fsm_version ?? "", "start");
 
     return c.json({ data: { fsm_instance } }, HttpStatusCodes.OK);
   } catch (_err) {
@@ -43,11 +45,11 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> = async 
   }
 };
 
-// resumeViaDispatch: enqueues the FSM instance to the daemon resume queue.
+// resumeViaDispatch: single PG call — resume_event_for_fsm_worker_v2 looks up
+// fsm_name/version, inserts into fsm_dispatch_queue, and notifies the scheduler.
 export const resumeViaDispatch: AppRouteHandler<ResumeViaDispatchRoute> = async (c) => {
-  const supabase = getSupabase(c);
   const db = c.get("db");
-  const deps = { db, useSupabase: true, supabase };
+  const deps = { db, useSupabase: false };
   const body = c.req.valid("json");
   const queue = body.queue;
 
@@ -56,18 +58,13 @@ export const resumeViaDispatch: AppRouteHandler<ResumeViaDispatchRoute> = async 
       return c.json({ error: "Missing queue parameter" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
     }
 
-    const fsmData = await getFsmDataResolveStateValue(deps, queue);
-    if (!fsmData) {
-      return c.json({ error: "Invalid queue id — FSM instance not found" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    const result = await resumeEventForFsmWorker(deps, queue);
+
+    if (result.status === "fsm_not_found") {
+      return c.json({ error: "Invalid queue id — FSM instance not found" }, HttpStatusCodes.NOT_FOUND);
     }
 
-    await sendMessage(deps, DISPATCH_QUEUE_RESUME, {
-      id: queue,
-      fsm_name: fsmData.fsm_instance_row.fsm_name,
-      fsm_version: fsmData.fsm_instance_row.fsm_version,
-    });
-
-    return c.json({ data: { queued: true, queue } }, HttpStatusCodes.OK);
+    return c.json({ data: result }, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in resumeViaDispatch handler: {error}", { error: _err });
     return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
