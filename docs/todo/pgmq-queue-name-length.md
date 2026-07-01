@@ -1,6 +1,6 @@
 # pgmq Queue Name Length — TODOs
 
-See limitation: [pgmq-queue-name-length.md](../limitation/pgmq-queue-name-length.md)
+See limitation: [pgmq-queue-name-length.md](../limitations/pgmq-queue-name-length.md)
 
 ## Tasks
 
