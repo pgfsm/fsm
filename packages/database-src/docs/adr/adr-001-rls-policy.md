@@ -1,4 +1,4 @@
-# ADR-002: Do Not Use PostgreSQL Row Security Policies (RLS) in fsm_core
+# ADR-001: Do Not Use PostgreSQL Row Security Policies (RLS) in fsm_core
 
 **Status:** Accepted
 **Date:** 2026-06-08

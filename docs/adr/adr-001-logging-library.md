@@ -1,4 +1,4 @@
-# ADR-005: Logging Library — LogTape for @pgfsm/worker, @pgfsm/db, @pgfsm/compiler
+# ADR-001: Logging Library — LogTape for @pgfsm/worker, @pgfsm/db, @pgfsm/compiler
 
 **Status:** Accepted  
 **Date:** 2026-06-24

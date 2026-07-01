@@ -2,7 +2,7 @@
 
 **Status:** Knowledge Base / Design Guidance
 **Date:** 2026-06-13
-**Relates to:** ADR-003 (worker process model), ADR-004 (master dispatch queue)
+**Relates to:** [ADR-002 — Worker Execution Model](../adr/adr-002-worker-execution-model.md)
 
 ---
 
