@@ -1,0 +1,14 @@
+version = 1
+
+SPDX-PackageName = "FSM Framework"
+SPDX-PackageSupplier = "Niraj Kashyap <niraj.38.re@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/pgfsm/fsm"
+
+# Catch-all: the entire repository is Niraj Kashyap's original work under
+# Apache-2.0 (see NOTICE and LICENSE). "aggregate" precedence means any
+# per-file SPDX header added later takes priority over this bulk annotation.
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Niraj Kashyap <niraj.38.re@gmail.com>"
+SPDX-License-Identifier = "Apache-2.0"

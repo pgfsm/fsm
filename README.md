@@ -1,5 +1,7 @@
 # FSM Framework
 
+[![REUSE status](https://api.reuse.software/badge/github.com/pgfsm/fsm)](https://api.reuse.software/info/github.com/pgfsm/fsm)
+
 A framework for running versioned finite state machines inside PostgreSQL, with a Hono/Deno REST API.
 
 ## What it is

@@ -85,6 +85,25 @@ We discuss features in issues before implementation work begins.
 
 ---
 
+## Required Checks
+
+Every PR runs two automated gates that must pass before it can be merged:
+
+- **CLA Assistant** — verifies you've signed the [CLA](CLA.md). If not, the bot comments with a signing link; sign once and future PRs are cleared automatically.
+- **REUSE Compliance** — verifies every file has declared copyright + license info. New files are covered automatically by the catch-all in `REUSE.toml`. If you add third-party code under a different license, add its text to `LICENSES/` and a matching `[[annotations]]` block in `REUSE.toml`.
+
+## For Maintainers
+
+These two checks are only enforced if `main` has a branch protection rule requiring them. To enable it (**Settings → Branches → Add branch ruleset** for `main`):
+
+1. **Require a pull request before merging** — no direct pushes to `main`.
+2. **Require status checks to pass**, and mark these as required:
+   - `CLA Assistant`
+   - `REUSE Compliance`
+3. **Require branches to be up to date before merging** (recommended).
+
+Without this rule the checks are advisory only — a red ✗ would not actually block a merge.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE) and the terms of the [CLA](CLA.md).

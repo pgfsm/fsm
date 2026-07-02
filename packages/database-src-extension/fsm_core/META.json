@@ -30,11 +30,11 @@
    },
    "resources": {
       "bugtracker": {
-         "web": "https://github.com/nirajkashyap/fsm/issues/"
+         "web": "https://github.com/pgfsm/fsm/issues/"
       },
       "repository": {
-         "url": "git://github.com/nirajkashyap/fsm.git",
-         "web": "https://github.com/nirajkashyap/fsm/",
+         "url": "git://github.com/pgfsm/fsm.git",
+         "web": "https://github.com/pgfsm/fsm/",
          "type": "git"
       }
    },
