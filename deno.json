@@ -5,5 +5,10 @@
     "apps/fsm-core-worker-ts",
     "apps/fsm-core-ts-hono-deno",
     "packages/fsm-compiler-ts"
-  ]
+  ],
+  "fmt": {
+    "exclude": [
+      ".github/assets/**"
+    ]
+  }
 }
