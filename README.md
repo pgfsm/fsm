@@ -106,3 +106,8 @@ packages/
 - [Execution model](./execution-model.md) — how an event flows from API to archive
 - [PG→TS function mapping](./packages/database-src/docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
 - [Context map](./CONTEXT-MAP.md) — domain language per package
+
+## Contributing & Security
+
+- [Contributing guide](./CONTRIBUTING.md) — how to get involved
+- [Security policy](./SECURITY.md) — how to report a vulnerability
