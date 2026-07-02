@@ -2,6 +2,10 @@
 
 How an event flows from the REST API through PostgreSQL and back.
 
+<p align="center">
+  <img src="../.github/assets/execution-model.svg" alt="Execution model: an event flows Client → REST API → PostgreSQL (pgmq.send) → instance queue; a worker dequeues it, runs a macrostep (resolve state, microstep_v2, run actions), archives the result (persist state, pgmq.archive, notify parent), and loops back to readMessage()." width="90%">
+</p>
+
 ## Overview
 
 ```

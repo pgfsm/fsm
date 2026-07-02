@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 600" width="860" height="600" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" role="img" aria-label="FSM control plane: a dispatch entry flows from the API through the dispatch queue and scheduler to a fsmlet worker node.">
+  <style>
+    :root {
+      --bg: #ffffff; --panel: #f6f8fa; --panel-brd: #d0d7de;
+      --ink: #1f2328; --muted: #57606a; --line: #8c959f;
+      --accent: #0969da; --sched: #8250df; --node: #1a7f37;
+      --token: #0969da; --beat: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --panel: #161b22; --panel-brd: #30363d;
+        --ink: #e6edf3; --muted: #8b949e; --line: #6e7681;
+        --accent: #58a6ff; --sched: #bc8cff; --node: #3fb950;
+        --token: #58a6ff; --beat: #ff7b72;
+      }
+    }
+    .bg   { fill: var(--bg); }
+    .box  { fill: var(--panel); stroke: var(--panel-brd); stroke-width: 1.5; }
+    .grp  { fill: none; stroke: var(--panel-brd); stroke-width: 1.25; stroke-dasharray: 5 5; }
+    .title{ fill: var(--ink); font-weight: 700; }
+    .sub  { fill: var(--muted); }
+    .tag  { fill: var(--muted); font-style: italic; }
+    .grplbl { fill: var(--muted); font-weight: 700; letter-spacing: .08em; }
+    .spine{ stroke: var(--line); stroke-width: 2; fill: none; }
+    .flow { stroke: var(--accent); stroke-width: 2; fill: none;
+            stroke-dasharray: 4 8; stroke-linecap: round; }
+    .aAcc { fill: var(--accent); } .aSch { fill: var(--sched); } .aNode { fill: var(--node); }
+    .token{ fill: var(--token); } .beat { fill: var(--beat); }
+    .chip { fill: var(--bg); stroke: var(--panel-brd); stroke-width: 1.25; }
+    text  { font-size: 15px; }
+    .small{ font-size: 12.5px; }
+    .mono { font-size: 13px; }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="860" height="600" rx="10"/>
+
+  <!-- ── grouping frames ─────────────────────────────────────────── -->
+  <rect class="grp" x="180" y="28"  width="500" height="392" rx="12"/>
+  <text class="grplbl small" x="196" y="50">CONTROL PLANE</text>
+  <rect class="grp" x="180" y="452" width="500" height="120" rx="12"/>
+  <text class="grplbl small" x="196" y="474">WORKER NODE</text>
+
+  <!-- ── spine + flowing dashes ──────────────────────────────────── -->
+  <line class="spine" x1="430" y1="128" x2="430" y2="484"/>
+  <line class="flow"  x1="430" y1="128" x2="430" y2="484">
+    <animate attributeName="stroke-dashoffset" from="24" to="0" dur="0.9s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- ── stage 1: API / fsmctl ───────────────────────────────────── -->
+  <rect class="box" x="230" y="64" width="400" height="64" rx="10"/>
+  <text class="title" x="430" y="92"  text-anchor="middle">API  /  fsmctl</text>
+  <text class="sub small" x="430" y="112" text-anchor="middle">enqueue_fsm_dispatch_v2()  →  INSERT status='pending'</text>
+
+  <!-- ── stage 2: dispatch queue ─────────────────────────────────── -->
+  <rect class="box" x="230" y="192" width="400" height="64" rx="10"/>
+  <text class="title" x="430" y="220" text-anchor="middle">fsm_dispatch_queue</text>
+  <text class="sub small" x="430" y="240" text-anchor="middle">pending → scheduled → (deleted on claim)</text>
+
+  <!-- edge label: enqueue notifies the scheduler -->
+  <rect class="chip" x="292" y="274" width="276" height="28" rx="14"/>
+  <text class="mono" x="430" y="292" text-anchor="middle"><tspan class="tag">pg_notify(</tspan><tspan class="aAcc">'fsm_scheduler_work'</tspan><tspan class="tag">)</tspan></text>
+
+  <!-- ── stage 3: scheduler ──────────────────────────────────────── -->
+  <rect class="box" x="230" y="320" width="400" height="72" rx="10"/>
+  <text class="title" x="430" y="348" text-anchor="middle">fsmscheduler</text>
+  <text class="sub small" x="430" y="368" text-anchor="middle">schedule_next_pending() — pick node with</text>
+  <text class="sub small" x="430" y="384" text-anchor="middle">module · free slot · fresh heartbeat (&lt; 30s)</text>
+
+  <!-- edge label: scheduler notifies the chosen fsmlet -->
+  <rect class="chip" x="286" y="424" width="288" height="28" rx="14"/>
+  <text class="mono" x="430" y="442" text-anchor="middle"><tspan class="tag">pg_notify(</tspan><tspan class="aSch">'fsm_fsmlet_work_&lt;id&gt;'</tspan><tspan class="tag">)</tspan></text>
+
+  <!-- ── stage 4: fsmlet ─────────────────────────────────────────── -->
+  <rect class="box" x="230" y="484" width="400" height="72" rx="10"/>
+  <text class="title" x="430" y="512" text-anchor="middle">fsmlet  ·  one process per node</text>
+  <text class="sub small" x="430" y="532" text-anchor="middle">claim → startFSMWorkerWithDBLock()</text>
+  <text class="sub small" x="430" y="548" text-anchor="middle">LISTEN own channel · heartbeat every 5s</text>
+
+  <!-- heartbeat pulse on the fsmlet -->
+  <circle class="beat" cx="256" cy="520" r="6">
+    <animate attributeName="r"       values="4;9;4"     dur="5s" repeatCount="indefinite" keyTimes="0;0.08;1"/>
+    <animate attributeName="opacity" values="1;0.35;1"  dur="5s" repeatCount="indefinite" keyTimes="0;0.08;1"/>
+  </circle>
+
+  <!-- ── the dispatch token travelling down the pipeline ─────────── -->
+  <circle class="token" r="8">
+    <animate attributeName="opacity"
+             values="0;1;1;1;1;1;1;0" keyTimes="0;0.04;0.30;0.42;0.60;0.72;0.95;1"
+             dur="4.5s" repeatCount="indefinite"/>
+    <animateMotion dur="4.5s" repeatCount="indefinite"
+                   path="M430,96 L430,224 L430,356 L430,520"
+                   keyPoints="0;0.36;0.36;0.72;0.72;1"
+                   keyTimes="0;0.30;0.42;0.60;0.72;1" calcMode="linear"/>
+  </circle>
+
+  <!-- caption -->
+  <text class="sub small" x="430" y="590" text-anchor="middle">ADR-002 · Stage 3 — Kubernetes-style scheduler → fsmlet</text>
+</svg>

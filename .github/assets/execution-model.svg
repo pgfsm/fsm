@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" width="920" height="500" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" role="img" aria-label="FSM execution model: an event flows from the REST API into a pgmq queue, a worker dequeues it, runs a macrostep (resolve state, evaluate transitions, run actions), archives the result, and loops.">
+  <style>
+    :root {
+      --bg: #ffffff; --panel: #f6f8fa; --panel-brd: #d0d7de;
+      --ink: #1f2328; --muted: #57606a; --line: #8c959f;
+      --accent: #0969da; --sched: #8250df; --node: #1a7f37;
+      --token: #0969da; --beat: #cf222e; --queue: #bf8700;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --panel: #161b22; --panel-brd: #30363d;
+        --ink: #e6edf3; --muted: #8b949e; --line: #6e7681;
+        --accent: #58a6ff; --sched: #bc8cff; --node: #3fb950;
+        --token: #58a6ff; --beat: #ff7b72; --queue: #d29922;
+      }
+    }
+    .bg    { fill: var(--bg); }
+    .box   { fill: var(--panel); stroke: var(--panel-brd); stroke-width: 1.5; }
+    .grp   { fill: none; stroke: var(--panel-brd); stroke-width: 1.25; stroke-dasharray: 5 5; }
+    .qbox  { fill: var(--bg); stroke: var(--queue); stroke-width: 1.5; }
+    .slot  { fill: none; stroke: var(--panel-brd); stroke-width: 1.25; }
+    .title { fill: var(--ink); font-weight: 700; }
+    .sub   { fill: var(--muted); }
+    .fn    { fill: var(--accent); }
+    .fnp   { fill: var(--node); }
+    .grplbl{ fill: var(--muted); font-weight: 700; letter-spacing: .1em; }
+    .qlbl  { fill: var(--queue); font-weight: 700; letter-spacing: .06em; }
+    .conn  { stroke: var(--line); stroke-width: 2; fill: none; }
+    .arrowhead { fill: var(--line); }
+    .token { fill: var(--token); }
+    .msg   { fill: var(--queue); }
+    .chip  { fill: var(--bg); stroke: var(--panel-brd); stroke-width: 1.25; }
+    text   { font-size: 15px; }
+    .s     { font-size: 12px; }
+    .m     { font-size: 12.5px; }
+    .fnt   { font-size: 12px; font-weight: 700; }
+  </style>
+
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="920" height="500" rx="10"/>
+
+  <!-- ── lane frames ─────────────────────────────────────────────── -->
+  <rect class="grp" x="16" y="52" width="300" height="312" rx="12"/>
+  <text class="grplbl s" x="30" y="44">ENQUEUE PATH</text>
+  <rect class="grp" x="572" y="84" width="300" height="360" rx="12"/>
+  <text class="grplbl s" x="586" y="76">WORKER LOOP  (dequeue)</text>
+
+  <!-- ── connectors ──────────────────────────────────────────────── -->
+  <line class="conn" x1="165" y1="116" x2="165" y2="149" marker-end="url(#arw)"/>
+  <line class="conn" x1="165" y1="224" x2="165" y2="251" marker-end="url(#arw)"/>
+  <line class="conn" x1="300" y1="302" x2="357" y2="318" marker-end="url(#arw)"/>
+  <line class="conn" x1="522" y1="304" x2="583" y2="134" marker-end="url(#arw)"/>
+  <line class="conn" x1="720" y1="156" x2="720" y2="193" marker-end="url(#arw)"/>
+  <line class="conn" x1="720" y1="300" x2="720" y2="341" marker-end="url(#arw)"/>
+  <!-- loop back: archive → worker read -->
+  <path class="conn" d="M855,390 C905,390 905,126 858,126" marker-end="url(#arw)"/>
+
+  <!-- ── ENQUEUE PATH boxes ──────────────────────────────────────── -->
+  <!-- Client -->
+  <rect class="box" x="30" y="64" width="270" height="52" rx="10"/>
+  <text class="title" x="165" y="88"  text-anchor="middle">Client</text>
+  <text class="sub s" x="165" y="106" text-anchor="middle">{ fsm_instance_id, event_data }</text>
+
+  <!-- REST API -->
+  <rect class="box" x="30" y="152" width="270" height="72" rx="10"/>
+  <text class="title" x="165" y="176" text-anchor="middle">REST API  ·  fsm.handlers.ts</text>
+  <text class="sub s" x="165" y="196" text-anchor="middle">calls into PostgreSQL:</text>
+  <text class="fn fnt" x="165" y="214" text-anchor="middle">sendEventToFsmQueueWithEventLogs()</text>
+
+  <!-- PostgreSQL enqueue -->
+  <rect class="box" x="30" y="252" width="270" height="100" rx="10"/>
+  <text class="title" x="165" y="276" text-anchor="middle">PostgreSQL</text>
+  <text class="fn fnt" x="165" y="298" text-anchor="middle">send_event_to_fsm_queue_</text>
+  <text class="fn fnt" x="165" y="314" text-anchor="middle">with_event_logs_v2()</text>
+  <text class="sub s" x="165" y="338" text-anchor="middle">validate · write event log · pgmq.send()</text>
+
+  <!-- ── QUEUE (pgmq) ────────────────────────────────────────────── -->
+  <rect class="qbox" x="360" y="250" width="162" height="150" rx="12"/>
+  <text class="qlbl s" x="441" y="274" text-anchor="middle">pgmq</text>
+  <text class="sub s"  x="441" y="290" text-anchor="middle">instance queue</text>
+  <rect class="slot" x="376" y="302" width="130" height="18" rx="4"/>
+  <rect class="slot" x="376" y="326" width="130" height="18" rx="4"/>
+  <rect class="slot" x="376" y="350" width="130" height="18" rx="4"/>
+  <!-- the message that lands in the queue, then is consumed -->
+  <rect class="msg" x="378" y="328" width="126" height="14" rx="3" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0"
+             keyTimes="0;0.36;0.40;0.48;0.50;1" dur="7s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── WORKER LOOP boxes ───────────────────────────────────────── -->
+  <!-- Worker read -->
+  <rect class="box" x="585" y="96" width="270" height="60" rx="10"/>
+  <text class="title" x="720" y="120" text-anchor="middle">Worker  ·  fsmworker.ts</text>
+  <text class="sub s" x="720" y="140" text-anchor="middle">polling loop — readMessage() → pgmq.read()</text>
+
+  <!-- macrostep -->
+  <rect class="box" x="585" y="196" width="270" height="104" rx="10"/>
+  <text class="title" x="720" y="220" text-anchor="middle">macrostep_v2()</text>
+  <text class="sub m" x="605" y="244">① resolve current state value</text>
+  <text class="sub m" x="605" y="266">② microstep_v2() — eval transitions</text>
+  <text class="sub m" x="605" y="288">③ runActionImplementation()</text>
+
+  <!-- archive -->
+  <rect class="box" x="585" y="344" width="270" height="92" rx="10"/>
+  <text class="fnp fnt" x="720" y="368" text-anchor="middle">archive_event_from_fsm_type_</text>
+  <text class="fnp fnt" x="720" y="384" text-anchor="middle">worker_v2()</text>
+  <text class="sub s" x="720" y="406" text-anchor="middle">persist state · pgmq.archive() · notify parent</text>
+  <text class="sub s" x="720" y="422" text-anchor="middle">UPDATE fsm_instance</text>
+
+  <!-- ── edge-label chips ────────────────────────────────────────── -->
+  <rect class="chip" x="78" y="123" width="174" height="24" rx="12"/>
+  <text class="m" x="165" y="139" text-anchor="middle"><tspan class="sub">POST </tspan><tspan class="fn">/fsm/fsm/send</tspan></text>
+
+  <rect class="chip" x="360" y="316" width="96" height="22" rx="11"/>
+  <text class="s" x="408" y="331" text-anchor="middle"><tspan class="fn">pgmq.send()</tspan></text>
+
+  <rect class="chip" x="486" y="202" width="140" height="24" rx="12"/>
+  <text class="m" x="556" y="218" text-anchor="middle"><tspan class="fn">pgmq.read()</tspan><tspan class="sub"> · VT 30s</tspan></text>
+
+  <!-- loop-back label, sits on the arc clear of the boxes -->
+  <text class="sub s" x="890" y="262" text-anchor="middle" transform="rotate(90 890 262)">loop back to readMessage()</text>
+
+  <!-- ── the event token travelling the full life-cycle ──────────── -->
+  <circle class="token" r="7">
+    <animate attributeName="opacity"
+             values="0;1;1;1;1;1;1;1;1;1;1;1;0"
+             keyTimes="0;.03;.07;.11;.19;.23;.37;.49;.62;.66;.74;.97;1"
+             dur="7s" repeatCount="indefinite"/>
+    <animateMotion dur="7s" repeatCount="indefinite" calcMode="linear"
+      path="M165,90 L165,187 L165,302 L441,325 L720,126 L720,248 L720,390"
+      keyPoints="0;.0885;.0885;.1935;.1935;.4454;.4454;.7590;.7590;.8703;.8703;1;1"
+      keyTimes="0;.07;.11;.19;.23;.37;.49;.62;.66;.74;.79;.91;1"/>
+  </circle>
+
+  <!-- caption -->
+  <text class="sub s" x="460" y="470" text-anchor="middle">docs/execution-model.md — one macrostep per message:  read → resolve → transition → act → archive → loop</text>
+</svg>
