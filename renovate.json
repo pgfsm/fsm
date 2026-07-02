@@ -1,0 +1,57 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "schedule": ["before 9am on Monday"],
+  "timezone": "UTC",
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "description": "Group Deno standard library updates",
+      "matchPackageNames": ["@std/**"],
+      "groupName": "Deno std"
+    },
+    {
+      "description": "Group logtape updates",
+      "matchPackageNames": ["@logtape/**"],
+      "groupName": "logtape"
+    },
+    {
+      "description": "Group Hono ecosystem updates",
+      "matchPackageNames": ["hono", "@hono/**", "hono-pino"],
+      "groupName": "Hono"
+    },
+    {
+      "description": "Ignore all Supabase package updates",
+      "matchPackageNames": ["@supabase/**", "supabase"],
+      "enabled": false
+    },
+    {
+      "description": "Group Drizzle ORM updates",
+      "matchPackageNames": ["drizzle-*"],
+      "groupName": "Drizzle ORM"
+    },
+    {
+      "description": "Group Pino logging updates",
+      "matchPackageNames": ["pino", "pino-pretty"],
+      "groupName": "Pino"
+    },
+    {
+      "description": "Group XState updates across all packages",
+      "matchPackageNames": ["xstate"],
+      "groupName": "XState"
+    },
+    {
+      "description": "Group non-major GitHub Actions updates into one PR",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "GitHub Actions (non-major)"
+    },
+    {
+      "description": "pgrx is exact-pinned and tied to the PostgreSQL major version — flag for careful review",
+      "matchPackageNames": ["pgrx", "pgrx-tests"],
+      "addLabels": ["pgrx"]
+    }
+  ]
+}
