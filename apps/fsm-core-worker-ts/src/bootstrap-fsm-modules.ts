@@ -54,12 +54,12 @@ export async function bootstrapFsmModules(
 
     const outputSharedPromise = fsmConfig.sharedPromise
       ? await validateAndLoadPromiseFromFolders(
-          deps,
-          fsmConfig.sharedPromise.folderPath,
-          "sharedPromise",
-          fsmConfig.sharedPromise.skipDirs ?? [],
-          [],
-        )
+        deps,
+        fsmConfig.sharedPromise.folderPath,
+        "sharedPromise",
+        fsmConfig.sharedPromise.skipDirs ?? [],
+        [],
+      )
       : [];
     const verifiedSharedPromise = outputSharedPromise.filter(
       (m) => m.isFsmModuleVerified === true,
@@ -67,12 +67,12 @@ export async function bootstrapFsmModules(
 
     const outputSharedFsm = fsmConfig.sharedFsm
       ? await validateAndLoadFsmFromFolders(
-          deps,
-          fsmConfig.sharedFsm.folderPath,
-          "sharedFsm",
-          fsmConfig.sharedFsm.skipDirs ?? [],
-          outputSharedPromise,
-        )
+        deps,
+        fsmConfig.sharedFsm.folderPath,
+        "sharedFsm",
+        fsmConfig.sharedFsm.skipDirs ?? [],
+        outputSharedPromise,
+      )
       : [];
     const verifiedSharedFsm = outputSharedFsm.filter(
       (m) => m.isFsmModuleVerified === true,
@@ -80,12 +80,12 @@ export async function bootstrapFsmModules(
 
     const outputFsm = fsmConfig.fsm
       ? await validateAndLoadFsmFromFolders(
-          deps,
-          fsmConfig.fsm.folderPath,
-          "fsm",
-          fsmConfig.fsm.skipDirs ?? [],
-          [...outputSharedPromise, ...outputSharedFsm],
-        )
+        deps,
+        fsmConfig.fsm.folderPath,
+        "fsm",
+        fsmConfig.fsm.skipDirs ?? [],
+        [...outputSharedPromise, ...outputSharedFsm],
+      )
       : [];
     const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);
 
@@ -105,7 +105,6 @@ export async function bootstrapFsmModules(
       internalActors: m.internalActors,
       externalActors: m.externalActors,
     }));
-
   }
 
   return { pool, verifiedFsmModules };

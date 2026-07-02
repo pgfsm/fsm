@@ -4,8 +4,15 @@ import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "generate"]);
 import { Ajv } from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
-import { DELAY_ACTION_NAME_PREFIX, RAISE_CANCEL, isVersionFolderName, type WorkflowType } from "./util.ts";
+import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with {
+  type: "json",
+};
+import {
+  DELAY_ACTION_NAME_PREFIX,
+  isVersionFolderName,
+  RAISE_CANCEL,
+  type WorkflowType,
+} from "./util.ts";
 import type { Json } from "@pgfsm/db/database.types";
 
 /**
@@ -50,7 +57,9 @@ function removeNullActions(obj: any): any {
     }
 
     if (state.states && typeof state.states === "object") {
-      for (const subKey of Object.keys(state.states)) visitState(state.states[subKey]);
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
     }
   }
 
@@ -77,8 +86,12 @@ export function normalizeActionsToObjects(obj: Json): Json {
   }
 
   function visitState(state: any) {
-    if (Array.isArray(state.entry)) state.entry = normalizeActionArray(state.entry);
-    if (Array.isArray(state.exit)) state.exit = normalizeActionArray(state.exit);
+    if (Array.isArray(state.entry)) {
+      state.entry = normalizeActionArray(state.entry);
+    }
+    if (Array.isArray(state.exit)) {
+      state.exit = normalizeActionArray(state.exit);
+    }
 
     if (state.initial && Array.isArray(state.initial.actions)) {
       state.initial.actions = normalizeActionArray(state.initial.actions);
@@ -105,7 +118,9 @@ export function normalizeActionsToObjects(obj: Json): Json {
     }
 
     if (state.states && typeof state.states === "object") {
-      for (const subKey of Object.keys(state.states)) visitState(state.states[subKey]);
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
     }
   }
 
@@ -142,7 +157,10 @@ export function addActionNameFromDelay(obj: Json): Json {
 
     if (Array.isArray(state.transitions)) {
       for (const t of state.transitions) {
-        if (typeof t.eventType === "string" && t.eventType.includes("xstate.after.") && "delay" in t) {
+        if (
+          typeof t.eventType === "string" &&
+          t.eventType.includes("xstate.after.") && "delay" in t
+        ) {
           afterTransitions.push(t);
         }
       }
@@ -155,12 +173,16 @@ export function addActionNameFromDelay(obj: Json): Json {
   function enrichActionArray(actions: any[], afterTransitions: any[]): any[] {
     let i = 0;
     return actions.map((a) => {
-      if (a && typeof a === "object" && RAISE_CANCEL.has(a.type) && i < afterTransitions.length) {
+      if (
+        a && typeof a === "object" && RAISE_CANCEL.has(a.type) &&
+        i < afterTransitions.length
+      ) {
         const t = afterTransitions[i++];
         return {
           ...a,
           delayActionName: DELAY_ACTION_NAME_PREFIX + t.delay,
-          ...(t.eventType !== undefined && { delayActionEventType: t.eventType }),
+          ...(t.eventType !== undefined &&
+            { delayActionEventType: t.eventType }),
         };
       }
       return a;
@@ -170,11 +192,17 @@ export function addActionNameFromDelay(obj: Json): Json {
   function visitState(state: any) {
     const afterTransitions = getAfterTransitions(state);
 
-    if (Array.isArray(state.entry)) state.entry = enrichActionArray(state.entry, afterTransitions);
-    if (Array.isArray(state.exit)) state.exit = enrichActionArray(state.exit, afterTransitions);
+    if (Array.isArray(state.entry)) {
+      state.entry = enrichActionArray(state.entry, afterTransitions);
+    }
+    if (Array.isArray(state.exit)) {
+      state.exit = enrichActionArray(state.exit, afterTransitions);
+    }
 
     if (state.states && typeof state.states === "object") {
-      for (const subKey of Object.keys(state.states)) visitState(state.states[subKey]);
+      for (const subKey of Object.keys(state.states)) {
+        visitState(state.states[subKey]);
+      }
     }
   }
 
@@ -190,33 +218,51 @@ export function addActionNameFromDelay(obj: Json): Json {
  * @param parentFsmVersion Fallback fsmVersion applied when invoke entry has none
  * @returns { fulljson, childActorsInfo }
  */
-export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion: string): { fulljson: Json, childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> } {
+export function addMissingFsmTypeToInvokeActors(
+  fsmJSON: Json,
+  parentFsmVersion: string,
+): {
+  fulljson: Json;
+  childActorsInfo: Array<
+    {
+      child_actor_src: string;
+      child_actor_fsmType: string;
+      child_actor_fsmVersion: string;
+    }
+  >;
+} {
   const clone = JSON.parse(JSON.stringify(fsmJSON));
-  const childActorsInfo: Array<{ child_actor_src: string, child_actor_fsmType: string, child_actor_fsmVersion: string }> = [];
+  const childActorsInfo: Array<
+    {
+      child_actor_src: string;
+      child_actor_fsmType: string;
+      child_actor_fsmVersion: string;
+    }
+  > = [];
 
   function visitState(state: any) {
     if (Array.isArray(state.invoke)) {
       for (const invokeObj of state.invoke) {
         // Only process if src exists
-        if (invokeObj && typeof invokeObj.src === 'string') {
+        if (invokeObj && typeof invokeObj.src === "string") {
           // Add missing fsmType
-          if (!('fsmType' in invokeObj)) {
-            invokeObj.fsmType = 'promise';
+          if (!("fsmType" in invokeObj)) {
+            invokeObj.fsmType = "promise";
           }
           // Add missing fsmVersion
-          if (!('fsmVersion' in invokeObj)) {
+          if (!("fsmVersion" in invokeObj)) {
             invokeObj.fsmVersion = parentFsmVersion;
           }
           childActorsInfo.push({
             child_actor_src: invokeObj.src,
             child_actor_fsmType: invokeObj.fsmType,
-            child_actor_fsmVersion: invokeObj.fsmVersion
+            child_actor_fsmVersion: invokeObj.fsmVersion,
           });
         }
       }
     }
     // Recursively visit substates
-    if (state.states && typeof state.states === 'object') {
+    if (state.states && typeof state.states === "object") {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -224,7 +270,7 @@ export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion:
   }
 
   // Visit all states recursively
-  if (clone.states && typeof clone.states === 'object') {
+  if (clone.states && typeof clone.states === "object") {
     for (const stateKey of Object.keys(clone.states)) {
       visitState(clone.states[stateKey]);
     }
@@ -233,17 +279,17 @@ export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion:
   // Also check root-level invoke (rare, but possible)
   if (Array.isArray(clone.invoke)) {
     for (const invokeObj of clone.invoke) {
-      if (invokeObj && typeof invokeObj.src === 'string') {
-        if (!('fsmType' in invokeObj)) {
-          invokeObj.fsmType = 'promise';
+      if (invokeObj && typeof invokeObj.src === "string") {
+        if (!("fsmType" in invokeObj)) {
+          invokeObj.fsmType = "promise";
         }
-        if (!('fsmVersion' in invokeObj)) {
+        if (!("fsmVersion" in invokeObj)) {
           invokeObj.fsmVersion = parentFsmVersion;
         }
         childActorsInfo.push({
           child_actor_src: invokeObj.src,
           child_actor_fsmType: invokeObj.fsmType,
-          child_actor_fsmVersion: invokeObj.fsmVersion
+          child_actor_fsmVersion: invokeObj.fsmVersion,
         });
       }
     }
@@ -251,7 +297,6 @@ export function addMissingFsmTypeToInvokeActors(fsmJSON: Json, parentFsmVersion:
 
   return { fulljson: clone, childActorsInfo };
 }
-
 
 /**
  * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
@@ -283,7 +328,10 @@ export async function generateFsmJSONFromMachineFile(
     ) {
       // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON = machineConfig.toJSON();
-      writeFileSync(`${absFolderPath}/xstate-fsm.json`, JSON.stringify(xstateFsmJSON, null, 2));
+      writeFileSync(
+        `${absFolderPath}/xstate-fsm.json`,
+        JSON.stringify(xstateFsmJSON, null, 2),
+      );
 
       // step 2 — removeNullActions (pure): strip null entries from all action arrays
       const cleanedJSON = removeNullActions(xstateFsmJSON);
@@ -295,10 +343,16 @@ export async function generateFsmJSONFromMachineFile(
       const enrichedJSON = addActionNameFromDelay(normalizedJSON);
 
       // step 5 — addMissingFsmTypeToInvokeActors (pure): fill in fsmType/fsmVersion on invoke entries
-      const { fulljson: fsmJSON } = addMissingFsmTypeToInvokeActors(enrichedJSON, version);
+      const { fulljson: fsmJSON } = addMissingFsmTypeToInvokeActors(
+        enrichedJSON,
+        version,
+      );
 
       // step 6 — write fsm.json
-      writeFileSync(`${absFolderPath}/fsm.json`, JSON.stringify(fsmJSON, null, 2));
+      writeFileSync(
+        `${absFolderPath}/fsm.json`,
+        JSON.stringify(fsmJSON, null, 2),
+      );
 
       // step 7 — (optional) validate fsm.json against schema and show recommendations
       if (showRecommendation) {
@@ -306,19 +360,30 @@ export async function generateFsmJSONFromMachineFile(
         const validate = ajv.compile(machineSchema);
         const valid = validate(fsmJSON);
         if (!valid) {
-          logger.warning("[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}", { path: absFolderPath, errors: validate.errors });
+          logger.warning(
+            "[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}",
+            { path: absFolderPath, errors: validate.errors },
+          );
         } else {
-          logger.info("[recommendation] fsm.json passes schema validation in {path}", { path: absFolderPath });
+          logger.info(
+            "[recommendation] fsm.json passes schema validation in {path}",
+            { path: absFolderPath },
+          );
         }
       }
     } else {
-      logger.error("Export in {path} is not a valid xstate machine config", { path: machineTsPath });
+      logger.error("Export in {path} is not a valid xstate machine config", {
+        path: machineTsPath,
+      });
     }
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       logger.info("machine.ts is missing in {path}", { path: absFolderPath });
     } else {
-      logger.error("Failed to import or process {path}: {error}", { path: machineTsPath, error: err });
+      logger.error("Failed to import or process {path}: {error}", {
+        path: machineTsPath,
+        error: err,
+      });
     }
   }
 }
@@ -346,14 +411,20 @@ export async function generateFsmJSONFromConfigFile(
     const configText = await Deno.readTextFile(configJsonPath);
     config = JSON.parse(configText);
   } catch (err) {
-    logger.error("Failed to read config.json at {path}: {error}", { path: configJsonPath, error: err });
+    logger.error("Failed to read config.json at {path}: {error}", {
+      path: configJsonPath,
+      error: err,
+    });
     return;
   }
 
   const machineTsPath = `${absFolderPath}/machine.ts`;
   try {
     await Deno.stat(machineTsPath);
-    logger.warning("machine.ts already exists at {path} — skipping generation, using existing file", { path: machineTsPath });
+    logger.warning(
+      "machine.ts already exists at {path} — skipping generation, using existing file",
+      { path: machineTsPath },
+    );
   } catch {
     // machine.ts does not exist — generate a wrapper from config.json
     const id = typeof config.id === "string" ? config.id : version;
@@ -368,12 +439,18 @@ export async function generateFsmJSONFromConfigFile(
       ``,
     ].join("\n");
     await Deno.writeTextFile(machineTsPath, machineTsContent);
-    logger.info("Generated machine.ts from config.json at {path}", { path: machineTsPath });
+    logger.info("Generated machine.ts from config.json at {path}", {
+      path: machineTsPath,
+    });
   }
 
-  await generateFsmJSONFromMachineFile(absFolderPath, version, workflowType, showRecommendation);
+  await generateFsmJSONFromMachineFile(
+    absFolderPath,
+    version,
+    workflowType,
+    showRecommendation,
+  );
 }
-
 
 async function generateFsmJSONFromFolder(
   _dirEntryName: string,
@@ -384,9 +461,13 @@ async function generateFsmJSONFromFolder(
   workflowType: WorkflowType,
   showRecommendation: boolean = false,
 ) {
-  await generateFsmJSONFromMachineFile(absFolderPath, dirEntryNameVersion, workflowType, showRecommendation);
+  await generateFsmJSONFromMachineFile(
+    absFolderPath,
+    dirEntryNameVersion,
+    workflowType,
+    showRecommendation,
+  );
 }
-
 
 export async function generateFsmJSONFromFolders(
   folderPath: string,
@@ -395,17 +476,28 @@ export async function generateFsmJSONFromFolders(
   showRecommendation: boolean = false,
 ) {
   if (folderPath.startsWith(".")) {
-    throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
+    );
   }
   if (folderPath.endsWith("/")) {
-    throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`);
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`,
+    );
   }
   if (folderPath.startsWith("/")) {
-    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
+    logger.info("Importing workflows from absolute path: {path}", {
+      path: folderPath,
+    });
   } else {
-    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
+    logger.info("Importing workflows from relative path: {path} to {cwd}", {
+      path: folderPath,
+      cwd: Deno.cwd(),
+    });
   }
-  const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
+  const absFolderPath = folderPath.startsWith("/")
+    ? folderPath
+    : `${Deno.cwd()}/${folderPath}`;
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {
@@ -417,9 +509,20 @@ export async function generateFsmJSONFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
           if (isVersionFolderName(subEntry.name)) {
-            await generateFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, showRecommendation);
+            await generateFsmJSONFromFolder(
+              dirEntry.name,
+              subEntry.name,
+              folderPath,
+              `${fsmDirPath}/${subEntry.name}`,
+              dirEntry.name,
+              workflowType,
+              showRecommendation,
+            );
           } else {
-            logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
+            logger.info("Skipping non-versioned folder: {name} in {dir}", {
+              name: subEntry.name,
+              dir: fsmDirPath,
+            });
           }
         }
       }

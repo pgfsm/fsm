@@ -15,13 +15,7 @@
  *   - When queue exists → returns 200 with success message and starts worker async.
  */
 import { testClient } from "hono/testing";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../middlewares/supabase.ts", () => ({
   getSupabase: vi.fn(() => null),
@@ -58,7 +52,9 @@ const client = testClient(makeTestApp());
 
 describe("GET /fsmpromise", () => {
   beforeEach(() => {
-    Object.keys(activePromiseLocks).forEach((k) => delete activePromiseLocks[k]);
+    Object.keys(activePromiseLocks).forEach((k) =>
+      delete activePromiseLocks[k]
+    );
   });
 
   it("returns 200 with an empty data object when no promise workers are active", async () => {
@@ -75,7 +71,9 @@ describe("GET /fsmpromise", () => {
 describe("POST /fsmpromise/resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(activePromiseLocks).forEach((k) => delete activePromiseLocks[k]);
+    Object.keys(activePromiseLocks).forEach((k) =>
+      delete activePromiseLocks[k]
+    );
   });
 
   it("returns 422 when promise_name is missing", async () => {
@@ -137,7 +135,7 @@ describe("POST /fsmpromise/resume", () => {
     const json = await res.json();
     expect(json.data).toContain("credit_promise");
     expect(startFSMPromiseWorker).toHaveBeenCalledWith(
-      expect.any(Object),      // deps
+      expect.any(Object), // deps
       "credit_promise",
       "credit_promise",
       "v01",

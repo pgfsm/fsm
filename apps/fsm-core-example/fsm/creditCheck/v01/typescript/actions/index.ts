@@ -1,7 +1,12 @@
 // Action: assignSSN
 export function assignSSN(context: any, event: any) {
   // TODO: implement
-  console.log("assignSSN action called with context:", context, "and event:", event);
+  console.log(
+    "assignSSN action called with context:",
+    context,
+    "and event:",
+    event,
+  );
 }
 
 // Action: assignFirstName
@@ -93,4 +98,3 @@ export function emailUser(context: any, event: any) {
 export function emailSalesTeam(context: any, event: any) {
   // TODO: implement
 }
-

@@ -6,12 +6,15 @@ description: Start any Deno project (including Hono apps) in debug mode with VS 
 # Skill: Start Deno App in Debug Mode
 
 ## Purpose
-A generic, reusable workflow for starting any Deno project (including Hono apps) in debug mode, with troubleshooting steps for common issues.
+
+A generic, reusable workflow for starting any Deno project (including Hono apps)
+in debug mode, with troubleshooting steps for common issues.
 
 ## Workflow Steps
 
 1. **Prerequisites**
-   - Ensure Deno is installed and available in your PATH (or at `${env:HOME}/.proto/shims/deno`).
+   - Ensure Deno is installed and available in your PATH (or at
+     `${env:HOME}/.proto/shims/deno`).
    - Confirm your app entry file (e.g., `src/main.ts`).
 
 2. **VS Code Debug Setup**
@@ -49,23 +52,29 @@ A generic, reusable workflow for starting any Deno project (including Hono apps)
      ```
 
 ## Troubleshooting
-- **Debugger does not attach**: Ensure port 9229 is open and not blocked by firewall.
+
+- **Debugger does not attach**: Ensure port 9229 is open and not blocked by
+  firewall.
 - **Deno not found**: Check Deno installation and PATH.
 - **Permission errors**: Add necessary `--allow-*` flags.
-- **Environment variables not loading**: Verify `.env` file path and permissions.
+- **Environment variables not loading**: Verify `.env` file path and
+  permissions.
 - **Code not reloading**: Use `--watch` flag for hot reload.
 
 ## Completion Criteria
+
 - App starts without errors.
 - Debugger attaches successfully.
 - Environment variables loaded.
 
 ## Example Prompts
+
 - "Start my Deno app in debug mode."
 - "How do I debug a Hono app with Deno?"
 - "Troubleshoot Deno debug setup."
 
 ## Related Customizations
+
 - Add custom debug configurations for test files.
 - Integrate hot reload with `--watch`.
 - Extend for other frameworks (Oak, Aleph, etc.).

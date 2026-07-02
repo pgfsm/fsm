@@ -4,7 +4,14 @@ import { z } from "zod";
 // Load environment variables
 config({ path: "./../../.env" });
 
-const LogTapeLevel = z.enum(["debug", "info", "warning", "error", "fatal", "silent"]);
+const LogTapeLevel = z.enum([
+  "debug",
+  "info",
+  "warning",
+  "error",
+  "fatal",
+  "silent",
+]);
 
 const EnvSchema = z.object({
   NODE_ENV: z.string().default("development"),
@@ -14,7 +21,9 @@ const EnvSchema = z.object({
   LOG_LEVEL_WORKER: LogTapeLevel.optional(),
   LOG_LEVEL_COMPILER: LogTapeLevel.optional(),
   LOG_LEVEL_DB: LogTapeLevel.optional(),
-  DB_TYPE: z.enum(["postgres","supabase","supabase_and_postgres"]).default("postgres"),
+  DB_TYPE: z.enum(["postgres", "supabase", "supabase_and_postgres"]).default(
+    "postgres",
+  ),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_ANON_KEY: z.string().min(1),

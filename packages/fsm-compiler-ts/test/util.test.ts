@@ -1,5 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { isTimestampFolderName, isValidDateFolderName, isVersionFolderName } from "../src/util.ts";
+import {
+  isTimestampFolderName,
+  isValidDateFolderName,
+  isVersionFolderName,
+} from "../src/util.ts";
 
 Deno.test("isVersionFolderName - valid", () => {
   assertEquals(isVersionFolderName("v01"), true);
@@ -26,7 +30,7 @@ Deno.test("isValidDateFolderName - invalid", () => {
   assertEquals(isValidDateFolderName("2024-13-01-10-30"), false); // month 13
   assertEquals(isValidDateFolderName("2024-01-32-10-30"), false); // day 32
   assertEquals(isValidDateFolderName("2024-01-15-25-00"), false); // hour 25
-  assertEquals(isValidDateFolderName("2024-01-15-10"), false);    // missing minute
+  assertEquals(isValidDateFolderName("2024-01-15-10"), false); // missing minute
   assertEquals(isValidDateFolderName(""), false);
 });
 
@@ -36,8 +40,8 @@ Deno.test("isTimestampFolderName - valid", () => {
 });
 
 Deno.test("isTimestampFolderName - invalid", () => {
-  assertEquals(isTimestampFolderName("2024"), false);          // too short
+  assertEquals(isTimestampFolderName("2024"), false); // too short
   assertEquals(isTimestampFolderName("202401151030001"), false); // too long
-  assertEquals(isTimestampFolderName("2024011510300a"), false);  // non-digit
+  assertEquals(isTimestampFolderName("2024011510300a"), false); // non-digit
   assertEquals(isTimestampFolderName(""), false);
 });

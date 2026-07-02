@@ -5,7 +5,10 @@ import { Pool } from "pg";
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
 import { macrostep_v2 } from "../../../../fsm-core-ts-hono-deno/worker/fsmworker-helper.ts";
-import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@pgfsm/compiler";
+import {
+  replaceSpacesWithUnderscores,
+  replaceUnderscoresWithSpaces,
+} from "@pgfsm/compiler";
 
 const pool = new Pool({
   connectionString: Deno.env.get("DATABASE_URL"),
@@ -40,9 +43,20 @@ Deno.test.ignore(
       message: { type: "initialTransition_event", payload: {} },
     };
 
-    const resolved_state_value = await resolveStateValue(dbDeps, {}, fsm_name, fsm_version);
-    const actionsModule = await loadModule(`./typescript/actions/index.ts`, "actions");
-    const delayModule = await loadModule(`./typescript/delays/index.ts`, "delays");
+    const resolved_state_value = await resolveStateValue(
+      dbDeps,
+      {},
+      fsm_name,
+      fsm_version,
+    );
+    const actionsModule = await loadModule(
+      `./typescript/actions/index.ts`,
+      "actions",
+    );
+    const delayModule = await loadModule(
+      `./typescript/delays/index.ts`,
+      "delays",
+    );
 
     const macrostepState: any = await macrostep_v2(
       dbDeps,
@@ -76,8 +90,14 @@ Deno.test.ignore(
     const initialStateJson = initialState.toJSON();
 
     const event_data = { type: "Submit", payload: {} };
-    const resolvedInitialState = machineConfig.resolveState(initialStateJson as any);
-    const [nextState] = transition(machineConfig, resolvedInitialState, event_data);
+    const resolvedInitialState = machineConfig.resolveState(
+      initialStateJson as any,
+    );
+    const [nextState] = transition(
+      machineConfig,
+      resolvedInitialState,
+      event_data,
+    );
 
     const msg = { msg_id: 1, message: event_data };
 
@@ -87,8 +107,14 @@ Deno.test.ignore(
       fsm_name,
       fsm_version,
     );
-    const actionsModule = await loadModule(`./typescript/actions/index.ts`, "actions");
-    const delayModule = await loadModule(`./typescript/delays/index.ts`, "delays");
+    const actionsModule = await loadModule(
+      `./typescript/actions/index.ts`,
+      "actions",
+    );
+    const delayModule = await loadModule(
+      `./typescript/delays/index.ts`,
+      "delays",
+    );
 
     const macrostepState: any = await macrostep_v2(
       dbDeps,
@@ -123,8 +149,14 @@ Deno.test(
     const initialStateJson = initialState.toJSON();
 
     const submitEvent = { type: "Submit", payload: {} };
-    const resolvedInitialState = machineConfig.resolveState(initialStateJson as any);
-    const [afterSubmit] = transition(machineConfig, resolvedInitialState, submitEvent);
+    const resolvedInitialState = machineConfig.resolveState(
+      initialStateJson as any,
+    );
+    const [afterSubmit] = transition(
+      machineConfig,
+      resolvedInitialState,
+      submitEvent,
+    );
     const afterSubmitJson = afterSubmit.toJSON();
 
     // step 2: get XState state after verifyCredentials done
@@ -132,8 +164,14 @@ Deno.test(
       type: "xstate.done.actor.0.(machine).creditCheck.Verifying Credentials",
       payload: {},
     };
-    const resolvedAfterSubmit = machineConfig.resolveState(afterSubmitJson as any);
-    const [nextState, actions] = transition(machineConfig, resolvedAfterSubmit, doneEvent);
+    const resolvedAfterSubmit = machineConfig.resolveState(
+      afterSubmitJson as any,
+    );
+    const [nextState, actions] = transition(
+      machineConfig,
+      resolvedAfterSubmit,
+      doneEvent,
+    );
 
     // step 3: call macrostep_v2 at "Verifying Credentials" state
     const msg = { msg_id: 1, message: doneEvent };
@@ -143,8 +181,14 @@ Deno.test(
       fsm_name,
       fsm_version,
     );
-    const actionsModule = await loadModule(`./typescript/actions/index.ts`, "actions");
-    const delayModule = await loadModule(`./typescript/delays/index.ts`, "delays");
+    const actionsModule = await loadModule(
+      `./typescript/actions/index.ts`,
+      "actions",
+    );
+    const delayModule = await loadModule(
+      `./typescript/delays/index.ts`,
+      "delays",
+    );
 
     const macrostepState: any = await macrostep_v2(
       dbDeps,
@@ -165,13 +209,14 @@ Deno.test(
     const changes = diff(macroStepValueWithSpaces, nextState.value);
     if (changes.length > 0) {
       throw new Error(
-        `macrostep_v2 state does not match XState nextState.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `macrostep_v2 state does not match XState nextState.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     }
 
     // compare action count
-    const totalMacroActions =
-      macrostepState.exit_actions.length +
+    const totalMacroActions = macrostepState.exit_actions.length +
       macrostepState.transition_actions.length +
       macrostepState.entry_actions.length;
     if (totalMacroActions !== actions.length) {

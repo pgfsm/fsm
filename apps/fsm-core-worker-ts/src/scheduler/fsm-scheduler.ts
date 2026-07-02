@@ -12,7 +12,8 @@ const DEFAULT_STALE_THRESHOLD_S = 30;
 // a LISTEN connection drop and reconnect).
 const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export type FsmSchedulerOptions = {
   signal?: AbortSignal;
@@ -63,7 +64,9 @@ export async function runFsmScheduler(
     }
   });
 
-  logger.info("Scheduler listening on channel: {channel}", { channel: SCHEDULER_NOTIFY_CHANNEL });
+  logger.info("Scheduler listening on channel: {channel}", {
+    channel: SCHEDULER_NOTIFY_CHANNEL,
+  });
 
   // Run an initial cycle in case entries were enqueued before this process started.
   await runCycle();

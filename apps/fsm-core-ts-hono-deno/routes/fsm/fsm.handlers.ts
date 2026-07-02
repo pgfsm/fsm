@@ -2,10 +2,24 @@ import * as HttpStatusCodes from "stoker/http-status-codes.ts";
 import { getLogger } from "@logtape/logtape";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
-import type { GetOneRoute, ListRoute, SendRoute, StopRoute } from "./fsm.routes.ts";
+import type {
+  GetOneRoute,
+  ListRoute,
+  SendRoute,
+  StopRoute,
+} from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 import { stopFSMWorker } from "@pgfsm/worker";
-import { listFsmInstances, sendEventToFsmQueueWithEventLogs, getFSMData, getFsmDataResolveStateValue, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME, type Json } from "@pgfsm/db";
+import {
+  API_SYSTEM_EVENT_NAME,
+  API_SYSTEM_QUEUE_TYPE,
+  API_SYSTEM_QUEUE_UUID,
+  getFSMData,
+  getFsmDataResolveStateValue,
+  type Json,
+  listFsmInstances,
+  sendEventToFsmQueueWithEventLogs,
+} from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/api", "fsm"]);
 
@@ -27,12 +41,18 @@ export const getOne: AppRouteHandler<GetOneRoute> = async (c) => {
   try {
     const result = await getFsmDataResolveStateValue(deps, id);
     if (!result) {
-      return c.json({ message: "FSM instance not found" }, HttpStatusCodes.NOT_FOUND);
+      return c.json(
+        { message: "FSM instance not found" },
+        HttpStatusCodes.NOT_FOUND,
+      );
     }
     return c.json({ data: result }, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in getOne handler: {error}", { error: _err });
-    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
   }
 };
 
@@ -46,7 +66,10 @@ export const stop: AppRouteHandler<StopRoute> = async (c) => {
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in stop handler: {error}", { error: _err });
-    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
   }
 };
 
@@ -60,12 +83,18 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
 
   try {
     if (!fsm_instance_id && !event_data) {
-      return c.json({ error: "Missing fsm_instance_id and event_data" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: "Missing fsm_instance_id and event_data" },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     const fsmInstance = await getFSMData(deps, fsm_instance_id);
     if (!fsmInstance) {
-      return c.json({ message: "FSM instance not found" }, HttpStatusCodes.NOT_FOUND);
+      return c.json(
+        { message: "FSM instance not found" },
+        HttpStatusCodes.NOT_FOUND,
+      );
     }
 
     const instance = await sendEventToFsmQueueWithEventLogs(
@@ -85,6 +114,9 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
     return c.json({ data: instance }, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in send handler: {error}", { error: _err });
-    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
   }
 };

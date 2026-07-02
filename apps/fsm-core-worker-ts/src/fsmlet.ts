@@ -1,5 +1,9 @@
 import { getLogger } from "@logtape/logtape";
-import type { DbConfig, FsmStartupConfig, VerifiedFsmModule } from "./bootstrap-fsm-modules.ts";
+import type {
+  DbConfig,
+  FsmStartupConfig,
+  VerifiedFsmModule,
+} from "./bootstrap-fsm-modules.ts";
 import { bootstrapFsmModules } from "./bootstrap-fsm-modules.ts";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import type { Pool } from "pg";
@@ -22,7 +26,8 @@ const HEARTBEAT_INTERVAL_MS = 5_000;
 // Fallback poll: catches any pg_notify missed after a LISTEN connection drop.
 const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 class Semaphore {
   private permits: number;
@@ -105,7 +110,10 @@ export async function startFsmlet(
   const activeWorkers = new Map<string, ActiveWorker>();
 
   // Step 1: bootstrap FSM modules.
-  const { pool, verifiedFsmModules } = await bootstrapFsmModules(dbConfig, fsmConfig);
+  const { pool, verifiedFsmModules } = await bootstrapFsmModules(
+    dbConfig,
+    fsmConfig,
+  );
 
   // Step 2: register this fsmlet in the node registry.
   const fsmModules: FsmModule[] = verifiedFsmModules.map((m) => ({
@@ -113,11 +121,14 @@ export async function startFsmlet(
     fsmVersion: m.fsmVersion,
   }));
   await registerFsmlet(pool, fsmletId, fsmModules, maxConcurrency);
-  logger.info("Fsmlet {fsmletId} registered ({count} modules, maxConcurrency={max})", {
-    fsmletId,
-    count: fsmModules.length,
-    max: maxConcurrency,
-  });
+  logger.info(
+    "Fsmlet {fsmletId} registered ({count} modules, maxConcurrency={max})",
+    {
+      fsmletId,
+      count: fsmModules.length,
+      max: maxConcurrency,
+    },
+  );
 
   // Step 4: spawn actor processes for internal (promise) actors.
   const cliScriptPath = new URL("./cli/worker.ts", import.meta.url).pathname;
@@ -126,15 +137,23 @@ export async function startFsmlet(
       const queueName = `${fsm.fsmName}_${fsm.fsmVersion}_${actor.src}`;
       new Deno.Command(Deno.execPath(), {
         args: [
-          "run", "--allow-all",
+          "run",
+          "--allow-all",
           cliScriptPath,
-          "--command", "create-and-start-promise-worker",
-          "--queue-name", queueName,
-          "--fsm-name", actor.src,
-          "--fsm-version", actor.fsmVersion ?? "",
-          "--promise-type", actor.fsmType ?? "promise",
-          "--fsm-folder-path", actor.fsmAbsFolderPath,
-          "--db-url", dbConfig.connectionString,
+          "--command",
+          "create-and-start-promise-worker",
+          "--queue-name",
+          queueName,
+          "--fsm-name",
+          actor.src,
+          "--fsm-version",
+          actor.fsmVersion ?? "",
+          "--promise-type",
+          actor.fsmType ?? "promise",
+          "--fsm-folder-path",
+          actor.fsmAbsFolderPath,
+          "--db-url",
+          dbConfig.connectionString,
         ],
         stdout: "inherit",
         stderr: "inherit",
@@ -171,7 +190,11 @@ export async function startFsmlet(
       return;
     }
 
-    const { instance_id: instanceId, fsm_name: fsmName, fsm_version: fsmVersion } = entry;
+    const {
+      instance_id: instanceId,
+      fsm_name: fsmName,
+      fsm_version: fsmVersion,
+    } = entry;
 
     if (activeWorkers.has(instanceId)) {
       // Already running on this fsmlet — duplicate dispatch, ignore.
@@ -180,7 +203,8 @@ export async function startFsmlet(
     }
 
     const module = verifiedFsmModules.find(
-      (m: VerifiedFsmModule) => m.fsmName === fsmName && m.fsmVersion === fsmVersion,
+      (m: VerifiedFsmModule) =>
+        m.fsmName === fsmName && m.fsmVersion === fsmVersion,
     );
 
     if (!module) {
@@ -194,11 +218,25 @@ export async function startFsmlet(
 
     const controller = new AbortController();
     activeWorkers.set(instanceId, { controller });
-    logger.info("Fsmlet {fsmletId}: starting worker for {instanceId} ({fsmName}@{fsmVersion})", {
-      fsmletId, instanceId, fsmName, fsmVersion,
-    });
+    logger.info(
+      "Fsmlet {fsmletId}: starting worker for {instanceId} ({fsmName}@{fsmVersion})",
+      {
+        fsmletId,
+        instanceId,
+        fsmName,
+        fsmVersion,
+      },
+    );
 
-    startFSMWorkerWithDBLock(deps, instanceId, fsmName, fsmVersion, module, false, controller.signal)
+    startFSMWorkerWithDBLock(
+      deps,
+      instanceId,
+      fsmName,
+      fsmVersion,
+      module,
+      false,
+      controller.signal,
+    )
       .then((result) => {
         if (result.status === "fail") {
           logger.warning("Worker for {instanceId} did not start: {message}", {
@@ -208,7 +246,10 @@ export async function startFsmlet(
         }
       })
       .catch((err) => {
-        logger.error("Worker for {instanceId} crashed: {error}", { instanceId, error: err });
+        logger.error("Worker for {instanceId} crashed: {error}", {
+          instanceId,
+          error: err,
+        });
       })
       .finally(() => {
         activeWorkers.delete(instanceId);
@@ -225,7 +266,10 @@ export async function startFsmlet(
   listenClient.on("notification", (msg) => {
     if (msg.channel === workChannel) {
       processNextWork().catch((err) =>
-        logger.error("Fsmlet {fsmletId}: processNextWork error: {error}", { fsmletId, error: err })
+        logger.error("Fsmlet {fsmletId}: processNextWork error: {error}", {
+          fsmletId,
+          error: err,
+        })
       );
     }
     if (msg.channel === "fsm_worker_stop" && msg.payload) {
@@ -234,15 +278,20 @@ export async function startFsmlet(
     }
   });
 
-  logger.info("Fsmlet {fsmletId}: LISTEN active on {workChannel} + fsm_worker_stop", {
-    fsmletId,
-    workChannel,
-  });
+  logger.info(
+    "Fsmlet {fsmletId}: LISTEN active on {workChannel} + fsm_worker_stop",
+    {
+      fsmletId,
+      workChannel,
+    },
+  );
 
   // Step 6 & 7: heartbeat + fallback poll loop (the daemon's main blocking task).
   const runHeartbeatAndFallback = async () => {
     let ticksSinceLastFallback = 0;
-    const fallbackEveryNHeartbeats = Math.ceil(FALLBACK_POLL_INTERVAL_MS / HEARTBEAT_INTERVAL_MS);
+    const fallbackEveryNHeartbeats = Math.ceil(
+      FALLBACK_POLL_INTERVAL_MS / HEARTBEAT_INTERVAL_MS,
+    );
 
     while (!signal?.aborted) {
       await sleep(HEARTBEAT_INTERVAL_MS);
@@ -251,14 +300,20 @@ export async function startFsmlet(
       try {
         await fsmletHeartbeat(pool, fsmletId, activeWorkers.size);
       } catch (err) {
-        logger.warning("Fsmlet {fsmletId}: heartbeat failed: {error}", { fsmletId, error: err });
+        logger.warning("Fsmlet {fsmletId}: heartbeat failed: {error}", {
+          fsmletId,
+          error: err,
+        });
       }
 
       ticksSinceLastFallback++;
       if (ticksSinceLastFallback >= fallbackEveryNHeartbeats) {
         ticksSinceLastFallback = 0;
         processNextWork().catch((err) =>
-          logger.warning("Fsmlet {fsmletId}: fallback poll error: {error}", { fsmletId, error: err })
+          logger.warning("Fsmlet {fsmletId}: fallback poll error: {error}", {
+            fsmletId,
+            error: err,
+          })
         );
       }
     }
@@ -279,7 +334,10 @@ export async function startFsmlet(
 
   // Drain any work that was scheduled before this fsmlet's LISTEN was active.
   processNextWork().catch((err) =>
-    logger.warning("Fsmlet {fsmletId}: initial work check error: {error}", { fsmletId, error: err })
+    logger.warning("Fsmlet {fsmletId}: initial work check error: {error}", {
+      fsmletId,
+      error: err,
+    })
   );
 
   return {

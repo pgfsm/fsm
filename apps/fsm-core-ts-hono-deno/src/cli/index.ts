@@ -76,7 +76,9 @@ dotenv.config({ path: envFile });
 
 // CLI flags override env vars (must happen before dynamic imports that trigger env.ts)
 const dbUrl = args["db-url"] ?? Deno.env.get("DATABASE_URL");
-const port = args["port"] ? Number(args["port"]) : Number(Deno.env.get("PORT") ?? "9999");
+const port = args["port"]
+  ? Number(args["port"])
+  : Number(Deno.env.get("PORT") ?? "9999");
 const urlPathPrefix = args["url-path-prefix"] ?? "/fsm";
 
 if (args["db-url"]) Deno.env.set("DATABASE_URL", args["db-url"]);
@@ -90,8 +92,12 @@ if (!dbUrl) {
 
 // Validate that FSM paths exist if provided
 const pathsToCheck: Array<[string, string]> = [];
-if (args["shared-promise-path"]) pathsToCheck.push(["--shared-promise-path", args["shared-promise-path"]]);
-if (args["shared-fsm-path"]) pathsToCheck.push(["--shared-fsm-path", args["shared-fsm-path"]]);
+if (args["shared-promise-path"]) {
+  pathsToCheck.push(["--shared-promise-path", args["shared-promise-path"]]);
+}
+if (args["shared-fsm-path"]) {
+  pathsToCheck.push(["--shared-fsm-path", args["shared-fsm-path"]]);
+}
 if (args["fsm-path"]) pathsToCheck.push(["--fsm-path", args["fsm-path"]]);
 
 for (const [flag, path] of pathsToCheck) {
@@ -114,7 +120,10 @@ const { Hono } = await import("hono");
 
 const fsmConfig: FsmStartupConfig = {};
 if (args["shared-promise-path"]) {
-  fsmConfig.sharedPromise = { folderPath: args["shared-promise-path"], skipDirs: [] };
+  fsmConfig.sharedPromise = {
+    folderPath: args["shared-promise-path"],
+    skipDirs: [],
+  };
 }
 if (args["shared-fsm-path"]) {
   fsmConfig.sharedFsm = { folderPath: args["shared-fsm-path"], skipDirs: [] };
@@ -133,7 +142,9 @@ const onSignal = () => {
     Deno.exit(0);
   }
   shutdownRequested = true;
-  logger.info("Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...");
+  logger.info(
+    "Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...",
+  );
 };
 
 Deno.addSignalListener("SIGINT", onSignal);
@@ -146,7 +157,10 @@ const fsmRouter = await createApp(pool, urlPathPrefix, fsmConfig);
 const host = new Hono();
 host.route(urlPathPrefix, fsmRouter);
 
-logger.info("Starting FSM server on port {port} with prefix {prefix}", { port, prefix: urlPathPrefix });
+logger.info("Starting FSM server on port {port} with prefix {prefix}", {
+  port,
+  prefix: urlPathPrefix,
+});
 Deno.serve({ port }, host.fetch);
 
 self.addEventListener("error", (event) => {
@@ -155,6 +169,8 @@ self.addEventListener("error", (event) => {
 });
 
 self.addEventListener("unhandledrejection", (event) => {
-  logger.error("Unhandled promise rejection: {reason}", { reason: event.reason });
+  logger.error("Unhandled promise rejection: {reason}", {
+    reason: event.reason,
+  });
   event.preventDefault();
 });

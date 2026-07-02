@@ -1,19 +1,24 @@
 # ADR-001: Use SQL/PL/pgSQL for PostgreSQL Extension Development
 
-**Status:** Accepted
-**Date:** 2026-06-04
+**Status:** Accepted **Date:** 2026-06-04
 
 ---
 
 ## Context
 
-Building the `fsm_core` PostgreSQL extension required choosing an implementation language. The three viable options were:
+Building the `fsm_core` PostgreSQL extension required choosing an implementation
+language. The three viable options were:
 
 - **SQL / PL/pgSQL** — pure database-native, no compilation, fully portable
-- **Rust via pgrx** — compiled to native code, memory-safe, access to Rust ecosystem
-- **C** — maximum performance, direct Postgres internals access, but manual memory management
+- **Rust via pgrx** — compiled to native code, memory-safe, access to Rust
+  ecosystem
+- **C** — maximum performance, direct Postgres internals access, but manual
+  memory management
 
-A key operational requirement is that the extension must support frequent version upgrades with minimal friction. Each upgrade requires writing migration scripts that evolve the extension schema from one version to the next. The ease of that workflow was the deciding factor.
+A key operational requirement is that the extension must support frequent
+version upgrades with minimal friction. Each upgrade requires writing migration
+scripts that evolve the extension schema from one version to the next. The ease
+of that workflow was the deciding factor.
 
 ---
 
@@ -26,36 +31,47 @@ We will implement `fsm_core` as a pure SQL/PL/pgSQL extension.
 ## Consequences
 
 ### Positive
-- **Frictionless upgrades** — upgrade scripts use `CREATE OR REPLACE FUNCTION` directly; no binary recompilation or symbol remapping needed.
-- **Zero toolchain setup** — no Rust, no C compiler; works out of the box on any Postgres installation.
-- **Full portability** — SQL extensions run on managed cloud environments (AWS RDS, Supabase, etc.) that block compiled binaries.
-- **100% transparent** — function logic lives inside the database catalog, visible and inspectable with standard Postgres tooling.
+
+- **Frictionless upgrades** — upgrade scripts use `CREATE OR REPLACE FUNCTION`
+  directly; no binary recompilation or symbol remapping needed.
+- **Zero toolchain setup** — no Rust, no C compiler; works out of the box on any
+  Postgres installation.
+- **Full portability** — SQL extensions run on managed cloud environments (AWS
+  RDS, Supabase, etc.) that block compiled binaries.
+- **100% transparent** — function logic lives inside the database catalog,
+  visible and inspectable with standard Postgres tooling.
 
 ### Negative / Trade-offs
-- **No external library access** — cannot use Rust/C ecosystem crates directly inside the extension.
-- **Performance ceiling** — PL/pgSQL is slower than compiled code for CPU-heavy computation; not suitable if the extension needs heavy number crunching.
+
+- **No external library access** — cannot use Rust/C ecosystem crates directly
+  inside the extension.
+- **Performance ceiling** — PL/pgSQL is slower than compiled code for CPU-heavy
+  computation; not suitable if the extension needs heavy number crunching.
 
 ---
 
 ## Alternatives Considered
 
-| Option | Best For | Why Not Selected |
-|---|---|---|
-| SQL / PL/pgSQL | Simple-to-moderate logic, frequent upgrades, portability | **Selected** |
-| Rust via pgrx | Complex logic, third-party libraries, native performance | Upgrade scripts require manual `DROP + re-CREATE` to remap binary symbols on every release — adds maintenance overhead and risk of version drift |
-| C | Core Postgres internals, absolute lowest overhead | Manual memory management; a single null pointer dereference can crash the entire database server |
+| Option         | Best For                                                 | Why Not Selected                                                                                                                                 |
+| -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SQL / PL/pgSQL | Simple-to-moderate logic, frequent upgrades, portability | **Selected**                                                                                                                                     |
+| Rust via pgrx  | Complex logic, third-party libraries, native performance | Upgrade scripts require manual `DROP + re-CREATE` to remap binary symbols on every release — adds maintenance overhead and risk of version drift |
+| C              | Core Postgres internals, absolute lowest overhead        | Manual memory management; a single null pointer dereference can crash the entire database server                                                 |
 
 ---
 
 ## Appendix: Why Upgrade Complexity Drove This Decision
 
-The core difference between SQL and compiled (Rust/C) extensions becomes visible when writing upgrade scripts.
+The core difference between SQL and compiled (Rust/C) extensions becomes visible
+when writing upgrade scripts.
 
 ### SQL Extension Upgrade (Frictionless)
 
-Functions live inside the database catalog. Upgrading is a direct SQL replacement — no binary concerns.
+Functions live inside the database catalog. Upgrading is a direct SQL
+replacement — no binary concerns.
 
 **Version 1.0.0** (`foo--1.0.0.sql`):
+
 ```sql
 CREATE FUNCTION calculate_tax(subtotal numeric) RETURNS numeric AS $$
     SELECT (subtotal * 0.05); -- 5% rate
@@ -63,6 +79,7 @@ $$ LANGUAGE SQL;
 ```
 
 **Version 1.0.1 upgrade script** (`foo--1.0.0--1.0.1.sql`):
+
 ```sql
 -- Replace the function logic directly — no binary concerns
 CREATE OR REPLACE FUNCTION calculate_tax(subtotal numeric) RETURNS numeric AS $$
@@ -72,9 +89,11 @@ $$ LANGUAGE SQL;
 
 ### Rust / pgrx Extension Upgrade (Requires Symbol Remapping)
 
-The database stores a pointer to a compiled symbol in a `.so`/`.dylib` binary — not the logic itself. Every code change requires manually re-linking.
+The database stores a pointer to a compiled symbol in a `.so`/`.dylib` binary —
+not the logic itself. Every code change requires manually re-linking.
 
 **Version 1.0.0** (`foo--1.0.0.sql`, auto-generated by pgrx):
+
 ```sql
 -- Postgres maps 'calculate_tax' to the compiled symbol in the 'foo' binary
 CREATE FUNCTION calculate_tax(subtotal numeric) RETURNS numeric
@@ -83,6 +102,7 @@ CREATE FUNCTION calculate_tax(subtotal numeric) RETURNS numeric
 ```
 
 **Version 1.0.1 upgrade script** (`foo--1.0.0--1.0.1.sql`, hand-written):
+
 ```sql
 -- DROP + re-CREATE required to re-link to the updated binary symbol
 DROP FUNCTION calculate_tax(numeric);
@@ -92,6 +112,13 @@ CREATE FUNCTION calculate_tax(subtotal numeric) RETURNS numeric
     LANGUAGE c IMMUTABLE STRICT;
 ```
 
-> **Manual step after pgrx generation:** pgrx auto-generates the initial `CREATE FUNCTION` SQL for you, but it does **not** generate upgrade scripts. Every time you update Rust code and pgrx regenerates the extension, you must manually add a `DROP FUNCTION` line for each changed function in your upgrade script before the `CREATE FUNCTION`. Skipping this step causes Postgres to execute old SQL definitions against the new binary — leading to silent errors or crashes.
+> **Manual step after pgrx generation:** pgrx auto-generates the initial
+> `CREATE FUNCTION` SQL for you, but it does **not** generate upgrade scripts.
+> Every time you update Rust code and pgrx regenerates the extension, you must
+> manually add a `DROP FUNCTION` line for each changed function in your upgrade
+> script before the `CREATE FUNCTION`. Skipping this step causes Postgres to
+> execute old SQL definitions against the new binary — leading to silent errors
+> or crashes.
 
-> `CREATE OR REPLACE` cannot be used for C/Rust-backed functions when argument types or return structures change. The DROP + re-CREATE pattern is mandatory.
+> `CREATE OR REPLACE` cannot be used for C/Rust-backed functions when argument
+> types or return structures change. The DROP + re-CREATE pattern is mandatory.

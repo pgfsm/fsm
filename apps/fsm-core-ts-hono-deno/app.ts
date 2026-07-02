@@ -6,11 +6,13 @@ const urlPathPrefix = "/fsm";
 
 const fsmRouter = await createApp(urlPathPrefix, {
   sharedPromise: {
-    folderPath: new URL("../fsm-core-example/sharedPromise", import.meta.url).pathname,
+    folderPath:
+      new URL("../fsm-core-example/sharedPromise", import.meta.url).pathname,
     skipDirs: [],
   },
   sharedFsm: {
-    folderPath: new URL("../fsm-core-example/sharedFSM", import.meta.url).pathname,
+    folderPath:
+      new URL("../fsm-core-example/sharedFSM", import.meta.url).pathname,
     skipDirs: [],
   },
   fsm: {

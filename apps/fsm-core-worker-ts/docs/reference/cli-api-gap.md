@@ -1,32 +1,38 @@
 # CLI ↔ API Gap Analysis — fsm-core-worker-ts
 
-This document maps the 5 CLI commands in `src/cli/index.ts` against the HTTP routes in `apps/fsm-core-ts-hono-deno/routes/` and records all gaps and bugs found.
+This document maps the 5 CLI commands in `src/cli/index.ts` against the HTTP
+routes in `apps/fsm-core-ts-hono-deno/routes/` and records all gaps and bugs
+found.
 
 ---
 
 ## Coverage matrix
 
-| CLI command | Underlying TS function | HTTP route | Status |
-|---|---|---|---|
-| `start-worker` | `startFSMWorker` | None dedicated | Low priority — deferred |
-| `start-worker-with-db-lock` | `startFSMWorkerWithDBLock` | `POST /fsm/start` | ✅ Implemented (bugs fixed — see Gap 5, 7) |
-| `start-promise-worker` | `startFSMPromiseWorker` | `POST /fsmpromise/start` | ✅ Implemented (bugs fixed — see Gap 4, 8) |
-| `create-and-start-worker` | `createAndStartFSMWorker` | `POST /fsm` (create handler) | ✅ Implemented via POST /fsm |
-| `create-and-start-promise-worker` | `createAndStartPromiseWorker` | `POST /fsmpromise/create-and-start` | ✅ Implemented |
+| CLI command                       | Underlying TS function        | HTTP route                          | Status                                     |
+| --------------------------------- | ----------------------------- | ----------------------------------- | ------------------------------------------ |
+| `start-worker`                    | `startFSMWorker`              | None dedicated                      | Low priority — deferred                    |
+| `start-worker-with-db-lock`       | `startFSMWorkerWithDBLock`    | `POST /fsm/start`                   | ✅ Implemented (bugs fixed — see Gap 5, 7) |
+| `start-promise-worker`            | `startFSMPromiseWorker`       | `POST /fsmpromise/start`            | ✅ Implemented (bugs fixed — see Gap 4, 8) |
+| `create-and-start-worker`         | `createAndStartFSMWorker`     | `POST /fsm` (create handler)        | ✅ Implemented via POST /fsm               |
+| `create-and-start-promise-worker` | `createAndStartPromiseWorker` | `POST /fsmpromise/create-and-start` | ✅ Implemented                             |
 
-> **Note:** `/fsmworker` routes were merged into `/fsm` in commit `2d6f83a`. The HTTP equivalents above reflect the current route paths.
+> **Note:** `/fsmworker` routes were merged into `/fsm` in commit `2d6f83a`. The
+> HTTP equivalents above reflect the current route paths.
 
 ---
 
 ## Gap 1 — `start-worker` has no dedicated HTTP route (deferred)
 
-`POST /fsm/start` always calls `startFSMWorkerWithDBLock`. No route for the bare `startFSMWorker` (no lock). Out of scope — the lock variant covers all production cases.
+`POST /fsm/start` always calls `startFSMWorkerWithDBLock`. No route for the bare
+`startFSMWorker` (no lock). Out of scope — the lock variant covers all
+production cases.
 
 ---
 
 ## Gap 2 — `createAndStartFSMWorker` covered by `POST /fsm` (no dedicated route needed)
 
-`createAndStartFSMWorker` is called directly by the `POST /fsm` create handler (`routes/fsm/fsm.handlers.ts`):
+`createAndStartFSMWorker` is called directly by the `POST /fsm` create handler
+(`routes/fsm/fsm.handlers.ts`):
 
 ```ts
 const controller = new AbortController();
@@ -40,7 +46,9 @@ const fsm_instance = await createAndStartFSMWorker(
   input_fsm_context,
   undefined,
   controller.signal,
-  () => { if (instanceId) delete activeWorkers[instanceId]; },
+  () => {
+    if (instanceId) delete activeWorkers[instanceId];
+  },
 );
 
 if (fsm_instance) {
@@ -49,11 +57,12 @@ if (fsm_instance) {
 }
 ```
 
-**Route:** `POST /fsm`
-**Body:** `{ fsm_name: string, fsm_version: string, fsm_context?: object }`
-**Response:** `{ data: { fsm_instance_id, fsm_version, ... } }`
+**Route:** `POST /fsm` **Body:**
+`{ fsm_name: string, fsm_version: string, fsm_context?: object }` **Response:**
+`{ data: { fsm_instance_id, fsm_version, ... } }`
 
-`verifiedModule` looked up by `fsm_name` + `fsm_version` from `c.get("verifiedFsmModules")`.
+`verifiedModule` looked up by `fsm_name` + `fsm_version` from
+`c.get("verifiedFsmModules")`.
 
 ---
 
@@ -61,11 +70,12 @@ if (fsm_instance) {
 
 Creates a PGMQ queue and starts a promise (actor) worker.
 
-**Route:** `POST /fsmpromise/create-and-start`
-**Body:** `{ queue_name: string, fsm_name: string, promise_type: string, fsm_version: string }`
+**Route:** `POST /fsmpromise/create-and-start` **Body:**
+`{ queue_name: string, fsm_name: string, promise_type: string, fsm_version: string }`
 **Response:** `{}`
 
-`verifiedModule` looked up by `fsm_name` + `fsm_version` from `c.get("verifiedFsmModules")`.
+`verifiedModule` looked up by `fsm_name` + `fsm_version` from
+`c.get("verifiedFsmModules")`.
 
 ---
 
@@ -74,14 +84,24 @@ Creates a PGMQ queue and starts a promise (actor) worker.
 **File:** `apps/fsm-core-ts-hono-deno/routes/fsmpromise/fsmpromise.handlers.ts`
 
 **Before (broken):**
+
 ```ts
-startFSMPromiseWorker(deps, promise_name, promise_name, input_promise_version)
+startFSMPromiseWorker(deps, promise_name, promise_name, input_promise_version);
 // ^ passes version where type is expected; missing version and verifiedModule
 ```
 
-**After (fixed):** Body extended with `promise_type`, `fsm_name`, `fsm_version`. Handler now calls:
+**After (fixed):** Body extended with `promise_type`, `fsm_name`, `fsm_version`.
+Handler now calls:
+
 ```ts
-startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_version, matchedModule)
+startFSMPromiseWorker(
+  deps,
+  promise_name,
+  promise_name,
+  promise_type,
+  promise_version,
+  matchedModule,
+);
 ```
 
 ---
@@ -89,12 +109,15 @@ startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_ve
 ## Gap 5 — Wrong Hono context key (`verifiedModules` → `verifiedFsmModules`) ✅ Fixed
 
 **Affected files:**
+
 - `apps/fsm-core-ts-hono-deno/routes/fsm/fsm.handlers.ts` (create handler)
 - `apps/fsm-core-ts-hono-deno/routes/fsm/fsm.handlers.ts` (start handler)
 
-`c.get("verifiedModules")` always returns `undefined` at runtime. The middleware sets `"verifiedFsmModules"` (see `lib/types.ts` — `ContextVariableMap`).
+`c.get("verifiedModules")` always returns `undefined` at runtime. The middleware
+sets `"verifiedFsmModules"` (see `lib/types.ts` — `ContextVariableMap`).
 
-**Fix:** `c.get("verifiedModules")` → `c.get("verifiedFsmModules")` in both files.
+**Fix:** `c.get("verifiedModules")` → `c.get("verifiedFsmModules")` in both
+files.
 
 ---
 
@@ -104,23 +127,41 @@ startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_ve
 
 ```ts
 // Before (type error — false is boolean, not Json)
-createAndStartFSMWorker(deps, input_fsm_name, input_fsm_version, matchedModule, activeFSMLocks, false)
+createAndStartFSMWorker(
+  deps,
+  input_fsm_name,
+  input_fsm_version,
+  matchedModule,
+  activeFSMLocks,
+  false,
+);
 
 // After
-createAndStartFSMWorker(deps, input_fsm_name, input_fsm_version, matchedModule ?? {}, {})
+createAndStartFSMWorker(
+  deps,
+  input_fsm_name,
+  input_fsm_version,
+  matchedModule ?? {},
+  {},
+);
 ```
 
-Also fixes `matchedModule` being passed without `?? {}` fallback (parameter is non-optional but `find` may return `undefined`).
+Also fixes `matchedModule` being passed without `?? {}` fallback (parameter is
+non-optional but `find` may return `undefined`).
 
 ---
 
 ## Gap 7 — `fsmworker.handlers.ts` misuses `isFSMInstancePresent` return value ✅ Fixed
 
-**File:** (formerly `fsmworker.handlers.ts`, now merged into `fsm.handlers.ts` — start handler)
+**File:** (formerly `fsmworker.handlers.ts`, now merged into `fsm.handlers.ts` —
+start handler)
 
-`isFSMInstancePresent` returns `boolean`. The handler was accessing `.fsm_name` and `.fsm_version` on it — always `undefined`. This caused `startFSMWorkerWithDBLock` to receive `undefined` for both name and version.
+`isFSMInstancePresent` returns `boolean`. The handler was accessing `.fsm_name`
+and `.fsm_version` on it — always `undefined`. This caused
+`startFSMWorkerWithDBLock` to receive `undefined` for both name and version.
 
-**Fix:** Replace `isFSMInstancePresent` with `getFsmDataResolveStateValue` which returns the full instance row (including `fsm_name` and `fsm_version`).
+**Fix:** Replace `isFSMInstancePresent` with `getFsmDataResolveStateValue` which
+returns the full instance row (including `fsm_name` and `fsm_version`).
 
 ---
 
@@ -133,7 +174,11 @@ Also fixes `matchedModule` being passed without `?? {}` fallback (parameter is n
 import type { CreateRoute, ListRoute, SendRoute } from "./fsmpromise.routes.ts";
 
 // After
-import type { CreateAndStartRoute, CreateRoute, ListRoute } from "./fsmpromise.routes.ts";
+import type {
+  CreateAndStartRoute,
+  CreateRoute,
+  ListRoute,
+} from "./fsmpromise.routes.ts";
 ```
 
 ---
@@ -142,9 +187,12 @@ import type { CreateAndStartRoute, CreateRoute, ListRoute } from "./fsmpromise.r
 
 **File:** `src/cli/index.ts`
 
-The compiler CLI (`packages/fsm-compiler-ts`) added a `--db-url` / `-d` flag that takes precedence over `DATABASE_URL`. The worker CLI previously only read `DATABASE_URL`.
+The compiler CLI (`packages/fsm-compiler-ts`) added a `--db-url` / `-d` flag
+that takes precedence over `DATABASE_URL`. The worker CLI previously only read
+`DATABASE_URL`.
 
 **Fix applied:**
+
 ```ts
 string: [..., "db-url"],
 alias: { ..., d: "db-url" },
@@ -158,11 +206,15 @@ connectionString: dbUrl ?? Deno.env.get("DATABASE_URL")
 
 **File:** `src/cli/index.ts`
 
-The CLI parsed `--fsm-folder-path` (`-f`) and passed it directly to `verifiedModule` without checking that the path exists on disk.
+The CLI parsed `--fsm-folder-path` (`-f`) and passed it directly to
+`verifiedModule` without checking that the path exists on disk.
 
 **Fix applied:** After the missing-args check:
+
 ```ts
-try { await Deno.stat(fsmFolderPath!); } catch {
+try {
+  await Deno.stat(fsmFolderPath!);
+} catch {
   console.error(`Error: --fsm-folder-path "${fsmFolderPath}" does not exist.`);
   Deno.exit(1);
 }
@@ -174,18 +226,28 @@ try { await Deno.stat(fsmFolderPath!); } catch {
 
 **File:** `src/cli/index.ts`
 
-The CLI used `await new Promise(() => {})` as an infinite block but registered no signal listeners. Pressing Ctrl+C (SIGINT) killed the process immediately — the worker loop could not finish its current iteration, and the DB advisory lock was not explicitly released (relied on session-end cleanup from the pg driver).
+The CLI used `await new Promise(() => {})` as an infinite block but registered
+no signal listeners. Pressing Ctrl+C (SIGINT) killed the process immediately —
+the worker loop could not finish its current iteration, and the DB advisory lock
+was not explicitly released (relied on session-end cleanup from the pg driver).
 
-**Fix applied:** Register Deno signal listeners that trigger an `AbortController`. The signal is passed to all worker start functions (which already support `AbortSignal` internally via `while (!signal?.aborted)`). Fire-and-forget commands block on `waitForAbort()` (a promise that resolves when the signal fires) instead of the infinite promise. Second Ctrl+C calls `Deno.exit(0)` immediately.
+**Fix applied:** Register Deno signal listeners that trigger an
+`AbortController`. The signal is passed to all worker start functions (which
+already support `AbortSignal` internally via `while (!signal?.aborted)`).
+Fire-and-forget commands block on `waitForAbort()` (a promise that resolves when
+the signal fires) instead of the infinite promise. Second Ctrl+C calls
+`Deno.exit(0)` immediately.
 
 ```ts
 const controller = new AbortController();
 let shutdownRequested = false;
 
 const onSignal = () => {
-  if (shutdownRequested) { Deno.exit(0); }
+  if (shutdownRequested) Deno.exit(0);
   shutdownRequested = true;
-  console.log("\nShutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
+  console.log(
+    "\nShutdown requested — stopping worker gracefully. Ctrl+C again to force exit...",
+  );
   controller.abort();
 };
 
@@ -197,33 +259,46 @@ Deno.addSignalListener("SIGTERM", onSignal);
 
 ## Gap 12 — `POST /fsmpromise/start` blocks forever + no AbortController in promise handlers ✅ Fixed
 
-**Files:** `apps/fsm-core-ts-hono-deno/routes/fsmpromise/fsmpromise.handlers.ts`, `apps/fsm-core-worker-ts/src/createAndStartPromiseWorker.ts`
+**Files:**
+`apps/fsm-core-ts-hono-deno/routes/fsmpromise/fsmpromise.handlers.ts`,
+`apps/fsm-core-worker-ts/src/createAndStartPromiseWorker.ts`
 
 Three problems mirroring what was fixed for `/fsm`:
 
-1. **`start` handler blocks forever.** `await startFSMPromiseWorker(...)` blocks the HTTP response indefinitely — the worker is an infinite loop and no signal was passed. Fix: check queue existence via `pgmqQueueExists`, then fire the worker in the background (not awaited), same fire-and-forget pattern as the FSM handlers.
+1. **`start` handler blocks forever.** `await startFSMPromiseWorker(...)` blocks
+   the HTTP response indefinitely — the worker is an infinite loop and no signal
+   was passed. Fix: check queue existence via `pgmqQueueExists`, then fire the
+   worker in the background (not awaited), same fire-and-forget pattern as the
+   FSM handlers.
 
-2. **`activePromiseLocks: Record<string, boolean>` has no `AbortController`.** Replace with `activePromiseWorkers: Record<string, { lock: boolean; controller: AbortController }>`. Add duplicate-running check to `start` and `createAndStart` handlers. `GET /fsmpromise` now projects to `{ [key]: lock }`.
+2. **`activePromiseLocks: Record<string, boolean>` has no `AbortController`.**
+   Replace with
+   `activePromiseWorkers: Record<string, { lock: boolean; controller: AbortController }>`.
+   Add duplicate-running check to `start` and `createAndStart` handlers.
+   `GET /fsmpromise` now projects to `{ [key]: lock }`.
 
-3. **No stop route.** Added `POST /fsmpromise/stop` (mirrors `POST /fsm/stop`): sets `lock = false`, calls `controller.abort()`, returns 200. Returns 404 if no active worker found.
+3. **No stop route.** Added `POST /fsmpromise/stop` (mirrors `POST /fsm/stop`):
+   sets `lock = false`, calls `controller.abort()`, returns 200. Returns 404 if
+   no active worker found.
 
-`createAndStartPromiseWorker` gained `onStop?: () => void` — called in `.then()/.catch()` cleanup when the worker loop exits.
+`createAndStartPromiseWorker` gained `onStop?: () => void` — called in
+`.then()/.catch()` cleanup when the worker loop exits.
 
 ---
 
 ## Summary
 
-| Gap | Priority | Status |
-|---|---|---|
-| Gap 1: `start-worker` no dedicated route | Low | Deferred |
-| Gap 2: `createAndStartFSMWorker` via `POST /fsm` | High | ✅ Fixed |
-| Gap 3: `POST /fsmpromise/create-and-start` | High | ✅ Fixed |
-| Gap 4: `POST /fsmpromise/start` arg mapping | High | ✅ Fixed |
-| Gap 5: `verifiedModules` → `verifiedFsmModules` | Critical | ✅ Fixed |
-| Gap 6: `false` as `fsm_context` | High | ✅ Fixed |
-| Gap 7: `isFSMInstancePresent` misuse | Critical | ✅ Fixed |
-| Gap 8: stale `SendRoute` import | Medium | ✅ Fixed |
-| Gap 9: no `--db-url` flag in worker CLI | Low | ✅ Fixed |
-| Gap 10: no `--fsm-folder-path` existence check | Low | ✅ Fixed |
-| Gap 11: no SIGINT/SIGTERM signal handlers in CLI | Medium | ✅ Fixed |
-| Gap 12: `POST /fsmpromise/start` blocks + no AbortController + no stop route | High | ✅ Fixed |
+| Gap                                                                          | Priority | Status   |
+| ---------------------------------------------------------------------------- | -------- | -------- |
+| Gap 1: `start-worker` no dedicated route                                     | Low      | Deferred |
+| Gap 2: `createAndStartFSMWorker` via `POST /fsm`                             | High     | ✅ Fixed |
+| Gap 3: `POST /fsmpromise/create-and-start`                                   | High     | ✅ Fixed |
+| Gap 4: `POST /fsmpromise/start` arg mapping                                  | High     | ✅ Fixed |
+| Gap 5: `verifiedModules` → `verifiedFsmModules`                              | Critical | ✅ Fixed |
+| Gap 6: `false` as `fsm_context`                                              | High     | ✅ Fixed |
+| Gap 7: `isFSMInstancePresent` misuse                                         | Critical | ✅ Fixed |
+| Gap 8: stale `SendRoute` import                                              | Medium   | ✅ Fixed |
+| Gap 9: no `--db-url` flag in worker CLI                                      | Low      | ✅ Fixed |
+| Gap 10: no `--fsm-folder-path` existence check                               | Low      | ✅ Fixed |
+| Gap 11: no SIGINT/SIGTERM signal handlers in CLI                             | Medium   | ✅ Fixed |
+| Gap 12: `POST /fsmpromise/start` blocks + no AbortController + no stop route | High     | ✅ Fixed |

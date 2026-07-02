@@ -17,4 +17,3 @@ export function assignCoolantLevel(context: any, event: any) {
 export function assignBattery(context: any, event: any) {
   // TODO: implement
 }
-

@@ -32,4 +32,3 @@ export function determineMiddleScore(context: any, event: any) {
 export function generateInterestRates(context: any, event: any) {
   // TODO: implement actor logic
 }
-

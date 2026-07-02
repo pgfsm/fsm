@@ -29,11 +29,14 @@ export async function registerFsmlet(
        last_heartbeat  = NOW()`,
     [fsmletId, JSON.stringify(fsmModules), maxConcurrency],
   );
-  logger.info("Fsmlet {fsmletId} registered (modules: {count}, maxConcurrency: {max})", {
-    fsmletId,
-    count: fsmModules.length,
-    max: maxConcurrency,
-  });
+  logger.info(
+    "Fsmlet {fsmletId} registered (modules: {count}, maxConcurrency: {max})",
+    {
+      fsmletId,
+      count: fsmModules.length,
+      max: maxConcurrency,
+    },
+  );
 }
 
 export async function fsmletHeartbeat(
@@ -49,8 +52,14 @@ export async function fsmletHeartbeat(
   );
 }
 
-export async function deregisterFsmlet(pool: Pool, fsmletId: string): Promise<void> {
-  await pool.query(`DELETE FROM fsm_core.fsm_daemon_node WHERE daemon_id = $1`, [fsmletId]);
+export async function deregisterFsmlet(
+  pool: Pool,
+  fsmletId: string,
+): Promise<void> {
+  await pool.query(
+    `DELETE FROM fsm_core.fsm_daemon_node WHERE daemon_id = $1`,
+    [fsmletId],
+  );
   logger.info("Fsmlet {fsmletId} deregistered", { fsmletId });
 }
 

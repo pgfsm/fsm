@@ -20,7 +20,6 @@ mod tests {
     fn test_hello_fsm_core() {
         assert_eq!("Hello, fsm_core", crate::hello_fsm_core());
     }
-
 }
 
 /// This module is required by `cargo pgrx test` invocations.

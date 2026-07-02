@@ -21,7 +21,9 @@ function getSummaryConsoleSink(): Sink {
     if (record.category.length > 2 && record.level === "debug") {
       const parentGroup = record.category.slice(0, 2).join(" > ");
       if (typeof process !== "undefined" && process.stdout?.write) {
-        process.stdout.write(`\r 📂 [${parentGroup}] Processing inner tasks...    `);
+        process.stdout.write(
+          `\r 📂 [${parentGroup}] Processing inner tasks...    `,
+        );
       } else {
         console.log(`📂 [${parentGroup}] Tasks working...`);
       }
@@ -38,14 +40,22 @@ export type LogLevel = "debug" | "info" | "warning" | "error" | "fatal";
 export async function configureWorkerLogger(
   level: LogLevel = "info",
 ): Promise<void> {
-  const metaLogger = { category: ["logtape", "meta"], sinks: ["console"] as string[], lowestLevel: "warning" as const };
+  const metaLogger = {
+    category: ["logtape", "meta"],
+    sinks: ["console"] as string[],
+    lowestLevel: "warning" as const,
+  };
 
   // Profile A: TTY terminal — rich summary-focused, debug-level, inline repainting
   if (isTerminal) {
     await configure({
       sinks: { console: getSummaryConsoleSink() },
       loggers: [
-        { category: ["@pgfsm/worker"], lowestLevel: "debug", sinks: ["console"] },
+        {
+          category: ["@pgfsm/worker"],
+          lowestLevel: "debug",
+          sinks: ["console"],
+        },
         metaLogger,
       ],
     });

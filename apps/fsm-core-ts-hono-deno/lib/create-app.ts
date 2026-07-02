@@ -21,7 +21,12 @@ import configureOpenAPI from "./configure-open-api.ts";
 import { logtapeLogger } from "./../middlewares/logtape-logger.ts";
 import { otelTrace } from "./../middlewares/otel-trace.ts";
 
-import type { AppBindings, AppOpenAPI, FsmStartupConfig, VerifiedFsmModule } from "./types.ts";
+import type {
+  AppBindings,
+  AppOpenAPI,
+  FsmStartupConfig,
+  VerifiedFsmModule,
+} from "./types.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
@@ -54,7 +59,9 @@ export default async function createApp(
       },
     },
   );
-  daemon.catch((err) => logger.error("Dispatch daemon error: {error}", { error: err }));
+  daemon.catch((err) =>
+    logger.error("Dispatch daemon error: {error}", { error: err })
+  );
 
   pool.on("connect", () => {
     logger.debug("Database pool: new connection established");
@@ -68,7 +75,8 @@ export default async function createApp(
 
   const app = createRouter();
 
-  const otelEnabled = env.OTEL_DENO === "true" && !!env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const otelEnabled = env.OTEL_DENO === "true" &&
+    !!env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
   // app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(logtapeLogger());

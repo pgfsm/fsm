@@ -53,9 +53,13 @@ const maxConcurrencyArg = args["max-concurrency"];
 const fsmletId = args["fsmlet-id"] ?? Deno.env.get("FSMLET_ID");
 
 const DEFAULT_MAX_CONCURRENCY = 8;
-const maxConcurrency = maxConcurrencyArg ? Number(maxConcurrencyArg) : DEFAULT_MAX_CONCURRENCY;
+const maxConcurrency = maxConcurrencyArg
+  ? Number(maxConcurrencyArg)
+  : DEFAULT_MAX_CONCURRENCY;
 if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
-  logger.error("--max-concurrency must be a positive integer, got: {value}", { value: maxConcurrencyArg });
+  logger.error("--max-concurrency must be a positive integer, got: {value}", {
+    value: maxConcurrencyArg,
+  });
   Deno.exit(1);
 }
 
@@ -68,7 +72,9 @@ if (!fsmFolderPath) {
 try {
   await Deno.stat(fsmFolderPath);
 } catch {
-  logger.error("--fsm-folder-path does not exist: {path}", { path: fsmFolderPath });
+  logger.error("--fsm-folder-path does not exist: {path}", {
+    path: fsmFolderPath,
+  });
   Deno.exit(1);
 }
 
@@ -84,7 +90,9 @@ const onSignal = () => {
     Deno.exit(0);
   }
   shutdownRequested = true;
-  logger.info("Shutdown requested — stopping fsmlet gracefully. Ctrl+C again to force exit...");
+  logger.info(
+    "Shutdown requested — stopping fsmlet gracefully. Ctrl+C again to force exit...",
+  );
   controller.abort();
 };
 

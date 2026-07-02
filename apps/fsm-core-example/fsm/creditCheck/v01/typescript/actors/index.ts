@@ -1,18 +1,24 @@
 // Actor: verifyCredentials
-export function verifyCredentials(input: { SSN: string; firstName: string; lastName: string }): Promise<{ SSN: string; firstName: string; lastName: string }> {
+export function verifyCredentials(
+  input: { SSN: string; firstName: string; lastName: string },
+): Promise<{ SSN: string; firstName: string; lastName: string }> {
   // TODO: implement actor logic
   console.log(`Verifying credentials input ${JSON.stringify(input)}`);
   return Promise.resolve(input);
 }
 
 // Actor: checkReportsTable
-export function checkReportsTable(_input: { ssn: string; bureauName: string }): Promise<null> {
+export function checkReportsTable(
+  _input: { ssn: string; bureauName: string },
+): Promise<null> {
   // TODO: implement actor logic — return null means no existing report found
   return Promise.resolve(null);
 }
 
 // Actor: checkBureau
-export function checkBureau(_input: { ssn: string; bureauName: string }): Promise<{ score: number }> {
+export function checkBureau(
+  _input: { ssn: string; bureauName: string },
+): Promise<{ score: number }> {
   // TODO: implement actor logic
   return Promise.resolve({ score: 0 });
 }

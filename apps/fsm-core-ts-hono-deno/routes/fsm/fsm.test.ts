@@ -12,14 +12,7 @@
  *   - activeWorkers — shared module-level state (single source of truth for running workers)
  */
 import { testClient } from "hono/testing";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Module-level mocks must be declared before any imports that trigger them.
 vi.mock("../../middlewares/supabase.ts", () => ({
@@ -43,7 +36,11 @@ vi.mock("@pgfsm/worker", () => ({
   createAndStartFSMWorker: vi.fn(),
 }));
 
-import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
+import {
+  createFsmInstanceFromName,
+  getFsmDataResolveStateValue,
+  sendEventToFsmQueueWithEventLogs,
+} from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "@pgfsm/worker";
 import { createRouter } from "../../lib/create-app.ts";
 import { activeWorkers } from "./fsm.handlers.ts";
@@ -82,7 +79,12 @@ describe("GET /fsm", () => {
 
   it("returns 200 with the list of FSM instances", async () => {
     const mockInstances = [
-      { id: "uuid-1", fsm_name: "credit_check", fsm_version: "v01", fsm_instance_status: "active" },
+      {
+        id: "uuid-1",
+        fsm_name: "credit_check",
+        fsm_version: "v01",
+        fsm_instance_status: "active",
+      },
     ];
     vi.mocked(listFsmInstances).mockResolvedValueOnce(mockInstances as never);
     const res = await client.fsm.$get();
@@ -180,7 +182,10 @@ describe("POST /fsm", () => {
   });
 
   it("does not register a controller when lock acquisition fails", async () => {
-    const mockInstance = { fsm_instance_id: "uuid-lock-fail", fsm_version: "v01" };
+    const mockInstance = {
+      fsm_instance_id: "uuid-lock-fail",
+      fsm_version: "v01",
+    };
     vi.mocked(createFsmInstanceFromName).mockResolvedValueOnce(mockInstance);
     vi.mocked(startFSMWorkerWithDBLock).mockResolvedValueOnce(false);
 
@@ -228,7 +233,9 @@ describe("POST /fsm/send", () => {
 
   it("returns 200 with data on successful event send", async () => {
     const mockResult = { msg_id: "42" };
-    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce(mockResult);
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce(
+      mockResult,
+    );
 
     const res = await client.fsm.send.$post({
       json: {
@@ -242,19 +249,27 @@ describe("POST /fsm/send", () => {
   });
 
   it("accepts extra fields in event_data (passthrough schema)", async () => {
-    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce({ msg_id: "1" });
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockResolvedValueOnce({
+      msg_id: "1",
+    });
 
     const res = await client.fsm.send.$post({
       json: {
         fsm_instance_id: "uuid-abc-123",
-        event_data: { type: "APPROVE", payload: { amount: 5000 }, source: "api" },
+        event_data: {
+          type: "APPROVE",
+          payload: { amount: 5000 },
+          source: "api",
+        },
       },
     });
     expect(res.status).toBe(200);
   });
 
   it("returns 500 with 'Unexpected error' when sendEventToFsmQueueWithEventLogs throws", async () => {
-    vi.mocked(sendEventToFsmQueueWithEventLogs).mockRejectedValueOnce(new Error("queue error"));
+    vi.mocked(sendEventToFsmQueueWithEventLogs).mockRejectedValueOnce(
+      new Error("queue error"),
+    );
 
     const res = await client.fsm.send.$post({
       json: {
@@ -284,7 +299,10 @@ describe("GET /fsm/currentActive", () => {
   });
 
   it("reflects workers registered in activeWorkers", async () => {
-    activeWorkers["some-queue-id"] = { lock: true, controller: new AbortController() };
+    activeWorkers["some-queue-id"] = {
+      lock: true,
+      controller: new AbortController(),
+    };
     const res = await client.fsm.currentActive.$get();
     expect(res.status).toBe(200);
     const json = await res.json();

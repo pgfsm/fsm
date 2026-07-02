@@ -11,8 +11,6 @@ declare module "hono" {
   }
 }
 
-
-
 type SupabaseEnv = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
@@ -34,8 +32,8 @@ export const supabaseMiddleware = (): MiddlewareHandler => {
     }
 
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-       db: {
-        schema: 'fsm_core', // Specify your custom schema name here
+      db: {
+        schema: "fsm_core", // Specify your custom schema name here
       },
       cookies: {
         getAll() {

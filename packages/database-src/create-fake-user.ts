@@ -2,8 +2,7 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
 
-
-dotenv.config({path: "./../../.env"});
+dotenv.config({ path: "./../../.env" });
 
 /**
  * Creates 10 fake users in Supabase Auth using the admin API.
@@ -14,7 +13,7 @@ export async function createFakeUsersInSupabaseAuth() {
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
-      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env variable"
+      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env variable",
     );
   }
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -26,8 +25,8 @@ export async function createFakeUsersInSupabaseAuth() {
     password: `fakeuser${i + 1}@example.com`,
     email_confirm: true,
     user_metadata: {
-        full_name: `Fake User ${i + 1}`,
-        avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${i + 1}`
+      full_name: `Fake User ${i + 1}`,
+      avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${i + 1}`,
     },
   }));
 

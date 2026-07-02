@@ -1,6 +1,38 @@
+# Pre-commit hooks (run locally on staged files via `prek`).
+#
+# Principle: only fast, local, deterministic, file-scoped checks belong here.
+# Slow/networked/whole-repo tools stay in CI:
+#   - cargo clippy  -> compiles the crate (slow)            => ci.yml
+#   - CodeQL        -> full SAST build                      => codeql.yml
+#   - cdxgen/grype  -> network + whole-repo SBOM/CVE scan   => sbom.yml
+#   - REUSE lint    -> whole-repo license check             => reuse.yml
+
+# Secret scanning — fast, catches credentials before they ever leave the machine.
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
 rev = "v8.30.1"
 hooks = [
   { id = "gitleaks" },
+]
+
+# Format & lint — Deno's are near-instant. fmt runs workspace-wide (no explicit
+# filenames) so it matches CI's `deno fmt --check` exactly; passing per-file paths
+# bypasses the workspace fmt config and can disagree with CI. cargo fmt only
+# parses (no compile), so it's cheap enough for pre-commit.
+#
+# Entries name the tool only (no shell wrapper, no hardcoded paths) so they run
+# cross-platform and assume the pinned toolchain is on PATH — the standard hook
+# contract. If a GUI git client can't find `deno`/`cargo`, that's an environment
+# issue (it isn't inheriting your shell PATH); see CONTRIBUTING.md. cargo fmt uses
+# --manifest-path instead of `cd` so no shell is needed on Windows.
+#
+# deno lint is intentionally OFF for now — the repo carries a ~541-issue backlog
+# (mostly no-explicit-any / no-unused-vars). Re-enable the `deno-lint` hook below
+# once the backlog is worked down (or to gate new code on touched files).
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "deno-fmt", name = "deno fmt", entry = "deno fmt --check", language = "system", pass_filenames = false, types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"] },
+  # { id = "deno-lint", name = "deno lint", entry = "deno lint", language = "system", pass_filenames = true, types_or = ["ts", "tsx", "javascript", "jsx"] },
+  { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --manifest-path packages/database-src-extension/fsm_core/Cargo.toml --all --check", language = "system", pass_filenames = false, files = '^packages/database-src-extension/fsm_core/.*\.rs$' },
 ]

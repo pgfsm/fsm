@@ -20,6 +20,8 @@ self.addEventListener("error", (event) => {
 });
 
 self.addEventListener("unhandledrejection", (event) => {
-  logger.error("Unhandled promise rejection: {reason}", { reason: event.reason });
+  logger.error("Unhandled promise rejection: {reason}", {
+    reason: event.reason,
+  });
   event.preventDefault();
 });

@@ -4,8 +4,7 @@ import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
-import { loadFsmFromJson, type DBDeps } from "@pgfsm/db";
-
+import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
 
 async function loadFsmJSONFromFolder(
   dirEntryName: string,
@@ -14,7 +13,7 @@ async function loadFsmJSONFromFolder(
   absFolderPath: string,
   parentSource: string,
   workflowType: WorkflowType,
-  deps: DBDeps
+  deps: DBDeps,
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
   try {
@@ -26,20 +25,31 @@ async function loadFsmJSONFromFolder(
     // Call loadFsmStateFromJsonV2 and loadFsmTransitionFromJsonV2 with fsmData
     const fsmName = dirEntryName;
     const fsmVersion = dirEntryNameVersion;
-    const fsmResult = await loadFsmFromJson(deps, fsmData, null, workflowType, fsmName, fsmVersion);
-    logger.info("Successfully loaded FSM from {path}: {result}", { path: fsmJson, result: fsmResult });
+    const fsmResult = await loadFsmFromJson(
+      deps,
+      fsmData,
+      null,
+      workflowType,
+      fsmName,
+      fsmVersion,
+    );
+    logger.info("Successfully loaded FSM from {path}: {result}", {
+      path: fsmJson,
+      result: fsmResult,
+    });
     return fsmResult;
-    
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      logger.info("fsm.json is missing in {path}", { path: `${absFolderPath}/${dirEntryName}` });
+      logger.info("fsm.json is missing in {path}", {
+        path: `${absFolderPath}/${dirEntryName}`,
+      });
     } else {
-      logger.error("Failed to import or process {path}: {error}", { path: fsmJson, error: err });
+      logger.error("Failed to import or process {path}: {error}", {
+        path: fsmJson,
+        error: err,
+      });
     }
   }
-
-    
-
 }
 
 /**
@@ -50,20 +60,31 @@ export async function loadFsmJSONFromFolders(
   folderPath: string,
   workflowType: WorkflowType,
   skipDirs: string[] = [],
-  deps: DBDeps
+  deps: DBDeps,
 ): Promise<any[]> {
   if (folderPath.startsWith(".")) {
-    throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`);
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
+    );
   }
   if (folderPath.endsWith("/")) {
-    throw new Error(`Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`);
+    throw new Error(
+      `Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`,
+    );
   }
   if (folderPath.startsWith("/")) {
-    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
+    logger.info("Importing workflows from absolute path: {path}", {
+      path: folderPath,
+    });
   } else {
-    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
+    logger.info("Importing workflows from relative path: {path} to {cwd}", {
+      path: folderPath,
+      cwd: Deno.cwd(),
+    });
   }
-  const absFolderPath = folderPath.startsWith("/") ? folderPath : `${Deno.cwd()}/${folderPath}`;
+  const absFolderPath = folderPath.startsWith("/")
+    ? folderPath
+    : `${Deno.cwd()}/${folderPath}`;
   const folderResults: any[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
@@ -74,11 +95,24 @@ export async function loadFsmJSONFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
           if (isVersionFolderName(subEntry.name)) {
-            const folderResult = await loadFsmJSONFromFolder(dirEntry.name, subEntry.name, folderPath, `${fsmDirPath}/${subEntry.name}`, dirEntry.name, workflowType, deps);
+            const folderResult = await loadFsmJSONFromFolder(
+              dirEntry.name,
+              subEntry.name,
+              folderPath,
+              `${fsmDirPath}/${subEntry.name}`,
+              dirEntry.name,
+              workflowType,
+              deps,
+            );
             folderResults.push(folderResult);
-            logger.info("Successfully loaded FSM from {path}", { path: `${fsmDirPath}/${subEntry.name}` });
+            logger.info("Successfully loaded FSM from {path}", {
+              path: `${fsmDirPath}/${subEntry.name}`,
+            });
           } else {
-            logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
+            logger.info("Skipping non-versioned folder: {name} in {dir}", {
+              name: subEntry.name,
+              dir: fsmDirPath,
+            });
           }
         }
       }

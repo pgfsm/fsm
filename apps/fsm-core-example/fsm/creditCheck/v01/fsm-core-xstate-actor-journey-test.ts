@@ -4,10 +4,19 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import { machineWithProvider } from "./machine-with-provider.ts";
-import { createAndStartFSMWorker, createAndStartPromiseWorker } from "@pgfsm/worker";
-import { sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
+import {
+  createAndStartFSMWorker,
+  createAndStartPromiseWorker,
+} from "@pgfsm/worker";
+import {
+  getFsmDataResolveStateValue,
+  sendEventToFsmQueueWithEventLogs,
+} from "@pgfsm/db";
 import type { DBDeps } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
+import {
+  replaceSpacesWithUnderscores,
+  replaceUnderscoresWithSpaces,
+} from "@pgfsm/compiler";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";
@@ -38,12 +47,15 @@ async function pollUntil(
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error(`Timeout: state predicate not satisfied for instance "${instanceId}"`);
+  throw new Error(
+    `Timeout: state predicate not satisfied for instance "${instanceId}"`,
+  );
 }
 
 // Journey 1: createActor initial context matches DB initial context after createAndStartFSMWorker
 Deno.test({
-  name: "Journey 1 — createActor + createAndStartFSMWorker: initial context matches",
+  name:
+    "Journey 1 — createActor + createAndStartFSMWorker: initial context matches",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -57,13 +69,14 @@ Deno.test({
       ErrorMessage: "",
       MiddleScore: 0,
       InterestRateOptions: [],
-
     };
     const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
     const deps: DBDeps = { useSupabase: false, db: pool };
     const activeLocks: Record<string, boolean> = {};
     const controller = new AbortController();
-    const actor = createActor(machineWithProvider,{ input : input_fsm_context });
+    const actor = createActor(machineWithProvider, {
+      input: input_fsm_context,
+    });
     actor.start();
 
     try {
@@ -86,10 +99,15 @@ Deno.test({
       // Wait for worker to write initial state to DB
       await new Promise((r) => setTimeout(r, 10000));
 
-      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(
+        deps,
+        fsm_instance.fsm_instance_id,
+      );
       if (!data) throw new Error("No FSM data found for instance");
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        data.resolved_state_value.json.machine,
+      );
       const stateChanges = diff(dbStateWithSpaces, xstateSnapshot.value);
 
       const dbContext = data.fsm_instance_row.fsm_instance_context;
@@ -98,13 +116,19 @@ Deno.test({
       assertEquals(
         stateChanges.length,
         0,
-        `Initial state mismatch.\nDB: ${JSON.stringify(dbStateWithSpaces)}\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${JSON.stringify(stateChanges, null, 2)}`,
+        `Initial state mismatch.\nDB: ${
+          JSON.stringify(dbStateWithSpaces)
+        }\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${
+          JSON.stringify(stateChanges, null, 2)
+        }`,
       );
 
       assertEquals(
         contextChanges.length,
         0,
-        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${JSON.stringify(xstateSnapshot.context)}\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
+        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${
+          JSON.stringify(xstateSnapshot.context)
+        }\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
       );
     } finally {
       actor.stop();
@@ -135,7 +159,9 @@ Deno.test({
     const deps: DBDeps = { useSupabase: false, db: pool };
     const activeLocks: Record<string, boolean> = {};
     const controller = new AbortController();
-    const actor = createActor(machineWithProvider, { input: input_fsm_context });
+    const actor = createActor(machineWithProvider, {
+      input: input_fsm_context,
+    });
     actor.start();
 
     try {
@@ -168,16 +194,21 @@ Deno.test({
         "Submit",
         "external",
         { type: "Submit", payload: {} },
-        0
+        0,
       );
 
       // Wait for worker to process Submit and write new state to DB
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(
+        deps,
+        fsm_instance.fsm_instance_id,
+      );
       if (!data) throw new Error("No FSM data found for instance");
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        data.resolved_state_value.json.machine,
+      );
       const stateChanges = diff(dbStateWithSpaces, xstateSnapshot.value);
 
       const dbContext = data.fsm_instance_row.fsm_instance_context;
@@ -186,13 +217,19 @@ Deno.test({
       assertEquals(
         stateChanges.length,
         0,
-        `Initial state mismatch.\nDB: ${JSON.stringify(dbStateWithSpaces)}\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${JSON.stringify(stateChanges, null, 2)}`,
+        `Initial state mismatch.\nDB: ${
+          JSON.stringify(dbStateWithSpaces)
+        }\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${
+          JSON.stringify(stateChanges, null, 2)
+        }`,
       );
 
       assertEquals(
         contextChanges.length,
         0,
-        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${JSON.stringify(xstateSnapshot.context)}\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
+        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${
+          JSON.stringify(xstateSnapshot.context)
+        }\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
       );
     } finally {
       actor.stop();
@@ -204,7 +241,8 @@ Deno.test({
 
 // Journey 3: verifyCredentials resolves — xstate actor context matches DB context in CheckingCreditScores
 Deno.test({
-  name: "Journey 3 — verifyCredentials done: xstate actor context matches DB context in CheckingCreditScores",
+  name:
+    "Journey 3 — verifyCredentials done: xstate actor context matches DB context in CheckingCreditScores",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -218,13 +256,14 @@ Deno.test({
       ErrorMessage: "",
       MiddleScore: 0,
       InterestRateOptions: [],
-
     };
     const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
     const deps: DBDeps = { useSupabase: false, db: pool };
     const activeLocks: Record<string, boolean> = {};
     const controller = new AbortController();
-    const actor = createActor(machineWithProvider, { input: input_fsm_context });
+    const actor = createActor(machineWithProvider, {
+      input: input_fsm_context,
+    });
     actor.start();
 
     try {
@@ -252,8 +291,7 @@ Deno.test({
         parentFsmVersion: fsm_version,
         fsmAbsFolderPath: verifiedModule.fsmAbsFolderPath as string,
         controller: new AbortController(),
-
-      }
+      };
       try {
         await createAndStartPromiseWorker(
           deps,
@@ -264,9 +302,14 @@ Deno.test({
           { fsmAbsFolderPath: promiseActor.fsmAbsFolderPath },
           promiseActor.controller.signal,
         );
-        console.log(`✅ Promise worker started for actor: ${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}`);
+        console.log(
+          `✅ Promise worker started for actor: ${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}`,
+        );
       } catch (err) {
-        console.warn(`⚠️ Could not start promise worker for "${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}":`, err);
+        console.warn(
+          `⚠️ Could not start promise worker for "${promiseActor.parentFsmName}_${promiseActor.parentFsmVersion}_${promiseActor.src}":`,
+          err,
+        );
       }
 
       // DB FSM: create instance and start worker
@@ -294,7 +337,7 @@ Deno.test({
         "Submit",
         "external",
         { type: "Submit", payload: {} },
-        0
+        0,
       );
 
       // DB FSM: poll until state reaches CheckingCreditScores
@@ -316,10 +359,15 @@ Deno.test({
 
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(
+        deps,
+        fsm_instance.fsm_instance_id,
+      );
       if (!data) throw new Error("No FSM data found for instance");
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        data.resolved_state_value.json.machine,
+      );
       const stateChanges = diff(dbStateWithSpaces, xstateSnapshot.value);
 
       const dbContext = data.fsm_instance_row.fsm_instance_context;
@@ -328,13 +376,19 @@ Deno.test({
       assertEquals(
         stateChanges.length,
         0,
-        `Initial state mismatch.\nDB: ${JSON.stringify(dbStateWithSpaces)}\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${JSON.stringify(stateChanges, null, 2)}`,
+        `Initial state mismatch.\nDB: ${
+          JSON.stringify(dbStateWithSpaces)
+        }\nXState: ${JSON.stringify(xstateSnapshot.value)}\nDiff: ${
+          JSON.stringify(stateChanges, null, 2)
+        }`,
       );
 
       assertEquals(
         contextChanges.length,
         0,
-        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${JSON.stringify(xstateSnapshot.context)}\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
+        `Initial context mismatch.\nDB: ${JSON.stringify(dbContext)}\nXState: ${
+          JSON.stringify(xstateSnapshot.context)
+        }\nDiff: ${JSON.stringify(contextChanges, null, 2)}`,
       );
     } finally {
       actor.stop();

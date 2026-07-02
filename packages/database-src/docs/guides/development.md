@@ -2,7 +2,8 @@
 
 ## Runtime requirements
 
-Node version is pinned via [proto](https://moonrepo.dev/docs/proto/overview). Check `.prototools` at the repo root for the exact version. To install:
+Node version is pinned via [proto](https://moonrepo.dev/docs/proto/overview).
+Check `.prototools` at the repo root for the exact version. To install:
 
 ```bash
 proto install node 22 --pin local
@@ -45,12 +46,17 @@ npm run supabase:db:deletefakeusers
 
 ## Making schema changes (day-to-day)
 
-Schema source files live in `supabase/schemas/` — they are the source of truth. Migrations in `supabase/migrations/` are generated output; never hand-edit them to add schema logic.
+Schema source files live in `supabase/schemas/` — they are the source of truth.
+Migrations in `supabase/migrations/` are generated output; never hand-edit them
+to add schema logic.
 
 1. Edit the relevant file in `supabase/schemas/`
-2. Run the temp diff command — it auto-bumps the patch version in `package.json`, generates the migration, restarts Supabase, and regenerates types in one step:
+2. Run the temp diff command — it auto-bumps the patch version in
+   `package.json`, generates the migration, restarts Supabase, and regenerates
+   types in one step:
    ```bash
    npm run supabase:restart:with:diff:withUpgradeScript:temp
    ```
 
-> Use this for iterative dev work. For a deliberate release bump (minor/major), see [release.md](./release.md).
+> Use this for iterative dev work. For a deliberate release bump (minor/major),
+> see [release.md](./release.md).

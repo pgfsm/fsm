@@ -6,14 +6,18 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
+import {
+  replaceSpacesWithUnderscores,
+  replaceUnderscoresWithSpaces,
+} from "@pgfsm/compiler";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";
 
 // Test 1: empty state {} — corresponds to the initial xstate state
 Deno.test({
-  name: "resolveStateValue: empty state {} matches xstate resolveState for initial state",
+  name:
+    "resolveStateValue: empty state {} matches xstate resolveState for initial state",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -27,8 +31,16 @@ Deno.test({
         context: {} as any,
       });
 
-      const result = await resolveStateValue(dbDeps, initialStateJson, fsm_name, fsm_version);
-      const changes = diff(replaceUnderscoresWithSpaces(result?.json), resolvedXstateState.value);
+      const result = await resolveStateValue(
+        dbDeps,
+        initialStateJson,
+        fsm_name,
+        fsm_version,
+      );
+      const changes = diff(
+        replaceUnderscoresWithSpaces(result?.json),
+        resolvedXstateState.value,
+      );
       assertEquals(
         changes.length,
         0,
@@ -41,26 +53,38 @@ Deno.test({
 });
 
 // Test 2: "Entering Information" state value — initial xstate state after replaceSpacesWithUnderscores
-Deno.test.ignore("resolveStateValue: Entering Information state matches xstate resolveState", async () => {
-  const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
-  const dbDeps = { useSupabase: false, db: pool };
-  try {
-    const [initialState] = initialTransition(machineConfig);
-    const initialStateJson = initialState.toJSON();
-    const resolvedXstateState = machineConfig.resolveState(initialStateJson as any);
+Deno.test.ignore(
+  "resolveStateValue: Entering Information state matches xstate resolveState",
+  async () => {
+    const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
+    const dbDeps = { useSupabase: false, db: pool };
+    try {
+      const [initialState] = initialTransition(machineConfig);
+      const initialStateJson = initialState.toJSON();
+      const resolvedXstateState = machineConfig.resolveState(
+        initialStateJson as any,
+      );
 
-    const stateValue = replaceSpacesWithUnderscores(resolvedXstateState.value);
-    const result = await resolveStateValue(dbDeps, stateValue, fsm_name, fsm_version);
+      const stateValue = replaceSpacesWithUnderscores(
+        resolvedXstateState.value,
+      );
+      const result = await resolveStateValue(
+        dbDeps,
+        stateValue,
+        fsm_name,
+        fsm_version,
+      );
 
-    assertEquals(
-      replaceUnderscoresWithSpaces(result?.json),
-      resolvedXstateState.value,
-      "resolveStateValue for Entering Information should match xstate resolveState",
-    );
-  } finally {
-    await pool.end();
-  }
-});
+      assertEquals(
+        replaceUnderscoresWithSpaces(result?.json),
+        resolvedXstateState.value,
+        "resolveStateValue for Entering Information should match xstate resolveState",
+      );
+    } finally {
+      await pool.end();
+    }
+  },
+);
 
 // Test 3: "Verifying Credentials" state — state after Submit event
 Deno.test({
@@ -84,8 +108,16 @@ Deno.test({
         context: {} as any,
       });
 
-      const result = await resolveStateValue(dbDeps, initialStateJson, fsm_name, fsm_version);
-      const changes = diff(replaceUnderscoresWithSpaces(result?.json), resolvedXstateState.value);
+      const result = await resolveStateValue(
+        dbDeps,
+        initialStateJson,
+        fsm_name,
+        fsm_version,
+      );
+      const changes = diff(
+        replaceUnderscoresWithSpaces(result?.json),
+        resolvedXstateState.value,
+      );
       assertEquals(
         changes.length,
         0,

@@ -3,13 +3,13 @@ import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import {
-  startFSMWorkerWithDBLock,
-  startFSMPromiseWorker,
+  bootstrapFsmModules,
   createAndStartFSMWorker,
   createAndStartPromiseWorker,
-  stopFSMWorker,
-  bootstrapFsmModules,
   pgListenerForWorkerStopEvent,
+  startFSMPromiseWorker,
+  startFSMWorkerWithDBLock,
+  stopFSMWorker,
 } from "../index.ts";
 import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
 
@@ -17,7 +17,15 @@ const logger = getLogger(["@pgfsm/worker", "cli"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "queue-name", "fsm-name", "fsm-version", "fsm-folder-path", "promise-type", "db-url"],
+  string: [
+    "command",
+    "queue-name",
+    "fsm-name",
+    "fsm-version",
+    "fsm-folder-path",
+    "promise-type",
+    "db-url",
+  ],
   boolean: ["help", "validate-plugin"],
   alias: {
     h: "help",
@@ -78,14 +86,31 @@ const fsmFolderPath = args["fsm-folder-path"];
 const promiseType = args["promise-type"];
 const dbUrl = args["db-url"];
 
-const needsQueueName = ["resume-worker", "start-promise-worker", "create-and-start-promise-worker", "stop-worker"];
-const needsPromiseType = ["start-promise-worker", "create-and-start-promise-worker"];
-const needsFsmDetails = ["resume-worker", "start-promise-worker", "create-and-start-promise-worker", "create-and-start-worker"];
+const needsQueueName = [
+  "resume-worker",
+  "start-promise-worker",
+  "create-and-start-promise-worker",
+  "stop-worker",
+];
+const needsPromiseType = [
+  "start-promise-worker",
+  "create-and-start-promise-worker",
+];
+const needsFsmDetails = [
+  "resume-worker",
+  "start-promise-worker",
+  "create-and-start-promise-worker",
+  "create-and-start-worker",
+];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
-if (command && needsQueueName.includes(command) && !queueName) missing.push("--queue-name");
-if (command && needsPromiseType.includes(command) && !promiseType) missing.push("--promise-type");
+if (command && needsQueueName.includes(command) && !queueName) {
+  missing.push("--queue-name");
+}
+if (command && needsPromiseType.includes(command) && !promiseType) {
+  missing.push("--promise-type");
+}
 if (command && needsFsmDetails.includes(command)) {
   if (!fsmName) missing.push("--fsm-name");
   if (!fsmVersion) missing.push("--fsm-version");
@@ -93,7 +118,9 @@ if (command && needsFsmDetails.includes(command)) {
 }
 
 if (missing.length > 0) {
-  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
+  logger.error("Missing required arguments: {missing}", {
+    missing: missing.join(", "),
+  });
   printHelp();
   Deno.exit(1);
 }
@@ -102,7 +129,9 @@ if (fsmFolderPath) {
   try {
     await Deno.stat(fsmFolderPath);
   } catch {
-    logger.error("--fsm-folder-path does not exist: {path}", { path: fsmFolderPath });
+    logger.error("--fsm-folder-path does not exist: {path}", {
+      path: fsmFolderPath,
+    });
     Deno.exit(1);
   }
 }
@@ -120,7 +149,9 @@ const onSignal = () => {
     Deno.exit(0);
   }
   shutdownRequested = true;
-  logger.info("Shutdown requested — stopping worker gracefully. Ctrl+C again to force exit...");
+  logger.info(
+    "Shutdown requested — stopping worker gracefully. Ctrl+C again to force exit...",
+  );
   controller.abort();
 };
 
@@ -143,11 +174,16 @@ const activeWorkers: Record<string, FsmWorkerEntry> = {};
 
 // Bootstrap is skipped for stop-worker — it only needs a bare DB connection
 let pool: Awaited<ReturnType<typeof bootstrapFsmModules>>["pool"] | undefined;
-let verifiedFsmModules: Awaited<ReturnType<typeof bootstrapFsmModules>>["verifiedFsmModules"] = [];
+let verifiedFsmModules: Awaited<
+  ReturnType<typeof bootstrapFsmModules>
+>["verifiedFsmModules"] = [];
 
 if (command && needsFsmDetails.includes(command)) {
   const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath! } };
-  const result = await bootstrapFsmModules({ connectionString: resolvedDbUrl }, fsmConfig);
+  const result = await bootstrapFsmModules(
+    { connectionString: resolvedDbUrl },
+    fsmConfig,
+  );
   pool = result.pool;
   verifiedFsmModules = result.verifiedFsmModules;
   await pgListenerForWorkerStopEvent(pool, (queueName) => {
@@ -180,7 +216,9 @@ try {
         controller.signal,
         () => {
           delete activeWorkers[queueName!];
-          logger.info("Worker for {queueName} stopped and DB lock released.", { queueName });
+          logger.info("Worker for {queueName} stopped and DB lock released.", {
+            queueName,
+          });
         },
       );
       if (result.status === "fail") {
@@ -191,18 +229,43 @@ try {
     }
     case "start-promise-worker": {
       activeWorkers[queueName!] = { lock: true, controller };
-      startFSMPromiseWorker(deps, queueName!, promiseType!, fsmName!, fsmVersion!, verifiedModule, controller.signal).catch((err) => {
-        logger.error("Promise worker for queue {queueName} stopped: {error}", { queueName, error: err });
+      startFSMPromiseWorker(
+        deps,
+        queueName!,
+        promiseType!,
+        fsmName!,
+        fsmVersion!,
+        verifiedModule,
+        controller.signal,
+      ).catch((err) => {
+        logger.error("Promise worker for queue {queueName} stopped: {error}", {
+          queueName,
+          error: err,
+        });
         Deno.exit(1);
       });
-      logger.info("Promise worker started for queue: {queueName}. Press Ctrl+C to stop.", { queueName });
+      logger.info(
+        "Promise worker started for queue: {queueName}. Press Ctrl+C to stop.",
+        { queueName },
+      );
       await waitForAbort();
       break;
     }
     case "create-and-start-promise-worker": {
       activeWorkers[queueName!] = { lock: true, controller };
-      await createAndStartPromiseWorker(deps, queueName!, fsmName!, promiseType!, fsmVersion!, verifiedModule, controller.signal);
-      logger.info("Promise worker started for queue: {queueName}. Press Ctrl+C to stop.", { queueName });
+      await createAndStartPromiseWorker(
+        deps,
+        queueName!,
+        fsmName!,
+        promiseType!,
+        fsmVersion!,
+        verifiedModule,
+        controller.signal,
+      );
+      logger.info(
+        "Promise worker started for queue: {queueName}. Press Ctrl+C to stop.",
+        { queueName },
+      );
       await waitForAbort();
       break;
     }
@@ -218,16 +281,23 @@ try {
         controller.signal,
         () => {
           if (createdInstanceId) delete activeWorkers[createdInstanceId];
-          logger.info("Worker for {instanceId} stopped and DB lock released.", { instanceId: createdInstanceId });
+          logger.info("Worker for {instanceId} stopped and DB lock released.", {
+            instanceId: createdInstanceId,
+          });
         },
       );
       if (!fsm_instance) {
-        logger.error("Failed to create FSM instance for {fsmName} v{fsmVersion}.", { fsmName, fsmVersion });
+        logger.error(
+          "Failed to create FSM instance for {fsmName} v{fsmVersion}.",
+          { fsmName, fsmVersion },
+        );
         Deno.exit(1);
       }
       createdInstanceId = fsm_instance.fsm_instance_id;
       activeWorkers[createdInstanceId] = { lock: true, controller };
-      logger.info("FSM instance created: {instanceId}.", { instanceId: createdInstanceId });
+      logger.info("FSM instance created: {instanceId}.", {
+        instanceId: createdInstanceId,
+      });
       if (workerResult?.status === "fail") {
         logger.error("Error: {message}", { message: workerResult.message });
         Deno.exit(1);
@@ -238,7 +308,9 @@ try {
       const { Pool } = await import("pg");
       const stopPool = new Pool({ connectionString: resolvedDbUrl });
       await stopFSMWorker({ db: stopPool, useSupabase: false }, queueName!);
-      logger.info("Stop signal sent for worker queue: {queueName}", { queueName });
+      logger.info("Stop signal sent for worker queue: {queueName}", {
+        queueName,
+      });
       await stopPool.end();
       break;
     }

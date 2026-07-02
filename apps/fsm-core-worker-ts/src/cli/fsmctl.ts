@@ -4,14 +4,32 @@ import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { stopFSMWorker } from "../index.ts";
-import { createFsmInstanceFromName, enqueueDispatch, getFsmDataResolveStateValue, getFSMData, sendEventToFsmQueueWithEventLogs, API_SYSTEM_QUEUE_UUID, API_SYSTEM_QUEUE_TYPE, API_SYSTEM_EVENT_NAME } from "@pgfsm/db";
+import {
+  API_SYSTEM_EVENT_NAME,
+  API_SYSTEM_QUEUE_TYPE,
+  API_SYSTEM_QUEUE_UUID,
+  createFsmInstanceFromName,
+  enqueueDispatch,
+  getFSMData,
+  getFsmDataResolveStateValue,
+  sendEventToFsmQueueWithEventLogs,
+} from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/fsmctl"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "queue-name", "fsm-name", "fsm-version", "context", "event-type", "event-data", "db-url"],
+  string: [
+    "command",
+    "queue-name",
+    "fsm-name",
+    "fsm-version",
+    "context",
+    "event-type",
+    "event-data",
+    "db-url",
+  ],
   boolean: ["help"],
   alias: {
     h: "help",
@@ -89,7 +107,9 @@ if (command === "send") {
 }
 
 if (missing.length > 0) {
-  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
+  logger.error("Missing required arguments: {missing}", {
+    missing: missing.join(", "),
+  });
   printHelp();
   Deno.exit(1);
 }
@@ -107,20 +127,34 @@ try {
         try {
           context = JSON.parse(contextArg);
         } catch {
-          logger.error("--context is not valid JSON: {context}", { context: contextArg });
+          logger.error("--context is not valid JSON: {context}", {
+            context: contextArg,
+          });
           Deno.exit(1);
         }
       }
       const pool = new Pool({ connectionString: resolvedDbUrl });
       const deps = { db: pool, useSupabase: false };
       // false = do not auto-enqueue to pgmq; we enqueue to fsm_dispatch_queue below.
-      const result = await createFsmInstanceFromName(deps, fsmName!, fsmVersion!, context, false) as Record<string, string> | null;
+      const result = await createFsmInstanceFromName(
+        deps,
+        fsmName!,
+        fsmVersion!,
+        context,
+        false,
+      ) as Record<string, string> | null;
       if (!result?.fsm_instance_id) {
         await pool.end();
         logger.error("Failed to create FSM instance.");
         Deno.exit(1);
       }
-      await enqueueDispatch(deps, result.fsm_instance_id, fsmName!, fsmVersion!, "start");
+      await enqueueDispatch(
+        deps,
+        result.fsm_instance_id,
+        fsmName!,
+        fsmVersion!,
+        "start",
+      );
       await pool.end();
       logger.info(result.fsm_instance_id);
       break;
@@ -152,7 +186,9 @@ try {
         try {
           eventData = JSON.parse(eventDataArg);
         } catch {
-          logger.error("--event-data is not valid JSON: {eventData}", { eventData: eventDataArg });
+          logger.error("--event-data is not valid JSON: {eventData}", {
+            eventData: eventDataArg,
+          });
           Deno.exit(1);
         }
       }

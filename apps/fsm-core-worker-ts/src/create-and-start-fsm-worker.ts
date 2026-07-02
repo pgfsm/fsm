@@ -3,7 +3,9 @@ import type { Json } from "@pgfsm/db/database.types";
 import { createFsmInstanceFromName } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock, type VerifiedModule } from "./fsmworker.ts";
 
-type FsmInstanceResult = { fsm_instance_id: string; fsm_version: string } & Record<string, Json>;
+type FsmInstanceResult =
+  & { fsm_instance_id: string; fsm_version: string }
+  & Record<string, Json>;
 type WorkerResult = { status: "success" | "fail"; message: string };
 
 export async function createAndStartFSMWorker(
@@ -15,7 +17,9 @@ export async function createAndStartFSMWorker(
   validatePlugin?: boolean,
   signal?: AbortSignal,
   onStop?: () => void,
-): Promise<{ fsm_instance: FsmInstanceResult | null; workerResult: WorkerResult | null }> {
+): Promise<
+  { fsm_instance: FsmInstanceResult | null; workerResult: WorkerResult | null }
+> {
   const fsm_instance = await createFsmInstanceFromName(
     deps,
     fsm_name,

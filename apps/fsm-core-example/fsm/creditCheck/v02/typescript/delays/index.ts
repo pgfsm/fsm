@@ -22,4 +22,3 @@ export function delayvc1000delay() {
 export function delayvc2000delay() {
   // TODO: implement delay logic
 }
-

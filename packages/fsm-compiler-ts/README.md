@@ -1,13 +1,17 @@
 # fsm-compiler-ts — FSM Compiler
 
-Validates FSM JSON definitions and generates the TypeScript plugin artifacts (actions, guards, delays, actors stubs) that workers load at startup. Runs on Deno.
+Validates FSM JSON definitions and generates the TypeScript plugin artifacts
+(actions, guards, delays, actors stubs) that workers load at startup. Runs on
+Deno.
 
 ## What it does
 
-**Input:** an `fsm.json` file in a versioned FSM folder  
-**Output:** a validated plugin — confirmed that every action, guard, delay, and actor referenced in the JSON has a matching TypeScript export
+**Input:** an `fsm.json` file in a versioned FSM folder\
+**Output:** a validated plugin — confirmed that every action, guard, delay, and
+actor referenced in the JSON has a matching TypeScript export
 
-Unresolved references are reported as errors so they're caught before deployment, not at runtime.
+Unresolved references are reported as errors so they're caught before
+deployment, not at runtime.
 
 ## How to run
 
@@ -23,20 +27,22 @@ deno run --allow-all src/main.ts
 
 ```typescript
 import {
-  validateAndLoadFsmFromFolders,    // validate all FSMs in a folder tree, then load if valid
+  validateAndLoadFsmFromFolders, // validate all FSMs in a folder tree, then load if valid
   validateAndLoadPromiseFromFolders, // validate all promise actors in a folder tree, then load if valid
-  validateFsmPluginLoadFromFolder,   // validate one specific FSM plugin
+  validateFsmPluginLoadFromFolder, // validate one specific FSM plugin
 } from "@pgfsm/compiler";
 
 import type { WorkflowType } from "@pgfsm/compiler";
 // WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise"
 ```
 
-The REST API and workers use these at startup to discover and validate FSM plugins before accepting requests.
+The REST API and workers use these at startup to discover and validate FSM
+plugins before accepting requests.
 
 ## Plugin structure
 
-After running the compiler against an FSM definition, the version folder contains:
+After running the compiler against an FSM definition, the version folder
+contains:
 
 ```
 fsm/<name>/v01/
@@ -49,11 +55,13 @@ fsm/<name>/v01/
     actors/index.ts    ← one export per actor src
 ```
 
-Generated stubs have `// TODO: implement` bodies — fill them in before running a worker against the FSM.
+Generated stubs have `// TODO: implement` bodies — fill them in before running a
+worker against the FSM.
 
 ## Reference
 
-- [FSM definition format](./docs/fsm-definition-format.md) — full spec for `fsm.json` (states, transitions, guards, actions, actors, delays)
+- [FSM definition format](./docs/fsm-definition-format.md) — full spec for
+  `fsm.json` (states, transitions, guards, actions, actors, delays)
 
 ## Tests
 

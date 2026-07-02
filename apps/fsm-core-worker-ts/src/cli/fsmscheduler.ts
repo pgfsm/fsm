@@ -55,8 +55,12 @@ if (!resolvedDbUrl) {
 }
 
 const options: FsmSchedulerOptions = {
-  pollIntervalMs: args["poll-interval"] ? Number(args["poll-interval"]) : undefined,
-  staleThresholdSeconds: args["stale-threshold"] ? Number(args["stale-threshold"]) : undefined,
+  pollIntervalMs: args["poll-interval"]
+    ? Number(args["poll-interval"])
+    : undefined,
+  staleThresholdSeconds: args["stale-threshold"]
+    ? Number(args["stale-threshold"])
+    : undefined,
 };
 
 const controller = new AbortController();
@@ -68,7 +72,9 @@ const onSignal = () => {
     Deno.exit(0);
   }
   shutdownRequested = true;
-  logger.info("Shutdown requested — stopping fsmscheduler gracefully. Ctrl+C again to force exit...");
+  logger.info(
+    "Shutdown requested — stopping fsmscheduler gracefully. Ctrl+C again to force exit...",
+  );
   controller.abort();
 };
 

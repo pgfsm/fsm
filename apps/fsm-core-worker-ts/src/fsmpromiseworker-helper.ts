@@ -47,10 +47,12 @@ export async function processFSMPromiseQueueMessage(
   if (actorFn) {
     try {
       const result = await actorFn(msgData.eventData?.eventPayload);
-      send_event_name_to_parent_queue_id = "xstate.done.actor." + event_name_base;
+      send_event_name_to_parent_queue_id = "xstate.done.actor." +
+        event_name_base;
       event_output = result as Json;
     } catch (err) {
-      send_event_name_to_parent_queue_id = "xstate.error.actor." + event_name_base;
+      send_event_name_to_parent_queue_id = "xstate.error.actor." +
+        event_name_base;
       error_message = String(err);
       event_output = { error: error_message };
     }
@@ -59,10 +61,12 @@ export async function processFSMPromiseQueueMessage(
       setTimeout(() => {
         const isSuccess = Math.random() < 0.5;
         if (isSuccess) {
-          send_event_name_to_parent_queue_id = "xstate.done.actor." + event_name_base;
+          send_event_name_to_parent_queue_id = "xstate.done.actor." +
+            event_name_base;
           resolve({ result: "Promise fulfilled successfully" });
         } else {
-          send_event_name_to_parent_queue_id = "xstate.error.actor." + event_name_base;
+          send_event_name_to_parent_queue_id = "xstate.error.actor." +
+            event_name_base;
           error_message = "Promise failed";
           resolve({ error: error_message });
         }
@@ -72,7 +76,8 @@ export async function processFSMPromiseQueueMessage(
 
   const event_status = error_message ? "failed" : "succeeded";
   const execution_finished_at = new Date().toISOString();
-  const execution_duration = new Date(execution_finished_at).getTime() - new Date(execution_started_at).getTime();
+  const execution_duration = new Date(execution_finished_at).getTime() -
+    new Date(execution_started_at).getTime();
 
   return {
     promise_queue_name,

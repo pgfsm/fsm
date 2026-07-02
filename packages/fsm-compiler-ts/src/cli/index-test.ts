@@ -12,7 +12,9 @@ await configureCompilerLogger();
 const CLI = "packages/fsm-compiler-ts/src/cli/index.ts";
 const FSM_FOLDER = "apps/fsm-core-example/fsm";
 
-async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runCli(
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: ["run", "--allow-all", CLI, ...args],
     stdout: "piped",
@@ -34,8 +36,12 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
     const { code, stdout } = await runCli(["--help"]);
     logger.info("[--help] exit code: {code}", { code });
     if (code !== 0) logger.error("--help should exit 0");
-    if (!stdout.includes("fsm-compiler")) logger.error("--help should print usage");
-    if (!stdout.includes("generate")) logger.error("--help should list generate command");
+    if (!stdout.includes("fsm-compiler")) {
+      logger.error("--help should print usage");
+    }
+    if (!stdout.includes("generate")) {
+      logger.error("--help should list generate command");
+    }
     logger.info("[--help] done");
   }
 
@@ -60,9 +66,13 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
   // validate-plugin without --workflow-type
   {
     const { code, stderr } = await runCli(["validate-plugin", FSM_FOLDER]);
-    logger.info("[validate-plugin, no --workflow-type] exit code: {code}", { code });
+    logger.info("[validate-plugin, no --workflow-type] exit code: {code}", {
+      code,
+    });
     if (code !== 1) logger.error("missing --workflow-type should exit 1");
-    if (!stderr.includes("--workflow-type")) logger.error("should print workflow-type error");
+    if (!stderr.includes("--workflow-type")) {
+      logger.error("should print workflow-type error");
+    }
     logger.info("[validate-plugin, no --workflow-type] done");
   }
 
@@ -71,7 +81,9 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
     const { code, stderr } = await runCli(["unknown-cmd", FSM_FOLDER]);
     logger.info("[unknown command] exit code: {code}", { code });
     if (code !== 1) logger.error("unknown command should exit 1");
-    if (!stderr.includes("Unknown command")) logger.error("should print unknown command error");
+    if (!stderr.includes("Unknown command")) {
+      logger.error("should print unknown command error");
+    }
     logger.info("[unknown command] done");
   }
 
@@ -79,7 +91,9 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
   {
     const { code, stdout } = await runCli(["generate", FSM_FOLDER]);
     logger.info("[generate fsm] exit code: {code}", { code });
-    logger.info("[generate fsm] stdout: {stdout}", { stdout: stdout.slice(0, 200) });
+    logger.info("[generate fsm] stdout: {stdout}", {
+      stdout: stdout.slice(0, 200),
+    });
     if (code !== 0) logger.error("generate should succeed");
     logger.info("[generate fsm] done");
   }
@@ -94,7 +108,12 @@ async function runCli(args: string[]): Promise<{ code: number; stdout: string; s
 
   // validate-plugin — runs on example folder (no DB required)
   {
-    const { code } = await runCli(["validate-plugin", FSM_FOLDER, "--workflow-type", "fsm"]);
+    const { code } = await runCli([
+      "validate-plugin",
+      FSM_FOLDER,
+      "--workflow-type",
+      "fsm",
+    ]);
     logger.info("[validate-plugin fsm] exit code: {code}", { code });
     if (code !== 0) logger.error("validate-plugin should succeed");
     logger.info("[validate-plugin fsm] done");

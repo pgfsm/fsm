@@ -4,9 +4,19 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
-import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
-import { createFsmInstanceFromName, sendEventToFsmQueueWithEventLogs, getFsmDataResolveStateValue } from "@pgfsm/db";
-import { replaceSpacesWithUnderscores, replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
+import {
+  createAndStartFSMWorker,
+  startFSMWorkerWithDBLock,
+} from "@pgfsm/worker";
+import {
+  createFsmInstanceFromName,
+  getFsmDataResolveStateValue,
+  sendEventToFsmQueueWithEventLogs,
+} from "@pgfsm/db";
+import {
+  replaceSpacesWithUnderscores,
+  replaceUnderscoresWithSpaces,
+} from "@pgfsm/compiler";
 import type { DBDeps } from "@pgfsm/db";
 
 const fsm_name = "creditCheck";
@@ -29,12 +39,15 @@ async function pollUntil(
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error(`Timeout: state predicate not satisfied for queue "${queueName}"`);
+  throw new Error(
+    `Timeout: state predicate not satisfied for queue "${queueName}"`,
+  );
 }
 
 // Journey 1: createAndStartFSMWorker — verify initial DB state matches xstate initial state
 Deno.test({
-  name: "Journey 1 — createAndStartFSMWorker: initial DB state matches xstate initialTransition",
+  name:
+    "Journey 1 — createAndStartFSMWorker: initial DB state matches xstate initialTransition",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -61,16 +74,23 @@ Deno.test({
       // wait for worker to create instance and write initial state to DB
       await new Promise((r) => setTimeout(r, 10000));
 
-      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(
+        deps,
+        fsm_instance.fsm_instance_id,
+      );
       if (!data) throw new Error("No FSM data found for instance");
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.resolved_state_value.json.machine);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        data.resolved_state_value.json.machine,
+      );
       const changes = diff(dbStateWithSpaces, xstateInitialState.value);
 
       assertEquals(
         changes.length,
         0,
-        `Initial DB state does not match xstate.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `Initial DB state does not match xstate.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     } finally {
       controller.abort();
@@ -92,8 +112,14 @@ Deno.test({
 
     try {
       const [initialState] = initialTransition(machineConfig);
-      const resolvedInitialState = machineConfig.resolveState(initialState.toJSON() as any);
-      const [afterSubmitXstate] = transition(machineConfig, resolvedInitialState, { type: "Submit", payload: {} });
+      const resolvedInitialState = machineConfig.resolveState(
+        initialState.toJSON() as any,
+      );
+      const [afterSubmitXstate] = transition(
+        machineConfig,
+        resolvedInitialState,
+        { type: "Submit", payload: {} },
+      );
       const expectedStateValue = afterSubmitXstate.value;
 
       const fsm_instance = await createAndStartFSMWorker(
@@ -127,17 +153,23 @@ Deno.test({
       // wait for worker to finish processing event and writing new state to DB
       await new Promise((r) => setTimeout(r, 30000));
 
-      const data = await getFsmDataResolveStateValue(deps, fsm_instance.fsm_instance_id);
+      const data = await getFsmDataResolveStateValue(
+        deps,
+        fsm_instance.fsm_instance_id,
+      );
       if (!data) throw new Error("No FSM data found for instance");
 
-      
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(data.fsm_instance_row.fsm_instance_state);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        data.fsm_instance_row.fsm_instance_state,
+      );
       const changes = diff(dbStateWithSpaces, expectedStateValue);
 
       assertEquals(
         changes.length,
         0,
-        `DB state after Submit does not match xstate.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `DB state after Submit does not match xstate.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     } finally {
       controller.abort();
@@ -148,7 +180,8 @@ Deno.test({
 
 // Journey 3: createFsmInstanceFromName + startFSMWorkerWithDBLock — same Submit journey via lower-level API
 Deno.test({
-  name: "Journey 3 — startFSMWorkerWithDBLock: DB state after Submit matches xstate transition",
+  name:
+    "Journey 3 — startFSMWorkerWithDBLock: DB state after Submit matches xstate transition",
   sanitizeResources: false,
   sanitizeOps: false,
   async fn() {
@@ -159,12 +192,25 @@ Deno.test({
 
     try {
       const [initialState] = initialTransition(machineConfig);
-      const resolvedInitialState = machineConfig.resolveState(initialState.toJSON() as any);
-      const [afterSubmitXstate] = transition(machineConfig, resolvedInitialState, { type: "Submit", payload: {} });
+      const resolvedInitialState = machineConfig.resolveState(
+        initialState.toJSON() as any,
+      );
+      const [afterSubmitXstate] = transition(
+        machineConfig,
+        resolvedInitialState,
+        { type: "Submit", payload: {} },
+      );
       const expectedStateValue = afterSubmitXstate.value;
 
-      const fsm_instance: any = await createFsmInstanceFromName(deps, fsm_name, fsm_version, true);
-      if (!fsm_instance || !fsm_instance?.fsm_instance_id) throw new Error("Failed to create FSM instance");
+      const fsm_instance: any = await createFsmInstanceFromName(
+        deps,
+        fsm_name,
+        fsm_version,
+        true,
+      );
+      if (!fsm_instance || !fsm_instance?.fsm_instance_id) {
+        throw new Error("Failed to create FSM instance");
+      }
 
       const acquired = await startFSMWorkerWithDBLock(
         deps,
@@ -177,7 +223,11 @@ Deno.test({
         controller.signal,
       );
 
-      if (!acquired) throw new Error(`Could not acquire DB lock for queue "${fsm_instance.fsm_instance_id}"`);
+      if (!acquired) {
+        throw new Error(
+          `Could not acquire DB lock for queue "${fsm_instance.fsm_instance_id}"`,
+        );
+      }
 
       await sendEventToFsmQueueWithEventLogs(
         deps,
@@ -190,18 +240,24 @@ Deno.test({
         deps,
         fsm_instance.fsm_instance_id,
         (r) => {
-          const stateWithSpaces = replaceUnderscoresWithSpaces(r.fsm_instance_state);
+          const stateWithSpaces = replaceUnderscoresWithSpaces(
+            r.fsm_instance_state,
+          );
           return diff(stateWithSpaces, expectedStateValue).length === 0;
         },
       );
 
-      const dbStateWithSpaces = replaceUnderscoresWithSpaces(row.fsm_instance_state);
+      const dbStateWithSpaces = replaceUnderscoresWithSpaces(
+        row.fsm_instance_state,
+      );
       const changes = diff(dbStateWithSpaces, expectedStateValue);
 
       assertEquals(
         changes.length,
         0,
-        `DB state after Submit does not match xstate.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `DB state after Submit does not match xstate.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     } finally {
       controller.abort();

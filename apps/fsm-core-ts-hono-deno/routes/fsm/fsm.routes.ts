@@ -52,7 +52,10 @@ export const getOne = createRoute({
       }),
       "FSM instance with resolved state",
     ),
-    [HttpStatusCodes.NOT_FOUND]: jsonContent(notFoundSchema, "FSM instance not found"),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      notFoundSchema,
+      "FSM instance not found",
+    ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       z.object({ error: z.string() }),
       "Error",
@@ -174,7 +177,10 @@ export const stop = createRoute({
   },
   tags,
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({}), "Worker stopped successfully"),
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({}),
+      "Worker stopped successfully",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
       z.object({ error: z.string() }),
       "No active worker for the given queue",

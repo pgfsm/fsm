@@ -1,26 +1,27 @@
 import dotenv from "dotenv";
-import { generateFsmPluginFromFolders } from './generate-fsm-plugin.ts';
+import { generateFsmPluginFromFolders } from "./generate-fsm-plugin.ts";
 
 dotenv.config({ path: "./../../.env" });
 
-
-
 (async () => {
-  
   // const folderPath = Deno.args[0] || Deno.cwd()+ "/packages/fsm-compiler-ts/src/sampleFSMfromFolder";
   // const sharedFSMfolderPath = 'packages/fsm-compiler-ts/src/example/sharedFSM';
   // const fsmfolderPath = 'packages/fsm-compiler-ts/src/example/fsm';
-  const sharedFSMfolderPath = 'apps/fsm-core-example/sharedFSM';
-  const fsmfolderPath = 'apps/fsm-core-example/fsm';
- 
- 
+  const sharedFSMfolderPath = "apps/fsm-core-example/sharedFSM";
+  const fsmfolderPath = "apps/fsm-core-example/fsm";
 
   const skipSharedFSMDirs = ["vitalsWorkflow"];
-  const skipFSMDirs = ["carVitals","taskMachineConfig"];
+  const skipFSMDirs = ["carVitals", "taskMachineConfig"];
   // const skipSharedFSMDirs = [];
   // const skipFSMDirs = [];
-  const outputSharedFSM = await generateFsmPluginFromFolders(sharedFSMfolderPath, "sharedFsm", skipSharedFSMDirs);
-  const outputFSM = await generateFsmPluginFromFolders(fsmfolderPath, "fsm", skipFSMDirs);
-  
+  const outputSharedFSM = await generateFsmPluginFromFolders(
+    sharedFSMfolderPath,
+    "sharedFsm",
+    skipSharedFSMDirs,
+  );
+  const outputFSM = await generateFsmPluginFromFolders(
+    fsmfolderPath,
+    "fsm",
+    skipFSMDirs,
+  );
 })();
-

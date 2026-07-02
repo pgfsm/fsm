@@ -2,9 +2,16 @@ import * as HttpStatusCodes from "stoker/http-status-codes.ts";
 import { getLogger } from "@logtape/logtape";
 
 import type { AppRouteHandler } from "../../lib/types.ts";
-import type { CreateRoute, CurrentActiveRoute, ResumeRoute } from "./fsm.routes.ts";
+import type {
+  CreateRoute,
+  CurrentActiveRoute,
+  ResumeRoute,
+} from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
-import { createAndStartFSMWorker, startFSMWorkerWithDBLock } from "@pgfsm/worker";
+import {
+  createAndStartFSMWorker,
+  startFSMWorkerWithDBLock,
+} from "@pgfsm/worker";
 import { getFsmDataResolveStateValue } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/api", "fsm.inprocess"]);
@@ -26,12 +33,16 @@ export const createAndStart: AppRouteHandler<CreateRoute> = async (c) => {
 
   try {
     if (!input_fsm_name) {
-      return c.json({ error: "Missing fsm_name" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: "Missing fsm_name" },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     const verifiedModules = c.get("verifiedFsmModules");
     const matchedModule = verifiedModules?.find(
-      (m: any) => m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version,
+      (m: any) =>
+        m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version,
     );
 
     const controller = new AbortController();
@@ -45,11 +56,16 @@ export const createAndStart: AppRouteHandler<CreateRoute> = async (c) => {
       input_fsm_context,
       false,
       controller.signal,
-      () => { if (instanceId) delete activeWorkers[instanceId]; },
+      () => {
+        if (instanceId) delete activeWorkers[instanceId];
+      },
     );
 
     if (!fsm_instance) {
-      return c.json({ error: "FSM instance creation failed" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: "FSM instance creation failed" },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     instanceId = fsm_instance.fsm_instance_id;
@@ -57,7 +73,10 @@ export const createAndStart: AppRouteHandler<CreateRoute> = async (c) => {
     return c.json({ data: { fsm_instance, workerResult } }, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in createAndStart handler: {error}", { error: _err });
-    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
   }
 };
 
@@ -71,12 +90,18 @@ export const resumeWithWorker: AppRouteHandler<ResumeRoute> = async (c) => {
 
   try {
     if (!queue) {
-      return c.json({ error: "Missing queue parameter" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: "Missing queue parameter" },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     const fsmData = await getFsmDataResolveStateValue(deps, queue);
     if (!fsmData) {
-      return c.json({ error: "Invalid queue id — FSM instance not found" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: "Invalid queue id — FSM instance not found" },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (activeWorkers[queue]) {
@@ -107,14 +132,20 @@ export const resumeWithWorker: AppRouteHandler<ResumeRoute> = async (c) => {
     );
 
     if (workerResult.status === "fail") {
-      return c.json({ error: workerResult.message }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+      return c.json(
+        { error: workerResult.message },
+        HttpStatusCodes.INTERNAL_SERVER_ERROR,
+      );
     }
 
     activeWorkers[queue] = { lock: true, controller };
     return c.json({ data: workerResult }, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in resumeWithWorker handler: {error}", { error: _err });
-    return c.json({ error: "Unexpected error" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
   }
 };
 

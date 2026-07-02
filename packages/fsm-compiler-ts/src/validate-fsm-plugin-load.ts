@@ -6,21 +6,29 @@ const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
 // Import Ajv for JSON schema validation
 import { Ajv } from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with { type: "json" };
-import { isVersionFolderName, type WorkflowType, type ActorReference, type FailedMethod, type InternalActor, type ExternalActor, type FsmPluginValidationResult, extractFsmPluginRefs, RAISE_CANCEL, DELAY_ACTION_NAME_PREFIX } from "./util.ts";
+import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with {
+  type: "json",
+};
+import {
+  type ActorReference,
+  DELAY_ACTION_NAME_PREFIX,
+  type ExternalActor,
+  extractFsmPluginRefs,
+  type FailedMethod,
+  type FsmPluginValidationResult,
+  type InternalActor,
+  isVersionFolderName,
+  RAISE_CANCEL,
+  type WorkflowType,
+} from "./util.ts";
 import type { Json } from "@pgfsm/db/database.types";
-
 
 // validators.ts
 export const isFunction = (v: unknown): v is Function =>
-  typeof v === "function"
+  typeof v === "function";
 
-export const hasArity =
-  (n: number) =>
-  (fn: unknown): boolean =>
-    isFunction(fn) && fn.length === n
-
-
+export const hasArity = (n: number) => (fn: unknown): boolean =>
+  isFunction(fn) && fn.length === n;
 
 export async function validateLanguageModules(
   absFolderPath: string,
@@ -33,9 +41,11 @@ export async function validateLanguageModules(
   const failedMethods: FailedMethod[] = [];
   // Plugin folders
   // Filter actors to only those with fsmType === 'promise'
-  const filteredActors = actors.filter(a => a.fsmType === 'promise').map(a => a.src);
-  const filteredActions = actions.filter(a => !RAISE_CANCEL.has(a));
-  const prefixedDelays = delays.map(d => `${DELAY_ACTION_NAME_PREFIX}${d}`);
+  const filteredActors = actors.filter((a) => a.fsmType === "promise").map(
+    (a) => a.src,
+  );
+  const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
+  const prefixedDelays = delays.map((d) => `${DELAY_ACTION_NAME_PREFIX}${d}`);
   const moduleTypes = [
     { type: "actions", names: filteredActions },
     { type: "guards", names: guards },
@@ -61,22 +71,39 @@ export async function validateLanguageModules(
       for (const name of modType.names) {
         // Check for method implementation
         if (typeof mod[name] !== "function") {
-          logger.info("{moduleType} does not export {name} as a function", { moduleType: modType.type, name });
-          failedMethods.push({ method: name, moduleType: modType.type, modulePath: modulePath });
+          logger.info("{moduleType} does not export {name} as a function", {
+            moduleType: modType.type,
+            name,
+          });
+          failedMethods.push({
+            method: name,
+            moduleType: modType.type,
+            modulePath: modulePath,
+          });
         } else {
-          logger.info("{moduleType} exports {name} as a function", { moduleType: modType.type, name });
+          logger.info("{moduleType} exports {name} as a function", {
+            moduleType: modType.type,
+            name,
+          });
         }
       }
     } catch (err) {
-      logger.error("Failed to import module for {moduleType} from {modulePath}: {error}", { moduleType: modType.type, modulePath, error: err });
+      logger.error(
+        "Failed to import module for {moduleType} from {modulePath}: {error}",
+        { moduleType: modType.type, modulePath, error: err },
+      );
       modules[modType.type] = null;
       // If module import fails, all methods in this moduleType are considered failed
       for (const name of modType.names) {
-        failedMethods.push({ method: name, moduleType: modType.type, modulePath: modulePath });
+        failedMethods.push({
+          method: name,
+          moduleType: modType.type,
+          modulePath: modulePath,
+        });
       }
     }
   }
-  
+
   return {
     modules,
     failedMethods,
@@ -102,7 +129,10 @@ export async function validatePromisePluginLoadFromFolder(
   let externalActors: ExternalActor[] = [];
   let failedMethods: FailedMethod[] = [];
 
-  logger.warning("Skipping plugin validation for sharedPromise {dirName}/{versionName} since it is only used as a dependency and not directly invoked", { dirName, versionName });
+  logger.warning(
+    "Skipping plugin validation for sharedPromise {dirName}/{versionName} since it is only used as a dependency and not directly invoked",
+    { dirName, versionName },
+  );
   const lang = "typescript";
 
   const modDir = `${absPath}/${lang}`;
@@ -111,17 +141,31 @@ export async function validatePromisePluginLoadFromFolder(
     const mod = await import(`file://${modulePath}`);
 
     if (typeof mod[dirName] !== "function") {
-      logger.info("sharedPromise does not export {name} as a function", { name: dirName });
-      failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
+      logger.info("sharedPromise does not export {name} as a function", {
+        name: dirName,
+      });
+      failedMethods.push({
+        method: dirName,
+        moduleType: "sharedPromise",
+        modulePath,
+      });
     } else {
-      logger.info("sharedPromise exports {name} as a function", { name: dirName });
+      logger.info("sharedPromise exports {name} as a function", {
+        name: dirName,
+      });
       fsmModuleDefinition = mod;
       isFsmModuleVerified = true;
     }
-
   } catch (err) {
-    logger.error("Failed to import module for sharedPromise from {modulePath}: {error}", { modulePath, error: err });
-    failedMethods.push({ method: dirName, moduleType: "sharedPromise", modulePath });
+    logger.error(
+      "Failed to import module for sharedPromise from {modulePath}: {error}",
+      { modulePath, error: err },
+    );
+    failedMethods.push({
+      method: dirName,
+      moduleType: "sharedPromise",
+      modulePath,
+    });
   }
 
   return {
@@ -161,9 +205,14 @@ export async function validatePromisePluginLoadFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
+    logger.info("Importing workflows from absolute path: {path}", {
+      path: folderPath,
+    });
   } else {
-    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
+    logger.info("Importing workflows from relative path: {path} to {cwd}", {
+      path: folderPath,
+      cwd: Deno.cwd(),
+    });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -187,7 +236,6 @@ export async function validatePromisePluginLoadFromFolders(
         for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
-
               const folderResult = await validatePromisePluginLoadFromFolder(
                 dirEntry.name,
                 subEntry.name,
@@ -199,23 +247,34 @@ export async function validatePromisePluginLoadFromFolders(
                 workflowType,
                 availableActors,
               );
-              logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
-              
+              logger.info("Validation result for {dir}/{sub}: {result}", {
+                dir: dirEntry.name,
+                sub: subEntry.name,
+                result: folderResult,
+              });
+
               allFolderResults.push(folderResult);
             } else {
-              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
+              logger.info("Skipping non-versioned folder: {name} in {dir}", {
+                name: subEntry.name,
+                dir: fsmDirPath,
+              });
             }
           }
         }
       }
     }
-    logger.info("All folder validation results: {results}", { results: allFolderResults });
-    
+    logger.info("All folder validation results: {results}", {
+      results: allFolderResults,
+    });
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
-  }  
-  
+    logger.error("Error occurred while reading directory {path}: {error}", {
+      path: absFolderPath,
+      error: err,
+    });
+  }
+
   return allFolderResults;
 }
 
@@ -249,7 +308,9 @@ export async function validateFsmPluginLoadFromFolder(
   const valid = validate(fsmData);
   fsmJsonFollowSchema = !!valid;
   if (!valid) {
-    logger.error("fsm.json validation failed: {errors}", { errors: validate.errors });
+    logger.error("fsm.json validation failed: {errors}", {
+      errors: validate.errors,
+    });
     return {
       src: dirName,
       fsmName: dirName,
@@ -276,8 +337,18 @@ export async function validateFsmPluginLoadFromFolder(
   guards = result.guards;
   delays = result.delays;
   actors = result.actors;
-  internalActors = actors.filter(actor => actor.fsmType === 'promise').map(actor => ({ ...actor, resolved: true, fsmName: actor.src, fsmAbsFolderPath: absPath, fsmRelativeFolderPath: relPath }));
-  externalActors = actors.filter(actor => actor.fsmType !== 'promise').map(actor => ({ ...actor, resolved: false }));
+  internalActors = actors.filter((actor) => actor.fsmType === "promise").map(
+    (actor) => ({
+      ...actor,
+      resolved: true,
+      fsmName: actor.src,
+      fsmAbsFolderPath: absPath,
+      fsmRelativeFolderPath: relPath,
+    }),
+  );
+  externalActors = actors.filter((actor) => actor.fsmType !== "promise").map(
+    (actor) => ({ ...actor, resolved: false }),
+  );
 
   // Actors are resolved via internalActors/externalActors below; skip module validation here
   const outputValidateLanguageModules = await validateLanguageModules(
@@ -292,7 +363,7 @@ export async function validateFsmPluginLoadFromFolder(
   fsmModuleDefinition = outputValidateLanguageModules.modules;
 
   for (const dependency of externalActors) {
-    const isDependencyFound = availableActors.some(folderObj =>
+    const isDependencyFound = availableActors.some((folderObj) =>
       folderObj.src === dependency.src &&
       folderObj.fsmVersion === dependency.fsmVersion &&
       folderObj.fsmType === dependency.fsmType
@@ -304,7 +375,15 @@ export async function validateFsmPluginLoadFromFolder(
       const expectedFolderPath = dependency.fsmVersion
         ? `${dependency.src}/${dependency.fsmVersion}`
         : dependency.src;
-      logger.error("Missing dependency: {dep} (fsmType: {fsmType}) required by {dirName}/{versionName}", { dep: expectedFolderPath, fsmType: dependency.fsmType, dirName, versionName });
+      logger.error(
+        "Missing dependency: {dep} (fsmType: {fsmType}) required by {dirName}/{versionName}",
+        {
+          dep: expectedFolderPath,
+          fsmType: dependency.fsmType,
+          dirName,
+          versionName,
+        },
+      );
       failedMethods.push({
         method: `${dependency.src}/${dependency.fsmVersion}`,
         moduleType: dependency.fsmType ?? "unknown",
@@ -352,9 +431,14 @@ export async function validateFsmPluginLoadFromFolders(
     );
   }
   if (folderPath.startsWith("/")) {
-    logger.info("Importing workflows from absolute path: {path}", { path: folderPath });
+    logger.info("Importing workflows from absolute path: {path}", {
+      path: folderPath,
+    });
   } else {
-    logger.info("Importing workflows from relative path: {path} to {cwd}", { path: folderPath, cwd: Deno.cwd() });
+    logger.info("Importing workflows from relative path: {path} to {cwd}", {
+      path: folderPath,
+      cwd: Deno.cwd(),
+    });
   }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
@@ -378,11 +462,12 @@ export async function validateFsmPluginLoadFromFolders(
         for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
-
               try {
                 const fsmJsonPath = `${fsmDirPath}/${subEntry.name}/fsm.json`;
                 await Deno.stat(fsmJsonPath);
-                const fsmData = JSON.parse(await Deno.readTextFile(fsmJsonPath));
+                const fsmData = JSON.parse(
+                  await Deno.readTextFile(fsmJsonPath),
+                );
 
                 const folderResult = await validateFsmPluginLoadFromFolder(
                   fsmData,
@@ -397,26 +482,39 @@ export async function validateFsmPluginLoadFromFolders(
                   availableActors,
                 );
 
-                logger.info("Validation result for {dir}/{sub}: {result}", { dir: dirEntry.name, sub: subEntry.name, result: folderResult });
+                logger.info("Validation result for {dir}/{sub}: {result}", {
+                  dir: dirEntry.name,
+                  sub: subEntry.name,
+                  result: folderResult,
+                });
 
                 allFolderResults.push(folderResult);
               } catch (err) {
-                logger.error("Failed to validate {path}: {error}", { path: `${fsmDirPath}/${subEntry.name}`, error: err });
-              }  
-             
+                logger.error("Failed to validate {path}: {error}", {
+                  path: `${fsmDirPath}/${subEntry.name}`,
+                  error: err,
+                });
+              }
             } else {
-              logger.info("Skipping non-versioned folder: {name} in {dir}", { name: subEntry.name, dir: fsmDirPath });
+              logger.info("Skipping non-versioned folder: {name} in {dir}", {
+                name: subEntry.name,
+                dir: fsmDirPath,
+              });
             }
           }
         }
       }
     }
-    logger.info("All folder validation results: {results}", { results: allFolderResults });
-    
+    logger.info("All folder validation results: {results}", {
+      results: allFolderResults,
+    });
   } catch (err) {
     // throw new Error(`Directory '${absFolderPath}' does not exist.`);
-    logger.error("Error occurred while reading directory {path}: {error}", { path: absFolderPath, error: err });
-  }  
-  
+    logger.error("Error occurred while reading directory {path}: {error}", {
+      path: absFolderPath,
+      error: err,
+    });
+  }
+
   return allFolderResults;
 }

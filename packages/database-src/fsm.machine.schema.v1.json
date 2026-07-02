@@ -266,7 +266,7 @@
         "src": {
           "type": "string"
         },
-        "fsmType":{
+        "fsmType": {
           "type": "string",
           "default": "promise",
           "enum": ["promise", "sharedPromise", "sharedFsm", "fsm"],

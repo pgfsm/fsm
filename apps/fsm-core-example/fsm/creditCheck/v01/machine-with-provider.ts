@@ -8,32 +8,37 @@ import {
 } from "./typescript/actors/index.ts";
 
 import {
-  assignSSN,
-  assignFirstName,
-  assignLastName,
-  assignErrorMessage,
   assignEquiGavinScore,
   assignEquiGavinScoreFetch,
-  assignGavUnionScore,
-  assignGavUnionScoreFetch,
+  assignErrorMessage,
+  assignFirstName,
   assignGavperianScore,
   assignGavperianScoreFetch,
-  assignMiddleScore,
+  assignGavUnionScore,
+  assignGavUnionScoreFetch,
   assignInterestRateOptions,
-  saveReportEquiGavin,
-  saveReportGavUnion,
-  saveReportGavperian,
-  saveCreditProfile,
-  emailUser,
+  assignLastName,
+  assignMiddleScore,
+  assignSSN,
   emailSalesTeam,
+  emailUser,
+  saveCreditProfile,
+  saveReportEquiGavin,
+  saveReportGavperian,
+  saveReportGavUnion,
   // assignCreditScoreError,
 } from "./typescript/actions/index.ts";
 
-import { allSucceeded, gavUnionReportFound, equiGavinReportFound, gavperianReportFound } from "./typescript/guards/index.ts";
+import {
+  allSucceeded,
+  equiGavinReportFound,
+  gavperianReportFound,
+  gavUnionReportFound,
+} from "./typescript/guards/index.ts";
 import { machine } from "./machine.ts";
 export const machineWithProvider = machine.provide({
   // types: {
-    
+
   //   context: {} as {
   //     SSN: string;
   //     FirstName: string;
@@ -49,8 +54,11 @@ export const machineWithProvider = machine.provide({
 
   actors: {
     verifyCredentials: fromPromise(
-      async ({ input }: { input: { SSN: string; firstName: string; lastName: string } }) =>
-        await verifyCredentials(input),
+      async (
+        { input }: {
+          input: { SSN: string; firstName: string; lastName: string };
+        },
+      ) => await verifyCredentials(input),
     ),
     checkReportsTable: fromPromise(
       async ({ input }: { input: { ssn: string; bureauName: string } }) =>
@@ -98,4 +106,4 @@ export const machineWithProvider = machine.provide({
     equiGavinReportFound,
     gavperianReportFound,
   },
-})
+});

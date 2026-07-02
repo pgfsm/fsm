@@ -3,54 +3,148 @@
 SPDX-FileCopyrightText: 2025 Niraj Kashyap <niraj.38.re@gmail.com>
 SPDX-License-Identifier: Apache-2.0
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="pgfsm — finite state machines that run inside PostgreSQL">
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1280 320"
+  width="1280"
+  height="320"
+  role="img"
+  aria-label="pgfsm — finite state machines that run inside PostgreSQL"
+>
   <title>pgfsm — finite state machines that run inside PostgreSQL</title>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1b2a3a"/>
-      <stop offset="0.55" stop-color="#2c5480"/>
-      <stop offset="1" stop-color="#336791"/>
+      <stop offset="0" stop-color="#1b2a3a" />
+      <stop offset="0.55" stop-color="#2c5480" />
+      <stop offset="1" stop-color="#336791" />
     </linearGradient>
     <linearGradient id="node" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#eaf2fb"/>
-      <stop offset="1" stop-color="#c3d8ef"/>
+      <stop offset="0" stop-color="#eaf2fb" />
+      <stop offset="1" stop-color="#c3d8ef" />
     </linearGradient>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#9cc2ea"/>
+    <marker
+      id="arrow"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
+      <path d="M0 0 L10 5 L0 10 z" fill="#9cc2ea" />
     </marker>
     <style>
-      .wm   { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-weight: 700; }
-      .tag  { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-      .nlbl { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 600; }
+    .wm {
+      font-family:
+        ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      font-weight: 700;
+    }
+    .tag {
+      font-family:
+        ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+        Arial, sans-serif;
+    }
+    .nlbl {
+      font-family:
+        ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+        Arial, sans-serif;
+      font-weight: 600;
+    }
     </style>
   </defs>
 
   <!-- background -->
-  <rect x="0" y="0" width="1280" height="320" rx="28" fill="url(#bg)"/>
-  <rect x="1" y="1" width="1278" height="318" rx="27" fill="none" stroke="#5b8bbd" stroke-opacity="0.35" stroke-width="2"/>
+  <rect x="0" y="0" width="1280" height="320" rx="28" fill="url(#bg)" />
+  <rect
+    x="1"
+    y="1"
+    width="1278"
+    height="318"
+    rx="27"
+    fill="none"
+    stroke="#5b8bbd"
+    stroke-opacity="0.35"
+    stroke-width="2"
+  />
 
   <!-- state-node graph motif (right side) -->
   <g stroke-linecap="round">
     <!-- transitions -->
-    <path d="M905 108 L1005 108" fill="none" stroke="#9cc2ea" stroke-width="3" marker-end="url(#arrow)"/>
-    <path d="M1075 138 C1075 190, 1000 205, 940 218" fill="none" stroke="#9cc2ea" stroke-width="3" marker-end="url(#arrow)"/>
-    <path d="M870 138 C870 185, 905 205, 905 205" fill="none" stroke="#9cc2ea" stroke-width="3" marker-end="url(#arrow)"/>
+    <path
+      d="M905 108 L1005 108"
+      fill="none"
+      stroke="#9cc2ea"
+      stroke-width="3"
+      marker-end="url(#arrow)"
+    />
+    <path
+      d="M1075 138 C1075 190, 1000 205, 940 218"
+      fill="none"
+      stroke="#9cc2ea"
+      stroke-width="3"
+      marker-end="url(#arrow)"
+    />
+    <path
+      d="M870 138 C870 185, 905 205, 905 205"
+      fill="none"
+      stroke="#9cc2ea"
+      stroke-width="3"
+      marker-end="url(#arrow)"
+    />
   </g>
   <g>
     <!-- initial state -->
-    <rect x="800" y="82" width="105" height="52" rx="14" fill="url(#node)"/>
-    <text x="852" y="114" text-anchor="middle" class="nlbl" font-size="17" fill="#274b6d">start</text>
+    <rect x="800" y="82" width="105" height="52" rx="14" fill="url(#node)" />
+    <text
+      x="852"
+      y="114"
+      text-anchor="middle"
+      class="nlbl"
+      font-size="17"
+      fill="#274b6d"
+    >start</text>
     <!-- active / highlighted state -->
-    <rect x="1005" y="82" width="120" height="52" rx="14" fill="#7fc7a8" stroke="#3fa77a" stroke-width="3"/>
-    <text x="1065" y="114" text-anchor="middle" class="nlbl" font-size="17" fill="#12402e">active</text>
+    <rect
+      x="1005"
+      y="82"
+      width="120"
+      height="52"
+      rx="14"
+      fill="#7fc7a8"
+      stroke="#3fa77a"
+      stroke-width="3"
+    />
+    <text
+      x="1065"
+      y="114"
+      text-anchor="middle"
+      class="nlbl"
+      font-size="17"
+      fill="#12402e"
+    >active</text>
     <!-- terminal state -->
-    <rect x="815" y="196" width="130" height="52" rx="14" fill="url(#node)"/>
-    <text x="880" y="228" text-anchor="middle" class="nlbl" font-size="17" fill="#274b6d">archived</text>
+    <rect x="815" y="196" width="130" height="52" rx="14" fill="url(#node)" />
+    <text
+      x="880"
+      y="228"
+      text-anchor="middle"
+      class="nlbl"
+      font-size="17"
+      fill="#274b6d"
+    >archived</text>
   </g>
 
   <!-- wordmark + tagline (left) -->
   <text x="80" y="150" class="wm" font-size="104" fill="#ffffff">pgfsm</text>
-  <rect x="84" y="176" width="132" height="6" rx="3" fill="#7fc7a8"/>
-  <text x="82" y="222" class="tag" font-size="30" fill="#dbe8f6">Finite state machines that run inside PostgreSQL.</text>
-  <text x="82" y="262" class="tag" font-size="20" fill="#9db8d4" fill-opacity="0.95">JSON&#8202;→&#8202;database objects&#8201;·&#8201;Hono/Deno REST API&#8201;·&#8201;pgmq queues</text>
+  <rect x="84" y="176" width="132" height="6" rx="3" fill="#7fc7a8" />
+  <text x="82" y="222" class="tag" font-size="30" fill="#dbe8f6"
+  >Finite state machines that run inside PostgreSQL.</text>
+  <text
+    x="82"
+    y="262"
+    class="tag"
+    font-size="20"
+    fill="#9db8d4"
+    fill-opacity="0.95"
+  >JSON&#8202;→&#8202;database objects&#8201;·&#8201;Hono/Deno REST API&#8201;·&#8201;pgmq queues</text>
 </svg>

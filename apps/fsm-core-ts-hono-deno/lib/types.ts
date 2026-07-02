@@ -4,7 +4,11 @@ import type { Schema } from "hono";
 // @logtape/hono uses withContext() instead of injecting into c.var, so there is
 // no per-request logger variable here. Use getLogger() at module level in handlers.
 
-export type { FsmFolderConfig, FsmStartupConfig, VerifiedFsmModule } from "@pgfsm/worker";
+export type {
+  FsmFolderConfig,
+  FsmStartupConfig,
+  VerifiedFsmModule,
+} from "@pgfsm/worker";
 import type { FsmStartupConfig, VerifiedFsmModule } from "@pgfsm/worker";
 
 export interface AppBindings {

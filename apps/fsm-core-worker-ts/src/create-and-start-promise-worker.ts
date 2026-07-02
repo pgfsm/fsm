@@ -18,13 +18,26 @@ export async function createAndStartPromiseWorker(
 ): Promise<boolean> {
   await createPgmqQueue(deps, queueName);
 
-  startFSMPromiseWorker(deps, queueName, fsm_promise_name, fsm_promise_type, fsm_promise_version, verifiedModule, signal)
+  startFSMPromiseWorker(
+    deps,
+    queueName,
+    fsm_promise_name,
+    fsm_promise_type,
+    fsm_promise_version,
+    verifiedModule,
+    signal,
+  )
     .then(() => {
-      logger.info("Promise worker for queue {queueName} stopped gracefully", { queueName });
+      logger.info("Promise worker for queue {queueName} stopped gracefully", {
+        queueName,
+      });
       onStop?.();
     })
     .catch((err) => {
-      logger.error("Promise worker for queue {queueName} stopped: {error}", { queueName, error: err });
+      logger.error("Promise worker for queue {queueName} stopped: {error}", {
+        queueName,
+        error: err,
+      });
       onStop?.();
     });
 

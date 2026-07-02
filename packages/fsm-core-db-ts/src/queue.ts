@@ -6,7 +6,6 @@ const logger = getLogger(["@pgfsm/db", "queue"]);
 
 import { QUEUE_SCHEMA } from "./const.ts";
 
-
 const CREATE_QUEUE_FN = `${QUEUE_SCHEMA}.create`;
 const DELETE_QUEUE_FN = `${QUEUE_SCHEMA}.delete`;
 const ARCHIVE_QUEUE_FN = `${QUEUE_SCHEMA}.archive`;
@@ -88,7 +87,10 @@ export async function sendMessage(
 ): Promise<bigint | null> {
   try {
     const text = `SELECT ${QUEUE_SCHEMA}.send($1::text, $2::jsonb) AS msg_id`;
-    const res = await deps.db.query<{ msg_id: bigint }>(text, [queueName, JSON.stringify(message)]);
+    const res = await deps.db.query<{ msg_id: bigint }>(text, [
+      queueName,
+      JSON.stringify(message),
+    ]);
     return res.rows?.[0]?.msg_id ?? null;
   } catch (err) {
     logger.error("Error in sendMessage: {error}", { error: err });
@@ -105,8 +107,11 @@ export async function pgmqQueueExists(
     const text = `
       SELECT * FROM ${LIST_QUEUES_FN}();
     `;
-    const res = await deps.db.query<DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"]>(text);
-    const rows: DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"][] = res.rows ?? [];
+    const res = await deps.db.query<
+      DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"]
+    >(text);
+    const rows: DatabaseGenerated["pgmq"]["CompositeTypes"]["queue_record"][] =
+      res.rows ?? [];
     return rows.some((r) => r?.queue_name === queueName);
   } catch (err) {
     logger.error("Error in pgmqQueueExists: {error}", { error: err });

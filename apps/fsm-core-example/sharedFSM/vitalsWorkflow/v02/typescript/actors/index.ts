@@ -17,4 +17,3 @@ export function checkCoolantLevel(context: any, event: any) {
 export function checkBattery(context: any, event: any) {
   // TODO: implement actor logic
 }
-

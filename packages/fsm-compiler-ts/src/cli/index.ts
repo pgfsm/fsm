@@ -8,19 +8,26 @@ import {
   generateFsmJSONFromFolders,
   generateFsmJSONFromMachineFile,
   generateFsmPluginFromFolders,
+  loadFsmJSONFromFolders,
   validateAndLoadFsmFromFolders,
   validateAndLoadPromiseFromFolders,
-  loadFsmJSONFromFolders,
   validateFsmPluginLoadFromFolders,
   validatePromisePluginLoadFromFolders,
 } from "../index.ts";
-import type { WorkflowType, ActorReference } from "../index.ts";
+import type { ActorReference, WorkflowType } from "../index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "cli"]);
 await configureCompilerLogger();
 
 const args = parseArgs(Deno.args, {
-  string: ["command", "folder", "workflow-type", "skip-dirs", "available-actors", "db-url"],
+  string: [
+    "command",
+    "folder",
+    "workflow-type",
+    "skip-dirs",
+    "available-actors",
+    "db-url",
+  ],
   boolean: ["help", "show-recommendation"],
   alias: {
     h: "help",
@@ -89,24 +96,44 @@ if (args.help || Deno.args.length === 0) {
 const command = args["command"];
 const folder = args["folder"];
 const workflowType = args["workflow-type"] as WorkflowType | undefined;
-const skipDirs = args["skip-dirs"] ? args["skip-dirs"].split(",").map((s: string) => s.trim()) : [];
+const skipDirs = args["skip-dirs"]
+  ? args["skip-dirs"].split(",").map((s: string) => s.trim())
+  : [];
 
-const VALID_WORKFLOW_TYPES: string[] = ["fsm", "sharedFsm", "sharedPromise", "promise"];
+const VALID_WORKFLOW_TYPES: string[] = [
+  "fsm",
+  "sharedFsm",
+  "sharedPromise",
+  "promise",
+];
 if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
-  logger.error("Invalid --workflow-type: {workflowType}. Must be one of: {valid}", { workflowType, valid: VALID_WORKFLOW_TYPES.join(", ") });
+  logger.error(
+    "Invalid --workflow-type: {workflowType}. Must be one of: {valid}",
+    { workflowType, valid: VALID_WORKFLOW_TYPES.join(", ") },
+  );
   printHelp();
   Deno.exit(1);
 }
 
-const needsWorkflowType = ["validate-plugin", "validate-promise-plugin", "load", "validate-and-load", "validate-and-load-promise"];
+const needsWorkflowType = [
+  "validate-plugin",
+  "validate-promise-plugin",
+  "load",
+  "validate-and-load",
+  "validate-and-load-promise",
+];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
 if (!folder) missing.push("--folder");
-if (command && needsWorkflowType.includes(command) && !workflowType) missing.push("--workflow-type");
+if (command && needsWorkflowType.includes(command) && !workflowType) {
+  missing.push("--workflow-type");
+}
 
 if (missing.length > 0) {
-  logger.error("Missing required arguments: {missing}", { missing: missing.join(", ") });
+  logger.error("Missing required arguments: {missing}", {
+    missing: missing.join(", "),
+  });
   printHelp();
   Deno.exit(1);
 }
@@ -132,7 +159,10 @@ async function loadAvailableActors(): Promise<ActorReference[]> {
     const content = await Deno.readTextFile(actorsFile);
     return JSON.parse(content) as ActorReference[];
   } catch (err) {
-    logger.error("Failed to read --available-actors file {actorsFile}: {error}", { actorsFile, error: err });
+    logger.error(
+      "Failed to read --available-actors file {actorsFile}: {error}",
+      { actorsFile, error: err },
+    );
     Deno.exit(1);
   }
 }
@@ -143,7 +173,9 @@ async function buildDeps(connectionString?: string) {
     return Deno.env.get("DATABASE_URL");
   })();
   if (!dbUrl) {
-    logger.error("No database connection string provided. Use --db-url <url> or set DATABASE_URL in .env");
+    logger.error(
+      "No database connection string provided. Use --db-url <url> or set DATABASE_URL in .env",
+    );
     Deno.exit(1);
   }
   const { Pool } = await import("pg");
@@ -155,36 +187,69 @@ try {
     case "generate": {
       const stat = await Deno.stat(folder!);
       if (stat.isFile) {
-        const absPath = folder!.startsWith("/") ? folder! : `${Deno.cwd()}/${folder!}`;
+        const absPath = folder!.startsWith("/")
+          ? folder!
+          : `${Deno.cwd()}/${folder!}`;
         if (folder!.endsWith(".ts")) {
           const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
           const version = absDir.split("/").at(-1) ?? "v01";
-          await generateFsmJSONFromMachineFile(absDir, version, workflowType ?? "fsm", args["show-recommendation"]);
+          await generateFsmJSONFromMachineFile(
+            absDir,
+            version,
+            workflowType ?? "fsm",
+            args["show-recommendation"],
+          );
         } else if (folder!.endsWith(".json")) {
-          await generateFsmJSONFromConfigFile(absPath, workflowType ?? "fsm", args["show-recommendation"]);
+          await generateFsmJSONFromConfigFile(
+            absPath,
+            workflowType ?? "fsm",
+            args["show-recommendation"],
+          );
         } else {
-          logger.error("--folder is not a recognized type. Use a .ts file, a .json file, or a directory: {folder}", { folder });
+          logger.error(
+            "--folder is not a recognized type. Use a .ts file, a .json file, or a directory: {folder}",
+            { folder },
+          );
           Deno.exit(1);
         }
       } else {
-        await generateFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs, args["show-recommendation"]);
+        await generateFsmJSONFromFolders(
+          folder!,
+          workflowType ?? "fsm",
+          skipDirs,
+          args["show-recommendation"],
+        );
       }
       break;
     }
     case "generate-plugin":
-      await generateFsmPluginFromFolders(folder!, workflowType ?? "fsm", skipDirs);
+      await generateFsmPluginFromFolders(
+        folder!,
+        workflowType ?? "fsm",
+        skipDirs,
+      );
       break;
     case "delete":
       await deleteFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs);
       break;
     case "validate-plugin": {
       const availableActors = await loadAvailableActors();
-      await validateFsmPluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
+      await validateFsmPluginLoadFromFolders(
+        folder!,
+        workflowType!,
+        skipDirs,
+        availableActors,
+      );
       break;
     }
     case "validate-promise-plugin": {
       const availableActors = await loadAvailableActors();
-      await validatePromisePluginLoadFromFolders(folder!, workflowType!, skipDirs, availableActors);
+      await validatePromisePluginLoadFromFolders(
+        folder!,
+        workflowType!,
+        skipDirs,
+        availableActors,
+      );
       break;
     }
     case "load": {
@@ -195,13 +260,25 @@ try {
     case "validate-and-load": {
       const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
-      await validateAndLoadFsmFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await validateAndLoadFsmFromFolders(
+        deps,
+        folder!,
+        workflowType!,
+        skipDirs,
+        availableActors,
+      );
       break;
     }
     case "validate-and-load-promise": {
       const deps = await buildDeps(args["db-url"]);
       const availableActors = await loadAvailableActors();
-      await validateAndLoadPromiseFromFolders(deps, folder!, workflowType!, skipDirs, availableActors);
+      await validateAndLoadPromiseFromFolders(
+        deps,
+        folder!,
+        workflowType!,
+        skipDirs,
+        availableActors,
+      );
       break;
     }
     default:

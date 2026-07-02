@@ -5,10 +5,18 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 
 const logger = getLogger(["@pgfsm/api", "fsmpromise"]);
 
-import type { CreateAndStartRoute, ListRoute, ResumeRoute, StopRoute } from "./fsmpromise.routes.ts";
+import type {
+  CreateAndStartRoute,
+  ListRoute,
+  ResumeRoute,
+  StopRoute,
+} from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import { createAndStartPromiseWorker, startFSMPromiseWorker } from "@pgfsm/worker";
+import {
+  createAndStartPromiseWorker,
+  startFSMPromiseWorker,
+} from "@pgfsm/worker";
 import { pgmqQueueExists } from "@pgfsm/db";
 
 // lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
@@ -32,7 +40,8 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
     supabase: supabase,
   };
   const body = c.req.valid("json");
-  const { promise_name, promise_type, promise_version, fsm_name, fsm_version } = body;
+  const { promise_name, promise_type, promise_version, fsm_name, fsm_version } =
+    body;
 
   try {
     if (!promise_name) {
@@ -63,10 +72,23 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
     );
 
     const controller = new AbortController();
-    startFSMPromiseWorker(deps, promise_name, promise_name, promise_type, promise_version, matchedModule, controller.signal)
-      .then(() => { delete activePromiseWorkers[promise_name]; })
+    startFSMPromiseWorker(
+      deps,
+      promise_name,
+      promise_name,
+      promise_type,
+      promise_version,
+      matchedModule,
+      controller.signal,
+    )
+      .then(() => {
+        delete activePromiseWorkers[promise_name];
+      })
       .catch((err) => {
-        logger.error("Promise worker for {name} stopped: {error}", { name: promise_name, error: err });
+        logger.error("Promise worker for {name} stopped: {error}", {
+          name: promise_name,
+          error: err,
+        });
         delete activePromiseWorkers[promise_name];
       });
 
@@ -81,7 +103,9 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
   }
 };
 
-export const createAndStart: AppRouteHandler<CreateAndStartRoute> = async (c) => {
+export const createAndStart: AppRouteHandler<CreateAndStartRoute> = async (
+  c,
+) => {
   const supabase = getSupabase(c);
   const db = c.get("db");
   const deps = {

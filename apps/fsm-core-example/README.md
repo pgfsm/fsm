@@ -1,16 +1,19 @@
 # fsm-core-example — Example FSM Definitions
 
-Reference FSM definitions used for development and testing. Each FSM is a self-contained folder with a JSON definition and TypeScript implementations of its actions, guards, delays, and actors.
+Reference FSM definitions used for development and testing. Each FSM is a
+self-contained folder with a JSON definition and TypeScript implementations of
+its actions, guards, delays, and actors.
 
 ## What's here
 
-| FSM | Path | Description |
-|---|---|---|
-| `creditCheck` | `fsm/creditCheck/` | Credit verification flow — parallel credit agency checks, actor invocations |
-| `carVitals` | `fsm/carVitals/` | Vehicle diagnostics state machine |
-| `taskMachineConfig` | `fsm/taskMachineConfig/` | Generic task workflow |
+| FSM                 | Path                     | Description                                                                 |
+| ------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `creditCheck`       | `fsm/creditCheck/`       | Credit verification flow — parallel credit agency checks, actor invocations |
+| `carVitals`         | `fsm/carVitals/`         | Vehicle diagnostics state machine                                           |
+| `taskMachineConfig` | `fsm/taskMachineConfig/` | Generic task workflow                                                       |
 
-Shared actors and FSMs live in `actors/`, `actions/`, `guards/`, `delays/`, and `sharedFSM/` at the root of this app.
+Shared actors and FSMs live in `actors/`, `actions/`, `guards/`, `delays/`, and
+`sharedFSM/` at the root of this app.
 
 ## Folder structure
 
@@ -30,7 +33,9 @@ fsm/<fsmName>/
     ...
 ```
 
-Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to create a new version; existing FSM instances keep running against their original version.
+Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to
+create a new version; existing FSM instances keep running against their original
+version.
 
 ## How to run the example server
 
@@ -38,14 +43,18 @@ Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to cr
 deno run --allow-all --env-file=.env --watch main.ts
 ```
 
-This starts a server that mounts all FSMs in this folder as plugin roots. See the root [README](../../README.md) for the full quick-start flow including database setup.
+This starts a server that mounts all FSMs in this folder as plugin roots. See
+the root [README](../../README.md) for the full quick-start flow including
+database setup.
 
 ## Adding a new FSM
 
-1. Create `fsm/<yourFsmName>/v01/fsm.json` (see [FSM definition format](../../packages/fsm-compiler-ts/docs/fsm-definition-format.md))
+1. Create `fsm/<yourFsmName>/v01/fsm.json` (see
+   [FSM definition format](../../packages/fsm-compiler-ts/docs/fsm-definition-format.md))
 2. Run the compiler to generate the TypeScript scaffold:
    ```bash
    cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts
    ```
-3. Implement the generated stubs in `typescript/actions/`, `guards/`, `delays/`, `actors/`
+3. Implement the generated stubs in `typescript/actions/`, `guards/`, `delays/`,
+   `actors/`
 4. Restart the server — it picks up the new FSM at startup

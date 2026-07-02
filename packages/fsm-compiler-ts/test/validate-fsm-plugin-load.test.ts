@@ -1,5 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { hasArity, isFunction, validateFsmPluginLoadFromFolder } from "../src/validate-fsm-plugin-load.ts";
+import {
+  hasArity,
+  isFunction,
+  validateFsmPluginLoadFromFolder,
+} from "../src/validate-fsm-plugin-load.ts";
 
 // isFunction
 Deno.test("isFunction - returns true for functions", () => {
@@ -23,7 +27,10 @@ Deno.test("hasArity - matches correct arity", () => {
   assertEquals(hasArity(0)(() => {}), true);
   assertEquals(hasArity(1)((_a: unknown) => {}), true);
   assertEquals(hasArity(2)((_a: unknown, _b: unknown) => {}), true);
-  assertEquals(hasArity(3)((_a: unknown, _b: unknown, _c: unknown) => {}), true);
+  assertEquals(
+    hasArity(3)((_a: unknown, _b: unknown, _c: unknown) => {}),
+    true,
+  );
 });
 
 Deno.test("hasArity - rejects wrong arity", () => {

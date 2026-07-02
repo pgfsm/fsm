@@ -11,11 +11,14 @@
   <a href="https://api.reuse.software/info/github.com/pgfsm/fsm"><img src="https://api.reuse.software/badge/github.com/pgfsm/fsm" alt="REUSE status"></a>
 </p>
 
-A framework for running versioned finite state machines inside PostgreSQL, with a Hono/Deno REST API.
+A framework for running versioned finite state machines inside PostgreSQL, with
+a Hono/Deno REST API.
 
 ## What it is
 
-FSMs are defined as JSON, compiled into database objects, and executed entirely inside PostgreSQL. The REST API creates instances and enqueues events; workers poll queues and drive transitions; PostgreSQL owns the state at every step.
+FSMs are defined as JSON, compiled into database objects, and executed entirely
+inside PostgreSQL. The REST API creates instances and enqueues events; workers
+poll queues and drive transitions; PostgreSQL owns the state at every step.
 
 ```
 Client
@@ -30,7 +33,10 @@ PostgreSQL (fsm_core schema)  ← FSM definitions, instance state, event queues 
 Workers (Deno)                ← poll queues, run transitions, archive results
 ```
 
-Each FSM instance owns a dedicated pgmq queue. Events are messages in that queue. Workers process one message at a time, run all triggered transitions (a macrostep), and write the new state back — atomically, inside a single PG function call.
+Each FSM instance owns a dedicated pgmq queue. Events are messages in that
+queue. Workers process one message at a time, run all triggered transitions (a
+macrostep), and write the new state back — atomically, inside a single PG
+function call.
 
 ## Quick start
 
@@ -46,7 +52,8 @@ OpenAPI docs available at `http://localhost:9999/fsm/docs`.
 
 ## Example: creditCheck
 
-The `creditCheck` FSM (in `apps/fsm-core-example/fsm/creditCheck/v01/`) models a credit verification flow.
+The `creditCheck` FSM (in `apps/fsm-core-example/fsm/creditCheck/v01/`) models a
+credit verification flow.
 
 ### States
 
@@ -111,9 +118,12 @@ packages/
 
 ## Deeper reading
 
-- [FSM definition format](./packages/fsm-compiler-ts/docs/fsm-definition-format.md) — how to write `fsm.json`
-- [Execution model](./execution-model.md) — how an event flows from API to archive
-- [PG→TS function mapping](./packages/database-src/docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
+- [FSM definition format](./packages/fsm-compiler-ts/docs/fsm-definition-format.md)
+  — how to write `fsm.json`
+- [Execution model](./execution-model.md) — how an event flows from API to
+  archive
+- [PG→TS function mapping](./packages/database-src/docs/pg-ts-function-mapping.md)
+  — PostgreSQL ↔ TypeScript reference
 - [Context map](./CONTEXT-MAP.md) — domain language per package
 
 ## Community

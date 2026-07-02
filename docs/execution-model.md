@@ -70,23 +70,29 @@ POST /fsm/fsm/send
 ### 2. API enqueues the event — `send_event_to_fsm_queue_with_event_logs_v2`
 
 PG function called with:
+
 - `input_fsm_instance_id` — the instance UUID (also the queue name)
 - `input_event_name` — the event type (`"Submit"`)
-- `input_send_to_parent_queue_id` — sentinel UUID (`api_system_queue_uuid()`) for API-originated events
+- `input_send_to_parent_queue_id` — sentinel UUID (`api_system_queue_uuid()`)
+  for API-originated events
 
-Writes an event log row and calls `pgmq.send()`. Returns immediately — the event is now queued.
+Writes an event log row and calls `pgmq.send()`. Returns immediately — the event
+is now queued.
 
 ### 3. Worker dequeues — `pgmq.read`
 
-The FSM worker polls the queue (visibility timeout: 30s). On receiving a message, it reads the `FsmQueueMessage` payload.
+The FSM worker polls the queue (visibility timeout: 30s). On receiving a
+message, it reads the `FsmQueueMessage` payload.
 
 ### 4. Load current state — `get_fsm_data_resolve_state_value_v2`
 
-Fetches the `fsm_instance` row and resolves the current XState state value from the stored ltree path.
+Fetches the `fsm_instance` row and resolves the current XState state value from
+the stored ltree path.
 
 ### 5. Evaluate transitions — `microstep_v2`
 
 Called with the current state and incoming event name. Returns:
+
 - The set of transitions that fire
 - New target state value
 - Actions to execute
@@ -94,7 +100,8 @@ Called with the current state and incoming event name. Returns:
 
 ### 6. Execute actions — `runActionImplementation`
 
-The worker calls each action function from `typescript/actions/index.ts` in sequence. Actions may modify context.
+The worker calls each action function from `typescript/actions/index.ts` in
+sequence. Actions may modify context.
 
 ### 7. Archive macrostep — `archive_event_from_fsm_type_worker_v2`
 
@@ -103,24 +110,32 @@ One atomic PG function that:
 1. Removes expired schedule queue entries from `total_schedule_queue_data`
 2. Removes expired promise queue entries from `total_promise_queue_data`
 3. Archives canceled schedule actors: `pgmq.archive()` on their queues
-4. Cancels removed promise actors: `cancel_event_for_fsm_promise_type_worker_v2()`
-5. Enqueues new schedule actors: `send_event_to_fsm_queue_with_event_logs_v2()` with delay
+4. Cancels removed promise actors:
+   `cancel_event_for_fsm_promise_type_worker_v2()`
+5. Enqueues new schedule actors: `send_event_to_fsm_queue_with_event_logs_v2()`
+   with delay
 6. Enqueues new promise actors: `send_event_to_queue_from_fsm_instance_id_v2()`
 7. `UPDATE fsm_instance` — persists new state, context, status, queue data
 8. `pgmq.archive()` — removes the processed message from the current queue
-9. If FSM reached a terminal status (`done`, `stopped`, `completed`, `final`) **and** `send_to_parent_queue_id` is a real queue (not a sentinel): sends `childFsm_completed` event to the parent queue
+9. If FSM reached a terminal status (`done`, `stopped`, `completed`, `final`)
+   **and** `send_to_parent_queue_id` is a real queue (not a sentinel): sends
+   `childFsm_completed` event to the parent queue
 
 ### 8. Parent notification (step 9 above)
 
-When a child FSM completes, the parent receives an event named `send_to_parent_queue_id_event_name` (carried on the original message). The parent worker picks it up in its next poll and processes it as a normal event — no special handling needed. The chain propagates naturally one hop at a time.
+When a child FSM completes, the parent receives an event named
+`send_to_parent_queue_id_event_name` (carried on the original message). The
+parent worker picks it up in its next poll and processes it as a normal event —
+no special handling needed. The chain propagates naturally one hop at a time.
 
 ## Sentinel queue IDs
 
-Two well-known UUIDs prevent the archive function from sending spurious parent notifications:
+Two well-known UUIDs prevent the archive function from sending spurious parent
+notifications:
 
-| Sentinel | UUID | Meaning |
-|---|---|---|
-| `pg_system_queue_uuid()` | `00000000-0000-0000-0000-000000000000` | Event originated inside PostgreSQL |
+| Sentinel                  | UUID                                   | Meaning                                               |
+| ------------------------- | -------------------------------------- | ----------------------------------------------------- |
+| `pg_system_queue_uuid()`  | `00000000-0000-0000-0000-000000000000` | Event originated inside PostgreSQL                    |
 | `api_system_queue_uuid()` | `00000000-0000-0000-0000-000000000001` | Event originated from the REST API with no parent FSM |
 
 If `send_to_parent_queue_id` equals either sentinel, step 9 is skipped.
@@ -144,4 +159,6 @@ archiveEventFromFsmPromiseTypeWorker()
     — archives the promise queue message
 ```
 
-The parent FSM worker picks up the `xstate.done.actor.*` or `xstate.error.actor.*` event in its next poll and evaluates the transitions that match.
+The parent FSM worker picks up the `xstate.done.actor.*` or
+`xstate.error.actor.*` event in its next poll and evaluates the transitions that
+match.

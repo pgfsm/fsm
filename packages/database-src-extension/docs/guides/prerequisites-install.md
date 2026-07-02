@@ -1,13 +1,14 @@
-
 # pgrx (Rust-based Postgres Extension Tool) Prerequisites on macOS
 
-To use [pgrx](https://github.com/pgcentralfoundation/pgrx) for building Postgres extensions in Rust, you need to install the following prerequisites on macOS:
+To use [pgrx](https://github.com/pgcentralfoundation/pgrx) for building Postgres
+extensions in Rust, you need to install the following prerequisites on macOS:
 
 ```sh
 brew install git icu4c pkg-config
 ```
 
-After installing `icu4c` and `pkg-config`, Homebrew may suggest the following steps:
+After installing `icu4c` and `pkg-config`, Homebrew may suggest the following
+steps:
 
 If you need to have `icu4c@78` first in your `PATH`, run:
 
@@ -23,7 +24,8 @@ export LDFLAGS="-L/opt/homebrew/opt/icu4c@78/lib"
 export CPPFLAGS="-I/opt/homebrew/opt/icu4c@78/include"
 ```
 
-Make sure to restart your terminal or source your `~/.zshrc` after making these changes:
+Make sure to restart your terminal or source your `~/.zshrc` after making these
+changes:
 
 ```sh
 source ~/.zshrc
@@ -37,5 +39,5 @@ To install the pgrx toolchain for building PostgreSQL extensions in Rust, run:
 cargo install --locked cargo-pgrx --version "=0.18.1"
 ```
 
-The version must match the `pgrx` dependency pinned in `fsm_core/Cargo.toml`. If you bump `pgrx` in Cargo.toml, update this command to match.
-
+The version must match the `pgrx` dependency pinned in `fsm_core/Cargo.toml`. If
+you bump `pgrx` in Cargo.toml, update this command to match.

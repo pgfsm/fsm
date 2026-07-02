@@ -1,7 +1,7 @@
 # Security Policy
 
 We take the security of the FSM Framework seriously. Because this project
-executes workflows *inside* PostgreSQL and exposes them over a REST API, we
+executes workflows _inside_ PostgreSQL and exposes them over a REST API, we
 especially want to hear about issues involving SQL injection, authentication
 bypass, privilege escalation, or unsafe handling of FSM definitions.
 
@@ -12,7 +12,8 @@ discussions, or pull requests.**
 
 Instead, use GitHub's private vulnerability reporting:
 
-1. Go to the [Security tab](https://github.com/pgfsm/fsm/security) of the repository.
+1. Go to the [Security tab](https://github.com/pgfsm/fsm/security) of the
+   repository.
 2. Click **Report a vulnerability**.
 3. Fill in the details described below.
 
@@ -31,7 +32,8 @@ This opens a private channel visible only to you and the maintainers.
 - **Acknowledgement** within 3 business days.
 - An initial assessment and severity classification within 7 days.
 - Regular updates as we work on a fix.
-- Public disclosure (via a [GitHub Security Advisory](https://github.com/pgfsm/fsm/security/advisories))
+- Public disclosure (via a
+  [GitHub Security Advisory](https://github.com/pgfsm/fsm/security/advisories))
   coordinated with you once a fix is available.
 
 We ask that you give us a reasonable window to release a fix before any public

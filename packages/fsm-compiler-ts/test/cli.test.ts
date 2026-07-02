@@ -52,7 +52,12 @@ Deno.test("cli generate without folder exits 1", async () => {
 });
 
 Deno.test("cli validate-plugin without --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "validate-plugin", "-f", FSM_FOLDER]);
+  const { code, stderr } = await runCli([
+    "-c",
+    "validate-plugin",
+    "-f",
+    FSM_FOLDER,
+  ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--workflow-type");
 });
@@ -64,13 +69,23 @@ Deno.test("cli load without --workflow-type exits 1", async () => {
 });
 
 Deno.test("cli validate-and-load without --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "validate-and-load", "-f", FSM_FOLDER]);
+  const { code, stderr } = await runCli([
+    "-c",
+    "validate-and-load",
+    "-f",
+    FSM_FOLDER,
+  ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--workflow-type");
 });
 
 Deno.test("cli unknown command exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "unknown-cmd", "-f", FSM_FOLDER]);
+  const { code, stderr } = await runCli([
+    "-c",
+    "unknown-cmd",
+    "-f",
+    FSM_FOLDER,
+  ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "Unknown command");
 });
@@ -78,13 +93,25 @@ Deno.test("cli unknown command exits 1", async () => {
 // --- Input validation ---
 
 Deno.test("cli invalid --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "validate-plugin", "-f", FSM_FOLDER, "-w", "foobar"]);
+  const { code, stderr } = await runCli([
+    "-c",
+    "validate-plugin",
+    "-f",
+    FSM_FOLDER,
+    "-w",
+    "foobar",
+  ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "Invalid --workflow-type");
 });
 
 Deno.test("cli nonexistent --folder exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "generate", "-f", "this/path/does/not/exist"]);
+  const { code, stderr } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    "this/path/does/not/exist",
+  ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "does not exist");
 });
@@ -97,7 +124,13 @@ Deno.test("cli generate runs successfully on example folder", async () => {
 });
 
 Deno.test("cli generate with --show-recommendation exits 0", async () => {
-  const { code } = await runCli(["-c", "generate", "-f", FSM_FOLDER, "--show-recommendation"]);
+  const { code } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    FSM_FOLDER,
+    "--show-recommendation",
+  ]);
   assertEquals(code, 0);
 });
 
@@ -125,19 +158,40 @@ Deno.test("cli delete runs successfully on example folder", async () => {
 // --- validate-plugin ---
 
 Deno.test("cli validate-plugin runs successfully on example folder", async () => {
-  const { code } = await runCli(["-c", "validate-plugin", "-f", FSM_FOLDER, "-w", "fsm"]);
+  const { code } = await runCli([
+    "-c",
+    "validate-plugin",
+    "-f",
+    FSM_FOLDER,
+    "-w",
+    "fsm",
+  ]);
   assertEquals(code, 0);
 });
 
 Deno.test("cli validate-plugin with -w shorthand exits 0", async () => {
-  const { code } = await runCli(["-c", "validate-plugin", "-f", FSM_FOLDER, "-w", "fsm"]);
+  const { code } = await runCli([
+    "-c",
+    "validate-plugin",
+    "-f",
+    FSM_FOLDER,
+    "-w",
+    "fsm",
+  ]);
   assertEquals(code, 0);
 });
 
 // --- validate-promise-plugin ---
 
 Deno.test("cli validate-promise-plugin runs on sharedFSM folder", async () => {
-  const { code } = await runCli(["-c", "validate-promise-plugin", "-f", SHARED_FSM_FOLDER, "-w", "sharedPromise"]);
+  const { code } = await runCli([
+    "-c",
+    "validate-promise-plugin",
+    "-f",
+    SHARED_FSM_FOLDER,
+    "-w",
+    "sharedPromise",
+  ]);
   assertEquals(code, 0);
 });
 
@@ -156,7 +210,16 @@ Deno.test("cli --db-url flag is accepted and parsed", async () => {
   // With --db-url provided, buildDeps() should not print "No database connection string".
   // The connection itself will fail later (port 1 is not a DB), but the flag must be parsed.
   const { stderr } = await runCli(
-    ["-c", "load", "-f", FSM_FOLDER, "-w", "fsm", "--db-url", "postgresql://localhost:1/test"],
+    [
+      "-c",
+      "load",
+      "-f",
+      FSM_FOLDER,
+      "-w",
+      "fsm",
+      "--db-url",
+      "postgresql://localhost:1/test",
+    ],
     { DATABASE_URL: "" },
   );
   const isParseError = stderr.includes("No database connection string");
@@ -166,7 +229,14 @@ Deno.test("cli --db-url flag is accepted and parsed", async () => {
 // --- Flag acceptance tests ---
 
 Deno.test("cli --skip-dirs flag is accepted", async () => {
-  const { code } = await runCli(["-c", "generate", "-f", FSM_FOLDER, "--skip-dirs", "nonexistent"]);
+  const { code } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    FSM_FOLDER,
+    "--skip-dirs",
+    "nonexistent",
+  ]);
   assertEquals(code, 0);
 });
 
@@ -174,7 +244,16 @@ Deno.test("cli --available-actors flag is accepted", async () => {
   const tmpFile = await Deno.makeTempFile({ suffix: ".json" });
   await Deno.writeTextFile(tmpFile, "[]");
   try {
-    const { code } = await runCli(["-c", "validate-plugin", "-f", FSM_FOLDER, "-w", "fsm", "--available-actors", tmpFile]);
+    const { code } = await runCli([
+      "-c",
+      "validate-plugin",
+      "-f",
+      FSM_FOLDER,
+      "-w",
+      "fsm",
+      "--available-actors",
+      tmpFile,
+    ]);
     assertEquals(code, 0);
   } finally {
     await Deno.remove(tmpFile);

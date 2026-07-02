@@ -1,54 +1,52 @@
 {
-   "name": "fsm_core",
-   "abstract": "finite state machine on Postgres",
-   "description": "A finite state machine implementation for PostgreSQL, allowing you to define states, transitions, and actions within the database.",
-   "version": "1.0.0",
-   "maintainer": [
-      "Niraj Kashyap <niraj38re@gmail.com>"
-   ],
-   "license": "postgresql",
-   "provides": {
-      "fsm_core": {
-         "abstract": "A finite state machine implementation for PostgreSQL",
-         "file": "share/postgresql/extension/fsm_core--0.0.0.sql",
-         "docfile": "README.md",
-         "version": "1.0.0"
-      }
-   },
-   "prereqs": {
-      "runtime": {
-         "requires": {
-            "PostgreSQL": "15.0.0",
-            "ltree": "1.2.0",
-            "pgmq": "1.4.4"
-
-         },
-         "recommends": {
-           
-         }
-      }
-   },
-   "resources": {
-      "bugtracker": {
-         "web": "https://github.com/pgfsm/fsm/issues/"
+  "name": "fsm_core",
+  "abstract": "finite state machine on Postgres",
+  "description": "A finite state machine implementation for PostgreSQL, allowing you to define states, transitions, and actions within the database.",
+  "version": "1.0.0",
+  "maintainer": [
+    "Niraj Kashyap <niraj38re@gmail.com>"
+  ],
+  "license": "postgresql",
+  "provides": {
+    "fsm_core": {
+      "abstract": "A finite state machine implementation for PostgreSQL",
+      "file": "share/postgresql/extension/fsm_core--0.0.0.sql",
+      "docfile": "README.md",
+      "version": "1.0.0"
+    }
+  },
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "PostgreSQL": "15.0.0",
+        "ltree": "1.2.0",
+        "pgmq": "1.4.4"
       },
-      "repository": {
-         "url": "git://github.com/pgfsm/fsm.git",
-         "web": "https://github.com/pgfsm/fsm/",
-         "type": "git"
+      "recommends": {
       }
-   },
-   "generated_by": "Niraj Kashyap <niraj38re@gmail.com>",
-   "meta-spec": {
-      "version": "1.0.0",
-      "url": "https://pgxn.org/meta/spec.txt"
-   },
-   "tags": [
-      "finite state machine",
-      "fsm",
-      "state machine",
-      "workflow",
-      "orchestrator",
-      "orchestration"
-   ]
+    }
+  },
+  "resources": {
+    "bugtracker": {
+      "web": "https://github.com/pgfsm/fsm/issues/"
+    },
+    "repository": {
+      "url": "git://github.com/pgfsm/fsm.git",
+      "web": "https://github.com/pgfsm/fsm/",
+      "type": "git"
+    }
+  },
+  "generated_by": "Niraj Kashyap <niraj38re@gmail.com>",
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  },
+  "tags": [
+    "finite state machine",
+    "fsm",
+    "state machine",
+    "workflow",
+    "orchestrator",
+    "orchestration"
+  ]
 }

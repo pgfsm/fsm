@@ -31,11 +31,17 @@ export const resume = createRoute({
   request: {
     body: jsonContentRequired(
       z.object({
-        promise_name: z.string().describe("The queue name for the promise worker"),
+        promise_name: z.string().describe(
+          "The queue name for the promise worker",
+        ),
         promise_type: z.string().describe("The actor type name to invoke"),
         promise_version: z.string().describe("The version of the promise"),
-        fsm_name: z.string().describe("Parent FSM name (for verifiedModule lookup)"),
-        fsm_version: z.string().describe("Parent FSM version (for verifiedModule lookup)"),
+        fsm_name: z.string().describe(
+          "Parent FSM name (for verifiedModule lookup)",
+        ),
+        fsm_version: z.string().describe(
+          "Parent FSM version (for verifiedModule lookup)",
+        ),
       }),
       "Promise worker configuration",
     ),
@@ -60,7 +66,9 @@ export const createAndStart = createRoute({
     body: jsonContentRequired(
       z.object({
         queue_name: z.string().describe("The PGMQ queue name to create"),
-        fsm_name: z.string().describe("Parent FSM name (for verifiedModule lookup)"),
+        fsm_name: z.string().describe(
+          "Parent FSM name (for verifiedModule lookup)",
+        ),
         promise_type: z.string().describe("The actor type name to invoke"),
         fsm_version: z.string().describe("Parent FSM version"),
       }),
@@ -93,7 +101,10 @@ export const stop = createRoute({
   },
   tags,
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({}), "Worker stopped successfully"),
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({}),
+      "Worker stopped successfully",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
       z.object({ error: z.string() }),
       "No active promise worker for the given queue",

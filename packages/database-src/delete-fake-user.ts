@@ -2,8 +2,7 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
 
-
-dotenv.config({path: "./../../.env"});
+dotenv.config({ path: "./../../.env" });
 
 /**
  * Deletes all fake users in Supabase Auth using the admin API.
@@ -14,7 +13,7 @@ export async function deleteFakeUsersInSupabaseAuth() {
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
-      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env variable"
+      "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env variable",
     );
   }
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -22,14 +21,17 @@ export async function deleteFakeUsersInSupabaseAuth() {
   });
 
   // Fetch all users
-  const { data: users, error: fetchError } = await supabase.auth.admin.listUsers();
+  const { data: users, error: fetchError } = await supabase.auth.admin
+    .listUsers();
   if (fetchError) {
     throw new Error(`Error fetching users: ${fetchError.message}`);
   }
 
   // console.log('deleteFakeUsersInSupabaseAuth: Found users:', users);
   // Filter fake users by email pattern
-  const fakeUsers = users.users.filter(user => user.email?.startsWith("fakeuser"));
+  const fakeUsers = users.users.filter((user) =>
+    user.email?.startsWith("fakeuser")
+  );
 
   // Delete each fake user
   const results = [];
@@ -37,7 +39,7 @@ export async function deleteFakeUsersInSupabaseAuth() {
     const { data, error } = await supabase.auth.admin.deleteUser(user.id);
     results.push({ data, error });
   }
-  
+
   return results;
 }
 deleteFakeUsersInSupabaseAuth()

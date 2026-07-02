@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { Database, Json } from "@pgfsm/db/database.types";
-type FsmTransitionRow = Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
+type FsmTransitionRow =
+  Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
 
 import type { DBDeps } from "@pgfsm/db";
 
@@ -15,10 +16,7 @@ export type FsmModuleDefinition = {
   actors: Record<string, (...args: unknown[]) => unknown> | null;
 };
 
-import {
-  microstep,
-  selectAllTransitions,
-} from "@pgfsm/db";
+import { microstep, selectAllTransitions } from "@pgfsm/db";
 
 /**
  * Splits the input array into two arrays based on matching event types.
@@ -77,11 +75,21 @@ export function splitBySendEventName<
 export async function runActionImplementation(
   actionKind: "exit" | "transition" | "entry",
   action: Json,
-  actionsModule: Record<string, (...args: unknown[]) => unknown> | null | undefined,
+  actionsModule:
+    | Record<string, (...args: unknown[]) => unknown>
+    | null
+    | undefined,
   current_context: Json,
-  meta: { deps: DBDeps; queueName: string; msg: Database["pgmq"]["CompositeTypes"]["message_record"] },
+  meta: {
+    deps: DBDeps;
+    queueName: string;
+    msg: Database["pgmq"]["CompositeTypes"]["message_record"];
+  },
 ): Promise<Json> {
-  actionsLogger.info("Running {kind} action: {action}", { kind: actionKind, action });
+  actionsLogger.info("Running {kind} action: {action}", {
+    kind: actionKind,
+    action,
+  });
   try {
     const actionName = action.type || action.action_type || action.name;
     if (actionsModule && typeof actionsModule[actionName] === "function") {
@@ -97,7 +105,10 @@ export async function runActionImplementation(
       }
     }
   } catch (err) {
-    actionsLogger.error("Error executing {kind} action implementation: {error}", { kind: actionKind, error: err });
+    actionsLogger.error(
+      "Error executing {kind} action implementation: {error}",
+      { kind: actionKind, error: err },
+    );
   }
   return current_context;
 }
@@ -113,7 +124,10 @@ export async function macrostepV2(
   fsmVersion: number | string,
   fsmModuleDefinition?: FsmModuleDefinition,
 ): Promise<any> {
-  const resolvedState = resolvedStateValue as { json: Json; all_nodes: string[] };
+  const resolvedState = resolvedStateValue as {
+    json: Json;
+    all_nodes: string[];
+  };
   // Simulate work (replace with real logic)
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
@@ -196,24 +210,36 @@ export async function macrostepV2(
               );
               if (eval_result) filteredTransitions.push(transition);
             } else {
-              logger.error("Guard function {guard} not found in module", { guard: condObj.type });
+              logger.error("Guard function {guard} not found in module", {
+                guard: condObj.type,
+              });
             }
           } else {
-            logger.error("Condition object does not have a type key: {cond}", { cond: condObj });
+            logger.error("Condition object does not have a type key: {cond}", {
+              cond: condObj,
+            });
           }
         } else {
-          logger.error("Condition is neither string nor object: {cond}", { cond: transition.cond });
+          logger.error("Condition is neither string nor object: {cond}", {
+            cond: transition.cond,
+          });
         }
       }
 
       if (filteredTransitions.length === 0) {
-        logger.error("No valid transitions found for the given event and state");
+        logger.error(
+          "No valid transitions found for the given event and state",
+        );
         return;
       } else if (filteredTransitions.length > 1) {
-        logger.error("Multiple valid transitions found for the given event and state. Ambiguous transition");
+        logger.error(
+          "Multiple valid transitions found for the given event and state. Ambiguous transition",
+        );
         return;
       } else {
-        logger.info("Selected Transition: {transition}", { transition: filteredTransitions[0] });
+        logger.info("Selected Transition: {transition}", {
+          transition: filteredTransitions[0],
+        });
         selectedTransition = filteredTransitions[0];
       }
     }
@@ -292,7 +318,10 @@ export async function macrostepV2(
 
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
-    .filter((item: any) => item !== (msg.message as unknown as FsmQueueMessage)?.eventData?.eventPayload);
+    .filter((item: any) =>
+      item !==
+        (msg.message as unknown as FsmQueueMessage)?.eventData?.eventPayload
+    );
 
   // get both removed and new_total_schedule_queue_data
   // const [new_total_schedule_queue_data, remove_schedule_queue_msg_ids] = splitByEventTypes(total_schedule_queue_data, remove_schedule_queue_msg_ids_xstate);
@@ -338,7 +367,8 @@ export async function macrostepV2(
   macroSaveFnPayload.fsm_instance_data_save_fsm_error = {};
   macroSaveFnPayload.fsm_instance_data_save_fsm_output = {};
 
-  macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state = microstepResult?.updated_state_value ?? null;
+  macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state =
+    microstepResult?.updated_state_value ?? null;
 
   macroSaveFnPayload.exit_actions = exit_actions;
   macroSaveFnPayload.transition_actions = transition_actions;

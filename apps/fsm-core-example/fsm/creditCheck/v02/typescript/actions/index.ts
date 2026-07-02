@@ -102,4 +102,3 @@ export function emailSalesTeam(context: any, event: any) {
 export function allWorkflowStepDoneEntryAction(context: any, event: any) {
   // TODO: implement
 }
-

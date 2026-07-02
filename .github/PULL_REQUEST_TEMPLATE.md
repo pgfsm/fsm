@@ -14,6 +14,7 @@
 
 ## Checklist
 
-- [ ] I have signed the [Contributor License Agreement](../CLA.md) (the cla-assistant bot will prompt me if I haven't)
+- [ ] I have signed the [Contributor License Agreement](../CLA.md) (the
+      cla-assistant bot will prompt me if I haven't)
 - [ ] Tests pass (`deno test`)
 - [ ] Code follows the project's naming conventions (see CLAUDE.md)

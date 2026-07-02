@@ -6,16 +6,22 @@ const logger = getLogger(["@pgfsm/db", "helper"]);
 import { FSM_SCHEMA, FSM_SCHEMA_FN_VERSION } from "./const.ts";
 import { toJsonbParam } from "./pg-utils.ts";
 
-
 export async function loadFsmStateFromJson(
   deps: DBDeps,
   json_input: Json,
   root_node_text: string | null,
-  input_fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"]["Args"]["input_fsm_name"],
-  input_fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"]["Args"]["input_fsm_version"],
+  input_fsm_name:
+    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"][
+      "Args"
+    ]["input_fsm_name"],
+  input_fsm_version:
+    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_state_from_json_v2"][
+      "Args"
+    ]["input_fsm_version"],
 ): Promise<Json> {
   try {
-    const LOAD_FSM_STATE_FN = `${FSM_SCHEMA}.load_fsm_state_from_json_${FSM_SCHEMA_FN_VERSION}`;
+    const LOAD_FSM_STATE_FN =
+      `${FSM_SCHEMA}.load_fsm_state_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT ${LOAD_FSM_STATE_FN}(
         $1::jsonb,
@@ -42,11 +48,16 @@ export async function loadFsmTransitionFromJson(
   deps: DBDeps,
   json_input: Json,
   root_node_text: string | null,
-  fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_transition_from_json_v2"]["Args"]["fsm_name"],
-  fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_transition_from_json_v2"]["Args"]["fsm_version"],
+  fsm_name: DatabaseGenerated["fsm_core"]["Functions"][
+    "load_fsm_transition_from_json_v2"
+  ]["Args"]["fsm_name"],
+  fsm_version: DatabaseGenerated["fsm_core"]["Functions"][
+    "load_fsm_transition_from_json_v2"
+  ]["Args"]["fsm_version"],
 ): Promise<Json> {
   try {
-    const LOAD_FSM_TRANSITION_FN = `${FSM_SCHEMA}.load_fsm_transition_from_json_${FSM_SCHEMA_FN_VERSION}`;
+    const LOAD_FSM_TRANSITION_FN =
+      `${FSM_SCHEMA}.load_fsm_transition_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT ${LOAD_FSM_TRANSITION_FN}(
         $1::jsonb,
@@ -73,12 +84,22 @@ export async function loadFsmFromJson(
   deps: DBDeps,
   json_input: Json,
   root_node_text: string | null,
-  input_fsm_type: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_type"],
-  input_fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_name"],
-  input_fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"]["input_fsm_version"],
+  input_fsm_type:
+    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
+      "input_fsm_type"
+    ],
+  input_fsm_name:
+    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
+      "input_fsm_name"
+    ],
+  input_fsm_version:
+    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
+      "input_fsm_version"
+    ],
 ): Promise<Json> {
   try {
-    const LOAD_FSM_FROM_JSON_FN = `${FSM_SCHEMA}.load_fsm_from_json_${FSM_SCHEMA_FN_VERSION}`;
+    const LOAD_FSM_FROM_JSON_FN =
+      `${FSM_SCHEMA}.load_fsm_from_json_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT ${LOAD_FSM_FROM_JSON_FN}(
         $1::jsonb,
@@ -88,7 +109,13 @@ export async function loadFsmFromJson(
         $5::text
       ) AS result;
     `;
-    const values = [toJsonbParam(json_input), root_node_text, input_fsm_type, input_fsm_name, input_fsm_version];
+    const values = [
+      toJsonbParam(json_input),
+      root_node_text,
+      input_fsm_type,
+      input_fsm_name,
+      input_fsm_version,
+    ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;
   } catch (err) {
@@ -100,11 +127,18 @@ export async function loadFsmFromJson(
 export async function resolveStateValue(
   deps: DBDeps,
   input_json: Json,
-  input_fsm_name: DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"]["Args"]["input_fsm_name"],
-  input_fsm_version: DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"]["Args"]["input_fsm_version"],
+  input_fsm_name:
+    DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"][
+      "Args"
+    ]["input_fsm_name"],
+  input_fsm_version:
+    DatabaseGenerated["fsm_core"]["Functions"]["resolve_state_value_v2"][
+      "Args"
+    ]["input_fsm_version"],
 ): Promise<{ json: Json; all_nodes: string[] } | null> {
   try {
-    const RESOLVE_STATE_VALUE_FN = `${FSM_SCHEMA}.resolve_state_value_${FSM_SCHEMA_FN_VERSION}`;
+    const RESOLVE_STATE_VALUE_FN =
+      `${FSM_SCHEMA}.resolve_state_value_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT ${RESOLVE_STATE_VALUE_FN}(
         $1::jsonb,
@@ -128,14 +162,27 @@ export async function resolveStateValue(
   }
 }
 
-
 export async function microstep(
   deps: DBDeps,
-  transition_record: DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"] | null,
-  event_name: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["event_name"],
-  state_value_node_set: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["state_value_node_set"],
-  fsm_name_param: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["fsm_name_param"],
-  fsm_version_param: DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"]["fsm_version_param"],
+  transition_record:
+    | DatabaseGenerated["fsm_core"]["Tables"]["fsm_transitions"]["Row"]
+    | null,
+  event_name:
+    DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"][
+      "event_name"
+    ],
+  state_value_node_set:
+    DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"][
+      "state_value_node_set"
+    ],
+  fsm_name_param:
+    DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"][
+      "fsm_name_param"
+    ],
+  fsm_version_param:
+    DatabaseGenerated["fsm_core"]["Functions"]["microstep_v2"]["Args"][
+      "fsm_version_param"
+    ],
 ): Promise<{
   updated_state_value_node_set: string[];
   updated_state_value: Json;
@@ -172,14 +219,16 @@ export async function microstep(
       fsm_name_param,
       fsm_version_param,
     ];
-    const res = await deps.db.query<{ result: {
-      updated_state_value_node_set: string[];
-      updated_state_value: Json;
-      exit_actions: Json;
-      entry_actions: Json;
-      initial_actions: Json;
-      transition_actions: Json;
-    } }>(text, values);
+    const res = await deps.db.query<{
+      result: {
+        updated_state_value_node_set: string[];
+        updated_state_value: Json;
+        exit_actions: Json;
+        entry_actions: Json;
+        initial_actions: Json;
+        transition_actions: Json;
+      };
+    }>(text, values);
     return (
       res.rows?.[0]?.result ?? {
         updated_state_value_node_set: [],
@@ -198,13 +247,26 @@ export async function microstep(
 
 export async function selectAllTransitions(
   deps: DBDeps,
-  event_name: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["event_name"],
-  input_state_value: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["input_state_value"],
-  fsm_name_param: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_name_param"],
-  fsm_version_param: DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"]["Args"]["fsm_version_param"],
+  event_name:
+    DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"][
+      "Args"
+    ]["event_name"],
+  input_state_value:
+    DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"][
+      "Args"
+    ]["input_state_value"],
+  fsm_name_param:
+    DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"][
+      "Args"
+    ]["fsm_name_param"],
+  fsm_version_param:
+    DatabaseGenerated["fsm_core"]["Functions"]["select_all_transitions_v2"][
+      "Args"
+    ]["fsm_version_param"],
 ): Promise<Json> {
   try {
-    const SELECT_TRANSITIONS_FN = `${FSM_SCHEMA}.select_all_transitions_${FSM_SCHEMA_FN_VERSION}`;
+    const SELECT_TRANSITIONS_FN =
+      `${FSM_SCHEMA}.select_all_transitions_${FSM_SCHEMA_FN_VERSION}`;
     const text = `
       SELECT ${SELECT_TRANSITIONS_FN}(
         $1::text,

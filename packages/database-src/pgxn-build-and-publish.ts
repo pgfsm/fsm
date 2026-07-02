@@ -82,7 +82,8 @@ const placeholders: Record<string, string> = {
   "{{VERSION}}": version,
   "{{DESCRIPTION}}": description,
   "{{AUTHOR}}": author,
-  "{{LICENSE_PGXN}}": SPDX_TO_PGXN[license.toLowerCase()] ?? license.toLowerCase(),
+  "{{LICENSE_PGXN}}": SPDX_TO_PGXN[license.toLowerCase()] ??
+    license.toLowerCase(),
   "{{PROVIDES_FILE}}": baseInstallFile,
 };
 
@@ -150,7 +151,9 @@ try {
     shell: true,
   }).trim();
   execSync(
-    `git -C "${tmpRepo}" archive --format=zip --prefix="${pkgName}-${version}/" "${treeHash}" > "${join(process.cwd(), zipName)}"`,
+    `git -C "${tmpRepo}" archive --format=zip --prefix="${pkgName}-${version}/" "${treeHash}" > "${
+      join(process.cwd(), zipName)
+    }"`,
     { shell: true, stdio: "inherit" },
   );
   console.log(`\nCreated: ${zipName}`);

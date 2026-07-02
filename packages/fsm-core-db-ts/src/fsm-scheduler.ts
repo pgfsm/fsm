@@ -5,7 +5,8 @@ import { FSM_SCHEMA } from "./const.ts";
 const logger = getLogger(["@pgfsm/db", "scheduler"]);
 
 const ENQUEUE_FSM_DISPATCH_FN = `${FSM_SCHEMA}.enqueue_fsm_dispatch_v2`;
-const RESUME_EVENT_FOR_FSM_WORKER_FN = `${FSM_SCHEMA}.resume_event_for_fsm_worker_v2`;
+const RESUME_EVENT_FOR_FSM_WORKER_FN =
+  `${FSM_SCHEMA}.resume_event_for_fsm_worker_v2`;
 
 export type FsmDispatchType = "start" | "resume";
 
@@ -44,6 +45,9 @@ export async function enqueueDispatch(
     [instanceId, fsmName, fsmVersion, dispatchType],
   );
   logger.debug("Enqueued {instanceId} ({fsmName}@{fsmVersion}, type={type})", {
-    instanceId, fsmName, fsmVersion, type: dispatchType,
+    instanceId,
+    fsmName,
+    fsmVersion,
+    type: dispatchType,
   });
 }

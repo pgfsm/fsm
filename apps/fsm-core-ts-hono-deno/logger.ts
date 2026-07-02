@@ -23,7 +23,9 @@ function getSummaryConsoleSink(): Sink {
     if (record.category.length > 2 && record.level === "debug") {
       const parentGroup = record.category.slice(0, 2).join(" > ");
       if (typeof process !== "undefined" && process.stdout?.write) {
-        process.stdout.write(`\r 📂 [${parentGroup}] Processing inner tasks...    `);
+        process.stdout.write(
+          `\r 📂 [${parentGroup}] Processing inner tasks...    `,
+        );
       } else {
         console.log(`📂 [${parentGroup}] Tasks working...`);
       }
@@ -34,12 +36,22 @@ function getSummaryConsoleSink(): Sink {
   };
 }
 
-export type LogLevel = "debug" | "info" | "warning" | "error" | "fatal" | "silent";
+export type LogLevel =
+  | "debug"
+  | "info"
+  | "warning"
+  | "error"
+  | "fatal"
+  | "silent";
 type ActiveLevel = "debug" | "info" | "warning" | "error" | "fatal";
 
 // "silent" maps to a noop sink at the highest active level so nothing is emitted.
 // All other levels pass through to the provided active sinks.
-function makeLoggerEntry(category: string[], level: LogLevel, activeSinks: string[]) {
+function makeLoggerEntry(
+  category: string[],
+  level: LogLevel,
+  activeSinks: string[],
+) {
   if (level === "silent") {
     return { category, lowestLevel: "fatal" as const, sinks: ["noop"] };
   }
@@ -49,13 +61,17 @@ function makeLoggerEntry(category: string[], level: LogLevel, activeSinks: strin
 export async function configureApiLogger(): Promise<void> {
   const defaultLevel = env!.LOG_LEVEL as LogLevel;
   const levels = {
-    api:      (env!.LOG_LEVEL_API      ?? defaultLevel) as LogLevel,
-    worker:   (env!.LOG_LEVEL_WORKER   ?? defaultLevel) as LogLevel,
+    api: (env!.LOG_LEVEL_API ?? defaultLevel) as LogLevel,
+    worker: (env!.LOG_LEVEL_WORKER ?? defaultLevel) as LogLevel,
     compiler: (env!.LOG_LEVEL_COMPILER ?? defaultLevel) as LogLevel,
-    db:       (env!.LOG_LEVEL_DB       ?? defaultLevel) as LogLevel,
+    db: (env!.LOG_LEVEL_DB ?? defaultLevel) as LogLevel,
   };
 
-  const metaLogger = { category: ["logtape", "meta"], sinks: ["console"] as string[], lowestLevel: "warning" as const };
+  const metaLogger = {
+    category: ["logtape", "meta"],
+    sinks: ["console"] as string[],
+    lowestLevel: "warning" as const,
+  };
   const consoleSink = isTerminal ? getSummaryConsoleSink() : getConsoleSink();
   const noopSink: Sink = () => {};
 
@@ -69,10 +85,10 @@ export async function configureApiLogger(): Promise<void> {
     // contextLocalStorage: new AsyncLocalStorage(),
     sinks,
     loggers: [
-      makeLoggerEntry(["@pgfsm/api"],      levels.api,      activeSinks),
-      makeLoggerEntry(["@pgfsm/worker"],   levels.worker,   activeSinks),
+      makeLoggerEntry(["@pgfsm/api"], levels.api, activeSinks),
+      makeLoggerEntry(["@pgfsm/worker"], levels.worker, activeSinks),
       makeLoggerEntry(["@pgfsm/compiler"], levels.compiler, activeSinks),
-      makeLoggerEntry(["@pgfsm/db"],       levels.db,       activeSinks),
+      makeLoggerEntry(["@pgfsm/db"], levels.db, activeSinks),
       metaLogger,
     ],
   });

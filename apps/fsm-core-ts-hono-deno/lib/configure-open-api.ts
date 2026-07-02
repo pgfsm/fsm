@@ -16,7 +16,6 @@ export default function configureOpenAPI(app: AppOpenAPI, basePath = "") {
   });
 
   app.get("/docs", (c) => {
-
     return apiReference({
       theme: "kepler",
       layout: "classic",

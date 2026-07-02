@@ -4,7 +4,10 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
-import { replaceUnderscoresWithSpaces, replaceSpacesWithUnderscores } from "@pgfsm/compiler";
+import {
+  replaceSpacesWithUnderscores,
+  replaceUnderscoresWithSpaces,
+} from "@pgfsm/compiler";
 
 const pool = new Pool({
   connectionString: Deno.env.get("DATABASE_URL"),
@@ -41,7 +44,9 @@ Deno.test(
 
     if (changes.length > 0) {
       throw new Error(
-        `resolveStateValue does not match XState resolveState for initial state.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `resolveStateValue does not match XState resolveState for initial state.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     }
   },
@@ -54,8 +59,14 @@ Deno.test(
     const initialStateJson = initialState.toJSON();
 
     const event_data = { type: "Submit", payload: {} };
-    const resolvedInitialState = machineConfig.resolveState(initialStateJson as any);
-    const [nextState] = transition(machineConfig, resolvedInitialState, event_data);
+    const resolvedInitialState = machineConfig.resolveState(
+      initialStateJson as any,
+    );
+    const [nextState] = transition(
+      machineConfig,
+      resolvedInitialState,
+      event_data,
+    );
     const nextStateJson = nextState.toJSON();
 
     const resolvedXState = machineConfig.resolveState(nextStateJson as any);
@@ -76,7 +87,9 @@ Deno.test(
 
     if (changes.length > 0) {
       throw new Error(
-        `resolveStateValue does not match XState resolveState after Submit.\nDiff: ${JSON.stringify(changes, null, 2)}`,
+        `resolveStateValue does not match XState resolveState after Submit.\nDiff: ${
+          JSON.stringify(changes, null, 2)
+        }`,
       );
     }
   },

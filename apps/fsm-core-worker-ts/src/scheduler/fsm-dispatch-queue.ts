@@ -54,14 +54,17 @@ export async function claimScheduledForFsmlet(
   try {
     await client.query("BEGIN");
 
-    const res = await client.query<FsmDispatchEntry>(`
+    const res = await client.query<FsmDispatchEntry>(
+      `
       SELECT id, instance_id, fsm_name, fsm_version, dispatch_type
       FROM fsm_core.fsm_dispatch_queue
       WHERE status = 'scheduled' AND scheduled_fsmlet_id = $1
       ORDER BY scheduled_at
       FOR UPDATE SKIP LOCKED
       LIMIT 1
-    `, [fsmletId]);
+    `,
+      [fsmletId],
+    );
 
     if (res.rows.length === 0) {
       await client.query("ROLLBACK");
@@ -69,7 +72,10 @@ export async function claimScheduledForFsmlet(
     }
 
     const entry = res.rows[0];
-    await client.query(`DELETE FROM fsm_core.fsm_dispatch_queue WHERE id = $1`, [entry.id]);
+    await client.query(
+      `DELETE FROM fsm_core.fsm_dispatch_queue WHERE id = $1`,
+      [entry.id],
+    );
     await client.query("COMMIT");
     return entry;
   } catch (err) {
@@ -79,4 +85,3 @@ export async function claimScheduledForFsmlet(
     client.release();
   }
 }
-
