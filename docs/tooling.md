@@ -12,6 +12,9 @@ ecosystems.
 
 ## 1. Language & version management
 
+`proto` pins every language runtime to an exact version per package, ensuring
+all contributors and CI use identical toolchains across the three ecosystems.
+
 | Tool                                                  | Purpose                                        | Where                                                                        |
 | ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
 | [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions per package     | `.prototools` files (one per package)                                        |
@@ -26,6 +29,9 @@ ecosystems.
 
 ## 2. Dependency management (per ecosystem)
 
+Each ecosystem uses its own native package manager; this table records which
+tool, manifest, and lockfile apply to each part of the repo.
+
 | Ecosystem    | Tool                            | Manifest / lockfile                      | Location                                   |
 | ------------ | ------------------------------- | ---------------------------------------- | ------------------------------------------ |
 | Deno / TS    | **Deno** (JSR + npm specifiers) | `deno.json` + `deno.lock`                | repo root (workspace of 5 members)         |
@@ -36,6 +42,9 @@ ecosystems.
 ---
 
 ## 3. Dependency auto-update
+
+Renovate Bot opens automated PRs to keep dependencies current across all three
+ecosystems and GitHub Actions, reducing manual version-bump toil.
 
 | Tool                                              | Purpose                                                                  | Config          |
 | ------------------------------------------------- | ------------------------------------------------------------------------ | --------------- |
@@ -55,6 +64,16 @@ Notable Renovate policy (`renovate.json`):
 
 ## 4. Security scanning
 
+**Terminology used in this section:** **Secret scanning** — detects credentials,
+API keys, and tokens accidentally committed to source control before they can be
+exploited. **SAST (Static Application Security Testing)** — analyses source code
+without executing it to find security vulnerabilities such as injection flaws
+and unsafe patterns. **SBOM (Software Bill of Materials)** — a machine-readable
+inventory of every dependency and transitive dependency in the project, used as
+the foundation for vulnerability and licence checks. **SCA (Software Composition
+Analysis)** — scans an SBOM against known CVE databases to identify vulnerable
+open-source components and flag them by severity.
+
 | Category              | Tool                                                              | Purpose                                                                        | Where                                                            |
 | --------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | Secret scanning       | [**gitleaks**](https://github.com/gitleaks/gitleaks) `v8.30.1`    | Detects committed secrets                                                      | `prek.toml` (local hook) + `.github/workflows/gitleaks.yml` (CI) |
@@ -71,6 +90,9 @@ Notable Renovate policy (`renovate.json`):
 ---
 
 ## 5. Lint & formatting
+
+Linters and formatters enforce a consistent code style and catch common errors;
+each language uses its ecosystem's standard tooling.
 
 | Language        | Tool                                 | Notes                                                                                               |
 | --------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------- |
@@ -92,6 +114,9 @@ in CI via `j178/prek-action@v2` (`.github/workflows/gitleaks.yml`).
 ---
 
 ## 7. Database & infrastructure tooling
+
+These tools manage the local PostgreSQL/Supabase stack, the custom `fsm_core`
+Rust extension, and helper scripts for database migrations and seed data.
 
 | Tool                                                               | Purpose                                                    | Where                                      |
 | ------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------ |
@@ -130,6 +155,9 @@ for supply-chain safety; Renovate keeps the digests updated.
 ---
 
 ## 9. Release & publishing
+
+Publishing is tag-driven; these tools pack TypeScript workspace members, publish
+them to npm, and attach the CycloneDX SBOM to GitHub Releases.
 
 | Tool                              | Purpose                                           | Where             |
 | --------------------------------- | ------------------------------------------------- | ----------------- |
