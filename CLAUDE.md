@@ -9,9 +9,9 @@ A Finite State Machine (FSM) framework that runs workflows inside PostgreSQL, ex
 ## Language & Runtime Management
 
 This repo uses [proto](https://moonrepo.dev/docs/proto/overview) to pin language versions. Check `.prototools` files for pinned versions. Key runtimes:
-- **Deno 2.6.10** — primary runtime for API server and compiler
+- **Deno 2.8.1** — primary runtime for API server and compiler
 - **Node 22.16.0** — used only for `packages/database-src` (Supabase CLI)
-- **Rust** — for the PostgreSQL extension in `packages/database-src-extension/`
+- **Rust 1.95.0** — for the PostgreSQL extension in `packages/database-src-extension/`
 
 ## Commands
 
