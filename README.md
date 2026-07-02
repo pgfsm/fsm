@@ -1,6 +1,15 @@
-# FSM Framework
+<p align="center">
+  <img src="./.github/assets/pgfsm-banner.svg" alt="pgfsm — finite state machines that run inside PostgreSQL" width="100%">
+</p>
 
-[![REUSE status](https://api.reuse.software/badge/github.com/pgfsm/fsm)](https://api.reuse.software/info/github.com/pgfsm/fsm)
+<h1 align="center">FSM Framework</h1>
+
+<p align="center">
+  <a href="https://discord.gg/FPNfaAbpq9"><img src="https://img.shields.io/badge/Discord-join%20chat-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://api.reuse.software/info/github.com/pgfsm/fsm"><img src="https://api.reuse.software/badge/github.com/pgfsm/fsm" alt="REUSE status"></a>
+</p>
 
 A framework for running versioned finite state machines inside PostgreSQL, with a Hono/Deno REST API.
 
@@ -107,7 +116,9 @@ packages/
 - [PG→TS function mapping](./packages/database-src/docs/pg-ts-function-mapping.md) — PostgreSQL ↔ TypeScript reference
 - [Context map](./CONTEXT-MAP.md) — domain language per package
 
-## Contributing & Security
+## Community
 
+- [Discord](https://discord.gg/FPNfaAbpq9) — chat, questions, and help
 - [Contributing guide](./CONTRIBUTING.md) — how to get involved
 - [Security policy](./SECURITY.md) — how to report a vulnerability
+- [License](./LICENSE) — Apache-2.0
