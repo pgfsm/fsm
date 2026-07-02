@@ -49,6 +49,32 @@ jobs:
       - name: Format check
         run: cargo fmt --all --check
 
+      # pgrx's pg-sys build.rs generates bindings from a real PostgreSQL install,
+      # so clippy/build need PG 15 dev headers + `cargo pgrx init` (writes
+      # $PGRX_HOME/config.toml). Without it the build fails with
+      # "config.toml not found. Have you run 'cargo pgrx init' yet?".
+      # PG 15 isn't in ubuntu-latest's default repos (it ships PG 16), so pull it
+      # from the official PostgreSQL APT (PGDG) repository.
+      - name: Install PostgreSQL 15 dev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15 postgresql-server-dev-15 libclang-dev
+
+      # cargo-pgrx must match the pinned pgrx = "=0.18.1" in Cargo.toml.
+      - name: Install cargo-pgrx
+        run: cargo install --locked cargo-pgrx@0.18.1
+
+      # Point pgrx at the system PG 15 (fast path — avoids compiling PG from source).
+      - name: Init pgrx (system PG 15)
+        run: cargo pgrx init --pg15 /usr/lib/postgresql/15/bin/pg_config
+
       # pgrx crates gate their PG version behind a feature; clippy needs one selected.
       - name: Clippy
         run: cargo clippy --features pg15 --no-default-features -- -D warnings
