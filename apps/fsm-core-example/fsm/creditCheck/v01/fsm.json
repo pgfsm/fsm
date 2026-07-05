@@ -390,7 +390,7 @@
                       "type": "xstate.invoke",
                       "fsmType": "promise",
                       "fsmVersion": "v01",
-                      "fsmLanguage": "typescript"
+                      "fsmLanguage": "rust"
                     }
                   ],
                   "tags": []
@@ -532,7 +532,7 @@
                       "type": "xstate.invoke",
                       "fsmType": "promise",
                       "fsmVersion": "v01",
-                      "fsmLanguage": "typescript"
+                      "fsmLanguage": "go"
                     }
                   ],
                   "tags": []
@@ -635,7 +635,7 @@
                       "type": "xstate.invoke",
                       "fsmType": "promise",
                       "fsmVersion": "v01",
-                      "fsmLanguage": "typescript"
+                      "fsmLanguage": "python"
                     }
                   ],
                   "tags": []
