@@ -1,9 +1,32 @@
 import { assertEquals } from "@std/assert";
 import {
+  extractFsmPluginRefs,
   isTimestampFolderName,
   isValidDateFolderName,
   isVersionFolderName,
 } from "../src/util.ts";
+
+Deno.test("extractFsmPluginRefs - defaults actor fsmLanguage to typescript", () => {
+  const fsmData = {
+    states: {
+      idle: { invoke: [{ src: "someActor" }] },
+    },
+  };
+  const { actors } = extractFsmPluginRefs(fsmData);
+  assertEquals(actors.length, 1);
+  assertEquals(actors[0].src, "someActor");
+  assertEquals(actors[0].fsmLanguage, "typescript");
+});
+
+Deno.test("extractFsmPluginRefs - preserves explicit actor fsmLanguage", () => {
+  const fsmData = {
+    states: {
+      idle: { invoke: [{ src: "pyActor", fsmLanguage: "python" }] },
+    },
+  };
+  const { actors } = extractFsmPluginRefs(fsmData);
+  assertEquals(actors[0].fsmLanguage, "python");
+});
 
 Deno.test("isVersionFolderName - valid", () => {
   assertEquals(isVersionFolderName("v01"), true);

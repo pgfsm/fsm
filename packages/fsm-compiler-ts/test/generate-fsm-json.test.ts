@@ -22,10 +22,12 @@ Deno.test("addMissingFsmTypeToInvokeActors - adds missing fsmType and fsmVersion
 
   assertEquals(fulljson.states.idle.invoke[0].fsmType, "promise");
   assertEquals(fulljson.states.idle.invoke[0].fsmVersion, "v01");
+  assertEquals(fulljson.states.idle.invoke[0].fsmLanguage, "typescript");
   assertEquals(childActorsInfo.length, 1);
   assertEquals(childActorsInfo[0].child_actor_src, "someActor");
   assertEquals(childActorsInfo[0].child_actor_fsmType, "promise");
   assertEquals(childActorsInfo[0].child_actor_fsmVersion, "v01");
+  assertEquals(childActorsInfo[0].child_actor_fsmLanguage, "typescript");
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - preserves existing fsmType and fsmVersion", () => {
@@ -36,6 +38,7 @@ Deno.test("addMissingFsmTypeToInvokeActors - preserves existing fsmType and fsmV
           src: "sharedActor",
           fsmType: "sharedFsm",
           fsmVersion: "v02",
+          fsmLanguage: "python",
         }],
       },
     },
@@ -47,8 +50,10 @@ Deno.test("addMissingFsmTypeToInvokeActors - preserves existing fsmType and fsmV
 
   assertEquals(fulljson.states.idle.invoke[0].fsmType, "sharedFsm");
   assertEquals(fulljson.states.idle.invoke[0].fsmVersion, "v02");
+  assertEquals(fulljson.states.idle.invoke[0].fsmLanguage, "python");
   assertEquals(childActorsInfo[0].child_actor_fsmType, "sharedFsm");
   assertEquals(childActorsInfo[0].child_actor_fsmVersion, "v02");
+  assertEquals(childActorsInfo[0].child_actor_fsmLanguage, "python");
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - handles nested states", () => {

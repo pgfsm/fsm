@@ -2,7 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   hasArity,
   isFunction,
-  validateFsmPluginLoadFromFolder,
+  validateSyncOperationFromFolder,
 } from "../src/validate-fsm-plugin-load.ts";
 
 // isFunction
@@ -45,11 +45,11 @@ Deno.test("hasArity - returns false for non-functions", () => {
   assertEquals(hasArity(2)("string"), false);
 });
 
-// validateFsmPluginLoadFromFolder - early return on schema failure
-Deno.test("validateFsmPluginLoadFromFolder - returns defaults when fsm.json fails schema", async () => {
+// validateSyncOperationFromFolder - early return on schema failure
+Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fails schema", async () => {
   const invalidFsmData = { not: "a valid fsm" };
 
-  const result = await validateFsmPluginLoadFromFolder(
+  const result = await validateSyncOperationFromFolder(
     invalidFsmData,
     "testFsm",
     "v01",

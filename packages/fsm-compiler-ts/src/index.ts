@@ -2,26 +2,31 @@ export { configureCompilerLogger, type LogLevel } from "./logger.ts";
 export {
   addActionNameFromDelay,
   addMissingFsmTypeToInvokeActors,
-  generateFsmJSONFromConfigFile,
   generateFsmJSONFromFolders,
   generateFsmJSONFromMachineFile,
   normalizeActionsToObjects,
 } from "./generate-fsm-json.ts";
-export { generateFsmPluginFromFolders } from "./generate-fsm-plugin.ts";
-export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
+export { generateAsyncOperationLogicFromFolders } from "./generate-async-operation-logic.ts";
+export { generateSyncOperationLogicFromFolders } from "./generate-sync-operation-logic.ts";
 export {
-  validateAndLoadFsmFromFolders,
-  validateAndLoadPromiseFromFolders,
-} from "./validate-and-load-fsm.ts";
+  isOperationLang,
+  type OperationLang,
+  SUPPORTED_OPERATION_LANGS,
+} from "./operation-logic-scaffold.ts";
+export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
+export { validateSyncOperationAndLoadToDb } from "./validate-sync-operation-logic-and-load-to-db.ts";
+export { validateAsyncOperationAndLoadToDb } from "./validate-async-operation-logic-and-load-to-db.ts";
 export {
   hasArity,
   isFunction,
-  validateFsmPluginLoadFromFolder,
-  validateFsmPluginLoadFromFolders,
   validateLanguageModules,
-  validatePromisePluginLoadFromFolder,
-  validatePromisePluginLoadFromFolders,
-} from "./validate-fsm-plugin-load.ts";
+  validateSyncOperationFromFolder,
+  validateSyncOperationFromFolders,
+} from "./validate-sync-operation-logic.ts";
+export {
+  validateAsyncOperationFromFolder,
+  validateAsyncOperationFromFolders,
+} from "./validate-async-operation-logic.ts";
 export { deleteFsmJSONFromFolders } from "./delete-fsm-json-from-folders.ts";
 export {
   DELAY_ACTION_NAME_PREFIX,

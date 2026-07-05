@@ -339,13 +339,16 @@ $$ LANGUAGE plpgsql;
 --     'v3'
 -- );
 
+CREATE FUNCTION fsm_core.hello_niraj(input_text TEXT)
+RETURNS void AS $$
+BEGIN
+    RAISE NOTICE 'Hello niraj, %!', input_text;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION fsm_core.hello(input_text text)
- RETURNS void
- LANGUAGE plpgsql
-AS $function$
+CREATE OR REPLACE FUNCTION fsm_core.hello(input_text TEXT)
+RETURNS void AS $$
 BEGIN
     RAISE NOTICE 'new Hello, %!', input_text;
 END;
-$function$
-;
+$$ LANGUAGE plpgsql;

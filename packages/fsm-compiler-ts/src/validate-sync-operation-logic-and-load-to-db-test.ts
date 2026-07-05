@@ -1,10 +1,7 @@
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureCompilerLogger } from "./logger.ts";
-import {
-  validateAndLoadFsmFromFolders,
-  validateAndLoadPromiseFromFolders,
-} from "./validate-and-load-fsm.ts";
+import { validateSyncOperationAndLoadToDb } from "./validate-sync-operation-logic-and-load-to-db.ts";
 import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });
@@ -14,38 +11,29 @@ await configureCompilerLogger();
 const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
 
 (async () => {
-  const sharedPromisefolderPath = "apps/fsm-core-example/sharedPromise";
   const sharedFSMfolderPath = "apps/fsm-core-example/sharedFSM";
   const fsmfolderPath = "apps/fsm-core-example/fsm";
 
-  const deps = {
-    db: pool,
-  };
+  const deps = { db: pool, useSupabase: false };
 
-  const skipSharedPromiseDirs = [""];
   const skipSharedFSMDirs = [""];
   const skipFSMDirs = ["", ""];
 
-  const outputSharedPromise = await validateAndLoadPromiseFromFolders(
-    deps,
-    sharedPromisefolderPath,
-    "sharedPromise",
-    skipSharedPromiseDirs,
-    [],
-  );
-  const outputSharedFSM = await validateAndLoadFsmFromFolders(
+  const outputSharedFSM = await validateSyncOperationAndLoadToDb(
     deps,
     sharedFSMfolderPath,
     "sharedFsm",
     skipSharedFSMDirs,
-    outputSharedPromise,
+    [],
   );
-  const outputFSM = await validateAndLoadFsmFromFolders(
+  const outputFSM = await validateSyncOperationAndLoadToDb(
     deps,
     fsmfolderPath,
     "fsm",
     skipFSMDirs,
-    [...outputSharedPromise, ...outputSharedFSM],
+    outputSharedFSM,
   );
   logger.info("final output: {output}", { output: outputFSM });
+
+  await pool.end();
 })();

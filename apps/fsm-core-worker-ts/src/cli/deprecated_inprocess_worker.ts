@@ -61,7 +61,7 @@ OPTIONS
   -f, --fsm-folder-path <path>      Absolute path to FSM folder for loading actions/guards/delays/actors (required except for stop-worker)
   -t, --promise-type <type>         Promise actor type to invoke (required for start-promise-worker, create-and-start-promise-worker)
   -d, --db-url <url>                Database connection URL (overrides DATABASE_URL from .env)
-      --validate-plugin             Use validateFsmPluginLoadFromFolder instead of direct imports
+      --validate-plugin             Use validateSyncOperationFromFolder instead of direct imports
   -h, --help                        Show this help message
 
 EXAMPLES

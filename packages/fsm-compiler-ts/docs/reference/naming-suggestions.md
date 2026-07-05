@@ -25,22 +25,22 @@ commands, and parameter names.
 Every public function previously used `workflow_type` (snake_case) while all
 other parameters were camelCase.
 
-| Function                                 | File                          | Was             | Is now         | Status |
-| ---------------------------------------- | ----------------------------- | --------------- | -------------- | ------ |
-| `generateFsmJSONFromFolders`             | `generateFsmJSON.ts`          | `workflow_type` | `workflowType` | ✅     |
-| `generateFsmJSONFromFolder` (internal)   | `generateFsmJSON.ts`          | `workflow_type` | `workflowType` | ✅     |
-| `generateFsmPluginFromFolders`           | `generateFsmPlugin.ts`        | `workflow_type` | `workflowType` | ✅     |
-| `generateFsmPluginFromFolder` (internal) | `generateFsmPlugin.ts`        | `workflow_type` | `workflowType` | ✅     |
-| `deleteFsmJSONFromFolders`               | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` | ✅     |
-| `deleteFsmJSONFromFolder` (internal)     | `deleteFsmJSONFromFolders.ts` | `workflow_type` | `workflowType` | ✅     |
-| `loadFsmJSONFromFolders`                 | `loadFsmJSON.ts`              | `workflow_type` | `workflowType` | ✅     |
-| `loadFsmJSONFromFolder` (internal)       | `loadFsmJSON.ts`              | `workflow_type` | `workflowType` | ✅     |
-| `validateAndLoadFsmFromFolders`          | `validate-and-load-fsm.ts`    | `workflow_type` | `workflowType` | ✅     |
-| `validateAndLoadPromiseFromFolders`      | `validate-and-load-fsm.ts`    | `workflow_type` | `workflowType` | ✅     |
-| `validateFsmPluginLoadFromFolders`       | `validateFsmPluginLoad.ts`    | `workflow_type` | `workflowType` | ✅     |
-| `validateFsmPluginLoadFromFolder`        | `validateFsmPluginLoad.ts`    | `workflow_type` | `workflowType` | ✅     |
-| `validatePromisePluginLoadFromFolders`   | `validateFsmPluginLoad.ts`    | `workflow_type` | `workflowType` | ✅     |
-| `validatePromisePluginLoadFromFolder`    | `validateFsmPluginLoad.ts`    | `workflow_type` | `workflowType` | ✅     |
+| Function                                 | File                                | Was             | Is now         | Status |
+| ---------------------------------------- | ----------------------------------- | --------------- | -------------- | ------ |
+| `generateFsmJSONFromFolders`             | `generateFsmJSON.ts`                | `workflow_type` | `workflowType` | ✅     |
+| `generateFsmJSONFromFolder` (internal)   | `generateFsmJSON.ts`                | `workflow_type` | `workflowType` | ✅     |
+| `generateAsyncOperationLogicFromFolders` | `generate-async-operation-logic.ts` | `workflow_type` | `workflowType` | ✅     |
+| `generateSyncOperationLogicFromFolders`  | `generate-sync-operation-logic.ts`  | `workflow_type` | `workflowType` | ✅     |
+| `deleteFsmJSONFromFolders`               | `deleteFsmJSONFromFolders.ts`       | `workflow_type` | `workflowType` | ✅     |
+| `deleteFsmJSONFromFolder` (internal)     | `deleteFsmJSONFromFolders.ts`       | `workflow_type` | `workflowType` | ✅     |
+| `loadFsmJSONFromFolders`                 | `loadFsmJSON.ts`                    | `workflow_type` | `workflowType` | ✅     |
+| `loadFsmJSONFromFolder` (internal)       | `loadFsmJSON.ts`                    | `workflow_type` | `workflowType` | ✅     |
+| `validateAndLoadFsmFromFolders`          | `validate-and-load-fsm.ts`          | `workflow_type` | `workflowType` | ✅     |
+| `validateAndLoadPromiseFromFolders`      | `validate-and-load-fsm.ts`          | `workflow_type` | `workflowType` | ✅     |
+| `validateFsmPluginLoadFromFolders`       | `validateFsmPluginLoad.ts`          | `workflow_type` | `workflowType` | ✅     |
+| `validateFsmPluginLoadFromFolder`        | `validateFsmPluginLoad.ts`          | `workflow_type` | `workflowType` | ✅     |
+| `validatePromisePluginLoadFromFolders`   | `validateFsmPluginLoad.ts`          | `workflow_type` | `workflowType` | ✅     |
+| `validatePromisePluginLoadFromFolder`    | `validateFsmPluginLoad.ts`          | `workflow_type` | `workflowType` | ✅     |
 
 ---
 

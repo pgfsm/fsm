@@ -1,9 +1,10 @@
 # fsm-compiler-ts — Potential Bugs
 
-Source files audited: `src/generateFsmJSON.ts`, `src/generateFsmPlugin.ts`,
-`src/deleteFsmJSONFromFolders.ts`, `src/loadFsmJSON.ts`,
-`src/loadAndValidateFsm.ts`, `src/validateFsmPluginLoad.ts`, `src/util.ts`,
-`src/cli/index.ts`.
+Source files audited: `src/generate-fsm-json.ts`,
+`src/generate-async-operation-logic.ts`, `src/generate-sync-operation-logic.ts`,
+`src/operation-logic-scaffold.ts`, `src/delete-fsm-json-from-folders.ts`,
+`src/load-fsm-json.ts`, `src/validate-and-load-fsm.ts`,
+`src/validate-fsm-plugin-load.ts`, `src/util.ts`, `src/cli/index.ts`.
 
 ---
 
@@ -123,38 +124,38 @@ const fsmResult = await loadFsmFromJson(
 
 ---
 
-## Bug #8 — Low | `generateFsmPlugin.ts:14` ✅ Fixed (documented)
+## Bug #8 — Low | `operation-logic-scaffold.ts` (`writeActorFile`) ✅ Resolved
 
 **Actor deduplication by `src` only — different `fsmType`/`fsmVersion` collapse
 silently**
 
-The deduplication by `src` is intentional: the generated stub function name
-equals `src`, so two actors sharing a `src` but differing in
-`fsmType`/`fsmVersion` must share one stub (duplicate exports would be a compile
-error). Added a comment to document this:
-
-```ts
-// Deduplicates by src only — stub function name equals src, so actors sharing a src
-// but differing in fsmType/fsmVersion must share one stub (duplicate exports would be a compile error).
-const actorNames = [...new Set(actors.map((a) => a.src))];
-```
+Previously all actors were written into a single `actors/index` module and
+deduplicated by `src`, so two actors sharing a `src` but differing in
+`fsmType`/`fsmVersion` collapsed into one stub. `generate-async-logic` now
+writes **one file per invoke** at
+`<lang>/actors/<fsmType>_<fsmVersion>_<src>.<ext>` and deduplicates by the full
+`<fsmType>_<fsmVersion>_<src>` — distinct type/version combinations no longer
+collapse.
 
 ---
 
 ## Bug #9 — Medium | `src/cli/index.ts:134–140` ✅ Fixed
 
-**`workflowType` hardcoded as `"fsm"` for `generate`, `generate-plugin`,
-`delete`**
+**`workflowType` hardcoded as `"fsm"` for the scaffold/generate/delete
+commands**
 
-Previously the `-w / --workflow-type` flag was ignored for these three commands.
-Fixed by using `workflowType ?? "fsm"`:
+Previously the `-w / --workflow-type` flag was ignored for these commands. Fixed
+by using `workflowType ?? "fsm"`:
 
 ```ts
 case "generate":
   await generateFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs, args["show-recommendation"]);
   break;
-case "generate-plugin":
-  await generateFsmPluginFromFolders(folder!, workflowType ?? "fsm", skipDirs);
+case "generate-async-logic":
+  await generateAsyncOperationLogicFromFolders(folder!, workflowType ?? "fsm", skipDirs);
+  break;
+case "generate-sync-logic":
+  await generateSyncOperationLogicFromFolders(folder!, workflowType ?? "fsm", langs, skipDirs);
   break;
 case "delete":
   await deleteFsmJSONFromFolders(folder!, workflowType ?? "fsm", skipDirs);
@@ -193,7 +194,8 @@ async function buildDeps(connectionString?: string) {
 
 ## Bug #11 — Medium | `loadAndValidateFsm.ts:6` ✅ Fixed
 
-**Schema version mismatch between `load-and-validate` and `validate-plugin`**
+**Schema version mismatch between `load-and-validate` and
+`validate-sync-operation`**
 
 `loadAndValidateFsm.ts` was validating against `fsm.machine.schema.v1.json`
 while `validateFsmPluginLoad.ts` used `fsm.machine.schema.v2.json`, causing

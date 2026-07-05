@@ -51,10 +51,10 @@ Deno.test("cli generate without folder exits 1", async () => {
   assertStringIncludes(stderr, "--folder");
 });
 
-Deno.test("cli validate-plugin without --workflow-type exits 1", async () => {
+Deno.test("cli validate-sync-operation without --workflow-type exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
-    "validate-plugin",
+    "validate-sync-operation",
     "-f",
     FSM_FOLDER,
   ]);
@@ -68,10 +68,10 @@ Deno.test("cli load without --workflow-type exits 1", async () => {
   assertStringIncludes(stderr, "--workflow-type");
 });
 
-Deno.test("cli validate-and-load without --workflow-type exits 1", async () => {
+Deno.test("cli validate-sync-operation-and-load without --workflow-type exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
-    "validate-and-load",
+    "validate-sync-operation-and-load",
     "-f",
     FSM_FOLDER,
   ]);
@@ -95,7 +95,7 @@ Deno.test("cli unknown command exits 1", async () => {
 Deno.test("cli invalid --workflow-type exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
-    "validate-plugin",
+    "validate-sync-operation",
     "-f",
     FSM_FOLDER,
     "-w",
@@ -139,11 +139,40 @@ Deno.test("cli generate with -r shorthand exits 0", async () => {
   assertEquals(code, 0);
 });
 
-// --- generate-plugin ---
+// --- generate-async-logic / generate-sync-logic ---
 
-Deno.test("cli generate-plugin runs successfully on example folder", async () => {
-  const { code } = await runCli(["-c", "generate-plugin", "-f", FSM_FOLDER]);
+Deno.test("cli generate-async-logic runs successfully on example folder", async () => {
+  const { code } = await runCli([
+    "-c",
+    "generate-async-logic",
+    "-f",
+    FSM_FOLDER,
+  ]);
   assertEquals(code, 0);
+});
+
+Deno.test("cli generate-sync-logic runs successfully on example folder", async () => {
+  const { code } = await runCli([
+    "-c",
+    "generate-sync-logic",
+    "-f",
+    FSM_FOLDER,
+    "--lang",
+    "typescript",
+  ]);
+  assertEquals(code, 0);
+});
+
+Deno.test("cli generate-sync-logic rejects an invalid --lang", async () => {
+  const { code } = await runCli([
+    "-c",
+    "generate-sync-logic",
+    "-f",
+    FSM_FOLDER,
+    "--lang",
+    "cobol",
+  ]);
+  assertEquals(code, 1);
 });
 
 // --- delete ---
@@ -155,12 +184,12 @@ Deno.test("cli delete runs successfully on example folder", async () => {
   await runCli(["-c", "generate", "-f", FSM_FOLDER]); // restore generated files
 });
 
-// --- validate-plugin ---
+// --- validate-sync-operation ---
 
-Deno.test("cli validate-plugin runs successfully on example folder", async () => {
+Deno.test("cli validate-sync-operation runs successfully on example folder", async () => {
   const { code } = await runCli([
     "-c",
-    "validate-plugin",
+    "validate-sync-operation",
     "-f",
     FSM_FOLDER,
     "-w",
@@ -169,10 +198,10 @@ Deno.test("cli validate-plugin runs successfully on example folder", async () =>
   assertEquals(code, 0);
 });
 
-Deno.test("cli validate-plugin with -w shorthand exits 0", async () => {
+Deno.test("cli validate-sync-operation with -w shorthand exits 0", async () => {
   const { code } = await runCli([
     "-c",
-    "validate-plugin",
+    "validate-sync-operation",
     "-f",
     FSM_FOLDER,
     "-w",
@@ -181,12 +210,12 @@ Deno.test("cli validate-plugin with -w shorthand exits 0", async () => {
   assertEquals(code, 0);
 });
 
-// --- validate-promise-plugin ---
+// --- validate-async-operation ---
 
-Deno.test("cli validate-promise-plugin runs on sharedFSM folder", async () => {
+Deno.test("cli validate-async-operation runs on sharedFSM folder", async () => {
   const { code } = await runCli([
     "-c",
-    "validate-promise-plugin",
+    "validate-async-operation",
     "-f",
     SHARED_FSM_FOLDER,
     "-w",
@@ -246,7 +275,7 @@ Deno.test("cli --available-actors flag is accepted", async () => {
   try {
     const { code } = await runCli([
       "-c",
-      "validate-plugin",
+      "validate-sync-operation",
       "-f",
       FSM_FOLDER,
       "-w",

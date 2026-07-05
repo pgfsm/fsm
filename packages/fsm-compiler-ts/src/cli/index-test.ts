@@ -63,17 +63,23 @@ async function runCli(
     logger.info("[generate, no folder] done");
   }
 
-  // validate-plugin without --workflow-type
+  // validate-sync-operation without --workflow-type
   {
-    const { code, stderr } = await runCli(["validate-plugin", FSM_FOLDER]);
-    logger.info("[validate-plugin, no --workflow-type] exit code: {code}", {
-      code,
-    });
+    const { code, stderr } = await runCli([
+      "validate-sync-operation",
+      FSM_FOLDER,
+    ]);
+    logger.info(
+      "[validate-sync-operation, no --workflow-type] exit code: {code}",
+      {
+        code,
+      },
+    );
     if (code !== 1) logger.error("missing --workflow-type should exit 1");
     if (!stderr.includes("--workflow-type")) {
       logger.error("should print workflow-type error");
     }
-    logger.info("[validate-plugin, no --workflow-type] done");
+    logger.info("[validate-sync-operation, no --workflow-type] done");
   }
 
   // unknown command
@@ -98,25 +104,38 @@ async function runCli(
     logger.info("[generate fsm] done");
   }
 
-  // generate-plugin — runs on example folder (no DB required)
+  // generate-async-logic — runs on example folder (no DB required)
   {
-    const { code } = await runCli(["generate-plugin", FSM_FOLDER]);
-    logger.info("[generate-plugin fsm] exit code: {code}", { code });
-    if (code !== 0) logger.error("generate-plugin should succeed");
-    logger.info("[generate-plugin fsm] done");
+    const { code } = await runCli(["generate-async-logic", FSM_FOLDER]);
+    logger.info("[generate-async-logic fsm] exit code: {code}", { code });
+    if (code !== 0) logger.error("generate-async-logic should succeed");
+    logger.info("[generate-async-logic fsm] done");
   }
 
-  // validate-plugin — runs on example folder (no DB required)
+  // generate-sync-logic — runs on example folder (no DB required)
   {
     const { code } = await runCli([
-      "validate-plugin",
+      "generate-sync-logic",
+      FSM_FOLDER,
+      "--lang",
+      "typescript",
+    ]);
+    logger.info("[generate-sync-logic fsm] exit code: {code}", { code });
+    if (code !== 0) logger.error("generate-sync-logic should succeed");
+    logger.info("[generate-sync-logic fsm] done");
+  }
+
+  // validate-sync-operation — runs on example folder (no DB required)
+  {
+    const { code } = await runCli([
+      "validate-sync-operation",
       FSM_FOLDER,
       "--workflow-type",
       "fsm",
     ]);
-    logger.info("[validate-plugin fsm] exit code: {code}", { code });
-    if (code !== 0) logger.error("validate-plugin should succeed");
-    logger.info("[validate-plugin fsm] done");
+    logger.info("[validate-sync-operation fsm] exit code: {code}", { code });
+    if (code !== 0) logger.error("validate-sync-operation should succeed");
+    logger.info("[validate-sync-operation fsm] done");
   }
 
   logger.info("=== CLI Tests complete ===");

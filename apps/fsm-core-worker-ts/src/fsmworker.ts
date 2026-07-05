@@ -12,7 +12,7 @@ import {
   getFsmDataResolveStateValue,
 } from "@pgfsm/db";
 
-import { validateFsmPluginLoadFromFolder } from "@pgfsm/compiler";
+import { validateSyncOperationFromFolder } from "@pgfsm/compiler";
 import type { WorkflowType } from "@pgfsm/compiler";
 
 import { macrostepV2 } from "./fsmworker-helper.ts";
@@ -130,7 +130,7 @@ export async function startFSMWorkerWithDBLock(
         const fsmJsonPath = `${verifiedModule.fsmAbsFolderPath}/fsm.json`;
         const fsmJsonText = await Deno.readTextFile(fsmJsonPath);
         const fsmData = JSON.parse(fsmJsonText);
-        const result = await validateFsmPluginLoadFromFolder(
+        const result = await validateSyncOperationFromFolder(
           fsmData,
           fsm_name,
           String(fsm_version),
@@ -144,7 +144,7 @@ export async function startFSMWorkerWithDBLock(
         );
         fsmModuleDefinition = result.fsmModuleDefinition;
         logger.info(
-          "Loaded fsmModuleDefinition via validateFsmPluginLoadFromFolder for {fsmName}/{fsmVersion}",
+          "Loaded fsmModuleDefinition via validateSyncOperationFromFolder for {fsmName}/{fsmVersion}",
           { fsmName: fsm_name, fsmVersion: fsm_version },
         );
       } else {

@@ -4,6 +4,7 @@ export type ActorReference = {
   src: string;
   fsmType?: string;
   fsmVersion?: string;
+  fsmLanguage?: string;
 };
 export type FailedMethod = {
   method: string;
@@ -53,19 +54,19 @@ export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);
 
 /**
  * Recursively traverses FSM JSON and collects all action, guard, delay, and actor names.
- * Actors are returned as objects preserving fsmType and fsmVersion.
+ * Actors are returned as objects preserving fsmType, fsmVersion, and fsmLanguage
+ * (fsmLanguage defaults to "typescript" when absent on the invoke object).
  */
 export function extractFsmPluginRefs(fsmData: any): {
   actions: string[];
   guards: string[];
   delays: string[];
-  actors: { src: string; fsmType?: string; fsmVersion?: string }[];
+  actors: ActorReference[];
 } {
   const actionsSet = new Set<string>();
   const guardsSet = new Set<string>();
   const delaysSet = new Set<string>();
-  const actorsArr: { src: string; fsmType?: string; fsmVersion?: string }[] =
-    [];
+  const actorsArr: ActorReference[] = [];
 
   function collectActionName(a: any) {
     if (typeof a === "string") actionsSet.add(a);
@@ -114,6 +115,9 @@ export function extractFsmPluginRefs(fsmData: any): {
             src: inv.src,
             fsmType: inv.fsmType,
             fsmVersion: inv.fsmVersion,
+            fsmLanguage: typeof inv.fsmLanguage === "string"
+              ? inv.fsmLanguage
+              : "typescript",
           });
         }
       }

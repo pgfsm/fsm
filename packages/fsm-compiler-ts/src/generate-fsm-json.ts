@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "generate"]);
 import { Ajv } from "ajv";
-import machineSchema from "../../database-src/fsm.machine.schema.v2.json" with {
+import machineSchema from "../../database-src/fsm.machine.schema.v3.json" with {
   type: "json",
 };
 import {
@@ -211,8 +211,9 @@ export function addActionNameFromDelay(obj: Json): Json {
 }
 
 /**
- * Pure function — returns a new FSM JSON with missing fsmType/fsmVersion added
- * to every invoke entry, plus a flat list of all child actor metadata.
+ * Pure function — returns a new FSM JSON with missing fsmType/fsmVersion/fsmLanguage
+ * added to every invoke entry, plus a flat list of all child actor metadata.
+ * fsmLanguage defaults to "typescript" when absent.
  * Does not mutate the input.
  * @param fsmJSON The FSM JSON object
  * @param parentFsmVersion Fallback fsmVersion applied when invoke entry has none
@@ -228,6 +229,7 @@ export function addMissingFsmTypeToInvokeActors(
       child_actor_src: string;
       child_actor_fsmType: string;
       child_actor_fsmVersion: string;
+      child_actor_fsmLanguage: string;
     }
   >;
 } {
@@ -237,6 +239,7 @@ export function addMissingFsmTypeToInvokeActors(
       child_actor_src: string;
       child_actor_fsmType: string;
       child_actor_fsmVersion: string;
+      child_actor_fsmLanguage: string;
     }
   > = [];
 
@@ -253,10 +256,15 @@ export function addMissingFsmTypeToInvokeActors(
           if (!("fsmVersion" in invokeObj)) {
             invokeObj.fsmVersion = parentFsmVersion;
           }
+          // Add missing fsmLanguage (defaults to typescript)
+          if (!("fsmLanguage" in invokeObj)) {
+            invokeObj.fsmLanguage = "typescript";
+          }
           childActorsInfo.push({
             child_actor_src: invokeObj.src,
             child_actor_fsmType: invokeObj.fsmType,
             child_actor_fsmVersion: invokeObj.fsmVersion,
+            child_actor_fsmLanguage: invokeObj.fsmLanguage,
           });
         }
       }
@@ -286,10 +294,14 @@ export function addMissingFsmTypeToInvokeActors(
         if (!("fsmVersion" in invokeObj)) {
           invokeObj.fsmVersion = parentFsmVersion;
         }
+        if (!("fsmLanguage" in invokeObj)) {
+          invokeObj.fsmLanguage = "typescript";
+        }
         childActorsInfo.push({
           child_actor_src: invokeObj.src,
           child_actor_fsmType: invokeObj.fsmType,
           child_actor_fsmVersion: invokeObj.fsmVersion,
+          child_actor_fsmLanguage: invokeObj.fsmLanguage,
         });
       }
     }
@@ -386,70 +398,6 @@ export async function generateFsmJSONFromMachineFile(
       });
     }
   }
-}
-
-/**
- * Reads a raw XState config.json, writes a machine.ts wrapper alongside it,
- * then delegates to generateFsmJSONFromMachineFile to produce fsm.json + xstate-fsm.json.
- *
- * Skips writing machine.ts if one already exists (logs a warning).
- *
- * @param configJsonPath Absolute path to config.json
- * @param workflowType Workflow type for the FSM
- * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
- */
-export async function generateFsmJSONFromConfigFile(
-  configJsonPath: string,
-  workflowType: WorkflowType,
-  showRecommendation: boolean = false,
-) {
-  const absFolderPath = configJsonPath.replace(/\/config\.json$/, "");
-  const version = absFolderPath.split("/").at(-1) ?? "v01";
-
-  let config: Record<string, unknown>;
-  try {
-    const configText = await Deno.readTextFile(configJsonPath);
-    config = JSON.parse(configText);
-  } catch (err) {
-    logger.error("Failed to read config.json at {path}: {error}", {
-      path: configJsonPath,
-      error: err,
-    });
-    return;
-  }
-
-  const machineTsPath = `${absFolderPath}/machine.ts`;
-  try {
-    await Deno.stat(machineTsPath);
-    logger.warning(
-      "machine.ts already exists at {path} — skipping generation, using existing file",
-      { path: machineTsPath },
-    );
-  } catch {
-    // machine.ts does not exist — generate a wrapper from config.json
-    const id = typeof config.id === "string" ? config.id : version;
-    const machineTsContent = [
-      `import config from "./config.json" with { type: "json" };`,
-      ``,
-      `export default {`,
-      `  id: "${id}",`,
-      `  config,`,
-      `  toJSON() { return config; },`,
-      `};`,
-      ``,
-    ].join("\n");
-    await Deno.writeTextFile(machineTsPath, machineTsContent);
-    logger.info("Generated machine.ts from config.json at {path}", {
-      path: machineTsPath,
-    });
-  }
-
-  await generateFsmJSONFromMachineFile(
-    absFolderPath,
-    version,
-    workflowType,
-    showRecommendation,
-  );
 }
 
 async function generateFsmJSONFromFolder(
