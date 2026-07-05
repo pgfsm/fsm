@@ -70,7 +70,7 @@ OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder or .ts file (required; a .ts file is accepted for generate only)
   -w, --workflow-type <type>          Workflow type (optional for generate, generate-async-logic, generate-sync-logic, delete, defaults to "fsm"; required for validate-sync-operation, validate-async-operation, load, validate-sync-operation-and-load, validate-async-operation-and-load)
-  -l, --lang <langs>                  Comma-separated target language(s) for generate-sync-logic: typescript, python, rust, go (default typescript)
+  -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation commands defaults to all languages
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation, validate-sync-operation-and-load, validate-async-operation-and-load)
@@ -90,6 +90,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
   deno run --allow-all src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise
+  deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise --lang typescript
+  deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise --lang typescript,python
   deno run --allow-all src/cli/index.ts -c validate-sync-operation-and-load -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
   deno run --allow-all src/cli/index.ts -c validate-async-operation-and-load -f apps/fsm-core-example/sharedFSM -w sharedPromise --db-url postgresql://user:pass@localhost:5432/db
 `);
@@ -114,6 +116,30 @@ const langs: OperationLang[] =
     : ["typescript"]) as OperationLang[];
 if (command === "generate-sync-logic") {
   const invalidLangs = langs.filter((l) => !isOperationLang(l));
+  if (invalidLangs.length > 0) {
+    logger.error(
+      "Invalid --lang value(s): {invalid}. Must be one of: {valid}",
+      {
+        invalid: invalidLangs.join(", "),
+        valid: SUPPORTED_OPERATION_LANGS.join(", "),
+      },
+    );
+    printHelp();
+    Deno.exit(1);
+  }
+}
+
+// Languages for validate-async-operation commands (comma-separated). Empty = all languages.
+const validateLangs: OperationLang[] = args["lang"]
+  ? (args["lang"].split(",").map((s: string) => s.trim()).filter(
+    Boolean,
+  ) as OperationLang[])
+  : [];
+if (
+  command === "validate-async-operation" ||
+  command === "validate-async-operation-and-load"
+) {
+  const invalidLangs = validateLangs.filter((l) => !isOperationLang(l));
   if (invalidLangs.length > 0) {
     logger.error(
       "Invalid --lang value(s): {invalid}. Must be one of: {valid}",
@@ -278,6 +304,7 @@ try {
         workflowType!,
         skipDirs,
         availableActors,
+        validateLangs,
       );
       break;
     }
@@ -307,6 +334,7 @@ try {
         workflowType!,
         skipDirs,
         availableActors,
+        validateLangs,
       );
       break;
     }

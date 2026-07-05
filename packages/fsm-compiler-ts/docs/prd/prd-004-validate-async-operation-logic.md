@@ -63,19 +63,51 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 ```
 
 `validateAsyncOperationFromFolder` extracts actor refs via
-`extractFsmPluginRefs`, groups their `src` names by declared `fsmLanguage`, and
-for each language:
+`extractFsmPluginRefs` and for each actor calls the appropriate language runtime
+to verify the named function is defined in the actor file:
 
-- **typescript** — imports `<lang>/actors/index.ts` and checks each `src` is a
-  `function`.
-- **python / rust / go** — verifies the actor module file exists at
-  `<lang>/actors/<module>`.
+| Language     | Checker script             | Runtime invoked                                          |
+| ------------ | -------------------------- | -------------------------------------------------------- |
+| `typescript` | `src/checkers/check_fn.ts` | `deno run --allow-all check_fn.ts <file> <fn>`           |
+| `python`     | `src/checkers/check_fn.py` | `python3 check_fn.py <file> <fn>`                        |
+| `go`         | `src/checkers/check_fn.go` | compiled once with `go build`, binary cached per process |
+| `rust`       | `src/checkers/check_fn.rs` | compiled once with `rustc`, binary cached per process    |
+
+Each checker script exits 0 if the function is found, 1 if not, 2 on bad
+arguments or parse/import error. For Rust, the binary is compiled on first use
+and reused for subsequent actors in the same process.
 
 Actors with an unsupported `fsmLanguage` are skipped with a warning.
 
 **Status:** ✅ Implemented — `validateAsyncOperationFromFolders` /
 `validateAsyncOperationFromFolder` (`src/validate-async-operation-logic.ts`),
 wired to the `validate-async-operation` command.
+
+### R1a — Language filter (`--lang`)
+
+```bash
+# Validate TypeScript actors only
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-async-operation \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise \
+  --lang typescript
+
+# Multiple languages
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-async-operation \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise \
+  --lang typescript,python
+```
+
+The `--lang` flag (comma-separated) restricts which `fsmLanguage` actors are
+validated. Omit `--lang` to validate all languages present. Applies to both
+`validate-async-operation` and `validate-async-operation-and-load`.
+
+**Status:** ✅ Implemented — `langs: OperationLang[] = []` parameter on both
+`validateAsyncOperationFromFolders` and `validateAsyncOperationAndLoadToDb`;
+wired to the `--lang` CLI flag.
 
 ### R2 — Validate and load to PostgreSQL
 
@@ -126,7 +158,10 @@ Tracked in [TODO.md](../todo/TODO.md):
 
 - `validate-async-operation` reports, per actor, whether its `fsmLanguage`
   module exports the named function. ✅
-- Non-TypeScript actor modules are checked for existence at the expected path.
+- Each language's runtime is called to confirm function presence — not just file
+  existence. ✅ (`deno run` / `python3` / `go build` → binary / `rustc` →
+  binary)
+- `--lang` restricts which languages are validated; omitting it validates all.
   ✅
 - `validate-async-operation-and-load` persists validated actor metadata into
   PostgreSQL. ❌ pending gap 1.

@@ -9,6 +9,7 @@ import {
   isVersionFolderName,
   type WorkflowType,
 } from "./util.ts";
+import { type OperationLang } from "./operation-logic-scaffold.ts";
 
 import type { DBDeps } from "@pgfsm/db";
 
@@ -18,6 +19,7 @@ export async function validateAsyncOperationAndLoadToDb(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   availableActors: ActorReference[] = [],
+  langs: OperationLang[] = [],
 ) {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -73,36 +75,42 @@ export async function validateAsyncOperationAndLoadToDb(
                 { dirName: dirEntry.name, versionName: subEntry.name },
               );
 
-              try {
-                const mod = await import(`file://${modulePath}`);
-                if (typeof mod[dirEntry.name] !== "function") {
-                  logger.info(
-                    "sharedPromise does not export {name} as a function",
-                    { name: dirEntry.name },
+              const shouldValidateTs = langs.length === 0 ||
+                langs.includes("typescript");
+              if (shouldValidateTs) {
+                try {
+                  const mod = await import(`file://${modulePath}`);
+                  if (typeof mod[dirEntry.name] !== "function") {
+                    logger.info(
+                      "sharedPromise does not export {name} as a function",
+                      { name: dirEntry.name },
+                    );
+                    failedMethods.push({
+                      method: dirEntry.name,
+                      moduleType: "sharedPromise",
+                      modulePath,
+                    });
+                  } else {
+                    logger.info(
+                      "sharedPromise exports {name} as a function",
+                      { name: dirEntry.name },
+                    );
+                    fsmModuleDefinition = mod;
+                    isFsmModuleVerified = true;
+                  }
+                } catch (err) {
+                  logger.error(
+                    "Failed to import module for sharedPromise from {modulePath}: {error}",
+                    { modulePath, error: err },
                   );
                   failedMethods.push({
                     method: dirEntry.name,
                     moduleType: "sharedPromise",
                     modulePath,
                   });
-                } else {
-                  logger.info(
-                    "sharedPromise exports {name} as a function",
-                    { name: dirEntry.name },
-                  );
-                  fsmModuleDefinition = mod;
-                  isFsmModuleVerified = true;
                 }
-              } catch (err) {
-                logger.error(
-                  "Failed to import module for sharedPromise from {modulePath}: {error}",
-                  { modulePath, error: err },
-                );
-                failedMethods.push({
-                  method: dirEntry.name,
-                  moduleType: "sharedPromise",
-                  modulePath,
-                });
+              } else {
+                isFsmModuleVerified = true;
               }
 
               const folderResult: FsmPluginValidationResult = {

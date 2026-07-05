@@ -80,6 +80,16 @@ Validation lives in `src/validate-async-operation-logic.ts`
 in `src/validate-async-operation-logic-and-load-to-db.ts`
 (`validate-async-operation-and-load`).
 
+- [x] **Runtime validation for all four languages.** `validate-async-operation`
+      calls each language's runtime (`deno run check_fn.ts` /
+      `python3
+      check_fn.py` / `go build check_fn.go` → binary /
+      `rustc check_fn.rs` → binary) to confirm the named function is defined —
+      not just that the file exists. Checker scripts live in `src/checkers/`.
+- [x] **Language filter (`--lang`).** `validateAsyncOperationFromFolders` and
+      `validateAsyncOperationAndLoadToDb` accept `langs: OperationLang[] = []`
+      (empty = all); wired to `--lang` in the CLI for `validate-async-operation`
+      and `validate-async-operation-and-load`.
 - [ ] **Load actor metadata to PostgreSQL.** `validateAsyncOperationAndLoadToDb`
       validates and returns results but never persists actor
       name/version/language/queue. Wire the DB load the `asyncOperationlet`
@@ -88,9 +98,9 @@ in `src/validate-async-operation-logic-and-load-to-db.ts`
       validate-async-operation-and-load path checks only `sharedPromise`
       dependency exports, not each invoke's actor per `fsmLanguage`. Reuse
       `validateAsyncOperationFromFolder`.
-- [ ] **Arity/shape validation** (shared with PRD-002). Validation checks
-      `typeof === "function"` only, so actor stubs with the wrong
-      `(input) => Promise` signature still pass.
+- [ ] **Arity/shape validation** (shared with PRD-002). Validation checks that
+      the export is a `function` but not its arity, so actor stubs with the
+      wrong `(input) => Promise` signature still pass.
 
 ## Validate and load sync operation logic (PRD-005)
 

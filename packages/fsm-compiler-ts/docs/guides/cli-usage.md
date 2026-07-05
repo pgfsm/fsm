@@ -21,17 +21,17 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 
 ## Global Options
 
-| Flag                        | Alias | Description                                                                                                                                                                                           |
-| --------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--command <command>`       | `-c`  | Command to run (required)                                                                                                                                                                             |
-| `--folder <folder>`         | `-f`  | Path to FSM folder or `.ts` file (required; a single `.ts` file is accepted for `generate` only)                                                                                                      |
-| `--workflow-type <type>`    | `-w`  | Workflow type — required for `validate-sync-operation`, `validate-async-operation`, `load`, `validate-sync-operation-and-load`, `validate-async-operation-and-load`                                   |
-| `--db-url <url>`            | `-d`  | PostgreSQL connection string — overrides `DATABASE_URL` env var                                                                                                                                       |
-| `--skip-dirs <dirs>`        | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                    |
-| `--available-actors <file>` | `-a`  | Path to a JSON file listing actor names available to resolve (used by `validate-sync-operation`, `validate-async-operation`, `validate-sync-operation-and-load`, `validate-async-operation-and-load`) |
-| `--lang <langs>`            | `-l`  | Comma-separated target language(s) for `generate-sync-logic`: `typescript`, `python`, `rust`, `go` (default `typescript`)                                                                             |
-| `--show-recommendation`     | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate` only)                                                                                                                       |
-| `--help`                    | `-h`  | Show help message                                                                                                                                                                                     |
+| Flag                        | Alias | Description                                                                                                                                                                                                                               |
+| --------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--command <command>`       | `-c`  | Command to run (required)                                                                                                                                                                                                                 |
+| `--folder <folder>`         | `-f`  | Path to FSM folder or `.ts` file (required; a single `.ts` file is accepted for `generate` only)                                                                                                                                          |
+| `--workflow-type <type>`    | `-w`  | Workflow type — required for `validate-sync-operation`, `validate-async-operation`, `load`, `validate-sync-operation-and-load`, `validate-async-operation-and-load`                                                                       |
+| `--db-url <url>`            | `-d`  | PostgreSQL connection string — overrides `DATABASE_URL` env var                                                                                                                                                                           |
+| `--skip-dirs <dirs>`        | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                                                        |
+| `--available-actors <file>` | `-a`  | Path to a JSON file listing actor names available to resolve (used by `validate-sync-operation`, `validate-async-operation`, `validate-sync-operation-and-load`, `validate-async-operation-and-load`)                                     |
+| `--lang <langs>`            | `-l`  | Comma-separated language(s): `typescript`, `python`, `rust`, `go`. For `generate-sync-logic` defaults to `typescript`; for `validate-async-operation` / `validate-async-operation-and-load` defaults to all languages (omit to check all) |
+| `--show-recommendation`     | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate` only)                                                                                                                                                           |
+| `--help`                    | `-h`  | Show help message                                                                                                                                                                                                                         |
 
 ### Workflow Types
 
@@ -147,15 +147,40 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ### `validate-async-operation`
 
-Validate that all TypeScript plugin modules for a promise-based workflow export
-the functions referenced in the FSM definition. Does not require a database
-connection.
+Validate that every actor module exports its named function, routed by
+`fsmLanguage`. Each language is checked by calling its runtime — no database
+connection required.
+
+| Language     | Runtime called                               |
+| ------------ | -------------------------------------------- |
+| `typescript` | `deno run src/checkers/check_fn.ts`          |
+| `python`     | `python3 src/checkers/check_fn.py`           |
+| `go`         | `go build src/checkers/check_fn.go` → binary |
+| `rust`       | `rustc src/checkers/check_fn.rs` → binary    |
+
+Pass `--lang` to restrict which languages are checked (default: all languages
+present in the actor folders).
 
 ```bash
+# Validate all languages
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c validate-async-operation \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedPromise
+
+# TypeScript actors only
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-async-operation \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise \
+  --lang typescript
+
+# Multiple languages
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-async-operation \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise \
+  --lang typescript,python
 
 # Promise workflow folder
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
@@ -165,6 +190,9 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 ```
 
 **Required:** `-w / --workflow-type`
+
+**Prerequisites:** the runtime for each language being validated must be on
+`PATH` (`python3`, `go`, `rustc`).
 
 ---
 
@@ -213,13 +241,22 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 ### `validate-async-operation-and-load`
 
 Validate promise-based workflow plugin exports first, then load into the
-database only if validation passes.
+database only if validation passes. Accepts `--lang` with the same semantics as
+`validate-async-operation` (default: all languages).
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c validate-async-operation-and-load \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedPromise \
+  --db-url postgresql://user:pass@localhost:5432/db
+
+# TypeScript only
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c validate-async-operation-and-load \
+  -f apps/fsm-core-example/sharedFSM \
+  -w sharedPromise \
+  --lang typescript \
   --db-url postgresql://user:pass@localhost:5432/db
 ```
 

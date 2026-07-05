@@ -2,10 +2,16 @@ import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
+const _checkerDir = new URL("./checkers", import.meta.url).pathname;
+
+// Lazily compiled checker binaries: null = not yet compiled, false = compile failed.
+let _rustCheckerBin: string | null | false = null;
+let _goCheckerBin: string | null | false = null;
+
 import {
   isOperationLang,
+  operationFileExtension,
   type OperationLang,
-  operationModuleFileName,
 } from "./operation-logic-scaffold.ts";
 import {
   type ActorReference,
@@ -28,14 +34,13 @@ export async function validateAsyncOperationFromFolder(
   parentRelPath: string,
   workflowType: WorkflowType,
   availableActors: ActorReference[],
+  langs: OperationLang[] = [],
 ): Promise<FsmPluginValidationResult> {
   const failedMethods: FailedMethod[] = [];
   const modules: Record<string, any> = {};
 
   const { actors } = extractFsmPluginRefs(fsmData as any);
 
-  // Group actor srcs by their declared fsmLanguage
-  const srcsByLang = new Map<OperationLang, Set<string>>();
   for (const actor of actors) {
     const lang = actor.fsmLanguage ?? "typescript";
     if (!isOperationLang(lang)) {
@@ -45,69 +50,159 @@ export async function validateAsyncOperationFromFolder(
       );
       continue;
     }
-    if (!srcsByLang.has(lang)) srcsByLang.set(lang, new Set());
-    srcsByLang.get(lang)!.add(actor.src);
-  }
+    if (langs.length > 0 && !langs.includes(lang)) {
+      logger.info(
+        "Skipping actor {src}: language {lang} not in requested langs",
+        { src: actor.src, lang },
+      );
+      continue;
+    }
 
-  for (const [lang, srcs] of srcsByLang) {
-    const modulePath = `${absPath}/${lang}/actors/${
-      operationModuleFileName(lang)
-    }`;
+    const ext = operationFileExtension(lang);
+    const actorFileName = `${actor.fsmType}_${versionName}_${actor.src}.${ext}`;
+    const modulePath = `${absPath}/${lang}/actors/${actorFileName}`;
 
     if (lang === "typescript") {
-      try {
-        const mod = await import(`file://${modulePath}`);
-        modules[lang] = mod;
-        for (const src of srcs) {
-          if (typeof mod[src] !== "function") {
-            logger.info(
-              "actors/typescript does not export {src} as a function",
-              { src },
-            );
-            failedMethods.push({
-              method: src,
-              moduleType: "actors/typescript",
-              modulePath,
-            });
-          } else {
-            logger.info(
-              "actors/typescript exports {src} as a function",
-              { src },
-            );
-          }
-        }
-      } catch (err) {
-        logger.error(
-          "Failed to import actors/typescript from {path}: {error}",
-          { path: modulePath, error: err },
+      const checkerPath = `${_checkerDir}/check_fn.ts`;
+      const result = await new Deno.Command("deno", {
+        args: ["run", "--allow-all", checkerPath, modulePath, actor.src],
+        stderr: "piped",
+      }).output();
+      if (result.success) {
+        modules[actor.src] = modulePath;
+        logger.info(
+          "actors/typescript: function {src} found in {path}",
+          { src: actor.src, path: modulePath },
         );
-        modules[lang] = null;
-        for (const src of srcs) {
+      } else {
+        const err = new TextDecoder().decode(result.stderr).trim();
+        logger.error(
+          "actors/typescript: function {src} not found in {path}: {err}",
+          { src: actor.src, path: modulePath, err },
+        );
+        modules[actor.src] = null;
+        failedMethods.push({
+          method: actor.src,
+          moduleType: "actors/typescript",
+          modulePath,
+        });
+      }
+    } else if (lang === "python") {
+      const checkerPath = `${_checkerDir}/check_fn.py`;
+      const result = await new Deno.Command("python3", {
+        args: [checkerPath, modulePath, actor.src],
+        stderr: "piped",
+      }).output();
+      if (result.success) {
+        modules[actor.src] = modulePath;
+        logger.info(
+          "actors/python: function {src} found in {path}",
+          { src: actor.src, path: modulePath },
+        );
+      } else {
+        const err = new TextDecoder().decode(result.stderr).trim();
+        logger.error(
+          "actors/python: function {src} not found in {path}: {err}",
+          { src: actor.src, path: modulePath, err },
+        );
+        failedMethods.push({
+          method: actor.src,
+          moduleType: "actors/python",
+          modulePath,
+        });
+      }
+    } else if (lang === "go") {
+      if (_goCheckerBin === null) {
+        const srcPath = `${_checkerDir}/check_fn.go`;
+        const tmpDir = await Deno.makeTempDir({ prefix: "pgfsm_go_checker_" });
+        const binPath = `${tmpDir}/check_fn`;
+        const compile = await new Deno.Command("go", {
+          args: ["build", "-o", binPath, srcPath],
+          stderr: "piped",
+        }).output();
+        if (compile.success) {
+          _goCheckerBin = binPath;
+        } else {
+          const err = new TextDecoder().decode(compile.stderr).trim();
+          logger.error("Failed to compile Go checker: {err}", { err });
+          _goCheckerBin = false;
+        }
+      }
+      if (_goCheckerBin === false) {
+        failedMethods.push({
+          method: actor.src,
+          moduleType: "actors/go",
+          modulePath,
+        });
+      } else {
+        const result = await new Deno.Command(_goCheckerBin, {
+          args: [modulePath, actor.src],
+          stderr: "piped",
+        }).output();
+        if (result.success) {
+          modules[actor.src] = modulePath;
+          logger.info(
+            "actors/go: function {src} found in {path}",
+            { src: actor.src, path: modulePath },
+          );
+        } else {
+          const err = new TextDecoder().decode(result.stderr).trim();
+          logger.error(
+            "actors/go: function {src} not found in {path}: {err}",
+            { src: actor.src, path: modulePath, err },
+          );
           failedMethods.push({
-            method: src,
-            moduleType: "actors/typescript",
+            method: actor.src,
+            moduleType: "actors/go",
             modulePath,
           });
         }
       }
-    } else {
-      // For non-TypeScript languages, verify the module file exists
-      try {
-        await Deno.stat(modulePath);
-        modules[lang] = modulePath;
-        logger.info(
-          "actors/{lang} module exists at {path}",
-          { lang, path: modulePath },
-        );
-      } catch {
-        logger.error(
-          "actors/{lang} module missing at {path}",
-          { lang, path: modulePath },
-        );
-        for (const src of srcs) {
+    } else if (lang === "rust") {
+      if (_rustCheckerBin === null) {
+        const srcPath = `${_checkerDir}/check_fn.rs`;
+        const tmpDir = await Deno.makeTempDir({
+          prefix: "pgfsm_rust_checker_",
+        });
+        const binPath = `${tmpDir}/check_fn`;
+        const compile = await new Deno.Command("rustc", {
+          args: [srcPath, "-o", binPath],
+          stderr: "piped",
+        }).output();
+        if (compile.success) {
+          _rustCheckerBin = binPath;
+        } else {
+          const err = new TextDecoder().decode(compile.stderr).trim();
+          logger.error("Failed to compile Rust checker: {err}", { err });
+          _rustCheckerBin = false;
+        }
+      }
+      if (_rustCheckerBin === false) {
+        failedMethods.push({
+          method: actor.src,
+          moduleType: "actors/rust",
+          modulePath,
+        });
+      } else {
+        const result = await new Deno.Command(_rustCheckerBin, {
+          args: [modulePath, actor.src],
+          stderr: "piped",
+        }).output();
+        if (result.success) {
+          modules[actor.src] = modulePath;
+          logger.info(
+            "actors/rust: function {src} found in {path}",
+            { src: actor.src, path: modulePath },
+          );
+        } else {
+          const err = new TextDecoder().decode(result.stderr).trim();
+          logger.error(
+            "actors/rust: function {src} not found in {path}: {err}",
+            { src: actor.src, path: modulePath, err },
+          );
           failedMethods.push({
-            method: src,
-            moduleType: `actors/${lang}`,
+            method: actor.src,
+            moduleType: "actors/rust",
             modulePath,
           });
         }
@@ -140,6 +235,7 @@ export async function validateAsyncOperationFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   availableActors: ActorReference[] = [],
+  langs: OperationLang[] = [],
 ): Promise<FsmPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -198,16 +294,17 @@ export async function validateAsyncOperationFromFolders(
                   folderPath,
                   workflowType,
                   availableActors,
+                  langs,
                 );
 
-                logger.info(
-                  "Validation result for {dir}/{sub}: {result}",
-                  {
-                    dir: dirEntry.name,
-                    sub: subEntry.name,
-                    result: folderResult,
-                  },
-                );
+                // logger.info(
+                //   "Validation result for {dir}/{sub}: {result}",
+                //   {
+                //     dir: dirEntry.name,
+                //     sub: subEntry.name,
+                //     result: folderResult,
+                //   },
+                // );
 
                 allFolderResults.push(folderResult);
               } catch (err) {
@@ -226,9 +323,9 @@ export async function validateAsyncOperationFromFolders(
         }
       }
     }
-    logger.info("All folder validation results: {results}", {
-      results: allFolderResults,
-    });
+    // logger.info("All folder validation results: {results}", {
+    //   results: allFolderResults,
+    // });
   } catch (err) {
     logger.error(
       "Error occurred while reading directory {path}: {error}",
