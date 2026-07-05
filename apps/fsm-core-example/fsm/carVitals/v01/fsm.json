@@ -99,7 +99,8 @@
           "fsmVersion": "v01",
           "src": "vitalsWorkflow",
           "type": "xstate.invoke",
-          "id": "0.checkcarvitals.DoCarVitalChecks"
+          "id": "0.checkcarvitals.DoCarVitalChecks",
+          "fsmLanguage": "typescript"
         }
       ],
       "description": "",
