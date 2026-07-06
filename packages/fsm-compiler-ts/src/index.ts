@@ -14,8 +14,6 @@ export {
   SUPPORTED_OPERATION_LANGS,
 } from "./operation-logic-scaffold.ts";
 export { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
-export { validateSyncOperationAndLoadToDb } from "./validate-sync-operation-logic-and-load-to-db.ts";
-export { validateAsyncOperationAndLoadToDb } from "./validate-async-operation-logic-and-load-to-db.ts";
 export {
   hasArity,
   isFunction,

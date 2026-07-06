@@ -11,9 +11,7 @@ import {
   isOperationLang,
   loadFsmJSONFromFolders,
   SUPPORTED_OPERATION_LANGS,
-  validateAsyncOperationAndLoadToDb,
   validateAsyncOperationFromFolders,
-  validateSyncOperationAndLoadToDb,
   validateSyncOperationFromFolders,
 } from "../index.ts";
 import type { ActorReference, OperationLang, WorkflowType } from "../index.ts";
@@ -60,26 +58,22 @@ COMMANDS
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for an FSM folder
   validate-async-operation            Validate async operation logic (actors) for a sharedPromise folder
   load                                Load FSM JSON into the database
-  validate-sync-operation-and-load    Validate sync operation logic, then load fsm.json into the DB
-  validate-async-operation-and-load   Validate async operation logic, then load into the DB
-
 WORKFLOW TYPES
   fsm | sharedFsm | sharedPromise | promise
 
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder or .ts file (required; a .ts file is accepted for generate only)
-  -w, --workflow-type <type>          Workflow type (optional for generate, generate-async-logic, generate-sync-logic, delete, defaults to "fsm"; required for validate-sync-operation, validate-async-operation, load, validate-sync-operation-and-load, validate-async-operation-and-load)
-  -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation commands defaults to all languages
+  -w, --workflow-type <type>          Workflow type (optional for generate, generate-async-logic, generate-sync-logic, delete, defaults to "fsm"; required for validate-sync-operation, validate-async-operation, load)
+  -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation defaults to all languages
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
-  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation, validate-sync-operation-and-load, validate-async-operation-and-load)
+  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation)
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
   -h, --help                          Show this help message
 
 ENVIRONMENT
-  DATABASE_URL    Fallback connection string for load, validate-sync-operation-and-load, validate-async-operation-and-load.
-                  Ignored if --db-url is provided.
+  DATABASE_URL    Fallback connection string for load. Ignored if --db-url is provided.
 
 EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
@@ -92,8 +86,6 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise
   deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise --lang typescript
   deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/sharedFSM -w sharedPromise --lang typescript,python
-  deno run --allow-all src/cli/index.ts -c validate-sync-operation-and-load -f apps/fsm-core-example/fsm -w fsm --db-url postgresql://user:pass@localhost:5432/db
-  deno run --allow-all src/cli/index.ts -c validate-async-operation-and-load -f apps/fsm-core-example/sharedFSM -w sharedPromise --db-url postgresql://user:pass@localhost:5432/db
 `);
 }
 
@@ -135,10 +127,7 @@ const validateLangs: OperationLang[] = args["lang"]
     Boolean,
   ) as OperationLang[])
   : [];
-if (
-  command === "validate-async-operation" ||
-  command === "validate-async-operation-and-load"
-) {
+if (command === "validate-async-operation") {
   const invalidLangs = validateLangs.filter((l) => !isOperationLang(l));
   if (invalidLangs.length > 0) {
     logger.error(
@@ -172,8 +161,6 @@ const needsWorkflowType = [
   "validate-sync-operation",
   "validate-async-operation",
   "load",
-  "validate-sync-operation-and-load",
-  "validate-async-operation-and-load",
 ];
 
 const missing: string[] = [];
@@ -311,31 +298,6 @@ try {
     case "load": {
       const deps = await buildDeps(args["db-url"]);
       await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
-      break;
-    }
-    case "validate-sync-operation-and-load": {
-      const deps = await buildDeps(args["db-url"]);
-      const availableActors = await loadAvailableActors();
-      await validateSyncOperationAndLoadToDb(
-        deps,
-        folder!,
-        workflowType!,
-        skipDirs,
-        availableActors,
-      );
-      break;
-    }
-    case "validate-async-operation-and-load": {
-      const deps = await buildDeps(args["db-url"]);
-      const availableActors = await loadAvailableActors();
-      await validateAsyncOperationAndLoadToDb(
-        deps,
-        folder!,
-        workflowType!,
-        skipDirs,
-        availableActors,
-        validateLangs,
-      );
       break;
     }
     default:
