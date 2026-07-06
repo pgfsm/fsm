@@ -2,16 +2,22 @@ import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
+import { Ajv } from "ajv";
+import machineSchema from "../../database-src/fsm.machine.schema.v3.json" with {
+  type: "json",
+};
 import {
   type ActorReference,
-  type FailedMethod,
+  extractFsmPluginRefs,
   type FsmPluginValidationResult,
   isVersionFolderName,
   type WorkflowType,
 } from "./util.ts";
 import { type OperationLang } from "./operation-logic-scaffold.ts";
-
+import { validateAsyncOperationFromFolder } from "./validate-async-operation-logic.ts";
+import { loadAsyncOperation } from "@pgfsm/db";
 import type { DBDeps } from "@pgfsm/db";
+import type { Json } from "@pgfsm/db/database.types";
 
 export async function validateAsyncOperationAndLoadToDb(
   deps: DBDeps,
@@ -45,6 +51,9 @@ export async function validateAsyncOperationAndLoadToDb(
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
 
+  const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
+  const validateSchema = ajv.compile(machineSchema);
+
   const allFolderResults: FsmPluginValidationResult[] = [];
   try {
     const stat = await Deno.stat(absFolderPath);
@@ -62,83 +71,91 @@ export async function validateAsyncOperationAndLoadToDb(
         for await (const subEntry of Deno.readDir(fsmDirPath)) {
           if (subEntry.isDirectory) {
             if (isVersionFolderName(subEntry.name)) {
-              // sharedPromise modules are TypeScript-only: validate that the
-              // versioned folder exports the module name as a function.
               const absVersionPath = `${fsmDirPath}/${subEntry.name}`;
-              const modulePath = `${absVersionPath}/typescript/index.ts`;
-              const failedMethods: FailedMethod[] = [];
-              let fsmModuleDefinition: any = undefined;
-              let isFsmModuleVerified = false;
+              try {
+                // 1. Read and AJV-validate fsm.json
+                const fsmJsonPath = `${absVersionPath}/fsm.json`;
+                await Deno.stat(fsmJsonPath);
+                const fsmData: Json = JSON.parse(
+                  await Deno.readTextFile(fsmJsonPath),
+                );
 
-              logger.warning(
-                "Skipping plugin validation for sharedPromise {dirName}/{versionName} since it is only used as a dependency and not directly invoked",
-                { dirName: dirEntry.name, versionName: subEntry.name },
-              );
-
-              const shouldValidateTs = langs.length === 0 ||
-                langs.includes("typescript");
-              if (shouldValidateTs) {
-                try {
-                  const mod = await import(`file://${modulePath}`);
-                  if (typeof mod[dirEntry.name] !== "function") {
-                    logger.info(
-                      "sharedPromise does not export {name} as a function",
-                      { name: dirEntry.name },
-                    );
-                    failedMethods.push({
-                      method: dirEntry.name,
-                      moduleType: "sharedPromise",
-                      modulePath,
-                    });
-                  } else {
-                    logger.info(
-                      "sharedPromise exports {name} as a function",
-                      { name: dirEntry.name },
-                    );
-                    fsmModuleDefinition = mod;
-                    isFsmModuleVerified = true;
-                  }
-                } catch (err) {
+                const schemaValid = validateSchema(fsmData);
+                if (!schemaValid) {
                   logger.error(
-                    "Failed to import module for sharedPromise from {modulePath}: {error}",
-                    { modulePath, error: err },
+                    "fsm.json schema validation failed for {name}/{version}: {errors}",
+                    {
+                      name: dirEntry.name,
+                      version: subEntry.name,
+                      errors: validateSchema.errors,
+                    },
                   );
-                  failedMethods.push({
-                    method: dirEntry.name,
-                    moduleType: "sharedPromise",
-                    modulePath,
-                  });
+                  continue;
                 }
-              } else {
-                isFsmModuleVerified = true;
+
+                // 2. Validate actor exports per fsmLanguage via runtime checkers
+                const folderResult = await validateAsyncOperationFromFolder(
+                  fsmData,
+                  dirEntry.name,
+                  subEntry.name,
+                  absVersionPath,
+                  `${dirEntry.name}/${subEntry.name}`,
+                  folderPath,
+                  absFolderPath,
+                  folderPath,
+                  workflowType,
+                  availableActors,
+                  langs,
+                );
+                folderResult.fsmJsonPresent = true;
+                folderResult.fsmJsonFollowSchema = true;
+
+                logger.info(
+                  "Validation result for {dir}/{sub}: {result}",
+                  {
+                    dir: dirEntry.name,
+                    sub: subEntry.name,
+                    result: folderResult,
+                  },
+                );
+
+                // 3. Load each actor into PostgreSQL only when all actors verified
+                if (folderResult.isFsmModuleVerified) {
+                  const { actors } = extractFsmPluginRefs(fsmData as any);
+                  for (const actor of actors) {
+                    const loadResult = await loadAsyncOperation(
+                      deps,
+                      actor.src,
+                      actor.fsmVersion ?? subEntry.name,
+                      actor.fsmType ?? workflowType,
+                      actor.fsmLanguage ?? "typescript",
+                      dirEntry.name,
+                      subEntry.name,
+                    );
+                    logger.info(
+                      "Loaded async operation for actor {src} in {dir}/{sub}: {result}",
+                      {
+                        src: actor.src,
+                        dir: dirEntry.name,
+                        sub: subEntry.name,
+                        result: loadResult,
+                      },
+                    );
+                  }
+                } else {
+                  logger.warning(
+                    "Skipping DB load for {dir}/{sub}: actor verification failed",
+                    { dir: dirEntry.name, sub: subEntry.name },
+                  );
+                }
+
+                allFolderResults.push(folderResult);
+              } catch (err) {
+                logger.error(
+                  "Failed to validate/load {path}: {error}",
+                  { path: absVersionPath, error: err },
+                );
               }
-
-              const folderResult: FsmPluginValidationResult = {
-                src: dirEntry.name,
-                fsmName: dirEntry.name,
-                fsmVersion: subEntry.name,
-                fsmType: workflowType,
-                fsmAbsFolderPath: absVersionPath,
-                fsmRelativeFolderPath: `${dirEntry.name}/${subEntry.name}`,
-                fsmParentDirName: folderPath,
-                fsmParentAbsFolderPath: absFolderPath,
-                fsmParentRelativeFolderPath: folderPath,
-                fsmJsonPresent: false,
-                fsmJsonFollowSchema: false,
-                isFsmModuleVerified,
-                fsmModuleDefinition,
-                failedMethods,
-                internalActors: [],
-                externalActors: [],
-              };
-
-              logger.info("Validation result for {dir}/{sub}: {result}", {
-                dir: dirEntry.name,
-                sub: subEntry.name,
-                result: folderResult,
-              });
-
-              allFolderResults.push(folderResult);
             } else {
               logger.info("Skipping non-versioned folder: {name} in {dir}", {
                 name: subEntry.name,
