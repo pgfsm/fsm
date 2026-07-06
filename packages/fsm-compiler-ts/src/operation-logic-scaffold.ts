@@ -144,19 +144,15 @@ export async function writeOperationModule(
 }
 
 /**
- * Base filename (without extension) for a per-actor file:
- * `<fsmType>_<fsmVersion>_<src>`. fsmType/fsmVersion default when absent.
+ * Base filename (without extension) for a per-actor file: the sanitized `src`.
  */
 export function actorFileBaseName(actor: ActorReference): string {
-  const fsmType = sanitizeFileComponent(actor.fsmType ?? "promise");
-  const fsmVersion = sanitizeFileComponent(actor.fsmVersion ?? "1");
-  const src = sanitizeFileComponent(actor.src);
-  return `${fsmType}_${fsmVersion}_${src}`;
+  return sanitizeFileComponent(actor.src);
 }
 
 /**
  * Writes a single actor to its own file at
- * `<absFolderPath>/<lang>/actors/<fsmType>_<fsmVersion>_<src>.<ext>`.
+ * `<absFolderPath>/<lang>/actors/<src>/<src>.<ext>`.
  * The file exports one function named after the actor `src`.
  * Returns the absolute path written.
  */
@@ -165,11 +161,10 @@ export async function writeActorFile(
   lang: OperationLang,
   actor: ActorReference,
 ): Promise<string> {
-  const dir = `${absFolderPath}/${lang}/actors`;
+  const name = actorFileBaseName(actor);
+  const dir = `${absFolderPath}/${lang}/actors/${name}`;
   await Deno.mkdir(dir, { recursive: true });
-  const file = `${dir}/${actorFileBaseName(actor)}.${
-    operationFileExtension(lang)
-  }`;
+  const file = `${dir}/${name}.${operationFileExtension(lang)}`;
   const header = lang === "go" ? "package actors\n\n" : "";
   await Deno.writeTextFile(file, header + stub(lang, "actors", actor.src));
   return file;

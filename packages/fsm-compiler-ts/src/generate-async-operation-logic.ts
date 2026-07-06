@@ -40,6 +40,14 @@ export async function generateAsyncOperationLogicFromFolders(
       const seen = new Set<string>();
       let written = 0;
       for (const actor of actors) {
+        const fsmType = actor.fsmType ?? "promise";
+        if (fsmType !== "promise") {
+          logger.info(
+            "Skipping actor {src}: fsmType is {fsmType}, not promise",
+            { src: actor.src, fsmType },
+          );
+          continue;
+        }
         const lang = actor.fsmLanguage ?? "typescript";
         if (!isOperationLang(lang)) {
           logger.warning(
