@@ -32,19 +32,15 @@ export async function validateLanguageModules(
   actions: string[],
   guards: string[],
   delays: string[],
-  actors: ActorReference[],
 ) {
   const failedMethods: FailedMethod[] = [];
-  const filteredActors = actors.filter((a) => a.fsmType === "promise").map(
-    (a) => a.src,
-  );
+
   const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
   const prefixedDelays = delays.map((d) => `${DELAY_ACTION_NAME_PREFIX}${d}`);
   const moduleTypes = [
     { type: "actions", names: filteredActions },
     { type: "guards", names: guards },
     { type: "delays", names: prefixedDelays },
-    { type: "actors", names: filteredActors },
   ];
 
   const modules: Record<string, any> = {
@@ -116,13 +112,11 @@ export async function validateSyncOperationFromFolder(
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
-  let internalActors: InternalActor[] = [];
-  let externalActors: ExternalActor[] = [];
   let failedMethods: FailedMethod[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
   let delays: string[] = [];
-  let actors: any[] = [];
+  let asyncOperationActors: any[] = [];
 
   const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
   const validate = ajv.compile(machineSchema);
@@ -147,8 +141,7 @@ export async function validateSyncOperationFromFolder(
       isFsmModuleVerified,
       fsmModuleDefinition,
       failedMethods,
-      internalActors,
-      externalActors,
+      asyncOperationActors,
     };
   }
 
@@ -156,19 +149,7 @@ export async function validateSyncOperationFromFolder(
   actions = result.actions;
   guards = result.guards;
   delays = result.delays;
-  actors = result.actors;
-  internalActors = actors.filter((actor) => actor.fsmType === "promise").map(
-    (actor) => ({
-      ...actor,
-      resolved: true,
-      fsmName: actor.src,
-      fsmAbsFolderPath: absPath,
-      fsmRelativeFolderPath: relPath,
-    }),
-  );
-  externalActors = actors.filter((actor) => actor.fsmType !== "promise").map(
-    (actor) => ({ ...actor, resolved: false }),
-  );
+  asyncOperationActors = result.actors;
 
   const outputValidateLanguageModules = await validateLanguageModules(
     absPath,
@@ -176,40 +157,9 @@ export async function validateSyncOperationFromFolder(
     actions,
     guards,
     delays,
-    [],
   );
   failedMethods = outputValidateLanguageModules.failedMethods;
   fsmModuleDefinition = outputValidateLanguageModules.modules;
-
-  for (const dependency of externalActors) {
-    const isDependencyFound = availableActors.some((folderObj) =>
-      folderObj.src === dependency.src &&
-      folderObj.fsmVersion === dependency.fsmVersion &&
-      folderObj.fsmType === dependency.fsmType
-    );
-
-    if (isDependencyFound) {
-      dependency.resolved = true;
-    } else {
-      const expectedFolderPath = dependency.fsmVersion
-        ? `${dependency.src}/${dependency.fsmVersion}`
-        : dependency.src;
-      logger.error(
-        "Missing dependency: {dep} (fsmType: {fsmType}) required by {dirName}/{versionName}",
-        {
-          dep: expectedFolderPath,
-          fsmType: dependency.fsmType,
-          dirName,
-          versionName,
-        },
-      );
-      failedMethods.push({
-        method: `${dependency.src}/${dependency.fsmVersion}`,
-        moduleType: dependency.fsmType ?? "unknown",
-        modulePath: "N/A - missing dependency",
-      });
-    }
-  }
 
   isFsmModuleVerified = failedMethods.length === 0;
 
@@ -228,8 +178,7 @@ export async function validateSyncOperationFromFolder(
     isFsmModuleVerified,
     fsmModuleDefinition,
     failedMethods,
-    internalActors,
-    externalActors,
+    asyncOperationActors,
   };
 }
 

@@ -163,9 +163,9 @@ BEGIN
     FROM fsm_core.fsm_transitions t
     WHERE t.fsm_name = input_fsm_name AND t.fsm_version = input_fsm_version;
 
-    -- 4. Enqueue to fsm_dispatch_queue and notify the fsmscheduler.
+    -- 4. Enqueue to fsm_instance_and_fsm_workerlet and notify the fsmscheduler.
     PERFORM fsm_core.enqueue_fsm_dispatch_v2(
-        fsm_instance_id::text,
+        fsm_instance_id,
         input_fsm_name,
         input_fsm_version,
         'start'

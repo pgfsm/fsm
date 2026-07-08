@@ -846,8 +846,17 @@ export type Database = {
           input_fsm_type: string;
           input_fsm_name: string;
           input_fsm_version: string;
+          input_dependent_children?: Json;
         };
         Returns: Json;
+      };
+      insert_fsm_dependencies: {
+        Args: {
+          p_parent_name: string;
+          p_parent_version: string;
+          p_dependent_children: Json;
+        };
+        Returns: undefined;
       };
       load_fsm_state_from_json_v1: {
         Args: {

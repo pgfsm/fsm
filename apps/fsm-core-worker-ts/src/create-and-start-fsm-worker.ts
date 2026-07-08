@@ -1,7 +1,10 @@
 import type { DBDeps } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
 import { createFsmInstanceFromName } from "@pgfsm/db";
-import { startFSMWorkerWithDBLock, type VerifiedModule } from "./fsmworker.ts";
+import {
+  startFSMWorkerWithDBLock,
+  type VerifiedModule,
+} from "./fsmlet/fsmworker.ts";
 
 type FsmInstanceResult =
   & { fsm_instance_id: string; fsm_version: string }

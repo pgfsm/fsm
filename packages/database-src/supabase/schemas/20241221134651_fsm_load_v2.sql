@@ -359,7 +359,7 @@ $$ LANGUAGE plpgsql;
 
 -- DROP FUNCTION IF EXISTS fsm_core.load_fsm_from_json_v2;
 
-CREATE OR REPLACE FUNCTION fsm_core.load_fsm_from_json_v2(json_input JSONB, root_node_text TEXT, input_fsm_type TEXT, input_fsm_name TEXT, input_fsm_version TEXT) RETURNS JSONB AS $$
+CREATE OR REPLACE FUNCTION fsm_core.load_fsm_from_json_v2(json_input JSONB, root_node_text TEXT, input_fsm_type TEXT, input_fsm_name TEXT, input_fsm_version TEXT, input_dependent_children JSONB DEFAULT NULL) RETURNS JSONB AS $$
 DECLARE
     state_result JSONB;
     transition_result JSONB;
@@ -367,7 +367,7 @@ DECLARE
     transition_ok BOOLEAN;
     schema_json JSON;
     schema_errors TEXT[];
-    existing_fsm_json JSON;
+    existing_fsm_json JSONB;
 BEGIN
     SELECT fsm_json
     INTO existing_fsm_json
@@ -377,11 +377,15 @@ BEGIN
     LIMIT 1;
 
     IF existing_fsm_json IS NOT NULL THEN
-        RETURN jsonb_build_object(
-            'ok', to_jsonb(true),
-            'fsm_json', to_jsonb(existing_fsm_json),
-            'cached', to_jsonb(true)
-        );
+        IF existing_fsm_json = json_input THEN
+            RETURN jsonb_build_object(
+                'ok', to_jsonb(true),
+                'fsm_json', existing_fsm_json,
+                'cached', to_jsonb(true)
+            );
+        ELSE
+            RAISE EXCEPTION 'FSM % version % already loaded with different JSON content', input_fsm_name, input_fsm_version;
+        END IF;
     END IF;
 
     -- SELECT config_value
@@ -425,8 +429,15 @@ BEGIN
         RAISE EXCEPTION 'fsm_core.load_fsm_transition_from_json_v2 reported failure: %', transition_result;
     END IF;
 
+    IF input_dependent_children IS NOT NULL
+       AND jsonb_array_length(input_dependent_children) > 0 THEN
+        PERFORM fsm_core.insert_fsm_dependencies(
+            input_fsm_name, input_fsm_version, input_dependent_children
+        );
+    END IF;
+
     INSERT INTO fsm_core.fsm_json (fsm_name, fsm_type, fsm_version, fsm_json)
-    VALUES (input_fsm_name, input_fsm_type, input_fsm_version, json_input::JSON);
+    VALUES (input_fsm_name, input_fsm_type, input_fsm_version, json_input);
 
     RETURN jsonb_build_object(
         'ok', to_jsonb(true),

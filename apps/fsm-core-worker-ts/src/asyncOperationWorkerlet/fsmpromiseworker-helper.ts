@@ -1,7 +1,7 @@
 import type { Database, Json } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
-import type { FsmQueueMessage } from "./types.ts";
+import type { FsmQueueMessage } from "../types.ts";
 
 export type FSMPromiseArchiveData = {
   promise_queue_name: string;

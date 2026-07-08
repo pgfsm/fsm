@@ -11,3 +11,23 @@ export * from "./fsm-instance-lock.ts";
 export type { Json } from "./database.types.ts";
 export { enqueueDispatch, resumeEventForFsmWorker } from "./fsm-scheduler.ts";
 export type { FsmDispatchType, ResumeEventResult } from "./fsm-scheduler.ts";
+
+export {
+  claimScheduledForFsmlet,
+  deregisterFsmlet,
+  fsmletHeartbeat,
+  listActiveFsmlets,
+  registerFsmlet,
+  scheduleNextPending,
+} from "./fsm-workerlet.ts";
+export type {
+  FsmDispatchEntry,
+  FsmletNode,
+  FsmModule,
+} from "./fsm-workerlet.ts";
+
+export {
+  asyncOperationScheduleNextPending,
+  enqueueAsyncOperationDispatch,
+} from "./async-operation.ts";
+export type { AsyncOperationDispatchInput } from "./async-operation.ts";

@@ -15,8 +15,8 @@ import {
 import { validateSyncOperationFromFolder } from "@pgfsm/compiler";
 import type { WorkflowType } from "@pgfsm/compiler";
 
-import { macrostepV2 } from "./fsmworker-helper.ts";
-import type { FsmQueueMessage } from "./types.ts";
+import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
+import type { FsmQueueMessage } from "../types.ts";
 
 export type VerifiedModule = {
   fsmAbsFolderPath?: string | null;

@@ -96,6 +96,7 @@ export async function loadFsmFromJson(
     DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
       "input_fsm_version"
     ],
+  input_dependent_children?: Json | null,
 ): Promise<Json> {
   try {
     const LOAD_FSM_FROM_JSON_FN =
@@ -106,7 +107,8 @@ export async function loadFsmFromJson(
         $2::text,
         $3::text,
         $4::text,
-        $5::text
+        $5::text,
+        $6::jsonb
       ) AS result;
     `;
     const values = [
@@ -115,6 +117,9 @@ export async function loadFsmFromJson(
       input_fsm_type,
       input_fsm_name,
       input_fsm_version,
+      input_dependent_children != null
+        ? toJsonbParam(input_dependent_children)
+        : null,
     ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;

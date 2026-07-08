@@ -44,8 +44,24 @@ export type FsmPluginValidationResult = {
   isFsmModuleVerified: boolean;
   fsmModuleDefinition: any;
   failedMethods: FailedMethod[];
-  internalActors: InternalActor[];
-  externalActors: ExternalActor[];
+  asyncOperationActors: any[];
+  isAsyncOperationActorsVerified?: boolean;
+};
+
+export type ActorPluginValidationResult = {
+  src: string;
+  method: string;
+  fsmName: string;
+  fsmType: "promise";
+  fsmVersion: string;
+  fsmLanguage: string;
+  isVerified: boolean;
+  fsmModulePath: string;
+  parentFsmName: string;
+  parentFsmVersion: string;
+  comment: string;
+  parentFsmPath: string;
+  errorMessage: string | null;
 };
 
 export const DELAY_ACTION_NAME_PREFIX = "delay";

@@ -1,11 +1,17 @@
 import { getLogger } from "@logtape/logtape";
 import { Pool } from "pg";
-import {
-  scheduleNextPending,
-  SCHEDULER_NOTIFY_CHANNEL,
-} from "./fsm-dispatch-queue.ts";
+import { scheduleNextPending } from "@pgfsm/db";
+
+export { claimScheduledForFsmlet, scheduleNextPending } from "@pgfsm/db";
+export type { FsmDispatchEntry } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/scheduler"]);
+
+export const SCHEDULER_NOTIFY_CHANNEL = "fsm_scheduler_work";
+
+export function fsmletNotifyChannel(fsmletId: string): string {
+  return `fsm_fsmlet_work_${fsmletId}`;
+}
 
 const DEFAULT_STALE_THRESHOLD_S = 30;
 // Fallback poll interval — catches any pg_notify that was missed (e.g. after
@@ -40,6 +46,7 @@ export async function runFsmScheduler(
   const staleSecs = options?.staleThresholdSeconds ?? DEFAULT_STALE_THRESHOLD_S;
 
   const pool = new Pool(dbConfig);
+  const deps = { db: pool, useSupabase: false };
 
   // One scheduling cycle: drain all pending entries until the queue is empty
   // or no fsmlet has capacity. Each call to scheduleNextPending delegates
@@ -47,7 +54,7 @@ export async function runFsmScheduler(
   // fsmlet selection or separate registry query needed.
   const runCycle = async () => {
     try {
-      while (await scheduleNextPending(pool, staleSecs)) {
+      while (await scheduleNextPending(deps, staleSecs)) {
         // keep going until queue is empty or no capable fsmlet
       }
     } catch (err) {

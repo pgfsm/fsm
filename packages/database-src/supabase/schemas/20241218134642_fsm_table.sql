@@ -3,9 +3,9 @@
 CREATE TABLE fsm_core.fsm_json (
     id SERIAL PRIMARY KEY,
     fsm_name TEXT,
-    fsm_type TEXT,
+    fsm_type TEXT, -- childFSM | FSM
     fsm_version TEXT,
-    fsm_json JSON
+    fsm_json JSONB
 );
 
 

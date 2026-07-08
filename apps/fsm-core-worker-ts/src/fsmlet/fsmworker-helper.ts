@@ -7,7 +7,7 @@ import type { DBDeps } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/worker", "macrostep"]);
 const actionsLogger = getLogger(["@pgfsm/worker", "macrostep", "actions"]);
-import type { FsmQueueMessage } from "./types.ts";
+import type { FsmQueueMessage } from "../types.ts";
 
 export type FsmModuleDefinition = {
   actions: Record<string, (...args: unknown[]) => unknown> | null;

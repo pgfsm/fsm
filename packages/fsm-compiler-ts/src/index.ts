@@ -37,6 +37,7 @@ export {
   replaceUnderscoresWithSpaces,
 } from "./util.ts";
 export type {
+  ActorPluginValidationResult,
   ActorReference,
   ExternalActor,
   FailedMethod,
@@ -44,3 +45,4 @@ export type {
   InternalActor,
 } from "./util.ts";
 export type { WorkflowType } from "./util.ts";
+export { validateAsyncOperationFromFoldersV2 } from "./validate-async-operation-logic-v2.ts";

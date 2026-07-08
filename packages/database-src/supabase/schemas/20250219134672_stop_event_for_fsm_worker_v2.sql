@@ -89,7 +89,7 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- stop_event_for_fsm_worker_v2
 -- Scheduler-model stop flow: cancels any pending or scheduled dispatch entry
--- from fsm_dispatch_queue. Does NOT unlock the advisory lock (no lock model)
+-- from fsm_instance_and_fsm_workerlet. Does NOT unlock the advisory lock (no lock model)
 -- and does NOT pg_notify (no live worker to signal — the entry is cancelled
 -- before a fsmlet ever claims it). If the entry was already claimed and is
 -- running, the dispatch row no longer exists; this is a no-op for that case.
@@ -121,8 +121,8 @@ BEGIN
     --    (fsm_instance_status can be inspected here if needed in the future)
 
     -- 3. Cancel any pending or scheduled dispatch entry for this instance.
-    DELETE FROM fsm_core.fsm_dispatch_queue
-    WHERE instance_id = input_fsm_instance_id::text
+    DELETE FROM fsm_core.fsm_instance_and_fsm_workerlet
+    WHERE fsm_instance_id = input_fsm_instance_id
       AND status IN ('pending', 'scheduled');
     GET DIAGNOSTICS cancelled_count = ROW_COUNT;
 
@@ -159,7 +159,7 @@ $$;
 -- resume_event_for_fsm_worker_v2
 -- Scheduler-model resume: looks up fsm_name + fsm_version from fsm_instance,
 -- then calls enqueue_fsm_dispatch_v2 to insert a 'resume' entry into
--- fsm_dispatch_queue and notify the fsmscheduler. Replaces the TypeScript
+-- fsm_instance_and_fsm_workerlet and notify the fsmscheduler. Replaces the TypeScript
 -- getFsmDataResolveStateValue + enqueueDispatch two-call pattern.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION fsm_core.resume_event_for_fsm_worker_v2(
@@ -185,7 +185,7 @@ BEGIN
     END IF;
 
     PERFORM fsm_core.enqueue_fsm_dispatch_v2(
-        input_fsm_instance_id::text,
+        input_fsm_instance_id,
         v_fsm_name,
         v_fsm_version,
         'resume'

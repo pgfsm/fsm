@@ -2,8 +2,8 @@ import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
-import { runFsmScheduler } from "../scheduler/fsm-scheduler.ts";
-import type { FsmSchedulerOptions } from "../scheduler/fsm-scheduler.ts";
+import { runFsmScheduler } from "../fsmlet/scheduler/fsm-scheduler.ts";
+import type { FsmSchedulerOptions } from "../fsmlet/scheduler/fsm-scheduler.ts";
 
 const logger = getLogger(["@pgfsm/scheduler", "cli"]);
 await configureWorkerLogger();

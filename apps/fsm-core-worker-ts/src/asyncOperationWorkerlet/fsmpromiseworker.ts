@@ -13,7 +13,7 @@ import {
 } from "@pgfsm/db";
 
 import { processFSMPromiseQueueMessage } from "./fsmpromiseworker-helper.ts";
-import type { VerifiedModule } from "./fsmworker.ts";
+import type { VerifiedModule } from "./fsmlet/fsmworker.ts";
 
 export async function startFSMPromiseWorker(
   deps: DBDeps,

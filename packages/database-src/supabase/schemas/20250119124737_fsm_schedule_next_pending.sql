@@ -17,16 +17,16 @@ RETURNS boolean
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  v_entry_id          bigint;
-  v_instance_id       text;
+  v_entry_id          uuid;
+  v_instance_id       uuid;
   v_fsm_name          text;
   v_fsm_version       text;
-  v_chosen_fsmlet_id  text;
+  v_chosen_fsmlet_id  uuid;
 BEGIN
   -- Step 1: claim the oldest pending entry (SKIP LOCKED = safe for parallel schedulers).
-  SELECT id, instance_id, fsm_name, fsm_version
+  SELECT fsm_instance_and_fsm_workerlet_id, fsm_instance_id, fsm_name, fsm_version
   INTO v_entry_id, v_instance_id, v_fsm_name, v_fsm_version
-  FROM fsm_core.fsm_dispatch_queue
+  FROM fsm_core.fsm_instance_and_fsm_workerlet
   WHERE status = 'pending'
   ORDER BY created_at
   FOR UPDATE SKIP LOCKED
@@ -41,14 +41,14 @@ BEGIN
   --           AND fsm_modules contains this fsm_name+version
   --           AND active_workers < max_concurrency (has a free slot)
   --   Score:  most available slots first (max_concurrency - active_workers DESC)
-  SELECT daemon_id
+  SELECT fsm_workerlet_id
   INTO v_chosen_fsmlet_id
-  FROM fsm_core.fsm_daemon_node
+  FROM fsm_core.fsm_workerlet
   WHERE
     last_heartbeat > NOW() - (input_stale_threshold_seconds || ' seconds')::interval
     AND active_workers < max_concurrency
     AND fsm_modules @> jsonb_build_array(
-          jsonb_build_object('fsmName', v_fsm_name, 'fsmVersion', v_fsm_version)
+          jsonb_build_object('fsm_name', v_fsm_name, 'fsm_version', v_fsm_version)
         )
   ORDER BY (max_concurrency - active_workers) DESC
   LIMIT 1;
@@ -59,15 +59,15 @@ BEGIN
   END IF;
 
   -- Step 3: assign the entry to the chosen fsmlet.
-  UPDATE fsm_core.fsm_dispatch_queue
+  UPDATE fsm_core.fsm_instance_and_fsm_workerlet
   SET
     status              = 'scheduled',
-    scheduled_fsmlet_id = v_chosen_fsmlet_id,
+    fsm_workerlet_id = v_chosen_fsmlet_id,
     scheduled_at        = NOW()
-  WHERE id = v_entry_id;
+  WHERE fsm_instance_and_fsm_workerlet_id = v_entry_id;
 
   -- Step 4: wake the fsmlet via pg_notify.
-  PERFORM pg_notify('fsm_fsmlet_work_' || v_chosen_fsmlet_id, v_instance_id);
+  PERFORM pg_notify('fsm_fsmlet_work_' || v_chosen_fsmlet_id::text, v_instance_id::text);
 
   RETURN true;
 END;
