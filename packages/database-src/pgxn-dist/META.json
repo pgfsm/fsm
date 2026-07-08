@@ -9,7 +9,7 @@
   "provides": {
     "fsm_core": {
       "abstract": "This package is used for the main PostgreSQL files for the FSM project.",
-      "file": "fsm_core--1.0.0.sql",
+      "file": "fsm_core--1.2.0.sql",
       "version": "1.2.0"
     }
   },
