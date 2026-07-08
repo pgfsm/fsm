@@ -1,26 +1,108 @@
 # fsm-core-worker-ts — CLI Usage Guide
 
-This package provides a CLI for starting and managing FSM queue workers. Workers
-poll a PGMQ queue, run FSM state transitions (actions, guards, delays), and
-archive results back to the database.
+This package provides two CLIs:
+
+| CLI        | Entry point         | Role                                                                                                                   |
+| ---------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **fsmlet** | `src/cli/fsmlet.ts` | Long-running node agent — registers itself with the scheduler, claims and drives FSM workers up to a concurrency limit |
+| **fsmctl** | `src/cli/index.ts`  | One-shot worker commands — start/create individual FSM or promise workers directly                                     |
 
 ---
 
 ## Prerequisites
 
-1. **Deno 2.6.10** — see `.prototools` at the repo root
+1. **Deno** — see `.prototools` at the repo root for the pinned version
 2. **Database connection** — one of:
    - `.env` file in the directory you run the CLI from, containing
      `DATABASE_URL=postgresql://...`
    - `--db-url` / `-d` flag passed directly (takes precedence over `.env`)
-3. **FSM folder path** — absolute path to the FSM definition folder (e.g.
-   `apps/fsm-core-example/fsm/creditCheck/v01`). This folder must contain
-   subdirectories for `actions/`, `guards/`, `delays/`, and/or `actors/` with
-   TypeScript module files.
+3. **FSM folder path** — path to the FSM definition folder tree (e.g.
+   `apps/fsm-core-example/fsm`). Folders must contain subdirectories for
+   `actions/`, `guards/`, `delays/`, and/or `actors/` with TypeScript module
+   files.
 
 ---
 
-## Running the CLI
+## fsmlet — node agent
+
+`fsmlet` is the long-running scheduler-aware agent (kubelet equivalent). It
+validates FSM modules at startup, registers itself in `fsm_workerlet`, then
+waits for the scheduler to route work to it via `pg_notify`. It drives multiple
+FSM instances concurrently up to `--max-concurrency`.
+
+### Invocation
+
+```bash
+# From repo root
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
+  -f <fsm-folder-path> [options]
+```
+
+### Options
+
+| Flag                       | Alias | Required | Default                    | Description                                                                 |
+| -------------------------- | ----- | -------- | -------------------------- | --------------------------------------------------------------------------- |
+| `--fsm-folder-path <path>` | `-f`  | yes      | —                          | Path to the FSM folder tree (validated at startup before any DB connection) |
+| `--db-url <url>`           | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string                                                |
+| `--max-concurrency <n>`    | `-m`  | no       | `8`                        | Max FSM instances driven concurrently on this node                          |
+| `--fsmlet-id <id>`         | `-i`  | no       | random UUID                | Stable identity across restarts — also read from `FSMLET_ID` env var        |
+| `--help`                   | `-h`  | —        | —                          | Print help and exit                                                         |
+
+### Example
+
+```bash
+# Minimal — reads DATABASE_URL from .env
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
+  -f apps/fsm-core-example/fsm
+
+# Full options
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
+  -f apps/fsm-core-example/fsm \
+  -d postgresql://user:pass@localhost:5432/db \
+  -m 4 \
+  -i my-node-01
+```
+
+### Startup sequence
+
+1. **Validate** — runs `validateSyncOperationFromFolders` on the FSM folder;
+   only modules that pass (`isFsmModuleVerified = true`) proceed.
+2. **Register** — inserts this node into `fsm_workerlet` with the verified FSM
+   list and `max-concurrency`.
+3. **LISTEN** — opens a dedicated connection and subscribes to:
+   - `fsm_fsmlet_work_<id>` — scheduler routes a work item here
+   - `fsm_worker_stop` — abort a specific running instance
+4. **Claim & dispatch** — on each notification, calls
+   `claim_scheduled_for_fsmlet()` atomically, then starts an FSM worker (bounded
+   by `--max-concurrency` via a semaphore).
+5. **Heartbeat** — sends a heartbeat every 5 s so the scheduler can score this
+   node.
+6. **Fallback poll** — polls every 30 s to catch any `pg_notify` missed after a
+   LISTEN connection drop.
+
+### Graceful shutdown
+
+| Signal                             | Behaviour                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Aborts all active workers, drains until they exit, deregisters from `fsm_workerlet`, closes the pool |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`) — DB lock and registration are cleaned up by session-end                 |
+
+### Environment variables
+
+| Variable       | Description                                                        |
+| -------------- | ------------------------------------------------------------------ |
+| `DATABASE_URL` | Fallback DB connection string (used when `--db-url` is not passed) |
+| `FSMLET_ID`    | Fallback stable identity (used when `--fsmlet-id` is not passed)   |
+
+---
+
+## fsmctl — one-shot worker commands
+
+`fsmctl` runs a single command against the database and exits (or stays running
+for worker polling). Use this for manual testing or for starting individual
+workers without the scheduler.
+
+### Invocation
 
 ```bash
 # Using deno task (recommended)
@@ -281,15 +363,21 @@ the queue is idle).
   "tasks": {
     "dev": "deno run --allow-all --watch src/cli/index.ts",
     "cli": "deno run --allow-all src/cli/index.ts",
+    "daemon": "deno run --allow-all src/cli/daemon.ts",
+    "ctl": "deno run --allow-all src/cli/ctl.ts",
     "check": "deno check src/index.ts"
   }
 }
 ```
 
-- `deno task dev` — runs with `--watch` (restarts on file change, useful during
-  development)
-- `deno task cli` — one-shot run
-- `deno task check` — type-check all exports without running
+| Task              | Equivalent                                      | Notes                                           |
+| ----------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `deno task cli`   | `deno run --allow-all src/cli/index.ts`         | One-shot fsmctl command                         |
+| `deno task dev`   | `deno run --allow-all --watch src/cli/index.ts` | fsmctl with `--watch` (restarts on file change) |
+| `deno task check` | `deno check src/index.ts`                       | Type-check all exports without running          |
+
+> **fsmlet has no dedicated task yet** — invoke it directly:
+> `deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts -f <path>`
 
 ---
 

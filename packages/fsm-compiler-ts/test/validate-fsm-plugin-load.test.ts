@@ -3,7 +3,7 @@ import {
   hasArity,
   isFunction,
   validateSyncOperationFromFolder,
-} from "../src/validate-fsm-plugin-load.ts";
+} from "../src/validate-sync-operation-logic.ts";
 
 // isFunction
 Deno.test("isFunction - returns true for functions", () => {
@@ -66,8 +66,7 @@ Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fail
   assertEquals(result.fsmJsonFollowSchema, false);
   assertEquals(result.isFsmModuleVerified, false);
   assertEquals(result.failedMethods, []);
-  assertEquals(result.internalActors, []);
-  assertEquals(result.externalActors, []);
+  assertEquals(result.asyncOperationActors, []);
   assertEquals(result.fsmModuleDefinition, undefined);
   assertEquals(result.fsmName, "testFsm");
   assertEquals(result.fsmVersion, "v01");

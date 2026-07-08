@@ -109,6 +109,7 @@ export async function validateSyncOperationFromFolder(
   availableActors: ActorReference[],
 ): Promise<FsmPluginValidationResult> {
   let fsmJsonPresent = true;
+  let fsmJsonConfigData: any = undefined;
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: any = undefined;
   let isFsmModuleVerified = false;
@@ -137,6 +138,7 @@ export async function validateSyncOperationFromFolder(
       fsmParentAbsFolderPath: parentAbsPath,
       fsmParentRelativeFolderPath: parentRelPath,
       fsmJsonPresent,
+      fsmJsonConfigData,
       fsmJsonFollowSchema,
       isFsmModuleVerified,
       fsmModuleDefinition,
@@ -174,6 +176,7 @@ export async function validateSyncOperationFromFolder(
     fsmParentAbsFolderPath: parentAbsPath,
     fsmParentRelativeFolderPath: parentRelPath,
     fsmJsonPresent,
+    fsmJsonConfigData: fsmData,
     fsmJsonFollowSchema,
     isFsmModuleVerified,
     fsmModuleDefinition,

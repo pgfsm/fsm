@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { runFsmlet } from "../fsmlet/fsmlet.ts";
-import type { FsmStartupConfig } from "../fsmlet/bootstrap-fsm-modules.ts";
+import type { FsmStartupConfig } from "../fsmlet/type.ts";
 
 const logger = getLogger(["@pgfsm/fsmlet", "cli"]);
 await configureWorkerLogger();
@@ -106,6 +106,15 @@ const fsmConfig: FsmStartupConfig = { fsm: { folderPath: fsmFolderPath } };
 const poolMax = maxConcurrency + 4;
 
 try {
+  logger.info(
+    "Starting fsmlet with fsm-folder-path={path}, db-url={url}, max-concurrency={max}, fsmlet-id={id}",
+    {
+      path: fsmFolderPath,
+      url: resolvedDbUrl,
+      max: maxConcurrency,
+      id: fsmletId,
+    },
+  );
   await runFsmlet(
     { connectionString: resolvedDbUrl, max: poolMax },
     fsmConfig,

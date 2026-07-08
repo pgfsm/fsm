@@ -46,18 +46,19 @@ export async function configureWorkerLogger(
     lowestLevel: "warning" as const,
   };
 
+  // ["@pgfsm/worker", "@pgfsm/fsmlet", "@pgfsm/compiler"] // use correct array to see relative logs
+  const pgfsmLoggers = (lowestLevel: LogLevel | "debug") =>
+    ["@pgfsm/fsmlet"].map((category) => ({
+      category: [category],
+      lowestLevel: lowestLevel as const,
+      sinks: ["console"],
+    }));
+
   // Profile A: TTY terminal — rich summary-focused, debug-level, inline repainting
   if (isTerminal) {
     await configure({
       sinks: { console: getSummaryConsoleSink() },
-      loggers: [
-        {
-          category: ["@pgfsm/worker"],
-          lowestLevel: "debug",
-          sinks: ["console"],
-        },
-        metaLogger,
-      ],
+      loggers: [...pgfsmLoggers("debug"), metaLogger],
     });
     return;
   }
@@ -65,9 +66,6 @@ export async function configureWorkerLogger(
   // Profile B: Hono app or piped output — flat, structured, info-level
   await configure({
     sinks: { console: getConsoleSink() },
-    loggers: [
-      { category: ["@pgfsm/worker"], lowestLevel: level, sinks: ["console"] },
-      metaLogger,
-    ],
+    loggers: [...pgfsmLoggers(level), metaLogger],
   });
 }

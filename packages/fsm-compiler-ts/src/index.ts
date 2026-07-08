@@ -21,10 +21,6 @@ export {
   validateSyncOperationFromFolder,
   validateSyncOperationFromFolders,
 } from "./validate-sync-operation-logic.ts";
-export {
-  validateAsyncOperationFromFolder,
-  validateAsyncOperationFromFolders,
-} from "./validate-async-operation-logic.ts";
 export { deleteFsmJSONFromFolders } from "./delete-fsm-json-from-folders.ts";
 export {
   DELAY_ACTION_NAME_PREFIX,
@@ -45,4 +41,6 @@ export type {
   InternalActor,
 } from "./util.ts";
 export type { WorkflowType } from "./util.ts";
-export { validateAsyncOperationFromFoldersV2 } from "./validate-async-operation-logic-v2.ts";
+export {
+  validateAsyncOperationFromFoldersV2,
+} from "./validate-async-operation-logic-v2.ts";

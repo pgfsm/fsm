@@ -32,6 +32,7 @@ async function loadFsmJSONFromFolder(
       workflowType,
       fsmName,
       fsmVersion,
+      [],
     );
     logger.info("Successfully loaded FSM from {path}: {result}", {
       path: fsmJson,

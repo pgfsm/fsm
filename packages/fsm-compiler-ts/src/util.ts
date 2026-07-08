@@ -39,6 +39,7 @@ export type FsmPluginValidationResult = {
   fsmParentDirName: string;
   fsmParentAbsFolderPath: string;
   fsmParentRelativeFolderPath: string;
+  fsmJsonConfigData: any;
   fsmJsonPresent: boolean;
   fsmJsonFollowSchema: boolean;
   isFsmModuleVerified: boolean;

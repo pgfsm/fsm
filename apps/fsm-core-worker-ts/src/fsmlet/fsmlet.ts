@@ -10,6 +10,7 @@ import {
   checkRegistryForAsyncActors,
   deregisterFsmlet,
   fsmletHeartbeat,
+  loadFsmFromJson,
   registerFsmlet,
 } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
@@ -86,14 +87,15 @@ export type FsmletHandle = {
  * On startup:
  *   1. validateSyncOperationFromFolders FSM modules.
  *   2. based on asyncOperationVerificationMode, verifies asyncOperationActors in the FSM modules.
- *   3. Registers itself with valid FSM modules in fsm_workerlet.
- *   4. Opens a dedicated LISTEN connection for two channels:
+ *   3. Load each verified FSM module into the database.
+ *   4. Registers itself with valid FSM modules in fsm_workerlet.
+ *   5. Opens a dedicated LISTEN connection for two channels:
  *        fsm_fsmlet_work_<id>  — scheduler routed work here
  *        fsm_worker_stop       — abort a specific running worker
- *   5. On each 'fsm_fsmlet_work' notify: calls claim_scheduled_for_fsmlet()
+ *   6. On each 'fsm_fsmlet_work' notify: calls claim_scheduled_for_fsmlet()
  *      which claims and deletes the row atomically, then starts the FSM worker.
- *   6. Sends heartbeats every 5 s so the scheduler can score this node.
- *   7. Fallback poll every 30 s to catch missed notifications.
+ *   7. Sends heartbeats every 5 s so the scheduler can score this node.
+ *   8. Fallback poll every 30 s to catch missed notifications.
  *
  * Returns immediately with a handle; the fsmlet runs in the background.
  * The caller owns the pool and must close it after `daemon` resolves.
@@ -114,7 +116,14 @@ export async function startFsmlet(
   let daemon: Promise<void> = Promise.resolve();
 
   const activeWorkers = new Map<string, ActiveWorker>();
-
+  logger.info(
+    "Fsmlet {fsmletId} starting (maxConcurrency={max}, asyncOperationVerificationMode={mode})",
+    {
+      fsmletId,
+      max: maxConcurrency,
+      mode: asyncOperationVerificationMode,
+    },
+  );
   if (fsmConfig) {
     // Step 1: validateSyncOperationFromFolders FSM modules.
     const outputFsm = fsmConfig.fsm
@@ -128,12 +137,8 @@ export async function startFsmlet(
     const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);
 
     if (verifiedFsm.length === 0) {
-      logger.warning(
-        "Fsmlet {fsmletId}: no verified FSM modules found in {folderPath}",
-        {
-          fsmletId,
-          folderPath: fsmConfig?.fsm?.folderPath,
-        },
+      throw new Error(
+        `Fsmlet ${fsmletId}: no verified FSM modules found in ${fsmConfig?.fsm?.folderPath}. Fix plugin validation errors and retry.`,
       );
     } else {
       pool = new Pool(dbConfig);
@@ -189,16 +194,45 @@ export async function startFsmlet(
         m.isAsyncOperationActorsVerified === true
       );
       if (verifiedFsmWithAsyncOps.length === 0) {
-        logger.warning(
-          "Fsmlet {fsmletId}: no verified FSM modules with async operation actors found in {folderPath}",
-          {
-            fsmletId,
-            folderPath: fsmConfig?.fsm?.folderPath,
-          },
+        throw new Error(
+          `Fsmlet ${fsmletId}: no FSM modules passed async actor verification (mode: ${asyncOperationVerificationMode}) in ${fsmConfig?.fsm?.folderPath}. Ensure async actors are registered and retry.`,
         );
       }
 
-      // Step 3: Registers itself with valid FSM modules in fsm_workerlet.
+      // Step 3: Load each verified FSM module into the database.
+      for (const fsmModule of verifiedFsmWithAsyncOps) {
+        try {
+          await loadFsmFromJson(
+            deps,
+            fsmModule.fsmJsonConfigData,
+            null,
+            fsmModule.fsmType,
+            fsmModule.fsmName,
+            fsmModule.fsmVersion,
+          );
+          logger.info(
+            "Fsmlet {fsmletId}: loaded {fsmName}@{fsmVersion} into DB",
+            {
+              fsmletId,
+              fsmName: fsmModule.fsmName,
+              fsmVersion: fsmModule.fsmVersion,
+            },
+          );
+        } catch (err) {
+          logger.error(
+            "Fsmlet {fsmletId}: failed to load {fsmName}@{fsmVersion}: {error}",
+            {
+              fsmletId,
+              fsmName: fsmModule.fsmName,
+              fsmVersion: fsmModule.fsmVersion,
+              error: err,
+            },
+          );
+          throw err;
+        }
+      }
+
+      // Step 4: Registers itself with valid FSM modules in fsm_workerlet.
       const verifiedFsmWithAsyncOpsToBeRegistered: FsmModule[] =
         verifiedFsmWithAsyncOps.map((m) => ({
           fsmName: m.fsmName,
@@ -312,7 +346,7 @@ export async function startFsmlet(
           });
       };
 
-      // Step 4: dedicated LISTEN connection for work notifications and stop signals.
+      // Step 5: dedicated LISTEN connection for work notifications and stop signals.
       const listenClient = await pool.connect();
       const workChannel = fsmletNotifyChannel(fsmletId);
       await listenClient.query(`LISTEN "${workChannel}"`);
@@ -320,7 +354,7 @@ export async function startFsmlet(
 
       listenClient.on("notification", (msg) => {
         if (msg.channel === workChannel) {
-          // Step 5: on each 'fsm_fsmlet_work' notify, call claimScheduledForFsmlet() atomically then start the FSM worker.
+          // Step 6: on each 'fsm_fsmlet_work' notify, call claimScheduledForFsmlet() atomically then start the FSM worker.
           processNextWork().catch((err) =>
             logger.error("Fsmlet {fsmletId}: processNextWork error: {error}", {
               fsmletId,
@@ -342,7 +376,7 @@ export async function startFsmlet(
         },
       );
 
-      // Step 6 & 7: heartbeat + fallback poll loop (the daemon's main blocking task).
+      // Step 7 & 8: heartbeat + fallback poll loop (the daemon's main blocking task).
       const runHeartbeatAndFallback = async () => {
         let ticksSinceLastFallback = 0;
         const fallbackEveryNHeartbeats = Math.ceil(
