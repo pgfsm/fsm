@@ -28,6 +28,13 @@ export type {
 
 export {
   asyncOperationScheduleNextPending,
+  checkRegistryAndWorkingForAsyncActors,
+  checkRegistryForAsyncActors,
   enqueueAsyncOperationDispatch,
 } from "./async-operation.ts";
-export type { AsyncOperationDispatchInput } from "./async-operation.ts";
+export type {
+  AsyncActor,
+  AsyncOperationDispatchInput,
+  CheckRegistryAndWorkingForAsyncActorsResult,
+  CheckRegistryForAsyncActorsResult,
+} from "./async-operation.ts";

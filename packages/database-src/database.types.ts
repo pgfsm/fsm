@@ -712,6 +712,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      check_registry_and_working_for_async_actors_for_fsm_instance_an: {
+        Args: {
+          input_async_actors: Json;
+          input_fsm_name: string;
+          input_fsm_version: string;
+        };
+        Returns: Json;
+      };
       check_registry_for_async_actors: {
         Args: {
           input_async_actors: Json;

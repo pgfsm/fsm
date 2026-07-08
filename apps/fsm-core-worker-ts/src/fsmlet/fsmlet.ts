@@ -5,7 +5,13 @@ import type { DbConfig, FsmStartupConfig } from "./type.ts";
 import type { FsmPluginValidationResult } from "@pgfsm/compiler";
 import { validateSyncOperationFromFolders } from "@pgfsm/compiler";
 import type { FsmModule } from "@pgfsm/db";
-import { deregisterFsmlet, fsmletHeartbeat, registerFsmlet } from "@pgfsm/db";
+import {
+  checkRegistryAndWorkingForAsyncActors,
+  checkRegistryForAsyncActors,
+  deregisterFsmlet,
+  fsmletHeartbeat,
+  registerFsmlet,
+} from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import {
   claimScheduledForFsmlet,
@@ -66,7 +72,7 @@ export type FsmletOptions = {
 };
 
 export type FsmletHandle = {
-  pool: Pool;
+  pool: Pool | null;
   verifiedFsmWithAsyncOps: FsmPluginValidationResult[];
   fsmletId: string;
   /** Resolves when the fsmlet exits cleanly. Does NOT close the pool. */
@@ -101,9 +107,11 @@ export async function startFsmlet(
   const maxConcurrency = options?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   const fsmletId = options?.fsmletId ?? crypto.randomUUID();
 
-  let pool: Pool;
+  const asyncOperationVerificationMode =
+    options?.asyncOperationVerificationMode ?? "none";
+  let pool: Pool | null = null;
   let verifiedFsmWithAsyncOps: FsmPluginValidationResult[] = [];
-  let daemon: Promise<void>;
+  let daemon: Promise<void> = Promise.resolve();
 
   const activeWorkers = new Map<string, ActiveWorker>();
 
@@ -134,35 +142,36 @@ export async function startFsmlet(
       const deps = { db: pool, useSupabase: false };
 
       // step 2. Based on asyncOperationVerificationMode, verifies asyncOperationActors in the FSM modules.
-      if (options?.asyncOperationVerificationMode === "checkRegistry") {
+      if (asyncOperationVerificationMode === "checkRegistry") {
         for (const fsmModule of verifiedFsm) {
           const asyncActors = fsmModule.asyncOperationActors ?? [];
-          const isRegistered = await checkResistryForAsyncActors(
+          const result = await checkRegistryForAsyncActors(
             deps,
             asyncActors,
             fsmModule.fsmName,
             fsmModule.fsmVersion,
           );
-          fsmModule.isAsyncOperationActorsVerified = isRegistered;
+          fsmModule.isAsyncOperationActorsVerified = result.all_registered;
         }
       } else if (
-        options?.asyncOperationVerificationMode === "checkRegistryAndWorking"
+        asyncOperationVerificationMode === "checkRegistryAndWorking"
       ) {
         for (const fsmModule of verifiedFsm) {
           const asyncActors = fsmModule.asyncOperationActors ?? [];
-          const isRegistered = await checkResistryForAsyncActors(
+          const registryResult = await checkRegistryForAsyncActors(
             deps,
             asyncActors,
             fsmModule.fsmName,
             fsmModule.fsmVersion,
           );
-          const isWorking = await checkWorkingForAsyncActors(
+          const workingResult = await checkRegistryAndWorkingForAsyncActors(
             deps,
             asyncActors,
             fsmModule.fsmName,
             fsmModule.fsmVersion,
           );
-          fsmModule.isAsyncOperationActorsVerified = isRegistered && isWorking;
+          fsmModule.isAsyncOperationActorsVerified =
+            registryResult.all_registered && workingResult.all_working;
         }
       } else {
         logger.info(
@@ -413,6 +422,8 @@ export async function runFsmlet(
 ): Promise<void> {
   const { pool, daemon } = await startFsmlet(dbConfig, fsmConfig, options);
   await daemon;
-  await pool.end();
-  logger.info("Pool closed");
+  if (pool) {
+    await pool.end();
+    logger.info("Pool closed");
+  }
 }

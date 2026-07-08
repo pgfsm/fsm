@@ -1,11 +1,9 @@
-CREATE OR REPLACE FUNCTION fsm_core.check_registry_and_working_for_async_actors_for_fsm_instance_and_worklet(
-  input_async_actors  jsonb,
-  input_fsm_name      text,
-  input_fsm_version   text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-AS $$
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION fsm_core.check_registry_and_working_for_async_actors_for_fsm_instance_an(input_async_actors jsonb, input_fsm_name text, input_fsm_version text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
   v_actor           record;
   v_non_working_actors jsonb := '[]'::jsonb;
@@ -44,4 +42,7 @@ BEGIN
     'fsm_version',        input_fsm_version
   );
 END;
-$$;
+$function$
+;
+
+
