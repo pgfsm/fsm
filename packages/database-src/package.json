@@ -1,36 +1,42 @@
 {
   "name": "fsm_core",
-  "version": "1.0.2",
+  "version": "1.2.0",
   "description": "This package is used for the main PostgreSQL files for the FSM project.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "loadenvandprintenv": "dotenv -e ./../../.env -- npm run printenv",
     "printenv": "echo $SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID",
+    "getExistingHighestVersion": "tsx get-existing-highest-pkg-version.ts",
+    "getNextVersion": "tsx get-next-pkg-version.ts",
     "supabase:init": "supabase init",
     "supabase:start": "supabase start --debug",
     "supabase:start:env": "dotenv -e ./../../.env -- npm run supabase:start",
     "supabase:stop": "supabase stop",
-    "supabase:db:diff:schemafolder:sql": "supabase db diff -f $(node scripts/diff-filename.js) --debug",
-    "supabase:db:diff:version:minor": "npm version minor --no-git-tag-version && npm run supabase:db:diff:schemafolder:sql",
-    "supabase:db:diff:version:patch": "npm version patch --no-git-tag-version && npm run supabase:db:diff:schemafolder:sql",
+    "supabase:db:diff:schemafolder:sql:withUpgradeScript": "NEXT_VERSION=$(tsx get-next-pkg-version.ts) && supabase db diff -f $NEXT_VERSION --debug",
     "supabase:db:reset": "supabase db reset",
     "supabase:db:migrate": "supabase migration up",
     "supabase:docker:volume:clean": "VOLUME=$(docker volume ls -q --filter label=com.supabase.cli.project=database-src); if [ -n \"$VOLUME\" ]; then docker volume rm $VOLUME; else echo 'No matching docker volume to remove.'; fi",
     "supabase:gen:types": "supabase gen types typescript --local --schema public,fsm_core,pgmq > database.types.ts",
     "supabase:db:addfakeusers": "tsx create-fake-user.ts",
     "supabase:db:deletefakeusers": "tsx delete-fake-user.ts",
-    "supabase:restart:with:diff": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql && npm run supabase:start:env && npm run supabase:gen:types"
+    "supabase:restart:with:diff:withUpgradeScript": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript && npm run supabase:start:env && npm run supabase:gen:types",
+    "supabase:restart:with:diff:withUpgradeScript:temp": "npm version patch --no-git-tag-version && npm run supabase:restart:with:diff:withUpgradeScript",
+    "pgxnBuildAndPublish": "tsx pgxn-build-and-publish.ts"
   },
   "author": "Niraj Kashyap",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "dotenv": "^16.5.0",
     "dotenv-cli": "^8.0.0",
     "supabase": "2.19",
     "tsx": "^4.19.4",
-    "uuid": "^11.1.0",
+    "uuid": "^11.1.1",
     "xstate": "^5.28.0"
+  },
+  "overrides": {
+    "ws": ">=8.21.0",
+    "tar": ">=7.5.11"
   }
 }

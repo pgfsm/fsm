@@ -9,6 +9,141 @@ export type Json =
 export type Database = {
   fsm_core: {
     Tables: {
+      async_operation_instance_and_async_operation_workerlet: {
+        Row: {
+          async_operation_instance_and_async_operation_workerlet_id: string;
+          async_operation_instance_id: string;
+          async_operation_language: string;
+          async_operation_name: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          async_operation_workerlet_id: string | null;
+          created_at: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          scheduled_at: string | null;
+          status: string;
+        };
+        Insert: {
+          async_operation_instance_and_async_operation_workerlet_id?: string;
+          async_operation_instance_id: string;
+          async_operation_language: string;
+          async_operation_name: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          async_operation_workerlet_id?: string | null;
+          created_at?: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          scheduled_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          async_operation_instance_and_async_operation_workerlet_id?: string;
+          async_operation_instance_id?: string;
+          async_operation_language?: string;
+          async_operation_name?: string;
+          async_operation_type?: string;
+          async_operation_version?: string;
+          async_operation_workerlet_id?: string | null;
+          created_at?: string;
+          parent_fsm_name?: string;
+          parent_fsm_version?: string;
+          scheduled_at?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      async_operation_meta: {
+        Row: {
+          async_operation_language: string;
+          async_operation_meta_id: string;
+          async_operation_name: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          max_concurrency: number;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          updated_at: string;
+          updated_by_pid: string;
+        };
+        Insert: {
+          async_operation_language: string;
+          async_operation_meta_id?: string;
+          async_operation_name: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          max_concurrency?: number;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          updated_at?: string;
+          updated_by_pid: string;
+        };
+        Update: {
+          async_operation_language?: string;
+          async_operation_meta_id?: string;
+          async_operation_name?: string;
+          async_operation_type?: string;
+          async_operation_version?: string;
+          max_concurrency?: number;
+          parent_fsm_name?: string;
+          parent_fsm_version?: string;
+          updated_at?: string;
+          updated_by_pid?: string;
+        };
+        Relationships: [];
+      };
+      async_operation_workerlet: {
+        Row: {
+          active_pid_number: number;
+          async_operation_workerlet_id: string;
+          async_operation_workerlet_pid: string;
+          last_heartbeat: string;
+          max_pid_number: number;
+          registered_at: string;
+          supported_async_operations: Json;
+        };
+        Insert: {
+          active_pid_number?: number;
+          async_operation_workerlet_id?: string;
+          async_operation_workerlet_pid: string;
+          last_heartbeat?: string;
+          max_pid_number: number;
+          registered_at?: string;
+          supported_async_operations?: Json;
+        };
+        Update: {
+          active_pid_number?: number;
+          async_operation_workerlet_id?: string;
+          async_operation_workerlet_pid?: string;
+          last_heartbeat?: string;
+          max_pid_number?: number;
+          registered_at?: string;
+          supported_async_operations?: Json;
+        };
+        Relationships: [];
+      };
+      fsm_dependencies: {
+        Row: {
+          child_fsm_name: string;
+          child_fsm_version: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+        };
+        Insert: {
+          child_fsm_name: string;
+          child_fsm_version: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+        };
+        Update: {
+          child_fsm_name?: string;
+          child_fsm_version?: string;
+          parent_fsm_name?: string;
+          parent_fsm_version?: string;
+        };
+        Relationships: [];
+      };
       fsm_instance: {
         Row: {
           childrens: Json | null;
@@ -75,6 +210,42 @@ export type Database = {
           worker_locked?: boolean | null;
           worker_locked_at?: string | null;
           worker_locked_by?: string | null;
+        };
+        Relationships: [];
+      };
+      fsm_instance_and_fsm_workerlet: {
+        Row: {
+          created_at: string;
+          dispatch_type: string;
+          fsm_instance_and_fsm_workerlet_id: string;
+          fsm_instance_id: string;
+          fsm_name: string;
+          fsm_version: string;
+          fsm_workerlet_id: string | null;
+          scheduled_at: string | null;
+          status: string;
+        };
+        Insert: {
+          created_at?: string;
+          dispatch_type?: string;
+          fsm_instance_and_fsm_workerlet_id?: string;
+          fsm_instance_id: string;
+          fsm_name: string;
+          fsm_version: string;
+          fsm_workerlet_id?: string | null;
+          scheduled_at?: string | null;
+          status?: string;
+        };
+        Update: {
+          created_at?: string;
+          dispatch_type?: string;
+          fsm_instance_and_fsm_workerlet_id?: string;
+          fsm_instance_id?: string;
+          fsm_name?: string;
+          fsm_version?: string;
+          fsm_workerlet_id?: string | null;
+          scheduled_at?: string | null;
+          status?: string;
         };
         Relationships: [];
       };
@@ -434,6 +605,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      fsm_workerlet: {
+        Row: {
+          active_workers: number;
+          fsm_modules: Json;
+          fsm_workerlet_id: string;
+          fsm_workerlet_pid: string;
+          last_heartbeat: string;
+          max_concurrency: number;
+          registered_at: string;
+        };
+        Insert: {
+          active_workers?: number;
+          fsm_modules?: Json;
+          fsm_workerlet_id?: string;
+          fsm_workerlet_pid: string;
+          last_heartbeat?: string;
+          max_concurrency: number;
+          registered_at?: string;
+        };
+        Update: {
+          active_workers?: number;
+          fsm_modules?: Json;
+          fsm_workerlet_id?: string;
+          fsm_workerlet_pid?: string;
+          last_heartbeat?: string;
+          max_concurrency?: number;
+          registered_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -492,6 +693,12 @@ export type Database = {
         };
         Returns: Json;
       };
+      async_operation_schedule_next_pending: {
+        Args: {
+          input_stale_threshold_seconds?: number;
+        };
+        Returns: boolean;
+      };
       build_nested_json_recursive: {
         Args: {
           paths: string[];
@@ -502,6 +709,20 @@ export type Database = {
         Args: {
           promise_type_worker_name: string;
           queue_msg_id: number;
+        };
+        Returns: Json;
+      };
+      check_registry_for_async_actors: {
+        Args: {
+          input_async_actors: Json;
+          input_fsm_name: string;
+          input_fsm_version: string;
+        };
+        Returns: Json;
+      };
+      claim_scheduled_for_fsmlet: {
+        Args: {
+          input_fsmlet_id: string;
         };
         Returns: Json;
       };
@@ -615,6 +836,24 @@ export type Database = {
           from_source_fsm_instance_id: string;
         };
         Returns: Json;
+      };
+      enqueue_fsm_dispatch_v1: {
+        Args: {
+          input_instance_id: string;
+          input_fsm_name: string;
+          input_fsm_version: string;
+          input_dispatch_type?: string;
+        };
+        Returns: undefined;
+      };
+      enqueue_fsm_dispatch_v2: {
+        Args: {
+          input_instance_id: string;
+          input_fsm_name: string;
+          input_fsm_version: string;
+          input_dispatch_type?: string;
+        };
+        Returns: undefined;
       };
       fsm_get_all_state_nodes_v1: {
         Args: {
@@ -798,6 +1037,20 @@ export type Database = {
         };
         Returns: undefined;
       };
+      hello_niraj: {
+        Args: {
+          input_text: string;
+        };
+        Returns: undefined;
+      };
+      insert_fsm_dependencies: {
+        Args: {
+          p_parent_name: string;
+          p_parent_version: string;
+          p_dependent_children: Json;
+        };
+        Returns: undefined;
+      };
       json_matches_schema: {
         Args: {
           schema: Json;
@@ -839,6 +1092,18 @@ export type Database = {
         };
         Returns: string[];
       };
+      load_async_operation_meta_v2: {
+        Args: {
+          input_async_operation_name: string;
+          input_async_operation_version: string;
+          input_async_operation_type: string;
+          input_async_operation_language: string;
+          input_parent_fsm_name: string;
+          input_parent_fsm_version: string;
+          input_updated_by_pid: string;
+        };
+        Returns: Json;
+      };
       load_fsm_from_json_v2: {
         Args: {
           json_input: Json;
@@ -849,14 +1114,6 @@ export type Database = {
           input_dependent_children?: Json;
         };
         Returns: Json;
-      };
-      insert_fsm_dependencies: {
-        Args: {
-          p_parent_name: string;
-          p_parent_version: string;
-          p_dependent_children: Json;
-        };
-        Returns: undefined;
       };
       load_fsm_state_from_json_v1: {
         Args: {
@@ -1009,6 +1266,12 @@ export type Database = {
         };
         Returns: Json;
       };
+      resume_event_for_fsm_worker_v2: {
+        Args: {
+          input_fsm_instance_id: string;
+        };
+        Returns: Json;
+      };
       sanitize_text_array_to_ltree_array: {
         Args: {
           input_array: string[];
@@ -1026,6 +1289,12 @@ export type Database = {
           input_text: string;
         };
         Returns: unknown;
+      };
+      schedule_next_pending: {
+        Args: {
+          input_stale_threshold_seconds?: number;
+        };
+        Returns: boolean;
       };
       select_all_transitions_v1: {
         Args: {
@@ -1155,6 +1424,12 @@ export type Database = {
           paths: unknown[];
         };
         Returns: unknown;
+      };
+      stop_event_for_fsm_worker_v1: {
+        Args: {
+          input_fsm_instance_id: string;
+        };
+        Returns: Json;
       };
       stop_event_for_fsm_worker_v2: {
         Args: {

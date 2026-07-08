@@ -1,7 +1,7 @@
 {
   "name": "fsm_core",
   "abstract": "This package is used for the main PostgreSQL files for the FSM project.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "maintainer": [
     "Niraj Kashyap <niraj.38.re@gmail.com>"
   ],
@@ -10,7 +10,7 @@
     "fsm_core": {
       "abstract": "This package is used for the main PostgreSQL files for the FSM project.",
       "file": "fsm_core--1.0.0.sql",
-      "version": "1.1.0"
+      "version": "1.2.0"
     }
   },
   "prereqs": {
