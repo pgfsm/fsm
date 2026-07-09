@@ -14,10 +14,7 @@ import {
   registerFsmlet,
 } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
-import {
-  claimScheduledForFsmlet,
-  fsmletNotifyChannel,
-} from "./fsm-scheduler.ts";
+import { claimScheduledForFsmlet, fsmletNotifyChannel } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/fsmlet"]);
 

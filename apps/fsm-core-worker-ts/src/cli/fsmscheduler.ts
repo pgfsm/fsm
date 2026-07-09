@@ -2,8 +2,8 @@ import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
-import { runFsmScheduler } from "../fsmlet/scheduler/fsm-scheduler.ts";
-import type { FsmSchedulerOptions } from "../fsmlet/scheduler/fsm-scheduler.ts";
+import { runFsmScheduler } from "../fsmscheduler/fsmscheduler.ts";
+import type { FsmSchedulerOptions } from "../fsmscheduler/fsmscheduler.ts";
 
 const logger = getLogger(["@pgfsm/scheduler", "cli"]);
 await configureWorkerLogger();
@@ -28,7 +28,7 @@ USAGE
 
 OPTIONS
   -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
-  -p, --poll-interval <ms>       Staging queue poll interval in milliseconds (default: 500)
+  -p, --poll-interval <ms>       Fallback poll interval in milliseconds (default: 30000)
   -s, --stale-threshold <secs>   Seconds before a fsmlet is considered dead (default: 30)
   -h, --help                     Show this help message
 
@@ -54,13 +54,35 @@ if (!resolvedDbUrl) {
   Deno.exit(1);
 }
 
+const pollIntervalArg = args["poll-interval"];
+const pollIntervalMs = pollIntervalArg ? Number(pollIntervalArg) : undefined;
+if (
+  pollIntervalMs !== undefined &&
+  (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 1)
+) {
+  logger.error("--poll-interval must be a positive integer, got: {value}", {
+    value: pollIntervalArg,
+  });
+  Deno.exit(1);
+}
+
+const staleThresholdArg = args["stale-threshold"];
+const staleThresholdSeconds = staleThresholdArg
+  ? Number(staleThresholdArg)
+  : undefined;
+if (
+  staleThresholdSeconds !== undefined &&
+  (!Number.isInteger(staleThresholdSeconds) || staleThresholdSeconds < 1)
+) {
+  logger.error("--stale-threshold must be a positive integer, got: {value}", {
+    value: staleThresholdArg,
+  });
+  Deno.exit(1);
+}
+
 const options: FsmSchedulerOptions = {
-  pollIntervalMs: args["poll-interval"]
-    ? Number(args["poll-interval"])
-    : undefined,
-  staleThresholdSeconds: args["stale-threshold"]
-    ? Number(args["stale-threshold"])
-    : undefined,
+  pollIntervalMs,
+  staleThresholdSeconds,
 };
 
 const controller = new AbortController();

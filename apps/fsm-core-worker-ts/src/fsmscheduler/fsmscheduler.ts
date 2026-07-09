@@ -2,21 +2,14 @@ import { getLogger } from "@logtape/logtape";
 import { Pool } from "pg";
 import { scheduleNextPending } from "@pgfsm/db";
 
-export { claimScheduledForFsmlet, scheduleNextPending } from "@pgfsm/db";
-export type { FsmDispatchEntry } from "@pgfsm/db";
+export { scheduleNextPending } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/scheduler"]);
 
 export const SCHEDULER_NOTIFY_CHANNEL = "fsm_scheduler_work";
 
-export function fsmletNotifyChannel(fsmletId: string): string {
-  return `fsm_fsmlet_work_${fsmletId}`;
-}
-
 const DEFAULT_STALE_THRESHOLD_S = 30;
-// Fallback poll interval — catches any pg_notify that was missed (e.g. after
-// a LISTEN connection drop and reconnect).
-const FALLBACK_POLL_INTERVAL_MS = 30_000;
+const DEFAULT_FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -24,6 +17,8 @@ const sleep = (ms: number) =>
 export type FsmSchedulerOptions = {
   signal?: AbortSignal;
   staleThresholdSeconds?: number;
+  /** Fallback poll interval in ms — catches pg_notify missed after a LISTEN connection drop. Default: 30000. */
+  pollIntervalMs?: number;
 };
 
 /**
@@ -44,6 +39,8 @@ export async function runFsmScheduler(
 ): Promise<void> {
   const signal = options?.signal;
   const staleSecs = options?.staleThresholdSeconds ?? DEFAULT_STALE_THRESHOLD_S;
+  const fallbackPollMs = options?.pollIntervalMs ??
+    DEFAULT_FALLBACK_POLL_INTERVAL_MS;
 
   const pool = new Pool(dbConfig);
   const deps = { db: pool, useSupabase: false };
@@ -62,7 +59,7 @@ export async function runFsmScheduler(
     }
   };
 
-  // Dedicated LISTEN connection — intentionally never released.
+  // Dedicated LISTEN connection — held for the process lifetime, released on shutdown.
   const listenClient = await pool.connect();
   await listenClient.query(`LISTEN "${SCHEDULER_NOTIFY_CHANNEL}"`);
   listenClient.on("notification", (msg) => {
@@ -80,7 +77,7 @@ export async function runFsmScheduler(
 
   // Fallback poll loop — also serves as the main blocking mechanism.
   while (!signal?.aborted) {
-    await sleep(FALLBACK_POLL_INTERVAL_MS);
+    await sleep(fallbackPollMs);
     if (signal?.aborted) break;
     await runCycle();
   }

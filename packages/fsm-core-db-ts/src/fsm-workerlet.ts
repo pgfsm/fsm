@@ -11,6 +11,10 @@ const CLAIM_SCHEDULED_FOR_FSMLET_FN =
 
 export type FsmModule = { fsmName: string; fsmVersion: string };
 
+export function fsmletNotifyChannel(fsmletId: string): string {
+  return `fsm_fsmlet_work_${fsmletId}`;
+}
+
 export type FsmletNode = {
   fsm_workerlet_id: string;
   fsm_modules: FsmModule[];

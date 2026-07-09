@@ -16,6 +16,7 @@ export {
   claimScheduledForFsmlet,
   deregisterFsmlet,
   fsmletHeartbeat,
+  fsmletNotifyChannel,
   listActiveFsmlets,
   registerFsmlet,
   scheduleNextPending,

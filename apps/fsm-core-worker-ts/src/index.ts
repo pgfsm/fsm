@@ -32,15 +32,14 @@ export type {
 } from "./fsmlet/bootstrap-fsm-modules.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
 export type { FsmletHandle, FsmletOptions } from "./fsmlet/fsmlet.ts";
-export { runFsmScheduler } from "./fsmlet/fsm-scheduler.ts";
-export type { FsmSchedulerOptions } from "./fsmlet/fsm-scheduler.ts";
+export { runFsmScheduler } from "./fsmscheduler/fsmscheduler.ts";
+export type { FsmSchedulerOptions } from "./fsmscheduler/fsmscheduler.ts";
+export { claimScheduledForFsmlet, fsmletNotifyChannel } from "@pgfsm/db";
+export type { FsmDispatchEntry } from "@pgfsm/db";
 export {
-  claimScheduledForFsmlet,
-  fsmletNotifyChannel,
   scheduleNextPending,
   SCHEDULER_NOTIFY_CHANNEL,
-} from "./fsmlet/fsm-scheduler.ts";
-export type { FsmDispatchEntry } from "./fsmlet/fsm-scheduler.ts";
+} from "./fsmscheduler/fsmscheduler.ts";
 export {
   deregisterFsmlet,
   fsmletHeartbeat,
