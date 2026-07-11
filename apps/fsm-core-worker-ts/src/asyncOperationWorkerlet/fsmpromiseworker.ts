@@ -1,19 +1,16 @@
 import { getLogger } from "@logtape/logtape";
-import type { Database } from "@pgfsm/db/database.types";
-
 import type { DBDeps } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/worker", "promise"]);
 
 import {
   archiveEventFromFsmPromiseTypeWorker,
-  getFsmDataResolveStateValue,
   pgmqQueueExists,
   readMessage,
 } from "@pgfsm/db";
 
 import { processFSMPromiseQueueMessage } from "./fsmpromiseworker-helper.ts";
-import type { VerifiedModule } from "./fsmlet/fsmworker.ts";
+import type { ActorPluginValidationResult } from "@pgfsm/compiler";
 
 export async function startFSMPromiseWorker(
   deps: DBDeps,
@@ -21,7 +18,7 @@ export async function startFSMPromiseWorker(
   fsm_promise_name: string,
   fsm_promise_type: string,
   fsm_promise_version: string,
-  verifiedModule?: VerifiedModule,
+  actorResult?: ActorPluginValidationResult,
   signal?: AbortSignal,
 ): Promise<boolean> {
   const queueExists = await pgmqQueueExists(deps, queueName);
@@ -33,20 +30,17 @@ export async function startFSMPromiseWorker(
   }
   const visibilityTimeout = 30;
 
-  // Load fsmModuleDefinition once using verifiedModule paths
-  let fsmModuleDefinition: any = undefined;
   let actorFn: ((input: unknown) => Promise<unknown>) | undefined = undefined;
-  if (verifiedModule?.fsmAbsFolderPath) {
+  if (actorResult?.parentFsmPath && actorResult?.parentFsmVersion) {
     try {
-      const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
+      const base =
+        `${actorResult.parentFsmPath}/${actorResult.parentFsmVersion}/typescript`;
       const [actors] = await Promise.allSettled([
         import(`${base}/actors/index.ts`),
       ]);
-      fsmModuleDefinition = {
-        actors: actors.status === "fulfilled" ? actors.value : null,
-      };
-      actorFn = fsmModuleDefinition?.actors
-        ? (fsmModuleDefinition?.actors[fsm_promise_name] as
+      const actorsModule = actors.status === "fulfilled" ? actors.value : null;
+      actorFn = actorsModule
+        ? (actorsModule[fsm_promise_name] as
           | ((input: unknown) => Promise<unknown>)
           | undefined)
         : undefined;

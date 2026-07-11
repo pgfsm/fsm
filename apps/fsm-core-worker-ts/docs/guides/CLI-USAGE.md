@@ -1,11 +1,12 @@
 # fsm-core-worker-ts — CLI Usage Guide
 
-This package provides two CLIs:
+This package provides three CLIs:
 
-| CLI        | Entry point         | Role                                                                                                                   |
-| ---------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **fsmlet** | `src/cli/fsmlet.ts` | Long-running node agent — registers itself with the scheduler, claims and drives FSM workers up to a concurrency limit |
-| **fsmctl** | `src/cli/index.ts`  | One-shot worker commands — start/create individual FSM or promise workers directly                                     |
+| CLI                           | Entry point                            | Role                                                                                                                                                    |
+| ----------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **fsmlet**                    | `src/cli/fsmlet.ts`                    | Long-running node agent — registers itself with the scheduler, claims and drives FSM workers up to a concurrency limit                                  |
+| **async-operation-workerlet** | `src/cli/async-operation-workerlet.ts` | Long-running async-op node agent — validates actors, registers in `async_operation_workerlet`, claims and drives promise workers via LISTEN + heartbeat |
+| **fsmctl**                    | `src/cli/index.ts`                     | One-shot worker commands — start/create individual FSM or promise workers directly                                                                      |
 
 ---
 
@@ -93,6 +94,115 @@ deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
 | -------------- | ------------------------------------------------------------------ |
 | `DATABASE_URL` | Fallback DB connection string (used when `--db-url` is not passed) |
 | `FSMLET_ID`    | Fallback stable identity (used when `--fsmlet-id` is not passed)   |
+
+---
+
+## async-operation-workerlet — async-op node agent
+
+`async-operation-workerlet` is the long-running scheduler-aware daemon for async
+operations (analogous to `fsmlet` for FSMs). It scans an FSM folder for async
+actors, loads them into `async_operation_meta`, registers itself in
+`async_operation_workerlet`, then listens for work routed by the scheduler via
+`pg_notify`. It drives one long-running promise-worker per actor queue, bounded
+by `--max-concurrency`.
+
+### Invocation
+
+```bash
+# From repo root
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts \
+  -f <folder-path> -l <langs> [options]
+```
+
+### Options
+
+| Flag                          | Alias | Required | Default                    | Description                                                                        |
+| ----------------------------- | ----- | -------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `--folder-path <path>`        | `-f`  | yes      | —                          | Path to the FSM folder tree to scan for async actors (validated before DB connect) |
+| `--runtime-languages <langs>` | `-l`  | yes      | —                          | Comma-separated languages to validate: `typescript`, `python`, `go`, `rust`        |
+| `--db-url <url>`              | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string                                                       |
+| `--max-concurrency <n>`       | `-m`  | no       | `8`                        | Max concurrent queue-workers on this node                                          |
+| `--workerlet-id <id>`         | `-i`  | no       | random UUID                | Stable identity across restarts — also read from `ASYNC_OP_WORKERLET_ID` env var   |
+| `--workflow-type <type>`      | `-t`  | no       | `promise`                  | `promise` (actors co-located with an FSM) or `sharedPromise` (shared actors)       |
+| `--help`                      | `-h`  | —        | —                          | Print help and exit                                                                |
+
+> **Why `--runtime-languages` is required:** the validator scans per-language
+> subdirectories (`typescript/`, `python/`, etc.) and only checks the languages
+> you declare. Omitting it means zero actors are validated and the workerlet
+> throws immediately.
+
+### Example
+
+```bash
+# Minimal — TypeScript actors only, reads DATABASE_URL from .env
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts \
+  --folder-path apps/fsm-core-example/fsm \
+  --runtime-languages typescript \
+  --workflow-type promise
+
+# Multiple languages
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts \
+  --folder-path apps/fsm-core-example/fsm \
+  --runtime-languages typescript,python \
+  --workflow-type promise
+
+# Full options
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts \
+  --folder-path apps/fsm-core-example/fsm \
+  --runtime-languages typescript \
+  --db-url postgresql://user:pass@localhost:5432/db \
+  --workflow-type promise \
+  --max-concurrency 4 \
+  --workerlet-id my-async-node-01
+```
+
+### `--folder-path` structure expected
+
+`validateAsyncOperationFromFoldersV2` scans for actors inside the folder tree in
+the pattern `<fsmName>/<version>/<lang>/actors/<actorName>/`. Pass the root that
+contains FSM subdirectories, the same path you would give `fsmlet`:
+
+```
+<folder-path>/
+└── creditCheck/
+    └── v01/
+        └── typescript/
+            └── actors/
+                └── checkBureau.ts
+```
+
+### Startup sequence
+
+1. **Validate** — runs `validateAsyncOperationFromFoldersV2`; only actors that
+   pass (`isVerified = true`) proceed.
+2. **Load** — upserts each verified actor into `async_operation_meta` via
+   `load_async_operation_meta_v2`.
+3. **Register** — upserts this node into `async_operation_workerlet` with the
+   full supported-op list and `max_pid_number`.
+4. **LISTEN** — opens a dedicated connection and subscribes to
+   `async_operation_workerlet_work_<id>`.
+5. **Claim & dispatch** — on each notification, calls
+   `claim_scheduled_for_async_operation_workerlet()` atomically, then starts a
+   long-running promise-worker for that actor queue (one worker per unique
+   queue, bounded by semaphore).
+6. **Heartbeat** — sends a heartbeat every 5 s so the scheduler can score this
+   node.
+7. **Fallback poll** — polls every 30 s to catch any `pg_notify` missed after a
+   LISTEN connection drop.
+
+### Graceful shutdown
+
+| Signal                             | Behaviour                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Aborts all active queue-workers, drains until they exit, deregisters from `async_operation_workerlet`, closes pool |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`) — DB registration cleaned up on session-end                                            |
+
+### Environment variables
+
+| Variable                | Description                                                         |
+| ----------------------- | ------------------------------------------------------------------- |
+| `DATABASE_URL`          | Fallback DB connection string (used when `--db-url` is not passed)  |
+| `ASYNC_OP_WORKERLET_ID` | Fallback stable identity (used when `--workerlet-id` is not passed) |
 
 ---
 
@@ -376,8 +486,11 @@ the queue is idle).
 | `deno task dev`   | `deno run --allow-all --watch src/cli/index.ts` | fsmctl with `--watch` (restarts on file change) |
 | `deno task check` | `deno check src/index.ts`                       | Type-check all exports without running          |
 
-> **fsmlet has no dedicated task yet** — invoke it directly:
-> `deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts -f <path>`
+> **fsmlet and async-operation-workerlet have no dedicated tasks yet** — invoke
+> them directly:
+>
+> - `deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts -f <path>`
+> - `deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts -f <path> -l typescript -t promise`
 
 ---
 

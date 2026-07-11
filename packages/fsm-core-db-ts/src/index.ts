@@ -32,6 +32,7 @@ export {
   checkRegistryAndWorkingForAsyncActors,
   checkRegistryForAsyncActors,
   enqueueAsyncOperationDispatch,
+  loadAsyncOperation,
 } from "./async-operation.ts";
 export type {
   AsyncActor,
@@ -39,3 +40,15 @@ export type {
   CheckRegistryAndWorkingForAsyncActorsResult,
   CheckRegistryForAsyncActorsResult,
 } from "./async-operation.ts";
+
+export {
+  asyncOperationWorkerletHeartbeat,
+  asyncOperationWorkerletNotifyChannel,
+  claimScheduledForAsyncOperationWorkerlet,
+  deregisterAsyncOperationWorkerlet,
+  registerAsyncOperationWorkerlet,
+} from "./async-operation-workerlet.ts";
+export type {
+  AsyncOpDispatchEntry,
+  AsyncOperationSupportedOp,
+} from "./async-operation-workerlet.ts";

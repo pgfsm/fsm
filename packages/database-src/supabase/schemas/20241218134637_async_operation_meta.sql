@@ -41,14 +41,16 @@ BEGIN
     async_operation_type,
     async_operation_language,
     parent_fsm_name,
-    parent_fsm_version
+    parent_fsm_version,
+    updated_by_pid
   ) VALUES (
     input_async_operation_name,
     input_async_operation_version,
     input_async_operation_type,
     input_async_operation_language,
     input_parent_fsm_name,
-    input_parent_fsm_version
+    input_parent_fsm_version,
+    input_updated_by_pid
   )
   ON CONFLICT ON CONSTRAINT async_operation_meta_unique
   DO UPDATE SET

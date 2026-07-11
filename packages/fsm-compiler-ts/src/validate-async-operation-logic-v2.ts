@@ -53,6 +53,9 @@ export async function validateAsyncOperationFromFoldersV2(
   try {
     const stat = await Deno.stat(absFolderPath);
     if (!stat.isDirectory) {
+      logger.error("Provided path is not a directory: {path}", {
+        path: absFolderPath,
+      });
       throw new Error(`Provided path '${absFolderPath}' is not a directory.`);
     }
     for await (const dirEntry of Deno.readDir(absFolderPath)) {
