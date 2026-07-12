@@ -1,4 +1,4 @@
-import { configure, type Sink } from "@logtape/logtape";
+import { configure, getConsoleSink, type Sink } from "@logtape/logtape";
 import { getOpenTelemetrySink } from "@logtape/otel";
 import { getTableConsoleSink } from "./sink.ts";
 import type { LogLevel } from "./types.ts";
@@ -50,6 +50,7 @@ export async function configureLogging(
 
   const sinks: Record<string, Sink> = {
     console: getTableConsoleSink(),
+    // console: getConsoleSink(),
     noop: () => {},
   };
   if (otelEnabled) sinks.otel = getOpenTelemetrySink();

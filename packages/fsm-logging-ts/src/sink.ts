@@ -69,21 +69,62 @@ function renderPayload({ value, mode, columns }: RenderPayload): void {
   renderAuto(value, columns);
 }
 
+function isPrimitive(v: unknown): boolean {
+  return v === null || (typeof v !== "object" && typeof v !== "function");
+}
+
+// Property names referenced as `{placeholder}` in a string message template, so
+// the sink can skip properties already interpolated into the message line
+// (e.g. `{error}` in "failed: {error}"). LogTape looks up the whole trimmed
+// placeholder text as a property key, so we match that verbatim. Tagged-
+// template rawMessage has no named placeholders — nothing to skip.
+function interpolatedKeys(
+  rawMessage: string | TemplateStringsArray,
+): Set<string> {
+  if (typeof rawMessage !== "string") return new Set();
+  const keys = new Set<string>();
+  for (const match of rawMessage.matchAll(/\{([^{}]+)\}/g)) {
+    keys.add(match[1].trim());
+  }
+  return keys;
+}
+
 // A console sink that prints the formatted message line for every record, then
-// — when a value was attached via table()/dir()/inspect() — renders it in the
-// most readable shape beneath the line. On a non-TTY the value is emitted as a
-// single JSON line instead, so log files/aggregators stay greppable and lose
-// nothing.
+// renders attached data in the most readable shape beneath it:
+//
+//  - Explicit: a value attached via table()/dir()/inspect() (the RENDER_KEY
+//    payload) is rendered in the requested/auto mode.
+//  - Auto: any *extra* property — one whose value is a non-primitive (array or
+//    object) and that was NOT interpolated into the message template — is
+//    rendered with its key as a label, using the same shape decision as
+//    inspect(). This lets you write `logger.info("Results ({n}):", { n, rows })`
+//    and get a table for `rows` without wrapping it in a helper. Scalars are
+//    left to the message template (show them via `{placeholder}`).
+//
+// Both are TTY-only. On a non-TTY the explicit payload is emitted as a single
+// JSON line (greppable); extra properties stay in the record for structured
+// sinks (OTel/files) and are not echoed.
 export function getTableConsoleSink(): Sink {
   return (record: LogRecord) => {
     console.log(formatLine(record));
 
-    const payload = record.properties?.[RENDER_KEY] as
-      | RenderPayload
-      | undefined;
-    if (!payload) return;
+    const props = record.properties;
+    if (!props) return;
 
-    if (isTerminal) renderPayload(payload);
-    else console.log(JSON.stringify(payload.value));
+    const payload = props[RENDER_KEY] as RenderPayload | undefined;
+    if (payload) {
+      if (isTerminal) renderPayload(payload);
+      else console.log(JSON.stringify(payload.value));
+    }
+
+    if (!isTerminal) return;
+    const interpolated = interpolatedKeys(record.rawMessage);
+    for (const [key, value] of Object.entries(props)) {
+      if (key === RENDER_KEY || interpolated.has(key) || isPrimitive(value)) {
+        continue;
+      }
+      console.log(key);
+      renderAuto(value);
+    }
   };
 }
