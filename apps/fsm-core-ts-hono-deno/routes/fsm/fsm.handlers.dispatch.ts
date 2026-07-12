@@ -72,38 +72,39 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> =
 
 // resumeViaDispatch: single PG call — resume_event_for_fsm_worker_v2 looks up
 // fsm_name/version, inserts into fsm_dispatch_queue, and notifies the scheduler.
-export const resumeViaDispatch: AppRouteHandler<ResumeViaDispatchRoute> =
-  async (c) => {
-    const db = c.get("db");
-    const deps = { db, useSupabase: false };
-    const body = c.req.valid("json");
-    const queue = body.queue;
+// Cast bridges the Hono jsr-vs-npm dual-package handler types; the RHS
+// annotation keeps `c` (and c.req.valid) fully typed.
+export const resumeViaDispatch = (async (c) => {
+  const db = c.get("db");
+  const deps = { db, useSupabase: false };
+  const body = c.req.valid("json");
+  const queue = body.queue;
 
-    try {
-      if (!queue) {
-        return c.json(
-          { error: "Missing queue parameter" },
-          HttpStatusCodes.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      const result = await resumeEventForFsmWorker(deps, queue);
-
-      if (result.status === "fsm_not_found") {
-        return c.json(
-          { error: "Invalid queue id — FSM instance not found" },
-          HttpStatusCodes.NOT_FOUND,
-        );
-      }
-
-      return c.json({ data: result }, HttpStatusCodes.OK);
-    } catch (_err) {
-      logger.error("Error in resumeViaDispatch handler: {error}", {
-        error: _err,
-      });
+  try {
+    if (!queue) {
       return c.json(
-        { error: "Unexpected error" },
+        { error: "Missing queue parameter" },
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
-  };
+
+    const result = await resumeEventForFsmWorker(deps, queue);
+
+    if (result.status === "fsm_not_found") {
+      return c.json(
+        { error: "Invalid queue id — FSM instance not found" },
+        HttpStatusCodes.NOT_FOUND,
+      );
+    }
+
+    return c.json({ data: result }, HttpStatusCodes.OK);
+  } catch (_err) {
+    logger.error("Error in resumeViaDispatch handler: {error}", {
+      error: _err,
+    });
+    return c.json(
+      { error: "Unexpected error" },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR,
+    );
+  }
+}) as AppRouteHandler<ResumeViaDispatchRoute>;

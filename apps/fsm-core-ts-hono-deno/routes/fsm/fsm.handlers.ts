@@ -23,6 +23,13 @@ import {
 
 const logger = getLogger(["@pgfsm/api", "fsm"]);
 
+// Cast bridges the Hono jsr-vs-npm dual-package types and sidesteps the
+// zod-openapi deep-instantiation blowup (TS2589); the RHS annotation keeps
+// `c` fully typed.
+// @ts-expect-error Hono jsr-vs-npm dual-package + zod-openapi deep response
+// union trips TS2589/TS2322 on the handler assignment. Suppressed here; the body
+// stays fully typed and this directive self-clears once the Hono packages are
+// aligned to one registry.
 export const list: AppRouteHandler<ListRoute> = async (c) => {
   const supabase = getSupabase(c);
   const db = c.get("db");
@@ -39,7 +46,7 @@ export const getOne: AppRouteHandler<GetOneRoute> = async (c) => {
   const { id } = c.req.valid("param");
 
   try {
-    const result = await getFsmDataResolveStateValue(deps, id);
+    const result = await getFsmDataResolveStateValue(deps, String(id));
     if (!result) {
       return c.json(
         { message: "FSM instance not found" },

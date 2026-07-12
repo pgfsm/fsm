@@ -1,4 +1,6 @@
-export { configureDbLogger, type LogLevel } from "./logger.ts";
+// @pgfsm/db is a library: it only calls getLogger([CATEGORY.db, ...]). Logging
+// is configured once by the host process (see @pgfsm/logging). No configure()
+// or sink is exported from here by design.
 // Expose all methods from db implementation
 export * from "./const.ts";
 export * from "./pg-client.ts";

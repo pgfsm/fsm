@@ -39,7 +39,13 @@ export const supabaseMiddleware = (): MiddlewareHandler => {
         getAll() {
           return parseCookieHeader(c.req.header("Cookie") ?? "");
         },
-        setAll(cookiesToSet) {
+        setAll(
+          cookiesToSet: {
+            name: string;
+            value: string;
+            options?: Record<string, unknown>;
+          }[],
+        ) {
           cookiesToSet.forEach(({ name, value, options }) =>
             setCookie(c, name, value, options)
           );
@@ -47,7 +53,7 @@ export const supabaseMiddleware = (): MiddlewareHandler => {
       },
     });
 
-    c.set("supabase", supabase as SupabaseClient<Database>);
+    c.set("supabase", supabase as unknown as SupabaseClient<Database>);
 
     await next();
   };

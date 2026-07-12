@@ -1,5 +1,5 @@
 import type { ErrorHandler } from "hono";
-import type { StatusCode } from "hono/utils/http-status";
+import type { ContentfulStatusCode, StatusCode } from "hono/utils/http-status";
 
 import { INTERNAL_SERVER_ERROR, OK } from "../http-status-codes.ts";
 
@@ -18,7 +18,9 @@ const onError: ErrorHandler = (err, c) => {
 
       stack: env === "production" ? undefined : err.stack,
     },
-    statusCode,
+    // c.json requires a contentful (body-bearing) status; statusCode is a
+    // broader StatusCode union in this vendored middleware.
+    statusCode as ContentfulStatusCode,
   );
 };
 

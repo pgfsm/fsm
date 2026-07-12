@@ -15,12 +15,15 @@ export default function configureOpenAPI(app: AppOpenAPI, basePath = "") {
     servers: [{ url: prefixed || "/" }],
   });
 
-  app.get("/docs", (c) => {
-    return apiReference({
+  app.get(
+    "/docs",
+    apiReference({
       theme: "kepler",
       layout: "classic",
       defaultHttpClient: { targetKey: "js", clientKey: "fetch" },
-      spec: { url: specUrl },
-    })(c);
-  });
+      // @scalar/hono-api-reference v0.9 takes `url` directly (the old
+      // `spec: { url }` wrapper was removed).
+      url: specUrl,
+    }),
+  );
 }

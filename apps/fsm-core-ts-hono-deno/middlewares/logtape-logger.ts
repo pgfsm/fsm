@@ -31,5 +31,8 @@ export function logtapeLogger(): MiddlewareHandler {
     },
 
     skip: (c) => c.req.path === "/favicon.ico",
-  });
+    // @logtape/hono resolves Hono from jsr (@hono/hono) while this app uses the
+    // npm `hono` build; the MiddlewareHandler types are structurally identical
+    // but nominally distinct across registries, so bridge them here.
+  }) as unknown as MiddlewareHandler;
 }

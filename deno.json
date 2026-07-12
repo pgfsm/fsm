@@ -1,6 +1,7 @@
 {
   "workspace": [
     "apps/fsm-core-example",
+    "packages/fsm-logging-ts",
     "packages/fsm-core-db-ts",
     "apps/fsm-core-worker-ts",
     "apps/fsm-core-ts-hono-deno",

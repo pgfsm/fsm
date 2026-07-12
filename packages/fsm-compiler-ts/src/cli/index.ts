@@ -219,7 +219,8 @@ async function buildDeps(connectionString?: string) {
     Deno.exit(1);
   }
   const { Pool } = await import("pg");
-  return { db: new Pool({ connectionString: dbUrl }) };
+  // CLI talks to Postgres directly (no Supabase client), so useSupabase: false.
+  return { db: new Pool({ connectionString: dbUrl }), useSupabase: false };
 }
 
 try {

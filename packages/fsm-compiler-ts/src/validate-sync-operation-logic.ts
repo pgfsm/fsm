@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { table } from "@pgfsm/logging";
 
 const logger = getLogger(["@pgfsm/compiler", "validate"]);
 
@@ -275,8 +276,18 @@ export async function validateSyncOperationFromFolders(
         }
       }
     }
-    logger.info("All folder validation results: {results}", {
-      results: allFolderResults,
+    // table() drives the TTY console.table; the column list keeps it readable by
+    // showing only these scalar columns of the rich result objects.
+    logger.info("All folder validation results ({count}):", {
+      count: allFolderResults.length,
+      ...table(allFolderResults, [
+        "fsmName",
+        "fsmVersion",
+        "fsmType",
+        "fsmJsonPresent",
+        "fsmJsonFollowSchema",
+        "isFsmModuleVerified",
+      ]),
     });
   } catch (err) {
     logger.error("Error occurred while reading directory {path}: {error}", {
