@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Security vulnerability
+    url: https://github.com/pgfsm/fsm/blob/main/SECURITY.md
+    about: Please report security vulnerabilities privately following our security policy — never in a public issue.
+  - name: 💬 Questions & discussion
+    url: https://github.com/pgfsm/fsm/discussions
+    about: Ask questions about FSM definitions, execution models, or deployment here.

@@ -1,0 +1,154 @@
+name: "🐛 Bug Report"
+description: Report a defect in the FSM framework — API server, compilers, database layer, or PostgreSQL extension.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below —
+        the component and execution-model fields drive automatic labeling and routing.
+
+        > ⚠️ **Security vulnerabilities:** do **not** file them here. Follow the process in [SECURITY.md](../../SECURITY.md).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I have searched the existing issues and this bug has not been reported yet.
+          required: true
+        - label: I can reproduce this on the latest `main` branch.
+          required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the framework is affected?
+      options:
+        - API server (apps/fsm-core-ts-hono-deno)
+        - FSM compiler — TypeScript (packages/fsm-compiler-ts)
+        - FSM compiler — Python (packages/fsm-compiler-py)
+        - Database migrations / Supabase (packages/database-src)
+        - PostgreSQL extension — Rust/pgrx (packages/database-src-extension)
+        - DB client helpers — TypeScript (packages/fsm-core-db-ts)
+        - DB client helpers — Python (apps/fsm-core-db-py)
+        - Worker / queue (pgmq, fsmworker)
+        - Logging (@pgfsm/logging)
+        - Example FSM definitions (apps/fsm-core-example)
+        - Documentation
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: execution-model
+    attributes:
+      label: Execution model
+      description: Which FSM execution model were you using when the bug occurred?
+      options:
+        - Direct
+        - Worker-based (pgmq queue)
+        - Promise / callback-based
+        - Not applicable
+    validations:
+      required: true
+
+  - type: dropdown
+    id: db-type
+    attributes:
+      label: DB_TYPE configuration
+      description: Value of the `DB_TYPE` environment variable, if relevant.
+      options:
+        - postgres
+        - supabase
+        - supabase_and_postgres
+        - Not applicable
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How badly does this affect you?
+      options:
+        - "Critical — data loss, corruption, or stuck FSM instances"
+        - "High — a core workflow is broken with no workaround"
+        - "Medium — broken behavior, but a workaround exists"
+        - "Low — cosmetic, docs, or minor annoyance"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug — actual behavior vs. expected behavior.
+      placeholder: |
+        When I send an event to an FSM instance via POST /fsm/send while a worker holds the advisory lock, the API returns 500 instead of queueing the event...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps. If the bug involves a specific FSM definition, include the relevant `fsm.json` excerpt below.
+      placeholder: |
+        1. Start local Supabase: `npm run supabase:start`
+        2. Start the API server: `deno run --allow-all --env-file=.env main.ts`
+        3. Create an FSM instance: `curl -X POST ...`
+        4. Send event `...`
+        5. Observe `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: fsm-definition
+    attributes:
+      label: FSM definition (if relevant)
+      description: The `fsm.json` / `xstate-fsm.json` excerpt needed to reproduce. Will be rendered as JSON automatically.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Pino/API logs, PostgreSQL logs, or compiler output. Will be rendered as shell automatically — no backticks needed.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Runtime and tool versions (see `.prototools` for pinned versions).
+      placeholder: |
+        - OS: macOS 15.3 / Ubuntu 24.04
+        - Deno: 2.8.1 (`deno --version`)
+        - Node: 22.16.0 (`node --version`, only for packages/database-src)
+        - Rust: 1.95.0 (`rustc --version`, only for the pgrx extension)
+        - PostgreSQL / Supabase CLI version:
+        - Commit SHA: (`git rev-parse --short HEAD`)
+      value: |
+        - OS:
+        - Deno:
+        - Node:
+        - Rust:
+        - PostgreSQL / Supabase CLI:
+        - Commit SHA:
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else — screenshots, related issues, hypotheses about the cause.
+    validations:
+      required: false

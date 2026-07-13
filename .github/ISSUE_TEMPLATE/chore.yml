@@ -1,0 +1,56 @@
+name: "🧹 Chore / Maintenance"
+description: Internal maintenance task — CI/CD, refactoring, tooling, or cleanup. Not for bugs or features.
+title: "[Chore]: "
+labels: ["chore", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For maintenance work that is neither a bug nor a feature.
+        Dependency bumps are handled automatically by Renovate — no need to file them here.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the framework does this touch?
+      options:
+        - API server (apps/fsm-core-ts-hono-deno)
+        - FSM compiler — TypeScript (packages/fsm-compiler-ts)
+        - FSM compiler — Python (packages/fsm-compiler-py)
+        - Database migrations / Supabase (packages/database-src)
+        - PostgreSQL extension — Rust/pgrx (packages/database-src-extension)
+        - DB client helpers — TypeScript (packages/fsm-core-db-ts)
+        - DB client helpers — Python (apps/fsm-core-db-py)
+        - Worker / queue (pgmq, fsmworker)
+        - Logging (@pgfsm/logging)
+        - Example FSM definitions (apps/fsm-core-example)
+        - Documentation
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chore-type
+    attributes:
+      label: Chore type
+      description: What kind of maintenance is this?
+      options:
+        - CI/CD & workflows
+        - Refactoring
+        - Tooling & developer environment
+        - Cleanup / dead code removal
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs doing, and why now? Include acceptance criteria if the "done" state isn't obvious.
+      placeholder: |
+        Remove old_README.md from the repo root — it has been superseded by README.md
+        and still shows up in search results...
+    validations:
+      required: true

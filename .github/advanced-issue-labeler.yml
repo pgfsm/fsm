@@ -1,0 +1,77 @@
+# Maps issue-form dropdown answers to labels.
+# Consumed by .github/workflows/issue-labeler.yml
+# (redhat-plumbers-in-action/advanced-issue-labeler).
+#
+# `keys` must exactly match the dropdown option strings in
+# .github/ISSUE_TEMPLATE/*.yml — update both together.
+
+policy:
+  - template: [bug_report.yml, feature_request.yml, chore.yml]
+    section:
+      - id: [component]
+        block-list: []
+        label:
+          - name: "area: api-server"
+            keys: ["API server (apps/fsm-core-ts-hono-deno)"]
+          - name: "area: compiler-ts"
+            keys: ["FSM compiler — TypeScript (packages/fsm-compiler-ts)"]
+          - name: "area: compiler-py"
+            keys: ["FSM compiler — Python (packages/fsm-compiler-py)"]
+          - name: "area: database"
+            keys: ["Database migrations / Supabase (packages/database-src)"]
+          - name: "area: pg-extension"
+            keys: [
+              "PostgreSQL extension — Rust/pgrx (packages/database-src-extension)",
+            ]
+          - name: "area: db-client-ts"
+            keys: ["DB client helpers — TypeScript (packages/fsm-core-db-ts)"]
+          - name: "area: db-client-py"
+            keys: ["DB client helpers — Python (apps/fsm-core-db-py)"]
+          - name: "area: worker-queue"
+            keys: ["Worker / queue (pgmq, fsmworker)"]
+          - name: "area: logging"
+            keys: ["Logging (@pgfsm/logging)"]
+          - name: "area: examples"
+            keys: ["Example FSM definitions (apps/fsm-core-example)"]
+          - name: "area: docs"
+            keys: ["Documentation"]
+
+      - id: [execution-model]
+        block-list: ["Not applicable"]
+        label:
+          - name: "exec: direct"
+            keys: ["Direct"]
+          - name: "exec: worker"
+            keys: ["Worker-based (pgmq queue)"]
+          - name: "exec: promise"
+            keys: ["Promise / callback-based"]
+
+      - id: [severity]
+        block-list: []
+        label:
+          - name: "severity: critical"
+            keys: ["Critical — data loss, corruption, or stuck FSM instances"]
+          - name: "severity: high"
+            keys: ["High — a core workflow is broken with no workaround"]
+          - name: "severity: medium"
+            keys: ["Medium — broken behavior, but a workaround exists"]
+          - name: "severity: low"
+            keys: ["Low — cosmetic, docs, or minor annoyance"]
+
+      - id: [chore-type]
+        block-list: ["Other"]
+        label:
+          - name: "chore: ci-cd"
+            keys: ["CI/CD & workflows"]
+          - name: "chore: refactoring"
+            keys: ["Refactoring"]
+          - name: "chore: tooling"
+            keys: ["Tooling & developer environment"]
+          - name: "chore: cleanup"
+            keys: ["Cleanup / dead code removal"]
+
+      - id: [breaking]
+        block-list: ["No — purely additive", "Unsure"]
+        label:
+          - name: "breaking-change"
+            keys: ["Yes — breaking change"]

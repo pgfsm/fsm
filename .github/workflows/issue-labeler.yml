@@ -1,0 +1,70 @@
+name: Issue Labeler
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # The issue forms apply "bug" / "enhancement" statically; these jobs parse
+  # the form answers and add area/exec/severity labels from the policy in
+  # .github/advanced-issue-labeler.yml.
+  label-bug-report:
+    if: contains(github.event.issue.labels.*.name, 'bug')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse issue form
+        id: issue-parser
+        uses: stefanbuck/github-issue-parser@v3
+        with:
+          template-path: .github/ISSUE_TEMPLATE/bug_report.yml
+
+      - name: Apply labels from form inputs
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        with:
+          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
+          template: bug_report.yml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  label-feature-request:
+    if: contains(github.event.issue.labels.*.name, 'enhancement')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse issue form
+        id: issue-parser
+        uses: stefanbuck/github-issue-parser@v3
+        with:
+          template-path: .github/ISSUE_TEMPLATE/feature_request.yml
+
+      - name: Apply labels from form inputs
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        with:
+          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
+          template: feature_request.yml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  label-chore:
+    if: contains(github.event.issue.labels.*.name, 'chore')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse issue form
+        id: issue-parser
+        uses: stefanbuck/github-issue-parser@v3
+        with:
+          template-path: .github/ISSUE_TEMPLATE/chore.yml
+
+      - name: Apply labels from form inputs
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        with:
+          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
+          template: chore.yml
+          token: ${{ secrets.GITHUB_TOKEN }}
