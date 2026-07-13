@@ -49,3 +49,9 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# --- Claude Code ---
+.claude/settings.local.json
+.claude/.current-session-id
+CLAUDE.local.md
+.claude/worktrees/
