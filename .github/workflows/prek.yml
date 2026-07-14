@@ -13,15 +13,19 @@ jobs:
 
       # prek.toml's deno-fmt / cargo-fmt hooks are language = "system": they call
       # `deno` / `cargo` directly, so the pinned toolchains must be on PATH.
-      # Versions come from the repo pins, not this file: setup-toolchain installs
-      # proto and runs `proto install` against the root .prototools (Deno), and
-      # the bare `rustup toolchain install` reads the root rust-toolchain.toml
-      # (Rust has no proto shims — proto delegates it to rustup).
+      # Versions come from the repo pins, not this file: the bare
+      # `rustup toolchain install` reads the root rust-toolchain.toml (Rust has
+      # no proto shims — proto delegates it to rustup), and setup-toolchain
+      # installs proto and runs `proto install` against the root .prototools
+      # (Deno). Rust runs first: proto must never be the one creating the
+      # toolchain (its native rust install once left a partial toolchain with
+      # no cargo — see detect-strategy in .prototools). The version check fails
+      # fast, with a clearer error than the cargo-fmt hook would give.
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install && cargo fmt --version
+
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
-
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        run: rustup toolchain install
 
       - uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d # v2.0.4
