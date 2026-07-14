@@ -24,15 +24,16 @@ jobs:
         uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         with:
+          # Signatures live in this repo (cla-signatures branch), so the
+          # default GITHUB_TOKEN suffices. Storing them in a different repo
+          # would need remote-organization-name/remote-repository-name plus a
+          # PERSONAL_ACCESS_TOKEN secret with repo scope.
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/${{ github.repository }}/blob/main/CLA.md
           branch: cla-signatures
           allowlist: nirajkashyap
 
-          remote-organization-name: pgfsm
-          remote-repository-name: fsm
           create-file-commit-message: "docs: store CLA signatures"
           signed-commit-message: "docs: $contributorName has signed the CLA in $owner/$repo#$pullRequestNo"
           custom-notsigned-prcomment: |
