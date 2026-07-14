@@ -13,10 +13,11 @@ models (direct, worker-based, promise-based).
 ## Session Workflow
 
 The session protocol — the session-type gate (explore / design-arch /
-feature-bug-chore), the spec-driven design path, the issue-driven work path, and
-the multi-agent coordination rules — is defined in `AGENTS.md` and applies to
-every coding agent, Claude Code included. Follow it exactly; the full text is
-imported below. For design/architecture sessions, use the `/design-spec` skill.
+spec-to-tickets / feature-bug-chore), the spec-driven design path, the
+spec-to-tickets path, the issue-driven work path, and the multi-agent
+coordination rules — is defined in `AGENTS.md` and applies to every coding
+agent, Claude Code included. Follow it exactly; the full text is imported below.
+For design/architecture sessions, use the `/design-spec` skill.
 
 @AGENTS.md
 
