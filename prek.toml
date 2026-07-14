@@ -12,6 +12,8 @@
 default_install_hook_types = ["pre-commit", "commit-msg"]
 
 # Secret scanning — fast, catches credentials before they ever leave the machine.
+# The version here must match GITLEAKS_VERSION in
+# .github/workflows/gitleaks.yml (the CI full-history scan) — keep in sync.
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
 rev = "v8.30.1"
