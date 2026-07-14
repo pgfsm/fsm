@@ -1,0 +1,19 @@
+# Single source of truth for pinned toolchain versions. Package directories
+# inherit these via proto's upward file resolution; a package may still pin
+# its own tools (packages/database-src pins node this way).
+#
+# Rust is intentionally NOT pinned here: proto delegates Rust to rustup and
+# creates no cargo/rustc shims, so the pin lives in rust-toolchain.toml where
+# rustup, cargo, and proto all read it.
+#
+# CI (prek.yml, ci.yml) installs from these files via moonrepo/setup-toolchain
+# and a bare `rustup toolchain install` — never hardcode versions in workflows.
+proto = "0.55.4"
+deno = "2.8.1"
+
+# only-prototools stops proto from detecting tools out of ecosystem files —
+# without it, proto picks up Rust from rust-toolchain.toml and "installs" it
+# natively, which in CI produced a partial toolchain (no cargo component) that
+# masked the real `rustup toolchain install`. Rust is rustup's job here.
+[settings]
+detect-strategy = "only-prototools"

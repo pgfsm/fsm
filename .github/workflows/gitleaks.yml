@@ -1,0 +1,40 @@
+# CI-side secret scanning — the independent backstop for the gitleaks prek
+# hook (prek.toml), which only scans files being committed and only runs for
+# contributors who ran `prek install`. This job checks out the full history
+# (fetch-depth: 0), so a secret that was committed and later "removed" still
+# fails the scan. The repo's .gitleaks.toml allowlist is picked up
+# automatically.
+#
+# Runs the gitleaks CLI directly instead of gitleaks/gitleaks-action: the
+# action requires a paid GITLEAKS_LICENSE for organization repos, while the
+# CLI is free (MIT). GITLEAKS_VERSION must match the rev pinned in prek.toml —
+# keep the two in sync.
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # full history — scan past commits, not just the tree
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan full git history
+        run: ./gitleaks git --redact --verbose .

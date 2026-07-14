@@ -1,0 +1,50 @@
+# Server-side enforcement of the AGENTS.md workflow conventions. The prek git
+# hooks check the same invariants locally; this catches anyone (human or
+# coding agent) who skipped `prek install`. Make this a required check in
+# branch protection so it actually gates merges.
+name: PR Lint
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    # Renovate manages its own PRs; the issue-linkage convention applies to
+    # human/agent work only.
+    if: "!startsWith(github.head_ref, 'renovate/')"
+    runs-on: ubuntu-latest
+    env:
+      HEAD_REF: ${{ github.head_ref }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+    steps:
+      - name: Head branch follows naming convention
+        run: |
+          if printf '%s' "$HEAD_REF" | grep -Eq '^(feat|bug|chore|design)/[0-9]+-[a-z0-9][a-z0-9-]*$'; then
+            echo "OK: $HEAD_REF"
+          else
+            echo "::error::Branch '$HEAD_REF' does not match '<type>/<issue-number>-short-slug' (type: feat|bug|chore|design). See AGENTS.md."
+            exit 1
+          fi
+
+      - name: PR body closes an issue
+        run: |
+          if printf '%s' "$PR_BODY" | grep -Eiq '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+'; then
+            echo "OK: closing keyword found"
+          else
+            echo "::error::PR body must contain 'Closes #<issue>' (or Fixes/Resolves) so merging auto-closes the issue. See AGENTS.md."
+            exit 1
+          fi
+
+      - name: Design PRs link their spec
+        if: startsWith(github.head_ref, 'design/')
+        run: |
+          if printf '%s' "$PR_BODY" | grep -Eq 'Spec:[[:space:]]*docs/specs/spec-[0-9]+[a-z0-9-]*\.md'; then
+            echo "OK: spec link found"
+          else
+            echo "::error::Design PRs must contain a 'Spec: docs/specs/spec-NNN-<slug>.md' line in the body. See AGENTS.md."
+            exit 1
+          fi

@@ -1,0 +1,9 @@
+# Pinned Rust toolchain for packages/database-src-extension/fsm_core — the
+# only crate in the repo. Lives at the root so rustup's upward search finds it
+# from any working directory (prek's cargo-fmt hook runs at the repo root).
+# rustup-native on purpose: `cargo` proxies, CI's bare `rustup toolchain
+# install`, and proto (which delegates Rust to rustup) all resolve this file.
+[toolchain]
+channel = "1.95.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
