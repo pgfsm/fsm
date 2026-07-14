@@ -10,76 +10,15 @@ exposed via a Hono/Deno REST API. FSMs are defined as JSON schemas, compiled
 into database objects, and executed through the API with multiple execution
 models (direct, worker-based, promise-based).
 
-## Session Workflow (GitHub Issues)
+## Session Workflow
 
-At the start of every session, before doing anything else, ask:
+The session protocol — the session-type gate (explore / design-arch /
+feature-bug-chore), the spec-driven design path, the issue-driven work path, and
+the multi-agent coordination rules — is defined in `AGENTS.md` and applies to
+every coding agent, Claude Code included. Follow it exactly; the full text is
+imported below. For design/architecture sessions, use the `/design-spec` skill.
 
-> "What are we doing in this session today? a) Explore / understand the
-> codebase, experiment, or general Q&A b) Working on this codebase (feature,
-> bug, or chore)"
-
-### If (a) — explore / experiment / Q&A
-
-Continue normally. Don't touch GitHub issues. Code changes are fine here —
-experiments and throwaway work don't need an issue.
-
-### If (b) — working on the codebase
-
-1. Show the repo link and the issue lists from session-start context (issues
-   assigned to the user, plus unassigned ones).
-2. Ask: "Which issue number are you working on? Or, if it's not listed, say 'not
-   in list' and I'll help you create one."
-
-#### If they give an issue number
-
-- Look it up to confirm it exists and read details: `gh issue view <n>`
-- Assign it: `gh issue edit <n> --add-assignee @me`
-- Link this session:
-  `gh issue comment <n> --body "🤖 Claude session linked: $(cat .claude/.current-session-id)"`
-- Confirm the type from its labels; if missing, ask and add one (**feature =
-  `enhancement`**): `gh issue edit <n> --add-label <bug|enhancement|chore>`
-
-#### If they say "not in list" (or the number doesn't exist)
-
-Ask for:
-
-- Type: bug, feature (label: `enhancement`), or chore
-- A short title
-- A one-paragraph description
-- For bugs: repro steps and expected vs. actual behavior
-- For features: the user-facing outcome and any acceptance criteria
-- For chores: why it's needed and what "done" looks like
-
-Then create, assign, and link:
-
-```bash
-gh issue create --title "<title>" --body "<body>" --label <type> --assignee @me
-gh issue comment <new-n> --body "🤖 Claude session linked: $(cat .claude/.current-session-id)"
-```
-
-Issues created via `gh` bypass the issue forms, so also add the matching
-`area: *` label — the component→label mapping lives in
-`.github/advanced-issue-labeler.yml`.
-
-### Conventions
-
-- Branch: `<type>/<issue-number>-short-slug` (e.g.
-  `bug/142-worker-lock-timeout`)
-- Commits reference the issue: `fix(worker): handle lock timeout (#142)`
-- PRs include `Closes #<number>` so merging auto-closes the issue.
-
-### Branch vs worktree
-
-- Default to working directly on a branch in the current directory.
-- If the user mentions another Claude session is already active on this repo, or
-  explicitly asks for isolation/parallel work, create a worktree instead:
-  `git worktree add .claude/worktrees/<type>-<issue-number> -b <type>/<issue-number>-slug`
-- Tell the user the worktree path so they can open a second terminal there if
-  needed.
-- Caveat for parallel worktrees in this repo: the API dev server (port 9999) and
-  local Supabase are shared services. Only one worktree can run them at a time —
-  coordinate with the user before starting either, or change `PORT` in that
-  worktree's `.env`.
+@AGENTS.md
 
 ## Language & Runtime Management
 

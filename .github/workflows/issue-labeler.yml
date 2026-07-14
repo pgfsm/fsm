@@ -50,6 +50,25 @@ jobs:
           template: feature_request.yml
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  label-design:
+    if: contains(github.event.issue.labels.*.name, 'design')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse issue form
+        id: issue-parser
+        uses: stefanbuck/github-issue-parser@v3
+        with:
+          template-path: .github/ISSUE_TEMPLATE/design_request.yml
+
+      - name: Apply labels from form inputs
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        with:
+          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
+          template: design_request.yml
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   label-chore:
     if: contains(github.event.issue.labels.*.name, 'chore')
     runs-on: ubuntu-latest

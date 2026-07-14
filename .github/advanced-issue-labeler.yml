@@ -6,7 +6,12 @@
 # .github/ISSUE_TEMPLATE/*.yml — update both together.
 
 policy:
-  - template: [bug_report.yml, feature_request.yml, chore.yml]
+  - template: [
+      bug_report.yml,
+      feature_request.yml,
+      chore.yml,
+      design_request.yml,
+    ]
     section:
       - id: [component]
         block-list: []

@@ -1,0 +1,69 @@
+name: "📐 Design / Architecture"
+description: Propose a design or architecture decision — new component, cross-cutting change, or execution-model decision. Produces a spec, not code.
+title: "[Design]: "
+labels: ["design", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Design work follows the spec-driven path in AGENTS.md: this issue tracks
+        a spec in `docs/specs/` that gets reviewed in a spec-only PR **before**
+        any implementation starts. For straightforward features, use the
+        feature request form instead.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the framework does this touch?
+      options:
+        - API server (apps/fsm-core-ts-hono-deno)
+        - FSM compiler — TypeScript (packages/fsm-compiler-ts)
+        - FSM compiler — Python (packages/fsm-compiler-py)
+        - Database migrations / Supabase (packages/database-src)
+        - PostgreSQL extension — Rust/pgrx (packages/database-src-extension)
+        - DB client helpers — TypeScript (packages/fsm-core-db-ts)
+        - DB client helpers — Python (apps/fsm-core-db-py)
+        - Worker / queue (pgmq, fsmworker)
+        - Logging (@pgfsm/logging)
+        - Example FSM definitions (apps/fsm-core-example)
+        - Documentation
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What breaks or is impossible today? Who is affected, and why does it need designing now?
+      placeholder: |
+        Promise actor workers can't be written in Python today because the
+        queue contract assumes Deno-side JSON serialization...
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Known constraints
+      description: What is fixed? Note any standing constraints from docs/kb/ or accepted ADRs this touches.
+    validations:
+      required: false
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options already considered
+      description: Rough sketches are fine — the spec process will expand these to at least two real options.
+    validations:
+      required: false
+
+  - type: input
+    id: spec
+    attributes:
+      label: Spec path
+      description: Filled in once the spec exists, e.g. docs/specs/spec-001-....md
+      placeholder: docs/specs/spec-NNN-short-slug.md
+    validations:
+      required: false

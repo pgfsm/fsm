@@ -1,3 +1,7 @@
+Closes #<!-- issue number — required; pr-lint enforces it -->
+
+<!-- Design PRs: also add a line "Spec: docs/specs/spec-NNN-slug.md" -->
+
 ## Summary
 
 <!-- Describe what this PR does and why. -->

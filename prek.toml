@@ -7,6 +7,10 @@
 #   - cdxgen/grype  -> network + whole-repo SBOM/CVE scan   => sbom.yml
 #   - REUSE lint    -> whole-repo license check             => reuse.yml
 
+# Install both stages with a plain `prek install` (workflow hooks below need
+# the commit-msg stage).
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
 # Secret scanning — fast, catches credentials before they ever leave the machine.
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
@@ -35,4 +39,15 @@ hooks = [
   { id = "deno-fmt", name = "deno fmt", entry = "deno fmt --check", language = "system", pass_filenames = false, types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"] },
   # { id = "deno-lint", name = "deno lint", entry = "deno lint", language = "system", pass_filenames = true, types_or = ["ts", "tsx", "javascript", "jsx"] },
   { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --manifest-path packages/database-src-extension/fsm_core/Cargo.toml --all --check", language = "system", pass_filenames = false, files = '^packages/database-src-extension/fsm_core/.*\.rs$' },
+]
+
+# Workflow enforcement (AGENTS.md conventions) — binds every agent and human,
+# whichever coding tool produced the commit. Deno scripts for cross-platform
+# behavior (no shell assumptions); CI's pr-lint re-checks the same invariants
+# server-side for anyone who skipped `prek install`.
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "branch-name", name = "branch naming convention", entry = "deno run --allow-run=git scripts/git-hooks/check-branch-name.ts", language = "system", pass_filenames = false, always_run = true },
+  { id = "commit-msg-issue-ref", name = "commit references issue", entry = "deno run --allow-read --allow-run=git scripts/git-hooks/check-commit-msg.ts", language = "system", stages = ["commit-msg"] },
 ]
