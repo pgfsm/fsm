@@ -12,18 +12,19 @@ ecosystems.
 
 ## 1. Language & version management
 
-`proto` pins every language runtime to an exact version per package, ensuring
-all contributors and CI use identical toolchains across the three ecosystems.
+`proto` pins every language runtime to an exact version, ensuring all
+contributors and CI use identical toolchains across the three ecosystems.
 
-| Tool                                                  | Purpose                                        | Where                                                                        |
-| ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
-| [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions per package     | `.prototools` files (one per package)                                        |
-| **Deno** `2.8.1`                                      | Primary runtime — API server, compiler, worker | `apps/fsm-core-ts-hono-deno`, `apps/fsm-core-worker-ts`, `packages/fsm-*-ts` |
-| **Node** `22.16.0`                                    | Runs Supabase CLI tooling only                 | `packages/database-src`                                                      |
-| **Rust** `1.95.0`                                     | PostgreSQL extension                           | `packages/database-src-extension/fsm_core`                                   |
+| Tool                                                  | Purpose                                        | Pinned in                                                   |
+| ----------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
+| [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions                 | Root `.prototools` (packages inherit; may override)         |
+| **Deno** `2.8.1`                                      | Primary runtime — API server, compiler, worker | Root `.prototools`                                          |
+| **Node** `22.16.0`                                    | Runs Supabase CLI tooling only                 | `packages/database-src/.prototools`                         |
+| **Rust** `1.95.0`                                     | PostgreSQL extension                           | Root `rust-toolchain.toml` (proto delegates Rust to rustup) |
 
-> Versions are pinned in each package's `.prototools`; run `proto use` to
-> install them.
+> Run `proto use` to install the pinned versions. CI (`prek.yml`, `ci.yml`)
+> installs from the same files via `moonrepo/setup-toolchain` and a bare
+> `rustup toolchain install` — don't hardcode toolchain versions in workflows.
 
 ---
 

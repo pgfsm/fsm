@@ -23,7 +23,10 @@ imported below. For design/architecture sessions, use the `/design-spec` skill.
 ## Language & Runtime Management
 
 This repo uses [proto](https://moonrepo.dev/docs/proto/overview) to pin language
-versions. Check `.prototools` files for pinned versions. Key runtimes:
+versions. Deno is pinned in the root `.prototools`, Node in
+`packages/database-src/.prototools`, and Rust in the root `rust-toolchain.toml`
+(proto delegates Rust to rustup, which reads that file). CI installs from the
+same files — never hardcode toolchain versions in workflows. Key runtimes:
 
 - **Deno 2.8.1** — primary runtime for API server and compiler
 - **Node 22.16.0** — used only for `packages/database-src` (Supabase CLI)
