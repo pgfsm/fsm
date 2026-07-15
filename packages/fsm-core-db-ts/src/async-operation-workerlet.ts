@@ -30,7 +30,10 @@ export type AsyncOpDispatchEntry = {
 export function asyncOperationWorkerletNotifyChannel(
   workerletId: string,
 ): string {
-  return `async_operation_workerlet_work_${workerletId}`;
+  // Prefix must keep prefix + uuid within PostgreSQL's 63-byte channel-name
+  // limit (LISTEN silently truncates above it). Must match the pg_notify in
+  // fsm_core.async_operation_schedule_next_pending.
+  return `async_op_workerlet_work_${workerletId}`;
 }
 
 export async function registerAsyncOperationWorkerlet(

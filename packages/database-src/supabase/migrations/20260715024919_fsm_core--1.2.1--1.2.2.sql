@@ -1,19 +1,35 @@
--- fsm_core.async_operation_schedule_next_pending
--- Atomically claims the oldest pending dispatch entry, selects the best
--- available async-operation workerlet (filter: heartbeat fresh + supports this
--- specific async operation + has a free slot; score: most free slots), assigns
--- the entry, and notifies the workerlet via pg_notify — all in one transaction.
---
--- Returns TRUE if an entry was scheduled, FALSE if the queue is empty or
--- no workerlet has capacity. Safe to call from multiple scheduler replicas
--- concurrently — FOR UPDATE SKIP LOCKED prevents double-assignment.
+set check_function_bodies = off;
 
-CREATE OR REPLACE FUNCTION fsm_core.async_operation_schedule_next_pending(
-  input_stale_threshold_seconds int DEFAULT 30
-)
-RETURNS boolean
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION fsm_core.claim_scheduled_for_async_operation_workerlet(input_workerlet_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  WITH claimed AS (
+    DELETE FROM fsm_core.async_operation_instance_and_async_operation_workerlet
+    WHERE async_operation_instance_and_async_operation_workerlet_id = (
+      SELECT async_operation_instance_and_async_operation_workerlet_id
+      FROM fsm_core.async_operation_instance_and_async_operation_workerlet
+      WHERE status = 'scheduled'
+        AND async_operation_workerlet_id = input_workerlet_id
+      ORDER BY scheduled_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING *
+  )
+  SELECT row_to_json(claimed.*)::jsonb INTO v_result FROM claimed;
+  RETURN v_result;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION fsm_core.async_operation_schedule_next_pending(input_stale_threshold_seconds integer DEFAULT 30)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
   v_entry_id                  uuid;
   v_instance_id               uuid;
@@ -94,4 +110,52 @@ BEGIN
 
   RETURN true;
 END;
-$$;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION fsm_core.load_async_operation_meta_v2(input_async_operation_name text, input_async_operation_version text, input_async_operation_type text, input_async_operation_language text, input_parent_fsm_name text, input_parent_fsm_version text, input_updated_by_pid text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  v_result jsonb;
+BEGIN
+  INSERT INTO fsm_core.async_operation_meta (
+    async_operation_name,
+    async_operation_version,
+    async_operation_type,
+    async_operation_language,
+    parent_fsm_name,
+    parent_fsm_version,
+    updated_by_pid
+  ) VALUES (
+    input_async_operation_name,
+    input_async_operation_version,
+    input_async_operation_type,
+    input_async_operation_language,
+    input_parent_fsm_name,
+    input_parent_fsm_version,
+    input_updated_by_pid
+  )
+  ON CONFLICT ON CONSTRAINT async_operation_meta_unique
+  DO UPDATE SET
+    updated_at             = now(),
+    updated_by_pid         = input_updated_by_pid
+  RETURNING jsonb_build_object(
+    'async_operation_meta_id',async_operation_meta_id,
+    'async_operation_name',   async_operation_name,
+    'async_operation_version', async_operation_version,
+    'async_operation_type',   async_operation_type,
+    'async_operation_language', async_operation_language,
+    'parent_fsm_name',        parent_fsm_name,
+    'parent_fsm_version',     parent_fsm_version,
+    'updated_at',             updated_at,
+    'updated_by_pid',         updated_by_pid
+  ) INTO v_result;
+
+  RETURN v_result;
+END;
+$function$
+;
+
+
