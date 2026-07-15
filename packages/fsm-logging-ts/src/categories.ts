@@ -7,6 +7,7 @@ export const CATEGORY = {
   db: "@pgfsm/db",
   compiler: "@pgfsm/compiler",
   fsmlet: "@pgfsm/fsmlet",
+  scheduler: "@pgfsm/scheduler",
 } as const;
 
 export type Category = typeof CATEGORY[keyof typeof CATEGORY];

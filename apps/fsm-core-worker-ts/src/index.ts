@@ -41,6 +41,12 @@ export {
   SCHEDULER_NOTIFY_CHANNEL,
 } from "./fsmscheduler/fsmscheduler.ts";
 export {
+  ASYNC_OPERATION_SCHEDULER_NOTIFY_CHANNEL,
+  asyncOperationScheduleNextPending,
+  runAsyncOperationScheduler,
+} from "./asyncOperationScheduler/asyncOperationScheduler.ts";
+export type { AsyncOperationSchedulerOptions } from "./asyncOperationScheduler/asyncOperationScheduler.ts";
+export {
   deregisterFsmlet,
   fsmletHeartbeat,
   listActiveFsmlets,

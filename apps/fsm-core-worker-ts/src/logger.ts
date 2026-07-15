@@ -20,6 +20,7 @@ export async function configureWorkerLogger(
       [CATEGORY.worker]: lowestLevel,
       [CATEGORY.fsmlet]: lowestLevel,
       [CATEGORY.compiler]: lowestLevel,
+      [CATEGORY.scheduler]: lowestLevel,
     },
   });
 }
