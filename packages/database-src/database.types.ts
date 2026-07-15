@@ -728,6 +728,12 @@ export type Database = {
         };
         Returns: Json;
       };
+      claim_scheduled_for_async_operation_workerlet: {
+        Args: {
+          input_workerlet_id: string;
+        };
+        Returns: Json;
+      };
       claim_scheduled_for_fsmlet: {
         Args: {
           input_fsmlet_id: string;

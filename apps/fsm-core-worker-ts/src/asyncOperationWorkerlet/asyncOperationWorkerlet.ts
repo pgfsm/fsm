@@ -151,7 +151,7 @@ async function startPromiseWorkerForLang(
  *   1. validateAsyncOperationFromFoldersV2 to discover and verify actors.
  *   2. Load each verified async operation into async_operation_meta via loadAsyncOperation.
  *   3. Registers itself in async_operation_workerlet with the full supported-op list.
- *   4. Opens a dedicated LISTEN connection on async_operation_workerlet_work_<id>.
+ *   4. Opens a dedicated LISTEN connection on async_op_workerlet_work_<id>.
  *   5. On each notify: claimScheduledForAsyncOperationWorkerlet() atomically, then
  *      starts a long-running promise worker for that actor queue (one per queue).
  *   6. Heartbeat every 5 s + fallback poll every 30 s to catch missed notifications.
