@@ -21,12 +21,7 @@ import configureOpenAPI from "./configure-open-api.ts";
 import { logtapeLogger } from "./../middlewares/logtape-logger.ts";
 import { otelTrace } from "./../middlewares/otel-trace.ts";
 
-import type {
-  AppBindings,
-  AppOpenAPI,
-  FsmStartupConfig,
-  VerifiedFsmModule,
-} from "./types.ts";
+import type { AppBindings, AppOpenAPI, FsmStartupConfig } from "./types.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
@@ -47,7 +42,10 @@ export default async function createApp(
   basePath = "",
   fsmConfig?: FsmStartupConfig,
 ) {
-  const { pool, verifiedFsmModules, daemon } = await startFsmlet(
+  if (!fsmConfig) {
+    throw new Error("createApp: fsmConfig is required to start the fsmlet");
+  }
+  const { pool, verifiedFsmWithAsyncOps, daemon } = await startFsmlet(
     { connectionString: env.DATABASE_URL },
     fsmConfig,
     {
@@ -59,6 +57,11 @@ export default async function createApp(
       },
     },
   );
+  if (!pool) {
+    throw new Error(
+      "createApp: fsmConfig is required to start the fsmlet and obtain a DB pool",
+    );
+  }
   daemon.catch((err) =>
     logger.error("Dispatch daemon error: {error}", { error: err })
   );
@@ -90,7 +93,7 @@ export default async function createApp(
 
   app.use("*", (c, next) => {
     c.set("fsmConfig", fsmConfig);
-    c.set("verifiedFsmModules", verifiedFsmModules);
+    c.set("verifiedFsmModules", verifiedFsmWithAsyncOps);
     return next();
   });
 

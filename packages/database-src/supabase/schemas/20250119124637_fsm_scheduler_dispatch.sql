@@ -36,9 +36,11 @@ $$;
 
 -- fsm_core.enqueue_fsm_dispatch_v2
 -- Inserts a row into fsm_instance_and_fsm_workerlet and wakes the fsmscheduler via
--- pg_notify. Called from create_fsm_instance_from_name_v2, the API server,
--- and fsmctl for both 'start' (new instance) and 'resume' (existing instance
--- resuming after an await).
+-- pg_notify. Called internally by create_fsm_instance_from_name_v2 (for
+-- 'start', on new instances) and resume_event_for_fsm_worker_v2 (for
+-- 'resume', on existing instances) — application code (fsmctl, the API
+-- server) should go through those, not call this directly, to avoid
+-- double-enqueueing.
 CREATE OR REPLACE FUNCTION fsm_core.enqueue_fsm_dispatch_v2(
   input_instance_id   uuid,
   input_fsm_name      text,

@@ -14,10 +14,13 @@
     "xstate": "npm:xstate@^5.26.0"
   },
   "tasks": {
-    "dev": "deno run --allow-all --watch src/cli/index.ts",
-    "cli": "deno run --allow-all src/cli/index.ts",
-    "daemon": "deno run --allow-all src/cli/daemon.ts",
-    "ctl": "deno run --allow-all src/cli/ctl.ts",
+    "cli": "deno run --allow-all src/cli/fsmctl.ts",
+    "dev": "deno run --allow-all --watch src/cli/fsmctl.ts",
+    "async-operation-ctl": "deno run --allow-all src/cli/async-operation-ctl.ts",
+    "fsmlet": "deno run --allow-all src/cli/fsmlet.ts",
+    "async-operation-workerlet": "deno run --allow-all src/cli/async-operation-workerlet.ts",
+    "fsmscheduler": "deno run --allow-all src/cli/fsmscheduler.ts",
+    "async-operation-scheduler": "deno run --allow-all src/cli/async-operation-scheduler.ts",
     "check": "deno check src/index.ts"
   }
 }

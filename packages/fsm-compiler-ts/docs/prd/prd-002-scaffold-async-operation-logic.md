@@ -9,9 +9,10 @@ Partially implemented — see [Gaps](#gaps) and [TODO.md](../todo/TODO.md).
 
 Once an `fsm.json` exists, the compiler scaffolds **base (stub) code** for the
 machine's **async operation logic** — the actors named by each state's `invoke`
-objects. This is stage 2 of the FSM lifecycle, derived from §2 of the root
-[`README.md`](../../../../README.md). The developer fills in the generated
-stubs; the `asyncOperationlet` / promise worker later executes them.
+objects. This is part of §2 ("Scaffold FSM operation") of the root
+[`README.md`](../../../../README.md), the same section that covers sync
+operation-logic scaffolding (PRD-003). The developer fills in the generated
+stubs; the `asyncOperationWorkerlet` / promise worker later executes them.
 
 ## Background
 
@@ -30,8 +31,7 @@ its invoke object's `fsmLanguage` (`typescript`, `python`, `rust`, `go`).
 
 ## Goals
 
-- Generate one file per invoke object at
-  `<lang>/actors/<fsmType>_<fsmVersion>_<src>.<ext>`.
+- Generate one file per invoke object at `<lang>/actors/<src>/<src>.<ext>`.
 - Emit stubs whose signature matches how the worker actually invokes an actor.
 - Route each actor to its `fsmLanguage` folder
   (`typescript`/`python`/`rust`/`go`).
@@ -42,7 +42,7 @@ its invoke object's `fsmLanguage` (`typescript`, `python`, `rust`, `go`).
 - Sync operation logic — actions/guards/delays (covered by PRD-003).
 - Validating/loading the filled-in stubs (covered by
   [PRD-004](./prd-004-validate-async-operation-logic.md)).
-- Running actors — the `asyncOperationlet` / promise worker stage.
+- Running actors — the `asyncOperationWorkerlet` / promise worker stage.
 
 ## Requirements
 
@@ -56,11 +56,13 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 - Walks every versioned folder, reads `fsm.json`, extracts actor references via
   `extractFsmPluginRefs`, and writes **one file per invoke** at
-  `<lang>/actors/<fsmType>_<fsmVersion>_<src>.<ext>` (in the actor's
-  `fsmLanguage` folder). Each file exports one function named after the actor
-  `src`.
-- Deduplicates by language + `<fsmType>_<fsmVersion>_<src>` — actors differing
-  in type/version/src get their own files.
+  `<lang>/actors/<src>/<src>.<ext>` (a subfolder named after the actor `src`, in
+  the actor's `fsmLanguage` folder). Each file exports one function named after
+  the actor `src`.
+- Deduplicates by language + sanitized `src` (`${lang}/${src}`) — actors
+  differing in `src` get their own files. Note: this means two invokes that
+  share a `src` but differ in `fsmType`/`fsmVersion` currently collapse into the
+  same file (see [TODO.md](../todo/TODO.md), PRD-002 dedup-key gap).
 
 **Status:** ✅ Implemented — `generateAsyncOperationLogicFromFolders`
 (`src/generate-async-operation-logic.ts`) using shared templates in
