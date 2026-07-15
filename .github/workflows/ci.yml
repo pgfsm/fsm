@@ -40,8 +40,8 @@ jobs:
         run: deno test --allow-all packages/fsm-compiler-ts apps/fsm-core-ts-hono-deno/stoker-src
         continue-on-error: true
 
-  rust:
-    name: Rust (fmt · clippy)
+  rust-fmt:
+    name: Rust (fmt)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,6 +57,37 @@ jobs:
 
       - name: Format check
         run: cargo fmt --all --check
+
+  # Clippy is split from fmt because it alone needs the heavy pgrx toolchain
+  # below (PG 15 headers, cargo-pgrx, pgrx init) — fmt fails fast in parallel.
+  rust-clippy:
+    name: Rust (clippy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/database-src-extension/fsm_core
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install
+
+      # Caches the cargo registry and the crate's target dir, keyed on
+      # Cargo.lock + rustc version. Must run after the toolchain install.
+      - name: Cache cargo registry + target dir
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: packages/database-src-extension/fsm_core
+
+      # cargo-pgrx takes ~5 min to compile; cache the installed binary and
+      # skip the install step on a hit. Key includes the pinned version so a
+      # pgrx bump in Cargo.toml naturally invalidates it.
+      - name: Cache cargo-pgrx binary
+        id: cache-cargo-pgrx
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-pgrx
+          key: cargo-pgrx-0.18.1-${{ runner.os }}
 
       # pgrx's pg-sys build.rs generates bindings from a real PostgreSQL install,
       # so clippy/build need PG 15 dev headers + `cargo pgrx init` (writes
@@ -78,6 +109,7 @@ jobs:
 
       # cargo-pgrx must match the pinned pgrx = "=0.18.1" in Cargo.toml.
       - name: Install cargo-pgrx
+        if: steps.cache-cargo-pgrx.outputs.cache-hit != 'true'
         run: cargo install --locked cargo-pgrx@0.18.1
 
       # Point pgrx at the system PG 15 (fast path — avoids compiling PG from source).
