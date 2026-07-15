@@ -32,7 +32,9 @@ jobs:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/${{ github.repository }}/blob/main/CLA.md
           branch: cla-signatures
-          allowlist: nirajkashyap
+          # The allowlist match is case-sensitive against the GitHub login;
+          # keep both casings so a login-case mismatch never flags the owner.
+          allowlist: Nirajkashyap,nirajkashyap
 
           create-file-commit-message: "docs: store CLA signatures"
           signed-commit-message: "docs: $contributorName has signed the CLA in $owner/$repo#$pullRequestNo"
