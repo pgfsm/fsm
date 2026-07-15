@@ -6,11 +6,7 @@ import type {
   CreateAndDispatchRoute,
   ResumeViaDispatchRoute,
 } from "./fsm.routes.ts";
-import {
-  createFsmInstanceFromName,
-  enqueueDispatch,
-  resumeEventForFsmWorker,
-} from "@pgfsm/db";
+import { createFsmInstanceFromName, resumeEventForFsmWorker } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/api", "fsm.dispatch"]);
@@ -34,7 +30,9 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> =
         );
       }
 
-      // false = do not auto-enqueue to pgmq; we enqueue to fsm_dispatch_queue below.
+      // false = do not auto-create a pgmq queue; create_fsm_instance_from_name_v2
+      // already enqueues to fsm_dispatch_queue and notifies the fsmscheduler
+      // internally — no separate enqueueDispatch call needed here.
       const fsm_instance = await createFsmInstanceFromName(
         deps,
         input_fsm_name,
@@ -49,14 +47,6 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> =
           HttpStatusCodes.INTERNAL_SERVER_ERROR,
         );
       }
-
-      await enqueueDispatch(
-        deps,
-        fsm_instance.fsm_instance_id,
-        input_fsm_name,
-        input_fsm_version ?? "",
-        "start",
-      );
 
       return c.json({ data: { fsm_instance } }, HttpStatusCodes.OK);
     } catch (_err) {

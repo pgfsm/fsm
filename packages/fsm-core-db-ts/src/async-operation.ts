@@ -7,12 +7,43 @@ const logger = getLogger(["@pgfsm/db", "async-operation"]);
 
 const ASYNC_OP_DISPATCH_TABLE =
   `${FSM_SCHEMA}.async_operation_instance_and_async_operation_workerlet`;
+const ASYNC_OPERATION_META_TABLE = `${FSM_SCHEMA}.async_operation_meta`;
+const CREATE_ASYNC_OPERATION_INSTANCE_AND_NOTIFY_ASYNC_OPERATION_SCHEDULER_WORK_FN =
+  `${FSM_SCHEMA}.create_async_operation_instance_and_notify_async_operation_scheduler_work`;
 const ASYNC_OP_SCHEDULE_NEXT_PENDING_FN =
   `${FSM_SCHEMA}.async_operation_schedule_next_pending`;
 const CHECK_REGISTRY_FOR_ASYNC_ACTORS_FN =
   `${FSM_SCHEMA}.check_registry_for_async_actors`;
 const CHECK_REGISTRY_AND_WORKING_FOR_ASYNC_ACTORS_FN =
   `${FSM_SCHEMA}.check_registry_and_working_for_async_actors_for_fsm_instance_and_worklet`;
+
+export type AsyncOperationInstanceRow = {
+  async_operation_instance_and_async_operation_workerlet_id: string;
+  async_operation_instance_id: string;
+  async_operation_workerlet_id: string | null;
+  async_operation_name: string;
+  async_operation_version: string;
+  async_operation_type: string;
+  parent_fsm_name: string;
+  parent_fsm_version: string;
+  async_operation_language: string;
+  status: string;
+  created_at: string;
+  scheduled_at: string | null;
+};
+
+export type AsyncOperationMetaRow = {
+  async_operation_meta_id: string;
+  async_operation_name: string;
+  async_operation_type: string;
+  async_operation_version: string;
+  parent_fsm_name: string;
+  parent_fsm_version: string;
+  max_concurrency: number;
+  async_operation_language: string;
+  updated_at: string;
+  updated_by_pid: string;
+};
 
 export type AsyncActor = {
   src: string;
@@ -44,23 +75,17 @@ export type AsyncOperationDispatchInput = {
 };
 
 /**
+ * Thin wrapper around fsm_core.create_async_operation_instance_and_notify_async_operation_scheduler_work().
  * Inserts a pending dispatch entry into async_operation_instance_and_async_operation_workerlet
- * and wakes the async-operation scheduler via pg_notify — in a single atomic CTE query.
+ * and wakes the async-operation scheduler via pg_notify — insert + notify run
+ * atomically inside the PG function.
  */
-export async function enqueueAsyncOperationDispatch(
+export async function createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork(
   deps: DBDeps,
   input: AsyncOperationDispatchInput,
 ): Promise<void> {
   await deps.db.query(
-    `WITH ins AS (
-       INSERT INTO ${ASYNC_OP_DISPATCH_TABLE}
-         (async_operation_instance_id, async_operation_name, async_operation_version,
-          async_operation_type, parent_fsm_name, parent_fsm_version, async_operation_language)
-       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
-       RETURNING async_operation_instance_id
-     )
-     SELECT pg_notify('async_operation_scheduler_work', async_operation_instance_id::text)
-     FROM ins`,
+    `SELECT ${CREATE_ASYNC_OPERATION_INSTANCE_AND_NOTIFY_ASYNC_OPERATION_SCHEDULER_WORK_FN}($1::uuid, $2, $3, $4, $5, $6, $7)`,
     [
       input.asyncOperationInstanceId,
       input.asyncOperationName,
@@ -72,7 +97,7 @@ export async function enqueueAsyncOperationDispatch(
     ],
   );
   logger.debug(
-    "Enqueued async operation {instanceId} ({name}@{version}, type={type}, lang={lang})",
+    "Created async operation {instanceId} ({name}@{version}, type={type}, lang={lang})",
     {
       instanceId: input.asyncOperationInstanceId,
       name: input.asyncOperationName,
@@ -178,4 +203,31 @@ export async function loadAsyncOperation(
     logger.error("Error in loadAsyncOperation: {error}", { error: err });
     throw new Error("Failed to load async operation", { cause: err });
   }
+}
+
+/**
+ * Lists every row in async_operation_instance_and_async_operation_workerlet —
+ * dispatch entries for async-operation instances, whether still 'pending' or
+ * already 'scheduled' to a workerlet.
+ */
+export async function listAsyncOperationInstances(
+  deps: DBDeps,
+): Promise<AsyncOperationInstanceRow[]> {
+  const res = await deps.db.query<AsyncOperationInstanceRow>(
+    `SELECT * FROM ${ASYNC_OP_DISPATCH_TABLE} ORDER BY created_at DESC`,
+  );
+  return res.rows;
+}
+
+/**
+ * Lists every row in async_operation_meta — validated async-operation
+ * metadata loaded by asyncOperationWorkerlet instances at startup.
+ */
+export async function listAsyncOperationMeta(
+  deps: DBDeps,
+): Promise<AsyncOperationMetaRow[]> {
+  const res = await deps.db.query<AsyncOperationMetaRow>(
+    `SELECT * FROM ${ASYNC_OPERATION_META_TABLE} ORDER BY updated_at DESC`,
+  );
+  return res.rows;
 }

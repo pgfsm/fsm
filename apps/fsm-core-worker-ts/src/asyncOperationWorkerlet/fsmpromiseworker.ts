@@ -31,26 +31,18 @@ export async function startFSMPromiseWorker(
   const visibilityTimeout = 30;
 
   let actorFn: ((input: unknown) => Promise<unknown>) | undefined = undefined;
-  if (actorResult?.parentFsmPath && actorResult?.parentFsmVersion) {
+  if (actorResult?.fsmModulePath) {
     try {
-      const base =
-        `${actorResult.parentFsmPath}/${actorResult.parentFsmVersion}/typescript`;
-      const [actors] = await Promise.allSettled([
-        import(`${base}/actors/index.ts`),
-      ]);
-      const actorsModule = actors.status === "fulfilled" ? actors.value : null;
-      actorFn = actorsModule
-        ? (actorsModule[fsm_promise_name] as
-          | ((input: unknown) => Promise<unknown>)
-          | undefined)
-        : undefined;
+      const actorModule = await import(`file://${actorResult.fsmModulePath}`);
+      actorFn = actorModule[actorResult.method ?? fsm_promise_name] as
+        | ((input: unknown) => Promise<unknown>)
+        | undefined;
     } catch (err) {
       logger.warning(
-        "Could not load fsmModuleDefinition for {type} at {name}/{version}: {error}",
+        "Could not load actor module for {type} at {path}: {error}",
         {
           type: fsm_promise_type,
-          name: fsm_promise_name,
-          version: fsm_promise_version,
+          path: actorResult.fsmModulePath,
           error: err,
         },
       );

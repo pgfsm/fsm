@@ -12,23 +12,24 @@
 This document is a **design specification** for the end-to-end lifecycle of an
 FSM: how you go from a state-machine definition to a running workflow. You
 **design** a machine, **scaffold** the code that implements its operation logic,
-then run two cooperating worker daemons that execute it — the
-**`asyncOperationlet`** (runs async operation logic / actors) and the
-**`fsmlet`** (drives the state machine itself).
+then run two cooperating pairs of node-agent + scheduler daemons that execute it
+— the **`asyncOperationWorkerlet`** (runs async operation logic / actors) and
+the **`fsmlet`** (drives the state machine itself).
 
-> **Status — read this first.** This is the _target_ design. Some pieces ship
-> today; some are the intended end state. Each step below is tagged **✅
-> Shipped** or **🔭 Planned**. The
+> **Status — read this first.** This is the _target_ design. Each step below is
+> tagged **✅ Shipped** or **🔭 Planned**. The
 > [Maps to today's code](#appendix-maps-to-todays-code) appendix ties every
-> design term to what exists now. The most significant gap is polyglot support:
-> the `fsmLanguage` model is specced (and partly reserved in the schema) but the
-> toolchain is TypeScript-only today.
+> design term to what exists now. Scaffolding and validation (sections 2–3) are
+> polyglot across all four languages. **Execution** is narrower: the `fsmlet`
+> only runs TypeScript sync operation logic, and the `asyncOperationWorkerlet`
+> can run TypeScript (in-process) and Python (subprocess) actors — Go and Rust
+> actors validate but cannot yet be executed (section 4).
 
 ```
-┌───────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌──────────┐
-│ 1. design │─▶│ 2+3. scaffold   │─▶│ 4+5. validate    │─▶│ 6. asyncOperation│─▶│ 7. fsmlet│
-│  fsm.json │  │ async+sync logic│  │  + load to PG    │  │     let (actors) │  │  (states)│
-└───────────┘  └─────────────────┘  └──────────────────┘  └──────────────────┘  └──────────┘
+┌───────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ 1. design │─▶│ 2. scaffold     │─▶│ 3. validate      │─▶│ 4. run workers   │
+│  fsm.json │  │ fsm operation   │  │  + load to PG    │  │  (async + fsm)   │
+└───────────┘  └─────────────────┘  └──────────────────┘  └──────────────────┘
               every step reads and writes through PostgreSQL as the source of truth
 ```
 
@@ -39,7 +40,7 @@ user code:
   inside a single macrostep of the `fsmlet`.
 - **Async operation logic** — `actors` (the `invoke` objects on a state).
   Long-running; each runs in its own queue and process, driven by the
-  `asyncOperationlet`, and reports back with `xstate.done.actor.<id>` /
+  `asyncOperationWorkerlet`, and reports back with `xstate.done.actor.<id>` /
   `xstate.error.actor.<id>` events.
 
 ---
@@ -93,7 +94,7 @@ the seam between the machine and its actors:
     {
       "type": "xstate.invoke",
       "id": "creditBureauCheck",
-      "src": "checkBureau", // exported fn in <lang>/actors/<fsmType>_<fsmVersion>_checkBureau.<ext>
+      "src": "checkBureau", // exported fn in <lang>/actors/checkBureau/checkBureau.<ext>
       "fsmType": "promise", // promise | sharedPromise | sharedFsm | fsm
       "fsmVersion": "1",
       "fsmLanguage": "typescript" // typescript | python | rust | llm  (🔭 reserved)
@@ -105,63 +106,47 @@ the seam between the machine and its actors:
 `fsmType` and `fsmVersion` are required and understood today. `fsmLanguage` is
 reserved in the schema (default `typescript`) and selects which language's actor
 folder implements the operation logic — the routing key for the polyglot model
-in sections 2 and 6.
+in sections 2 and 4.
 
 ---
 
-## 2. Scaffold async operation logic (actors / `invoke` objects)
+## 2. Scaffold FSM operation
 
-From a compiled `fsm.json`, generate **base (stub) code** for every actor
-referenced by an `invoke` object — both **internal actors** (implemented and run
-inside this project) and **external actors** (implemented and run by another
-service/fleet). Each actor is generated in the language declared by its invoke
-object's `fsmLanguage`, so a single machine can spread its async operation logic
-across runtimes.
+From a compiled `fsm.json`, generate **base (stub) code** for the two families
+of operation logic a machine can reference: async operation logic (`actors`, via
+`invoke` objects) and sync operation logic (`actions`, `guards`, `delays`). Both
+are driven by the same compiler CLI; they differ in command, language routing,
+and where the resulting code runs.
 
-**✅ Shipped** — `generate-async-logic` writes one file per invoke, routed by
-`fsmLanguage`:
+| Info                | Async Operation                                                                                                                                                                 | Sync Operation                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FSM component       | `actors` (the `invoke` objects on a state)                                                                                                                                      | `actions`, `guards`, `delays`                                                                                                                                            |
+| PRD                 | [PRD-002](./packages/fsm-compiler-ts/docs/prd/prd-002-scaffold-async-operation-logic.md)                                                                                        | [PRD-003](./packages/fsm-compiler-ts/docs/prd/prd-003-scaffold-sync-operation-logic.md)                                                                                  |
+| Execution model     | Long-running; each runs in its own queue and process, driven by the `asyncOperationWorkerlet`; reports back via `xstate.done.actor.<id>` / `xstate.error.actor.<id>` events     | Pure/inline; runs inside a single macrostep of the `fsmlet` — no separate queue or process                                                                               |
+| CLI command         | `generate-async-logic`                                                                                                                                                          | `generate-sync-logic`                                                                                                                                                    |
+| Command             | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm`                                                           | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python`                            |
+| Language selection  | Per-invoke, from that invoke object's `fsmLanguage` field — a single machine can spread its actors across runtimes                                                              | Via `--lang` flag (comma-separated), applied uniformly to the whole generation run; default `typescript` only                                                            |
+| Languages generated | It will generate code for all 4 languages, one invoke at a time, according to each invoke's `fsmLanguage`                                                                       | It will generate code for TS only unless `--lang` is passed with other languages                                                                                         |
+| Supported languages | `typescript`, `python`, `rust`, `go` — unsupported `fsmLanguage` values are skipped with a warning                                                                              | `typescript`, `python`, `rust`, `go`                                                                                                                                     |
+| File naming         | One file per invoke, in its own subfolder: `<src>/<src>.<ext>` (exports one function named after the actor `src`)                                                               | One stub per `action` / `guard` / `delay` referenced in `fsm.json`                                                                                                       |
+| Output layout       | `<fsmLanguage>/actors/<src>/<src>.<ext>`                                                                                                                                        | `<lang>/actions/<index>`, `<lang>/guards/<index>`, `<lang>/delays/<index>`                                                                                               |
+| Status              | ✅ Shipped                                                                                                                                                                      | ✅ Shipped for all four languages                                                                                                                                        |
+| Planned gaps        | Generated actor stub signature doesn't yet match the worker's `(input) => Promise<output>` calling convention; external actors are still stubbed locally rather than referenced | Action stubs are emitted as `(context, event)` and guard stubs as `(context, event)`, but the worker invokes them as `(context, params, meta)` / `(context, cond, meta)` |
 
-```bash
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c generate-async-logic \
-  -f apps/fsm-core-example/fsm
-```
+See the compiler [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md) for both
+planned-gap items.
 
-Each invoke object gets its **own file** named
-`<fsmType>_<fsmVersion>_<src>.<ext>` (exporting one function named after the
-actor `src`), in its `fsmLanguage` folder:
+### Async operation logic — example layout
 
 ```
 creditCheck/v01/
-  typescript/actors/promise_v01_checkBureau.ts     # fsmLanguage: "typescript"
-  python/actors/promise_v01_scoreReport.py         # fsmLanguage: "python"
-  rust/actors/promise_v01_riskModel.rs             # fsmLanguage: "rust"
-  go/actors/promise_v01_notify.go                  # fsmLanguage: "go"
+  typescript/actors/checkBureau/checkBureau.ts         # fsmLanguage: "typescript"
+  python/actors/checkBureau/checkBureau.py             # fsmLanguage: "python"
+  rust/actors/checkBureau/checkBureau.rs               # fsmLanguage: "rust"
+  go/actors/checkReportsTable/checkReportsTable.go     # fsmLanguage: "go"
 ```
 
-Supported languages: `typescript`, `python`, `rust`, `go`. Actors with an
-unsupported `fsmLanguage` are skipped with a warning.
-
-> **🔭 Planned:** the generated actor stub signature does not yet match the
-> worker's `(input) => Promise<output>` calling convention, and external actors
-> are still stubbed locally rather than referenced. See the compiler
-> [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md).
-
----
-
-## 3. Scaffold sync operation logic (actions / guards / delays)
-
-The `generate-sync-logic` command scaffolds the **sync operation logic** — one
-stub per `action`, `guard`, and `delay` referenced in `fsm.json` — in the
-language(s) passed via `--lang` (`typescript`, `python`, `rust`, `go`;
-comma-separated, default `typescript`):
-
-```bash
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c generate-sync-logic \
-  -f apps/fsm-core-example/fsm \
-  --lang typescript,python
-```
+### Sync operation logic — example layout
 
 ```
 <lang>/
@@ -170,15 +155,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   delays/<index>    # delay durations (return ms)
 ```
 
-Unlike actors, this logic runs **inline inside a macrostep** of the `fsmlet` —
-no separate queue or process. **✅ Shipped** for all four languages.
-
-> **🔭 Planned:** action stubs are emitted as `(context, event)` and guard stubs
-> as `(context, event)`, but the worker invokes them as
-> `(context, params, meta)` / `(context, cond, meta)`. See the compiler
-> [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md).
-
-Fill in the stubs, then validate exports without touching the database:
+Fill in the sync stubs, then validate exports without touching the database:
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
@@ -189,12 +166,32 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-## 4. Validate and load async operation logic
+## 3. Validate operation logic
 
-Once the actor stubs from section 2 are filled in, validate that each async
-operation-logic module actually exports its named function, then load its
-metadata into PostgreSQL — the DB-side half of the seam the `asyncOperationlet`
-(section 6) consumes when it spawns actor processes.
+Once the stubs from section 2 are filled in, validate that each async
+operation-logic module and each sync `action` / `guard` / `delay` actually
+export what the machine expects. Validation and the PostgreSQL load are separate
+steps: each workflow type has its own validate-only command, and a single shared
+`load` command then loads `fsm.json` into PostgreSQL — this is the DB-side half
+of the seam the `asyncOperationWorkerlet` and `fsmlet` (section 4) consume.
+
+| Info                  | Async Operation                                                                                                                 | Sync Operation                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| PRD                   | [PRD-004](./packages/fsm-compiler-ts/docs/prd/prd-004-validate-async-operation-logic.md)                                        | [PRD-005](./packages/fsm-compiler-ts/docs/prd/prd-005-validate-sync-operation-logic.md)    |
+| What it validates     | Each async operation-logic module actually exports its named function                                                           | Every `action`, `guard`, `delay` referenced in `fsm.json` is exported with the right shape |
+| Validate-only command | `validate-async-operation`                                                                                                      | `validate-sync-operation`                                                                  |
+| Language scope        | `--lang` (comma-separated) restricts to a language subset; omitted = all actor languages are checked                            | Validates whatever `--lang` languages were scaffolded in section 2                         |
+| Per-language check    | Each language's runtime is invoked to confirm the function is defined — not just that the file exists (see runtime table below) | Validated via `validateSyncOperationFromFolder`                                            |
+| Status                | ✅ Shipped for validation across all four languages                                                                             | ✅ Shipped for validation                                                                  |
+
+### Async operation logic — runtime called per language
+
+| Language     | Runtime called                                         |
+| ------------ | ------------------------------------------------------ |
+| `typescript` | `deno run src/checkers/check_fn.ts <file> <fn>`        |
+| `python`     | `python3 src/checkers/check_fn.py <file> <fn>`         |
+| `go`         | `go build -o binary src/checkers/check_fn.go` → binary |
+| `rust`       | `rustc src/checkers/check_fn.rs` → binary, then binary |
 
 ```bash
 # Validate all languages (calls each language's runtime)
@@ -209,144 +206,60 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -f apps/fsm-core-example/sharedFSM \
   -w sharedPromise \
   --lang typescript
-
-# Validate then load into PostgreSQL
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c validate-async-operation-and-load \
-  -f apps/fsm-core-example/sharedFSM \
-  -w sharedPromise \
-  --db-url postgresql://user:pass@localhost:5432/db
 ```
 
-`--db-url` overrides `DATABASE_URL`; when omitted, the connection string is read
-from `DATABASE_URL` in `.env`.
-
-**✅ Shipped** — per-actor function validation across all four languages. Each
-language's runtime is invoked to confirm the function is defined — not just that
-the file exists:
-
-| Language     | Runtime called                                         |
-| ------------ | ------------------------------------------------------ |
-| `typescript` | `deno run src/checkers/check_fn.ts <file> <fn>`        |
-| `python`     | `python3 src/checkers/check_fn.py <file> <fn>`         |
-| `go`         | `go build -o binary src/checkers/check_fn.go` → binary |
-| `rust`       | `rustc src/checkers/check_fn.rs` → binary, then binary |
-
-Use `--lang` (comma-separated) to restrict validation to a specific language
-subset. When `--lang` is omitted, all actor languages are checked.
-
-> **🔭 Planned:** loading the async operation-logic metadata (actor name,
-> version, language, queue) into PostgreSQL. Today `validate-async-operation`
-> validates and returns results without persisting them;
-> `validate-async-operation-and-load` validates `sharedPromise` modules but the
-> DB write is not yet wired. See the compiler
-> [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md).
-
----
-
-## 5. Validate and load sync operation logic
-
-Once the action / guard / delay stubs from section 3 are filled in, validate
-that every one is exported with the right shape, then load `fsm.json` into
-PostgreSQL so the `fsmlet` (section 7) can drive the machine.
+### Sync operation logic — validate
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c validate-sync-operation-and-load \
+  -c validate-sync-operation \
   -f apps/fsm-core-example/fsm \
-  -w fsm \
-  --db-url postgresql://user:pass@localhost:5432/db
+  -w fsm
 ```
-
-`--db-url` overrides `DATABASE_URL`; when omitted, the connection string is read
-from `DATABASE_URL` in `.env`.
-
-**✅ Shipped** — validates every action, guard, and delay via
-`validateSyncOperationFromFolder`, and on success loads the machine into
-PostgreSQL via `loadFsmFromJson` → `load_fsm_from_json_v2`.
 
 ---
 
-## 6. Start the `asyncOperationlet` (async-operation worker)
+## 4. Start the workers
 
-The `asyncOperationlet` is the daemon that runs **async operation logic** — the
-conceptual twin of the `fsmlet`. It takes a **folder path** and a **`lang`**
-list (comma-separated languages to activate).
+The async-operation side and the FSM side each run as a **node agent** (kubelet
+equivalent) — it validates, loads its modules, and registers itself, then waits
+for its companion **scheduler** (kube-scheduler equivalent, a separate
+control-plane process — see [section 5](#5-start-the-schedulers)) to route
+claimed work to it via `pg_notify`. The two node agents are structurally
+identical; only the tables and per-language execution differ.
 
-**🔭 Planned — intended CLI:**
+| Info                        | Async-Operation Worker (`asyncOperationWorkerlet`)                                                                                                                                                                                             | FSM Worker (`fsmlet`)                                                                                                                                                                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drives                      | Async operation logic (`actors`) — one long-running promise-worker per actor queue                                                                                                                                                             | State machines — sync operation logic, transitions, and dispatching invokes                                                                                                                                                                                                            |
+| Node-agent CLI              | `apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts`                                                                                                                                                                                 | `apps/fsm-core-worker-ts/src/cli/fsmlet.ts`                                                                                                                                                                                                                                            |
+| On startup, validates       | `validateAsyncOperationFromFoldersV2` — per invoke, routed by `fsmLanguage` (`typescript`/`python`/`go`/`rust`)                                                                                                                                | `validateSyncOperationFromFolders` — TypeScript only, workflow type hardcoded to `"fsm"`                                                                                                                                                                                               |
+| Cross-checks the other side | none built in                                                                                                                                                                                                                                  | Optional `asyncOperationVerificationMode` (`checkRegistry` / `checkRegistryAndWorking`, via `checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — shipped as a library option but not exposed as an `fsmlet` CLI flag; the CLI always runs with it off (`"none"`) |
+| On startup, loads           | Each verified actor into `async_operation_meta` via `load_async_operation_meta_v2`                                                                                                                                                             | `fsm.json` into PostgreSQL via `loadFsmFromJson` → `load_fsm_from_json_v2`                                                                                                                                                                                                             |
+| Registers itself in         | `async_operation_workerlet` table (`supported_async_operations`, `max_pid_number`)                                                                                                                                                             | `fsm_workerlet` table (`fsm_modules`, `max_concurrency`)                                                                                                                                                                                                                               |
+| Listens on                  | `async_op_workerlet_work_<id>`                                                                                                                                                                                                                 | `fsm_fsmlet_work_<id>` and `fsm_worker_stop` (per-instance abort)                                                                                                                                                                                                                      |
+| Claims work via             | `claim_scheduled_for_async_operation_workerlet()`                                                                                                                                                                                              | `claim_scheduled_for_fsmlet()`                                                                                                                                                                                                                                                         |
+| Concurrency model           | One long-running worker per unique actor queue, bounded by `--max-concurrency` semaphore. TypeScript runs in-process (`startFSMPromiseWorker`); Python spawns a subprocess; Go/Rust actors validate but log a warning and are not yet runnable | One FSM worker per claimed instance, bounded by `--max-concurrency` semaphore                                                                                                                                                                                                          |
+| Heartbeat                   | `asyncOperationWorkerletHeartbeat` every 5s (tracks `active_pid_number`), 30s fallback poll                                                                                                                                                    | `fsmletHeartbeat` every 5s (tracks `active_workers`), 30s fallback poll                                                                                                                                                                                                                |
+| Graceful shutdown           | `SIGINT`/`SIGTERM` aborts active queue-workers, drains, deregisters from `async_operation_workerlet`                                                                                                                                           | `SIGINT`/`SIGTERM` aborts active workers, drains, deregisters from `fsm_workerlet`                                                                                                                                                                                                     |
+| Status                      | ✅ Shipped                                                                                                                                                                                                                                     | ✅ Shipped                                                                                                                                                                                                                                                                             |
+
+### Start the async-operation worker
 
 ```bash
-asyncOperationlet --folder-path apps/fsm-core-example/fsm --lang typescript,python
+# Node agent — validates, loads actor metadata, registers, then waits for work
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts \
+  -f /abs/path/to/apps/fsm-core-example/fsm \
+  -l typescript,python     # runtime languages to validate/activate (required)
+  -t promise                # workflow type: promise | sharedPromise (default promise)
+  -m 8                      # max concurrent queue-workers (default 8)
+  # -i <workerlet-id>       # stable identity (default: random UUID per startup)
+  # -d <db-url>             # overrides DATABASE_URL
 ```
 
-### 6.a For each folder — 🔭 Planned (validation/load ✅ Shipped for TS)
-
-1. **Validate `fsm.json`** against the machine schema.
-2. **Validate every async operation-logic function** referenced by an `invoke`
-   object, _per its `fsmLanguage`_ — confirm each `<lang>/actors/` file exports
-   the named function with the right shape.
-3. **Load the async operation-logic metadata** (actor name, version, language,
-   queue) into PostgreSQL.
-
-> Today, per-`invoke` validation exists for all four languages via
-> `validate-async-operation` (each language's runtime is called — see §4);
-> metadata load into PostgreSQL and liveness registry are the planned
-> extensions.
-
-### 6.b Spawn a process per successful actor — 🔭 Planned
-
-For each actor that validated and loaded, the `asyncOperationlet` spawns a new
-process that runs **`processPromiseQueueMessage`** — a loop that reads its
-actor's queue, invokes the operation-logic function with the message payload,
-and archives the result back to the parent FSM instance's queue.
-
-The shipped basis for this is the promise worker (**✅ Shipped**), startable
-directly today:
+### Start the FSM worker
 
 ```bash
-# Shipped promise worker — one actor queue, TypeScript
-deno task cli \
-  -c create-and-start-promise-worker \
-  -q checkBureau_v01 \
-  -t checkBureau \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01
-```
-
-### 6.c Register the spawned process — 🔭 Planned
-
-Each spawned async-operation process is registered in an
-**`async_operation_instance_status`** table so the control plane knows which
-operation logic is live and in which runtime:
-
-| Column        | Meaning                                        |
-| ------------- | ---------------------------------------------- |
-| `parent_pid`  | PID of the `asyncOperationlet` that spawned it |
-| `parent_lang` | Language of the parent                         |
-| `child_pid`   | PID of the spawned (child) actor process       |
-| `child_lang`  | Language of the child process                  |
-
-This registry is what the `fsmlet` consults in step 7.a.iii before it will run a
-machine that invokes those actors.
-
-> Today there is no such table: actor subprocesses are spawned inside the
-> `fsmlet` and their live queues are tracked on
-> `fsm_instance.total_promise_queue_data`. The registry is the planned home for
-> cross-language actor liveness.
-
----
-
-## 7. Start the `fsmlet` (FSM worker)
-
-The `fsmlet` is the node agent (kubelet equivalent) that **drives state
-machines**: it runs sync operation logic, fires transitions, and coordinates the
-async actors registered in step 6. It takes a **folder path** and a **max
-`fsmworker`** count.
-
-**✅ Shipped CLI:**
-
-```bash
+# Node agent — validates, loads fsm.json, registers, then waits for work
 deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
   -f /abs/path/to/apps/fsm-core-example/fsm \
   -m 8                     # max FSM instances driven concurrently (default 8)
@@ -354,52 +267,73 @@ deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts \
   # -d <db-url>            # overrides DATABASE_URL
 ```
 
-### 7.a For each folder
+Both node agents need their companion scheduler running somewhere in the cluster
+to ever receive claimed work — see [section 5](#5-start-the-schedulers). See
+[`CLI-USAGE.md`](./apps/fsm-core-worker-ts/docs/guides/CLI-USAGE.md) for the
+full flag reference and startup sequence.
 
-1. **Validate `fsm.json`** against the machine schema. **✅ Shipped**
-2. **Validate every sync operation-logic function** (actions, guards, delays).
-   **✅ Shipped**
-3. **Verify all internal + external actors are present** in
-   `async_operation_instance_status` — i.e. every `invoke` target already has a
-   live async-operation process. **🔭 Planned**
-4. **Load `fsm.json` into PostgreSQL** via `loadFsmFromJson` →
-   `load_fsm_from_json_v2`. **✅ Shipped**
+---
 
-### 7.b Register the fsmlet — ✅ Shipped
+## 5. Start the schedulers
 
-`registerFsmlet` upserts this node into `fsm_daemon_node` with its loaded FSM
-modules and `max_concurrency`, so the scheduler can route work to it.
+Each node-agent type has a companion **scheduler** — a control-plane routing
+process (kube-scheduler equivalent) run once per cluster, never on a worker
+node. It listens for a `pg_notify` wake-up, then loops a single PG function that
+atomically claims the next pending dispatch entry, filters/scores active node
+agents, assigns the winner, and notifies it — repeating until the queue is empty
+or no node agent has capacity. A fallback poll catches any notification missed
+after a `LISTEN` connection drop.
 
-### 7.c The fsmlet loop — ✅ Shipped
+| Info                    | Async-Operation Scheduler                                                              | FSM Scheduler                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| CLI                     | `apps/fsm-core-worker-ts/src/cli/async-operation-scheduler.ts`                         | `apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts`                            |
+| Routes work for         | `asyncOperationWorkerlet` node agents                                                  | `fsmlet` node agents                                                         |
+| Listens on              | `async_operation_scheduler_work`                                                       | `fsm_scheduler_work`                                                         |
+| Dispatch table          | `async_operation_instance_and_async_operation_workerlet`                               | `fsm_dispatch_queue`                                                         |
+| Scheduling function     | `async_operation_schedule_next_pending()`                                              | `schedule_next_pending()`                                                    |
+| Notifies the winner via | `async_op_workerlet_work_<id>` (channel the workerlet is listening on — see section 4) | `fsm_fsmlet_work_<id>` (channel the fsmlet is listening on — see section 4)  |
+| `--stale-threshold`     | Seconds before a workerlet with no heartbeat is treated as dead (default `30`)         | Seconds before a fsmlet with no heartbeat is treated as dead (default `30`)  |
+| `--poll-interval`       | Fallback poll interval in ms, catches missed notifications (default `30000`)           | Fallback poll interval in ms, catches missed notifications (default `30000`) |
+| Deployment              | Control plane, alongside the API server — **not** on worker nodes                      | Control plane, alongside the API server — **not** on worker nodes            |
+| Status                  | ✅ Shipped                                                                             | ✅ Shipped                                                                   |
 
-The node `LISTEN`s on `fsm_fsmlet_work_<id>`, claims scheduled work from
-`fsm_dispatch_queue`, runs a worker per claimed instance (each worker executes
-macrosteps: resolve state → run sync logic → dispatch invokes), and drains
-gracefully on `SIGINT`/`SIGTERM`.
+### Start the async-operation scheduler
 
-### 7.d Heartbeat — ✅ Shipped
+```bash
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-scheduler.ts
+  # -d <db-url>             # overrides DATABASE_URL
+  # -p <poll-interval-ms>   # fallback poll interval (default 30000)
+  # -s <stale-threshold-s>  # seconds before a workerlet is considered dead (default 30)
+```
 
-`fsmletHeartbeat` updates `last_heartbeat` and `active_workers` on
-`fsm_daemon_node` every **5 seconds** (`HEARTBEAT_INTERVAL_MS = 5_000`), with a
-30-second fallback poll to catch missed notifications. The scheduler treats a
-node with a stale heartbeat (> 30s) as dead and stops routing work to it.
+### Start the FSM scheduler
+
+```bash
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts
+  # -d <db-url>             # overrides DATABASE_URL
+  # -p <poll-interval-ms>   # fallback poll interval (default 30000)
+  # -s <stale-threshold-s>  # seconds before a fsmlet is considered dead (default 30)
+```
 
 ---
 
 ## Appendix: Maps to today's code
 
-| Design term (this spec)            | Today's implementation                                                                                                        | Status                 |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `asyncOperationlet`                | Promise worker — `fsmpromise` routes; `start-promise-worker` CLI                                                              | 🔭 name / ✅ mechanism |
-| `processPromiseQueueMessage`       | `processFSMPromiseQueueMessage` (`apps/fsm-core-worker-ts/src/fsmpromiseworker-helper.ts`)                                    | ✅ Shipped             |
-| `async_operation_instance_status`  | `fsm_daemon_node` + `fsm_instance.total_promise_queue_data` (no dedicated registry table)                                     | 🔭 Planned             |
-| `lang` arg / `fsmLanguage` routing | `generate-sync-logic --lang`; `generate-async-logic` (by `fsmLanguage`); `validate-async-operation --lang`; ts/python/rust/go | ✅ Shipped             |
-| async op scaffolding (`actors/`)   | `generate-async-logic` command (`generate-async-operation-logic.ts`)                                                          | ✅ Shipped             |
-| sync op scaffolding (actions/…)    | `generate-sync-logic --lang` command (`generate-sync-operation-logic.ts`)                                                     | ✅ Shipped             |
-| validate + load `fsm.json`         | `validate-fsm-plugin-load.ts`; `loadFsmFromJson` → `load_fsm_from_json_v2`                                                    | ✅ Shipped             |
-| `fsmlet`, `registerFsmlet`, loop   | `apps/fsm-core-worker-ts/src/fsmlet.ts`, `scheduler/fsmlet-registry.ts`                                                       | ✅ Shipped             |
-| heartbeat (5s)                     | `fsmletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`)                                                                           | ✅ Shipped             |
-| scheduler / dispatch               | `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                                                      | ✅ Shipped             |
+| Design term (this spec)                     | Today's implementation                                                                                                                                                                                | Status                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `asyncOperationWorkerlet`                   | `apps/fsm-core-worker-ts/src/asyncOperationWorkerlet/asyncOperationWorkerlet.ts`, CLI `async-operation-workerlet.ts`                                                                                  | ✅ Shipped                                                      |
+| `async_operation_meta` (actor registry)     | `async_operation_meta` table, loaded via `loadAsyncOperation` → `load_async_operation_meta_v2`                                                                                                        | ✅ Shipped                                                      |
+| `async_operation_workerlet` (node registry) | `async_operation_workerlet` table — `registerAsyncOperationWorkerlet` / `asyncOperationWorkerletHeartbeat` / `deregisterAsyncOperationWorkerlet`                                                      | ✅ Shipped                                                      |
+| `lang` arg / `fsmLanguage` routing          | `generate-sync-logic --lang`; `generate-async-logic` (by `fsmLanguage`); `validate-async-operation --lang`; `async-operation-workerlet -l`; ts/python/rust/go                                         | ✅ Shipped (scaffold/validate) — 🔭 Planned (Go/Rust execution) |
+| async op scaffolding (`actors/`)            | `generate-async-logic` command (`generate-async-operation-logic.ts`)                                                                                                                                  | ✅ Shipped                                                      |
+| sync op scaffolding (actions/…)             | `generate-sync-logic --lang` command (`generate-sync-operation-logic.ts`)                                                                                                                             | ✅ Shipped                                                      |
+| validate `fsm.json` + operation logic       | `validate-sync-operation-logic.ts`, `validate-async-operation-logic-v2.ts`                                                                                                                            | ✅ Shipped                                                      |
+| load `fsm.json`                             | `load-fsm-json.ts` (`loadFsmJSONFromFolders`); `loadFsmFromJson` → `load_fsm_from_json_v2`                                                                                                            | ✅ Shipped                                                      |
+| `fsmlet`, `registerFsmlet`, loop            | `apps/fsm-core-worker-ts/src/fsmlet/fsmlet.ts`, `packages/fsm-core-db-ts/src/fsm-workerlet.ts` (`fsm_workerlet` table)                                                                                | ✅ Shipped                                                      |
+| heartbeat (5s)                              | `fsmletHeartbeat` / `asyncOperationWorkerletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`)                                                                                                              | ✅ Shipped                                                      |
+| scheduler / dispatch (FSM)                  | `fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                                                                                                           | ✅ Shipped                                                      |
+| scheduler / dispatch (async operation)      | `async-operation-scheduler.ts`, `async_operation_schedule_next_pending`, `createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork`, `async_operation_instance_and_async_operation_workerlet` | ✅ Shipped                                                      |
+| fsmlet ↔ async-actor liveness check         | `asyncOperationVerificationMode` (`checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — library option, not exposed as an `fsmlet` CLI flag                                      | ⚠️ Shipped, not wired to CLI                                    |
 
 ## References
 

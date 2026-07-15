@@ -9,14 +9,13 @@ import {
   API_SYSTEM_QUEUE_TYPE,
   API_SYSTEM_QUEUE_UUID,
   createFsmInstanceFromName,
-  enqueueDispatch,
   getFSMData,
-  getFsmDataResolveStateValue,
+  resumeEventForFsmWorker,
   sendEventToFsmQueueWithEventLogs,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
 
-const logger = getLogger(["@pgfsm/fsmctl"]);
+const logger = getLogger(["@pgfsm/worker", "fsmctl"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
@@ -135,7 +134,9 @@ try {
       }
       const pool = new Pool({ connectionString: resolvedDbUrl });
       const deps = { db: pool, useSupabase: false };
-      // false = do not auto-enqueue to pgmq; we enqueue to fsm_dispatch_queue below.
+      // false = do not auto-create a pgmq queue; create_fsm_instance_from_name_v2
+      // already enqueues to fsm_dispatch_queue and notifies the fsmscheduler
+      // internally — no separate enqueueDispatch call needed here.
       const result = await createFsmInstanceFromName(
         deps,
         fsmName!,
@@ -148,13 +149,6 @@ try {
         logger.error("Failed to create FSM instance.");
         Deno.exit(1);
       }
-      await enqueueDispatch(
-        deps,
-        result.fsm_instance_id,
-        fsmName!,
-        fsmVersion!,
-        "start",
-      );
       await pool.end();
       logger.info(result.fsm_instance_id);
       break;
@@ -163,20 +157,12 @@ try {
     case "resume": {
       const pool = new Pool({ connectionString: resolvedDbUrl });
       const deps = { db: pool, useSupabase: false };
-      const fsmData = await getFsmDataResolveStateValue(deps, queueName!);
-      if (!fsmData) {
-        await pool.end();
+      const result = await resumeEventForFsmWorker(deps, queueName!);
+      await pool.end();
+      if (result.status === "fsm_not_found") {
         logger.error("FSM instance not found: {queueName}", { queueName });
         Deno.exit(1);
       }
-      await enqueueDispatch(
-        deps,
-        queueName!,
-        fsmData.fsm_instance_row.fsm_name ?? "",
-        fsmData.fsm_instance_row.fsm_version ?? "",
-        "resume",
-      );
-      await pool.end();
       break;
     }
 

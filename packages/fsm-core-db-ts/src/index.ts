@@ -33,12 +33,16 @@ export {
   asyncOperationScheduleNextPending,
   checkRegistryAndWorkingForAsyncActors,
   checkRegistryForAsyncActors,
-  enqueueAsyncOperationDispatch,
+  createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork,
+  listAsyncOperationInstances,
+  listAsyncOperationMeta,
   loadAsyncOperation,
 } from "./async-operation.ts";
 export type {
   AsyncActor,
   AsyncOperationDispatchInput,
+  AsyncOperationInstanceRow,
+  AsyncOperationMetaRow,
   CheckRegistryAndWorkingForAsyncActorsResult,
   CheckRegistryForAsyncActorsResult,
 } from "./async-operation.ts";

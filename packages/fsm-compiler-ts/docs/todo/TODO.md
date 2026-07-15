@@ -5,8 +5,8 @@ Gaps tracked against the compiler PRDs in [`../prd/`](../prd/):
 - [PRD-001: Design your FSM JSON schema](../prd/prd-001-design-fsm-json-schema.md)
 - [PRD-002: Scaffold async operation logic](../prd/prd-002-scaffold-async-operation-logic.md)
 - [PRD-003: Scaffold sync operation logic](../prd/prd-003-scaffold-sync-operation-logic.md)
-- [PRD-004: Validate and load async operation logic](../prd/prd-004-validate-async-operation-logic.md)
-- [PRD-005: Validate and load sync operation logic](../prd/prd-005-validate-sync-operation-logic.md)
+- [PRD-004: Validate async operation logic](../prd/prd-004-validate-async-operation-logic.md)
+- [PRD-005: Validate sync operation logic](../prd/prd-005-validate-sync-operation-logic.md)
 
 Scaffolding is split into two commands/modules: `generate-async-logic`
 (`src/generate-async-operation-logic.ts`) for actors, and `generate-sync-logic`
@@ -17,8 +17,7 @@ language templates + the folder walker live in
 ## Design FSM JSON schema (PRD-001)
 
 - [x] **Adopt schema v3.** Imports `fsm.machine.schema.v3.json` in
-      `src/generate-fsm-json.ts`, `src/validate-and-load-fsm.ts`, and
-      `src/validate-fsm-plugin-load.ts`.
+      `src/generate-fsm-json.ts` and `src/validate-sync-operation-logic.ts`.
 - [x] **Wire `fsmLanguage` on invoke objects.** Backfilled (default
       `typescript`) and parsed onto `ActorReference`.
 - [x] **Language-keyed scaffolding.** Actors are generated per invoke object's
@@ -47,8 +46,17 @@ language templates + the folder walker live in
       `Deno.writeTextFile`, clobbering hand-written bodies. Skip files that
       already exist (or merge) rather than overwriting. (Applies to PRD-003.)
 - [x] **Language-keyed actor scaffolding.** `generate-async-logic` writes one
-      file per invoke at `<lang>/actors/<fsmType>_<fsmVersion>_<src>.<ext>`,
-      routed by `fsmLanguage`.
+      file per invoke at `<lang>/actors/<src>/<src>.<ext>` (a subfolder named
+      after the actor `src`), routed by `fsmLanguage`.
+- [ ] **Dedup key regressed to `lang/src` only.**
+      `generateAsyncOperationLogicFromFolders` dedupes by
+      `${lang}/${actorFileBaseName(actor)}` (src only) — two invokes sharing a
+      `src` but differing in `fsmType`/`fsmVersion` collapse into the same file,
+      a collision that was previously fixed by deduping on the full
+      `<fsmType>_<fsmVersion>_<src>` key. That fix was lost when the file layout
+      moved to per-`src` subfolders. Either accept one file per `src` per
+      language as the intended contract, or restore a type/version-aware key
+      (and folder layout) if collisions are actually possible in practice.
 
 ## Scaffold sync operation logic (PRD-003)
 
@@ -73,12 +81,10 @@ name exports a `function` (not its arity), so mismatched stubs pass
       actions/guards/delays, since all kinds are written by
       `writeOperationModule`.
 
-## Validate and load async operation logic (PRD-004)
+## Validate async operation logic (PRD-004)
 
-Validation lives in `src/validate-async-operation-logic.ts`
-(`validate-async-operation`); the validate-async-operation-and-load path lives
-in `src/validate-async-operation-logic-and-load-to-db.ts`
-(`validate-async-operation-and-load`).
+Validation lives in `src/validate-async-operation-logic-v2.ts`
+(`validateAsyncOperationFromFoldersV2`, wired to `validate-async-operation`).
 
 - [x] **Runtime validation for all four languages.** `validate-async-operation`
       calls each language's runtime (`deno run check_fn.ts` /
@@ -86,38 +92,33 @@ in `src/validate-async-operation-logic-and-load-to-db.ts`
       check_fn.py` / `go build check_fn.go` → binary /
       `rustc check_fn.rs` → binary) to confirm the named function is defined —
       not just that the file exists. Checker scripts live in `src/checkers/`.
-- [x] **Language filter (`--lang`).** `validateAsyncOperationFromFolders` and
-      `validateAsyncOperationAndLoadToDb` accept `langs: OperationLang[] = []`
-      (empty = all); wired to `--lang` in the CLI for `validate-async-operation`
-      and `validate-async-operation-and-load`.
-- [ ] **Load actor metadata to PostgreSQL.** `validateAsyncOperationAndLoadToDb`
-      validates and returns results but never persists actor
-      name/version/language/queue. Wire the DB load the `asyncOperationlet`
-      reads from.
-- [ ] **Validate per-`fsmLanguage` actors on the load path.** The
-      validate-async-operation-and-load path checks only `sharedPromise`
-      dependency exports, not each invoke's actor per `fsmLanguage`. Reuse
-      `validateAsyncOperationFromFolder`.
+- [x] **Language filter (`--lang`).** `validateAsyncOperationFromFoldersV2`
+      accepts `runtimeLanguages: OperationLang[] = []` (empty = all); wired to
+      `--lang` in the CLI for `validate-async-operation`.
+- [x] **Validate per-`fsmLanguage` actors, not just `sharedPromise`.**
+      `validateAsyncOperationFromFoldersV2` walks every requested language
+      folder's `actors/` directory directly (not scoped to `sharedPromise`
+      dependency exports).
 - [ ] **Arity/shape validation** (shared with PRD-002). Validation checks that
       the export is a `function` but not its arity, so actor stubs with the
       wrong `(input) => Promise` signature still pass.
 
-## Validate and load sync operation logic (PRD-005)
+## Validate sync operation logic (PRD-005)
 
 Validation lives in `src/validate-sync-operation-logic.ts`
-(`validate-sync-operation`); the validate-sync-operation-and-load path lives in
-`src/validate-sync-operation-logic-and-load-to-db.ts`
-(`validate-sync-operation-and-load`), which loads verified machines via
-`loadFsmFromJson` → `load_fsm_from_json_v2`.
+(`validateSyncOperationFromFolders`, wired to `validate-sync-operation`) and
+only checks that stubs are exported with the right shape.
 
 - [ ] **Arity/shape validation** (shared with PRD-003).
       `validateLanguageModules` checks `typeof === "function"` only, so
       mismatched action/guard stub signatures still pass
-      `validate-sync-operation` and load.
+      `validate-sync-operation`.
 - [ ] **Validate non-TypeScript sync stubs.** `validateSyncOperationFromFolder`
       calls `validateLanguageModules(absPath, "typescript", …)` with the
       language hardcoded, so `python`/`rust`/`go` stubs are never validated.
-- [ ] **Internal actors force-marked resolved.**
-      `validateSyncOperationFromFolder` sets `resolved: true` on internal actors
-      unconditionally (see `../limitations/bugs.md` Bug #5), hiding missing
-      implementations.
+- [ ] **`--available-actors` / external-actor resolution is a no-op.**
+      `validateSyncOperationFromFolder` and `validateSyncOperationFromFolders`
+      accept and pass through an `availableActors` parameter (wired to
+      `--available-actors` on the CLI), but nothing in the current
+      implementation reads it — no external-actor dependency check actually
+      happens. Either wire it up or remove the dead parameter and flag.

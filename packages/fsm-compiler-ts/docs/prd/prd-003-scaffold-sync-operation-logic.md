@@ -9,11 +9,11 @@ Partially implemented — see [Gaps](#gaps) and [TODO.md](../todo/TODO.md).
 
 Alongside the async actors (PRD-002), the compiler scaffolds **base (stub)
 code** for the machine's **sync operation logic** — the `actions`, `guards`, and
-`delays` referenced in `fsm.json`. This is stage 3 of the FSM lifecycle, derived
-from §3 of the root [`README.md`](../../../../README.md). The
-`generate-sync-logic` command emits all three, in the language(s) passed via
-`--lang`. Unlike actors, this logic runs **inline inside a macrostep** of the
-`fsmlet` — no separate queue or process.
+`delays` referenced in `fsm.json`. This is part of §2 ("Scaffold FSM operation")
+of the root [`README.md`](../../../../README.md), the same section that covers
+async actor scaffolding (PRD-002). The `generate-sync-logic` command emits all
+three, in the language(s) passed via `--lang`. Unlike actors, this logic runs
+**inline inside a macrostep** of the `fsmlet` — no separate queue or process.
 
 ## Background
 

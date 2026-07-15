@@ -1,12 +1,21 @@
 # fsm-core-worker-ts — CLI Usage Guide
 
-This package provides three CLIs:
+This package provides six CLIs:
 
-| CLI                           | Entry point                            | Role                                                                                                                                                    |
-| ----------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **fsmlet**                    | `src/cli/fsmlet.ts`                    | Long-running node agent — registers itself with the scheduler, claims and drives FSM workers up to a concurrency limit                                  |
-| **async-operation-workerlet** | `src/cli/async-operation-workerlet.ts` | Long-running async-op node agent — validates actors, registers in `async_operation_workerlet`, claims and drives promise workers via LISTEN + heartbeat |
-| **fsmctl**                    | `src/cli/index.ts`                     | One-shot worker commands — start/create individual FSM or promise workers directly                                                                      |
+| CLI                           | Entry point                            | Role                                                                                                                                                                         |
+| ----------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **fsmlet**                    | `src/cli/fsmlet.ts`                    | Long-running node agent (kubelet equivalent) — registers itself, claims and drives FSM workers up to a concurrency limit                                                     |
+| **async-operation-workerlet** | `src/cli/async-operation-workerlet.ts` | Long-running async-op node agent (kubelet equivalent) — validates actors, registers in `async_operation_workerlet`, claims and drives promise workers via LISTEN + heartbeat |
+| **fsmscheduler**              | `src/cli/fsmscheduler.ts`              | Control-plane routing process (kube-scheduler equivalent) for `fsmlet` node agents. Run once per cluster, not on worker nodes                                                |
+| **async-operation-scheduler** | `src/cli/async-operation-scheduler.ts` | Control-plane routing process (kube-scheduler equivalent) for `async-operation-workerlet` node agents. Run once per cluster, not on worker nodes                             |
+| **fsmctl**                    | `src/cli/fsmctl.ts`                    | One-shot control CLI (kubectl equivalent) — create/resume/send/stop against the dispatch-queue model, then exits                                                             |
+| **async-operation-ctl**       | `src/cli/async-operation-ctl.ts`       | One-shot control CLI (kubectl equivalent) — list-instances/list-meta/dispatch against the async-operation dispatch tables, then exits                                        |
+
+> **Also present, not covered here:** `src/cli/deprecated_inprocess_worker.ts` —
+> the legacy pre-scheduler CLI (`resume-worker`, `start-promise-worker`,
+> `create-and-start-worker`, `create-and-start-promise-worker`, `stop-worker`).
+> Superseded by the `fsmlet` / `fsmscheduler` dispatch model above; still
+> present in the tree but not the recommended path for new work.
 
 ---
 
@@ -180,7 +189,7 @@ contains FSM subdirectories, the same path you would give `fsmlet`:
 3. **Register** — upserts this node into `async_operation_workerlet` with the
    full supported-op list and `max_pid_number`.
 4. **LISTEN** — opens a dedicated connection and subscribes to
-   `async_operation_workerlet_work_<id>`.
+   `async_op_workerlet_work_<id>`.
 5. **Claim & dispatch** — on each notification, calls
    `claim_scheduled_for_async_operation_workerlet()` atomically, then starts a
    long-running promise-worker for that actor queue (one worker per unique
@@ -206,263 +215,295 @@ contains FSM subdirectories, the same path you would give `fsmlet`:
 
 ---
 
-## fsmctl — one-shot worker commands
+## fsmscheduler — control-plane routing process
 
-`fsmctl` runs a single command against the database and exits (or stays running
-for worker polling). Use this for manual testing or for starting individual
-workers without the scheduler.
+`fsmscheduler` is the control-plane routing process (kube-scheduler equivalent)
+for `fsmlet` node agents. It does not take a folder path or drive any FSM
+instances itself — it only routes dispatch entries to the `fsmlet` nodes that
+can handle them. Run it once per cluster, alongside the API server, **not** on a
+machine also running `fsmlet`.
 
 ### Invocation
 
 ```bash
-# Using deno task (recommended)
-deno task cli -c <command> [options]
-
-# Direct invocation
-deno run --allow-all src/cli/index.ts -c <command> [options]
-
-# Watch mode (for development)
-deno task dev -c <command> [options]
+# From repo root
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts [options]
 ```
+
+### Options
+
+| Flag                    | Alias | Required | Default                    | Description                                                    |
+| ----------------------- | ----- | -------- | -------------------------- | -------------------------------------------------------------- |
+| `--db-url <url>`        | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string (required — exits if unset)       |
+| `--poll-interval <ms>`  | `-p`  | no       | `30000`                    | Fallback poll interval in milliseconds                         |
+| `--stale-threshold <s>` | `-s`  | no       | `30`                       | Seconds before a `fsmlet` with no heartbeat is treated as dead |
+| `--help`                | `-h`  | —        | —                          | Print help and exit                                            |
+
+### Example
+
+```bash
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts \
+  -d postgresql://user:pass@localhost:5432/db \
+  -p 30000 \
+  -s 30
+```
+
+### Behavior
+
+1. **LISTEN** — opens a dedicated connection and subscribes to
+   `fsm_scheduler_work`.
+2. **Scheduling cycle** — on each notification, loops
+   `fsm_core.schedule_next_pending()` until the queue is empty or no `fsmlet`
+   has capacity. Each call does a single-transaction claim
+   (`SELECT FOR
+   UPDATE SKIP LOCKED`), filters/scores active `fsmlet` nodes,
+   assigns the winner, and `pg_notify`s it — all inside the PG function.
+3. **Initial cycle** — runs one scheduling cycle immediately on startup, in case
+   entries were enqueued before the process started.
+4. **Fallback poll** — every 30 s by default (`--poll-interval`), runs another
+   cycle to catch any `pg_notify` missed after a `LISTEN` connection drop.
+
+### Graceful shutdown
+
+| Signal                             | Behaviour                                                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Stops the fallback poll loop, releases the LISTEN connection, closes the pool |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                   |
+
+### Environment variables
+
+| Variable       | Description                                                        |
+| -------------- | ------------------------------------------------------------------ |
+| `DATABASE_URL` | Fallback DB connection string (used when `--db-url` is not passed) |
 
 ---
 
-## Commands
+## async-operation-scheduler — control-plane routing process
 
-### `start-worker`
+`async-operation-scheduler` is the control-plane routing process (kube-scheduler
+equivalent) for `async-operation-workerlet` node agents. Structurally identical
+to `fsmscheduler`, routing a different dispatch table to a different node-agent
+type. Run it once per cluster, alongside the API server, **not** on a machine
+also running `async-operation-workerlet`.
 
-Start a polling worker on an existing PGMQ queue. Does **not** acquire a DB
-advisory lock.
-
-> **No HTTP equivalent** — the API always uses the lock variant. Use
-> `start-worker-with-db-lock` or `POST /fsm/start` for production.
-
-```bash
-deno task cli \
-  -c start-worker \
-  -q <queue-name> \
-  -n <fsm-name> \
-  -v <fsm-version> \
-  -f <abs-fsm-folder-path>
-```
-
-**Example — credit check FSM:**
+### Invocation
 
 ```bash
-deno task cli \
-  -c start-worker \
-  -q creditCheck_v01 \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01
+# From repo root
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-scheduler.ts [options]
 ```
+
+### Options
+
+| Flag                    | Alias | Required | Default                    | Description                                                     |
+| ----------------------- | ----- | -------- | -------------------------- | --------------------------------------------------------------- |
+| `--db-url <url>`        | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string (required — exits if unset)        |
+| `--poll-interval <ms>`  | `-p`  | no       | `30000`                    | Fallback poll interval in milliseconds                          |
+| `--stale-threshold <s>` | `-s`  | no       | `30`                       | Seconds before a workerlet with no heartbeat is treated as dead |
+| `--help`                | `-h`  | —        | —                          | Print help and exit                                             |
+
+### Example
+
+```bash
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-scheduler.ts \
+  -d postgresql://user:pass@localhost:5432/db \
+  -p 30000 \
+  -s 30
+```
+
+### Behavior
+
+1. **LISTEN** — opens a dedicated connection and subscribes to
+   `async_operation_scheduler_work`.
+2. **Scheduling cycle** — on each notification, loops
+   `fsm_core.async_operation_schedule_next_pending()` until the queue is empty
+   or no `async-operation-workerlet` has capacity. Each call atomically claims a
+   pending entry from `async_operation_instance_and_async_operation_workerlet`,
+   filters/scores active workerlets, assigns the winner, and `pg_notify`s it.
+3. **Initial cycle** — runs one scheduling cycle immediately on startup.
+4. **Fallback poll** — every 30 s by default (`--poll-interval`), catches any
+   `pg_notify` missed after a `LISTEN` connection drop.
+
+### Graceful shutdown
+
+| Signal                             | Behaviour                                                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Stops the fallback poll loop, releases the LISTEN connection, closes the pool |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                   |
+
+### Environment variables
+
+| Variable       | Description                                                        |
+| -------------- | ------------------------------------------------------------------ |
+| `DATABASE_URL` | Fallback DB connection string (used when `--db-url` is not passed) |
 
 ---
 
-### `start-worker-with-db-lock`
+## fsmctl — one-shot control CLI
 
-Start a polling worker with a PostgreSQL advisory lock. Prevents duplicate
-workers on the same queue. Exits with code 1 if another worker already holds the
-lock.
+`fsmctl` is the one-shot control CLI (kubectl equivalent) for the dispatch-queue
+model. It issues a single command against the database and exits immediately —
+it does not run a polling loop or drive a worker itself. `create` and `resume`
+enqueue a dispatch entry and `pg_notify` the `fsmscheduler`; an actual `fsmlet`
+still has to pick the work up.
 
-**HTTP equivalent:** `POST /fsm/start`
-
-```json
-{ "queue": "creditCheck_v01" }
-```
+### Invocation
 
 ```bash
-deno task cli \
-  -c start-worker-with-db-lock \
-  -q <queue-name> \
-  -n <fsm-name> \
-  -v <fsm-version> \
-  -f <abs-fsm-folder-path> \
-  [--validate-plugin]
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c <command> [options]
 ```
 
-**Example:**
+> **`deno task cli` / `deno task dev` are currently broken.** `deno.json` points
+> them at `src/cli/index.ts`, which no longer exists — it was renamed to
+> `src/cli/deprecated_inprocess_worker.ts` when `fsmctl` was introduced. Invoke
+> `fsmctl.ts` directly as shown above until `deno.json` is updated (see
+> [`deno.json` tasks](#denojson-tasks)).
+
+### Commands
+
+| Command  | Required flags                         | Description                                                                               |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `create` | `-n, --fsm-name`, `-v, --fsm-version`  | Create a new FSM instance and enqueue it to `fsm_dispatch_queue` for the `fsmscheduler`   |
+| `resume` | `-q, --queue-name`                     | Enqueue an existing FSM instance to `fsm_dispatch_queue` for resumption                   |
+| `send`   | `-q, --queue-name`, `-e, --event-type` | Send an event to a running FSM instance                                                   |
+| `stop`   | `-q, --queue-name`                     | Send a stop signal to whichever `fsmlet` worker is running that instance, via `pg_notify` |
+
+`-q, --queue-name` takes the FSM instance ID (a UUID), not a PGMQ queue name —
+the flag name is a holdover from the pre-scheduler model.
+
+### Options
+
+| Flag                  | Alias | Description                                                                      |
+| --------------------- | ----- | -------------------------------------------------------------------------------- |
+| `--command <command>` | `-c`  | Command to run — `create` / `resume` / `send` / `stop` (required)                |
+| `--fsm-name <name>`   | `-n`  | FSM definition name (required for `create`)                                      |
+| `--fsm-version <ver>` | `-v`  | FSM version (required for `create`)                                              |
+| `--context <json>`    |       | Initial FSM context as a JSON string (optional, `create` only; defaults to `{}`) |
+| `--queue-name <id>`   | `-q`  | FSM instance ID (required for `resume`, `send`, `stop`)                          |
+| `--event-type <type>` | `-e`  | Event type to send (required for `send`)                                         |
+| `--event-data <json>` |       | Event payload as a JSON string (optional, `send` only)                           |
+| `--db-url <url>`      | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`)              |
+| `--help`              | `-h`  | Print help and exit                                                              |
+
+### Examples
 
 ```bash
-deno task cli \
-  -c start-worker-with-db-lock \
-  -q creditCheck_v01 \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01 \
-  --validate-plugin
+# Create a new FSM instance (prints the instance UUID to stdout)
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c create -n creditCheck -v 1
+
+# ...with initial context
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c create -n creditCheck -v 1 --context '{"userId":"abc"}'
+
+# Resume an existing instance
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c resume -q <instance-uuid>
+
+# Send an event
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c send -q <instance-uuid> -e APPROVE
+
+# ...with an event payload
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c send -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
+
+# Stop a running worker
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts \
+  -c stop -q <instance-uuid>
 ```
 
-**`--validate-plugin`** — use `validateFsmPluginLoadFromFolder` instead of
-direct `import()`. Useful when you want to validate that all required exports
-(actions/guards/delays/actors) are present before starting.
+For `create`/`resume` to actually run anything, a `fsmscheduler` and at least
+one `fsmlet` with a matching FSM module both need to be running — see the
+sections above. `fsmctl` itself has no signal handling to worry about: each
+command runs once and the process exits (`0` on success, `1` on error).
 
 ---
 
-### `start-promise-worker`
+## All flags (`fsmctl`)
 
-Start a promise (actor) worker on an existing PGMQ promise queue. Invokes the
-named actor function for each queued message.
-
-**HTTP equivalent:** `POST /fsmpromise/start`
-
-```json
-{
-  "promise_name": "checkBureau_v01",
-  "promise_type": "checkBureau",
-  "promise_version": "1",
-  "fsm_name": "creditCheck",
-  "fsm_version": "1"
-}
-```
-
-> **Note:** `-n` must be the **parent FSM name** (e.g. `creditCheck`), not the
-> actor name. The actor type is specified separately with `-t`.
-
-```bash
-deno task cli \
-  -c start-promise-worker \
-  -q <queue-name> \
-  -t <promise-type> \
-  -n <parent-fsm-name> \
-  -v <fsm-version> \
-  -f <abs-fsm-folder-path>
-```
-
-**Example — credit bureau check actor:**
-
-```bash
-deno task cli \
-  -c start-promise-worker \
-  -q checkBureau_v01 \
-  -t checkBureau \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01
-```
-
-**`-t / --promise-type`** — the actor/promise type name. Must match an export in
-the `actors/` folder of the FSM definition.
+| Flag            | Alias | Required by              | Description                                                    |
+| --------------- | ----- | ------------------------ | -------------------------------------------------------------- |
+| `--command`     | `-c`  | all                      | Command to run — `create` / `resume` / `send` / `stop`         |
+| `--fsm-name`    | `-n`  | `create`                 | FSM definition name                                            |
+| `--fsm-version` | `-v`  | `create`                 | FSM version number                                             |
+| `--context`     |       | optional (`create`)      | Initial FSM context, JSON string                               |
+| `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (UUID)                                         |
+| `--event-type`  | `-e`  | `send`                   | Event type to send                                             |
+| `--event-data`  |       | optional (`send`)        | Event payload, JSON string                                     |
+| `--db-url`      | `-d`  | optional                 | Database connection URL (overrides `DATABASE_URL` from `.env`) |
+| `--help`        | `-h`  |                          | Print help and exit                                            |
 
 ---
 
-### `create-and-start-worker`
+## async-operation-ctl — one-shot control CLI
 
-Create a new FSM instance (and its PGMQ queue) then immediately start a worker
-with a DB advisory lock. This is the most common command for spinning up a fresh
-workflow.
+`async-operation-ctl` is the one-shot control CLI (kubectl equivalent) for the
+async-operation dispatch tables. Like `fsmctl`, it issues a single command and
+exits immediately.
 
-**HTTP equivalent:** `POST /fsm`
-
-```json
-{
-  "fsm_name": "creditCheck",
-  "fsm_version": "1",
-  "fsm_context": {}
-}
-```
-
-Returns `{ "data": { "fsm_instance_id": "<uuid>", ... } }`.
+### Invocation
 
 ```bash
-deno task cli \
-  -c create-and-start-worker \
-  -n <fsm-name> \
-  -v <fsm-version> \
-  -f <abs-fsm-folder-path> \
-  [--validate-plugin]
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts -c <command> [options]
 ```
 
-**Example:**
+### Commands
+
+| Command          | Required flags                                                                                             | Description                                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list-instances` | none                                                                                                       | Lists every row in `async_operation_instance_and_async_operation_workerlet` (`created_at DESC`)                                               |
+| `list-meta`      | none                                                                                                       | Lists every row in `async_operation_meta` (`updated_at DESC`)                                                                                 |
+| `dispatch`       | `-n, --name`, `-v, --version`, `-t, --type`, `--parent-fsm-name`, `--parent-fsm-version`, `-l, --language` | Enqueues an async-operation instance to `async_operation_instance_and_async_operation_workerlet` and notifies the `async-operation-scheduler` |
+
+`dispatch` calls
+`createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork`
+(`fsm_core.create_async_operation_instance_and_notify_async_operation_scheduler_work`
+under the hood — mirrors `create_fsm_instance_from_name_v2`'s internal
+`enqueue_fsm_dispatch_v2` call on the FSM side), but nothing else in the
+codebase calls it yet — the FSM macrostep code that fires `invoke` actions does
+not enqueue through this table (see the compiler/worker integration notes
+elsewhere in this repo). Use `dispatch` to manually enqueue an async-operation
+instance for testing or ops purposes.
+
+### Options
+
+| Flag                         | Alias | Description                                                                       |
+| ---------------------------- | ----- | --------------------------------------------------------------------------------- |
+| `--command <command>`        | `-c`  | Command to run — `list-instances` / `list-meta` / `dispatch` (required)           |
+| `--instance-id <uuid>`       |       | Async-operation instance ID (`dispatch` only; default: random UUID)               |
+| `--name <name>`              | `-n`  | Async-operation name (required for `dispatch`)                                    |
+| `--version <version>`        | `-v`  | Async-operation version (required for `dispatch`)                                 |
+| `--type <type>`              | `-t`  | Async-operation type, e.g. `promise` \| `sharedPromise` (required for `dispatch`) |
+| `--parent-fsm-name <name>`   |       | Parent FSM name (required for `dispatch`)                                         |
+| `--parent-fsm-version <ver>` |       | Parent FSM version (required for `dispatch`)                                      |
+| `--language <lang>`          | `-l`  | Async-operation language, e.g. `typescript` (required for `dispatch`)             |
+| `--db-url <url>`             | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`)               |
+| `--help`                     | `-h`  | Print help and exit                                                               |
+
+### Examples
 
 ```bash
-deno task cli \
-  -c create-and-start-worker \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01
+# List pending/scheduled async-operation instances
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts \
+  -c list-instances
+
+# List validated async-operation metadata
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts \
+  -c list-meta
+
+# Manually enqueue an async-operation instance
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts \
+  -c dispatch \
+  -n checkBureau -v 1 -t promise \
+  --parent-fsm-name creditCheck --parent-fsm-version 1 \
+  -l typescript
 ```
 
-The created FSM instance ID is printed to stdout. The worker then runs
-indefinitely, polling its queue.
-
-> **Note:** Initial FSM context defaults to `{}`. To pass custom context via
-> HTTP, include `fsm_context` in the request body.
-
----
-
-### `create-and-start-promise-worker`
-
-Create a new PGMQ queue and start a promise worker on it.
-
-**HTTP equivalent:** `POST /fsmpromise/create-and-start`
-
-```json
-{
-  "queue_name": "checkBureau_v01",
-  "fsm_name": "creditCheck",
-  "promise_type": "checkBureau",
-  "fsm_version": "1"
-}
-```
-
-> **Note:** `-n` must be the **parent FSM name** (e.g. `creditCheck`), not the
-> actor name.
-
-```bash
-deno task cli \
-  -c create-and-start-promise-worker \
-  -q <queue-name> \
-  -t <promise-type> \
-  -n <parent-fsm-name> \
-  -v <fsm-version> \
-  -f <abs-fsm-folder-path>
-```
-
-**Example:**
-
-```bash
-deno task cli \
-  -c create-and-start-promise-worker \
-  -q checkBureau_v01 \
-  -t checkBureau \
-  -n creditCheck \
-  -v 1 \
-  -f /abs/path/to/apps/fsm-core-example/fsm/creditCheck/v01
-```
-
----
-
-## All flags
-
-| Flag                | Alias | Required by                                               | Description                                                    |
-| ------------------- | ----- | --------------------------------------------------------- | -------------------------------------------------------------- |
-| `--command`         | `-c`  | all                                                       | Command to run (see above)                                     |
-| `--queue-name`      | `-q`  | all except `create-and-start-worker`                      | PGMQ queue name                                                |
-| `--fsm-name`        | `-n`  | all                                                       | FSM definition name                                            |
-| `--fsm-version`     | `-v`  | all                                                       | FSM version number                                             |
-| `--fsm-folder-path` | `-f`  | all                                                       | Absolute path to FSM folder (validated at startup)             |
-| `--promise-type`    | `-t`  | `start-promise-worker`, `create-and-start-promise-worker` | Actor/promise type name                                        |
-| `--db-url`          | `-d`  | optional                                                  | Database connection URL (overrides `DATABASE_URL` from `.env`) |
-| `--validate-plugin` |       | optional                                                  | Use plugin validator instead of direct imports                 |
-| `--help`            | `-h`  |                                                           | Print help and exit                                            |
-
----
-
-## Graceful shutdown
-
-All commands support graceful and force shutdown via keyboard signals:
-
-| Signal                        | Behavior                                                                                                        |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Ctrl+C once** (SIGINT)      | Graceful stop — signals the worker loop to exit after the current iteration, then releases the DB advisory lock |
-| **Ctrl+C twice** (SIGINT × 2) | Force exit — `Deno.exit(0)` immediately (DB lock released by session-end cleanup)                               |
-| **SIGTERM**                   | Same as first Ctrl+C — graceful stop                                                                            |
-
-The worker loop checks the abort signal on each iteration
-(`while (!signal?.aborted)`), so graceful stop completes within one poll cycle
-(at most ~30 seconds for the PGMQ visibility timeout, typically 1 second when
-the queue is idle).
+For `dispatch` to actually run anything, an `async-operation-scheduler` and at
+least one `async-operation-workerlet` with matching supported ops both need to
+be running — see the sections above. Like `fsmctl`, each command runs once and
+the process exits (`0` on success, `1` on error).
 
 ---
 
@@ -471,42 +512,60 @@ the queue is idle).
 ```json
 {
   "tasks": {
-    "dev": "deno run --allow-all --watch src/cli/index.ts",
-    "cli": "deno run --allow-all src/cli/index.ts",
-    "daemon": "deno run --allow-all src/cli/daemon.ts",
-    "ctl": "deno run --allow-all src/cli/ctl.ts",
+    "cli": "deno run --allow-all src/cli/fsmctl.ts",
+    "dev": "deno run --allow-all --watch src/cli/fsmctl.ts",
+    "async-operation-ctl": "deno run --allow-all src/cli/async-operation-ctl.ts",
+    "fsmlet": "deno run --allow-all src/cli/fsmlet.ts",
+    "async-operation-workerlet": "deno run --allow-all src/cli/async-operation-workerlet.ts",
+    "fsmscheduler": "deno run --allow-all src/cli/fsmscheduler.ts",
+    "async-operation-scheduler": "deno run --allow-all src/cli/async-operation-scheduler.ts",
     "check": "deno check src/index.ts"
   }
 }
 ```
 
-| Task              | Equivalent                                      | Notes                                           |
-| ----------------- | ----------------------------------------------- | ----------------------------------------------- |
-| `deno task cli`   | `deno run --allow-all src/cli/index.ts`         | One-shot fsmctl command                         |
-| `deno task dev`   | `deno run --allow-all --watch src/cli/index.ts` | fsmctl with `--watch` (restarts on file change) |
-| `deno task check` | `deno check src/index.ts`                       | Type-check all exports without running          |
+Run from `apps/fsm-core-worker-ts/`, each task takes the CLI's own flags after
+the task name, e.g. `deno task fsmlet -f <path>` or
+`deno task cli -c create
+-n creditCheck -v 1`. Equivalent direct invocations
+from the repo root:
 
-> **fsmlet and async-operation-workerlet have no dedicated tasks yet** — invoke
-> them directly:
->
-> - `deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts -f <path>`
-> - `deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts -f <path> -l typescript -t promise`
+```bash
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c <command> [options]
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts -c <command> [options]
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmlet.ts -f <path>
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-workerlet.ts -f <path> -l typescript -t promise
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-scheduler.ts
+```
 
 ---
 
-## FSM folder structure expected by `--fsm-folder-path`
+## FSM folder structure expected by `-f` / `--folder-path`
+
+Both `fsmlet` (`--fsm-folder-path`) and `async-operation-workerlet`
+(`--folder-path`) expect the same tree layout:
 
 ```
 <fsm-folder>/
 ├── actions/
-│   └── index.ts      # exports: { actionName: async (context, params, meta) => ... }
+│   └── index.ts               # exports: { actionName: async (context, params, meta) => ... }
 ├── guards/
-│   └── index.ts      # exports: { guardName: async (context, cond, meta) => boolean }
+│   └── index.ts               # exports: { guardName: async (context, cond, meta) => boolean }
 ├── delays/
-│   └── index.ts      # exports: { delayName: (context, event) => number }
+│   └── index.ts               # exports: { delayName: (context, event) => number }
 └── actors/
-    └── index.ts      # exports: { actorName: async (input) => output }
+    └── <actorName>/
+        └── <actorName>.ts     # exports: { actorName: async (input) => output }
 ```
+
+`actions`, `guards`, and `delays` are each a single `index.ts` module exporting
+every name in that category. `actors` is one subfolder per actor — matching
+exactly what `generate-async-logic` (`@pgfsm/compiler`) scaffolds — and
+`startFSMPromiseWorker` (`asyncOperationWorkerlet/fsmpromiseworker.ts`) loads
+each actor from its own file at runtime, using the module path and export name
+already resolved during validation (`ActorPluginValidationResult.fsmModulePath`
+/ `.method`) — no aggregating `actors/index.ts` is needed or read.
 
 Any of these subdirectories may be absent if the FSM does not use that feature
 type. The path is validated at startup — an invalid path exits with code 1
@@ -516,28 +575,40 @@ before any database connection is made.
 
 ## HTTP API reference
 
-The API server (`apps/fsm-core-ts-hono-deno`) exposes HTTP equivalents for most
-commands. `verifiedModule` (actor/action folder) is resolved server-side from
-`verifiedFsmModules` context using `fsm_name` + `fsm_version`.
+The API server (`apps/fsm-core-ts-hono-deno`) exposes both the legacy in-process
+routes and the newer dispatch-queue routes side by side. `verifiedModule`
+(actor/action folder) is resolved server-side from `verifiedFsmModules` context
+using `fsm_name` + `fsm_version`.
 
-| HTTP route                          | CLI equivalent                    | Body                                                                         |
-| ----------------------------------- | --------------------------------- | ---------------------------------------------------------------------------- |
-| `GET /fsm`                          | —                                 | —                                                                            |
-| `POST /fsm`                         | `create-and-start-worker`         | `{ fsm_name, fsm_version, fsm_context? }` — creates instance + starts worker |
-| `POST /fsm/start`                   | `start-worker-with-db-lock`       | `{ queue }`                                                                  |
-| `POST /fsm/stop`                    | Ctrl+C (graceful)                 | `{ queue }`                                                                  |
-| `GET /fsm/currentActive`            | —                                 | —                                                                            |
-| `POST /fsm/send`                    | —                                 | `{ fsm_instance_id, event_data }`                                            |
-| `GET /fsmpromise`                   | —                                 | —                                                                            |
-| `POST /fsmpromise/start`            | `start-promise-worker`            | `{ promise_name, promise_type, promise_version, fsm_name, fsm_version }`     |
-| `POST /fsmpromise/stop`             | Ctrl+C (graceful)                 | `{ queue }`                                                                  |
-| `POST /fsmpromise/create-and-start` | `create-and-start-promise-worker` | `{ queue_name, fsm_name, promise_type, fsm_version }`                        |
+| HTTP route                          | Model      | CLI equivalent                                                      | Body                                                                                            |
+| ----------------------------------- | ---------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /fsm`                          | —          | —                                                                   | —                                                                                               |
+| `POST /fsm`                         | in-process | `deprecated_inprocess_worker.ts -c create-and-start-worker`         | `{ fsm_name, fsm_version, fsm_context? }` — creates instance + starts worker directly           |
+| `POST /fsm/resume`                  | in-process | `deprecated_inprocess_worker.ts -c resume-worker`                   | `{ queue }`                                                                                     |
+| `POST /fsm/stop`                    | either     | `fsmctl -c stop`                                                    | `{ queue }`                                                                                     |
+| `GET /fsm/currentActive`            | in-process | —                                                                   | —                                                                                               |
+| `POST /fsm/send`                    | either     | `fsmctl -c send`                                                    | `{ fsm_instance_id, event_data }`                                                               |
+| `POST /fsm/dispatch`                | dispatch   | `fsmctl -c create`                                                  | `{ fsm_name, fsm_version, fsm_context? }` — creates instance + enqueues to `fsm_dispatch_queue` |
+| `POST /fsm/resume-dispatch`         | dispatch   | `fsmctl -c resume`                                                  | `{ queue }`                                                                                     |
+| `GET /fsmpromise`                   | in-process | —                                                                   | —                                                                                               |
+| `POST /fsmpromise/resume`           | in-process | `deprecated_inprocess_worker.ts -c start-promise-worker`            | `{ promise_name, promise_type, promise_version, fsm_name, fsm_version }`                        |
+| `POST /fsmpromise/stop`             | in-process | Ctrl+C (graceful) / `fsmctl -c stop`                                | `{ queue }`                                                                                     |
+| `POST /fsmpromise/create-and-start` | in-process | `deprecated_inprocess_worker.ts -c create-and-start-promise-worker` | `{ queue_name, fsm_name, promise_type, fsm_version }`                                           |
+
+`POST /fsm` and `POST /fsm/resume` start (or resume) a worker directly inside
+the API server process — the same in-process model as
+`deprecated_inprocess_worker.ts`. `POST /fsm/dispatch` and
+`POST /fsm/resume-dispatch` instead enqueue to `fsm_dispatch_queue`, the same
+path `fsmctl create`/`resume` use, requiring a running `fsmscheduler` + `fsmlet`
+to pick the work up. `fsmpromise` has no dispatch-model route yet —
+`async-operation-workerlet` is driven only via its own CLI, not through the HTTP
+API.
 
 ---
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                      |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Worker started (or command completed or gracefully stopped) successfully                                                     |
-| `1`  | Missing required arguments, invalid `--fsm-folder-path`, failed to acquire lock, failed to create instance, or runtime error |
+| Code | Meaning                                                                                                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Command completed (or long-running daemon exited) successfully                                                       |
+| `1`  | Missing required arguments, invalid folder path, failed to acquire lock, failed to create instance, or runtime error |

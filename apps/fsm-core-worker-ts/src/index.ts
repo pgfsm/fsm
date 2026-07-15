@@ -21,15 +21,12 @@ export {
 } from "./asyncOperationWorkerlet/fsmpromiseworker-helper.ts";
 export { stopFSMWorker } from "./stop-fsm-worker.ts";
 export { pgListenerForWorkerStopEvent } from "./pg-listener-for-worker-stop-event.ts";
-export { bootstrapFsmModules } from "./fsmlet/bootstrap-fsm-modules.ts";
 export type {
   BootstrapResult,
   DbConfig,
   FsmFolderConfig,
   FsmStartupConfig,
-  FsmWorkerEntry,
-  VerifiedFsmModule,
-} from "./fsmlet/bootstrap-fsm-modules.ts";
+} from "./fsmlet/type.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
 export type { FsmletHandle, FsmletOptions } from "./fsmlet/fsmlet.ts";
 export { runFsmScheduler } from "./fsmscheduler/fsmscheduler.ts";
