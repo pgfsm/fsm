@@ -15,14 +15,16 @@ At the start of every session, before doing anything else, ask:
 
 > "What are we doing in this session today? a) Explore / understand the
 > codebase, experiment, or general Q&A b) Design / architecture work (new
-> component, cross-cutting change, execution-model decision) c) Working on the
-> codebase — feature, bug, or chore"
+> component, cross-cutting change, execution-model decision) c) Scan a spec and
+> cut feature/chore tickets from it d) Working on the codebase — feature, bug,
+> or chore"
 
 ### (a) Explore / experiment / Q&A
 
 Continue normally. Don't touch GitHub issues. Code changes are fine here —
 experiments and throwaway work don't need an issue. If exploration turns into
-real design or implementation work, stop and re-enter the gate as (b) or (c).
+real design or implementation work, stop and re-enter the gate as (b), (c), or
+(d).
 
 ### (b) Design / architecture → spec-driven path
 
@@ -53,13 +55,51 @@ reviewed spec, not code.
    body must contain `Spec: docs/specs/spec-NNN-short-slug.md` and
    `Closes #<issue-number>`. No implementation code rides along.
 5. Humans review the design in the PR. On merge, the spec's status becomes
-   **Accepted**; cut implementation issues that link back to the spec. Durable,
-   hard-to-reverse decisions graduate to `docs/adr/` (see `docs/specs/README.md`
-   for the lifecycle).
+   **Accepted**; cut implementation issues that link back to the spec — that is
+   path (c) below. Durable, hard-to-reverse decisions graduate to `docs/adr/`
+   (see `docs/specs/README.md` for the lifecycle).
 
 Claude Code users: the `/design-spec` skill walks through this path.
 
-### (c) Feature / bug / chore → issue-driven path
+### (c) Spec → tickets — scan a spec and cut feature/chore issues
+
+**Do not write implementation code in this session.** The deliverables are a
+tickets file next to the spec and the GitHub issues cut from it.
+
+1. Scan `docs/specs/` for `spec-NNN-*.md` files (ignore `TEMPLATE.md` and
+   existing `*-tickets.md` files) and ask which spec to break down. Prefer
+   **Accepted** specs; flag it if the user picks a Draft.
+2. Read the spec, gauge its complexity, and suggest a ticket count. Ask the user
+   how many tickets they want. **The count can never exceed 7** — suggest fewer
+   for simple specs, and cap at 7 even if the user asks for more.
+3. Once the user replies with a number, create
+   `docs/specs/spec-NNN-short-slug-tickets.md` with one table row per ticket:
+
+   ```markdown
+   # Tickets — spec-NNN-short-slug
+
+   | # | Type    | Summary                        | Issue |
+   | - | ------- | ------------------------------ | ----- |
+   | 1 | feature | One-line summary of the ticket |       |
+   | 2 | chore   | One-line summary of the ticket |       |
+   ```
+
+   Each row has a type (feature or chore), a one-line summary, and an empty
+   **Issue** column to be filled in after the issues exist.
+4. When all tickets are written to the markdown file, create one GitHub issue
+   per row:
+
+   ```bash
+   gh issue create --title "<summary>" --body "Part of spec: docs/specs/spec-NNN-short-slug.md" --label <enhancement|chore>
+   ```
+
+   Feature tickets get the `enhancement` label; also add the matching `area: *`
+   label (see the note under (d)). Leave the issues unassigned — they are
+   backlog for future (d) sessions.
+5. Update the **Issue** column with `#<n>` for each created issue. The tickets
+   file lands via the normal PR flow, referencing one of the issues it created.
+
+### (d) Feature / bug / chore → issue-driven path
 
 1. List open issues (assigned to the current user, plus unassigned):
 
