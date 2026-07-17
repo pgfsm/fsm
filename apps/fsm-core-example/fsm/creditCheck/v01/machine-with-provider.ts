@@ -1,11 +1,9 @@
 import { fromPromise, setup } from "xstate";
-import {
-  checkBureau,
-  checkReportsTable,
-  determineMiddleScore,
-  generateInterestRates,
-  verifyCredentials,
-} from "./typescript/actors/index.ts";
+import { checkBureau } from "./typescript/actors/checkBureau/checkBureau.ts";
+import { checkReportsTable } from "./typescript/actors/checkReportsTable/checkReportsTable.ts";
+import { determineMiddleScore } from "./typescript/actors/determineMiddleScore/determineMiddleScore.ts";
+import { generateInterestRates } from "./typescript/actors/generateInterestRates/generateInterestRates.ts";
+import { verifyCredentials } from "./typescript/actors/verifyCredentials/verifyCredentials.ts";
 
 import {
   assignEquiGavinScore,

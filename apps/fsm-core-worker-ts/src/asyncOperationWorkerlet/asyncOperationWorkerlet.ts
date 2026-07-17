@@ -263,8 +263,11 @@ export async function startAsyncOperationWorkerlet(
       return;
     }
 
+    // Must match the DB-side naming convention in
+    // create_promise_queue_and_send_event_from_fsm_instance_id_v2:
+    // parentFsmName || '_' || parentFsmVersion || '_' || fsmName.
     const queueName =
-      `${entry.parent_fsm_name}_${entry.async_operation_name}_${entry.parent_fsm_version}`;
+      `${entry.parent_fsm_name}_${entry.parent_fsm_version}_${entry.async_operation_name}`;
 
     if (activeWorkers.has(queueName)) {
       // Long-running worker already polling this queue — duplicate dispatch, skip.
