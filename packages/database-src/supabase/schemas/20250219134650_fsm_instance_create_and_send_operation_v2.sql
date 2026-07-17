@@ -117,7 +117,7 @@ CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(
     input_fsm_name text,
     input_fsm_version TEXT,
     input_fsm_context jsonb,
-    create_pgmq_queue boolean DEFAULT false
+    create_pgmq_queue boolean DEFAULT true
 )
 RETURNS JSONB
 AS $$

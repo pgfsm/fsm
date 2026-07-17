@@ -30,15 +30,16 @@ export const createAndDispatch: AppRouteHandler<CreateAndDispatchRoute> =
         );
       }
 
-      // false = do not auto-create a pgmq queue; create_fsm_instance_from_name_v2
-      // already enqueues to fsm_dispatch_queue and notifies the fsmscheduler
-      // internally — no separate enqueueDispatch call needed here.
+      // true = also create the instance's pgmq queue and send
+      // initialTransition_event; the fsm_dispatch_queue enqueue alone only gets
+      // a worker started for this instance — the worker then reads from the
+      // per-instance pgmq queue, so that queue must exist and have a message.
       const fsm_instance = await createFsmInstanceFromName(
         deps,
         input_fsm_name,
         input_fsm_version,
         input_fsm_context as Json,
-        false,
+        true,
       ) as Record<string, string> | null;
 
       if (!fsm_instance?.fsm_instance_id) {
