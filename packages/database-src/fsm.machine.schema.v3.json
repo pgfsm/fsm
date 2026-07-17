@@ -306,8 +306,8 @@
         "fsmLanguage": {
           "type": "string",
           "default": "typescript",
-          "enum": ["typescript", "python", "rust", "llm"],
-          "description": "Language runtime that executes the invoked service. Defaults to typescript. Aligns with the actor folder convention (typescript/, python/, rust/, llm/)."
+          "enum": ["typescript", "python", "rust", "go", "llm"],
+          "description": "Language runtime that executes the invoked service. Defaults to typescript. Aligns with the actor folder convention (typescript/, python/, rust/, go/, llm/)."
         }
       },
       "required": ["type", "id", "src", "fsmType", "fsmVersion"],

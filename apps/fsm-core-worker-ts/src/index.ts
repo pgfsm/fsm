@@ -44,6 +44,14 @@ export {
 } from "./asyncOperationScheduler/asyncOperationScheduler.ts";
 export type { AsyncOperationSchedulerOptions } from "./asyncOperationScheduler/asyncOperationScheduler.ts";
 export {
+  runAsyncOperationWorkerlet,
+  startAsyncOperationWorkerlet,
+} from "./asyncOperationWorkerlet/asyncOperationWorkerlet.ts";
+export type {
+  AsyncOperationWorkerletHandle,
+  AsyncOperationWorkerletOptions,
+} from "./asyncOperationWorkerlet/asyncOperationWorkerlet.ts";
+export {
   deregisterFsmlet,
   fsmletHeartbeat,
   listActiveFsmlets,
