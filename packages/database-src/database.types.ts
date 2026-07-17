@@ -810,6 +810,18 @@ export type Database = {
         };
         Returns: string[];
       };
+      create_async_operation_instance_and_notify_async_operation_sche: {
+        Args: {
+          input_async_operation_instance_id: string;
+          input_async_operation_name: string;
+          input_async_operation_version: string;
+          input_async_operation_type: string;
+          input_parent_fsm_name: string;
+          input_parent_fsm_version: string;
+          input_async_operation_language: string;
+        };
+        Returns: undefined;
+      };
       create_fsm_instance_from_name_v2: {
         Args: {
           input_fsm_name: string;

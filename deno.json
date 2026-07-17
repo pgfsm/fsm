@@ -5,7 +5,8 @@
     "packages/fsm-core-db-ts",
     "apps/fsm-core-worker-ts",
     "apps/fsm-core-ts-hono-deno",
-    "packages/fsm-compiler-ts"
+    "packages/fsm-compiler-ts",
+    "packages/database-src"
   ],
   "fmt": {
     "exclude": [

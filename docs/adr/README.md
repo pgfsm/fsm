@@ -12,9 +12,10 @@ the monorepo.
 
 ## packages/database-src
 
-| ADR                                                                   | Title                                             | Status   |
-| --------------------------------------------------------------------- | ------------------------------------------------- | -------- |
-| [ADR-001](../../packages/database-src/docs/adr/adr-001-rls-policy.md) | Do Not Use PostgreSQL Row Security Policies (RLS) | Accepted |
+| ADR                                                                                       | Title                                               | Status   |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------- | -------- |
+| [ADR-001](../../packages/database-src/docs/adr/adr-001-rls-policy.md)                     | Do Not Use PostgreSQL Row Security Policies (RLS)   | Accepted |
+| [ADR-002](../../packages/database-src/docs/adr/adr-002-nodejs-npm-pinned-supabase-cli.md) | Node.js + npm, with a Pinned `supabase` CLI Version | Accepted |
 
 ## packages/database-src-extension
 
