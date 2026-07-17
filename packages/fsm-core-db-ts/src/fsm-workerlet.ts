@@ -9,7 +9,7 @@ const SCHEDULE_NEXT_PENDING_FN = `${FSM_SCHEMA}.schedule_next_pending`;
 const CLAIM_SCHEDULED_FOR_FSMLET_FN =
   `${FSM_SCHEMA}.claim_scheduled_for_fsmlet`;
 
-export type FsmModule = { fsmName: string; fsmVersion: string };
+export type FsmModule = { fsm_name: string; fsm_version: string };
 
 export function fsmletNotifyChannel(fsmletId: string): string {
   return `fsm_fsmlet_work_${fsmletId}`;

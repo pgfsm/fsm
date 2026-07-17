@@ -232,8 +232,8 @@ export async function startFsmlet(
       // Step 4: Registers itself with valid FSM modules in fsm_workerlet.
       const verifiedFsmWithAsyncOpsToBeRegistered: FsmModule[] =
         verifiedFsmWithAsyncOps.map((m) => ({
-          fsmName: m.fsmName,
-          fsmVersion: m.fsmVersion,
+          fsm_name: m.fsmName,
+          fsm_version: m.fsmVersion,
         }));
       await registerFsmlet(
         deps,
