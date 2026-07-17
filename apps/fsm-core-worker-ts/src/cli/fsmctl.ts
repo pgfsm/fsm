@@ -134,15 +134,16 @@ try {
       }
       const pool = new Pool({ connectionString: resolvedDbUrl });
       const deps = { db: pool, useSupabase: false };
-      // false = do not auto-create a pgmq queue; create_fsm_instance_from_name_v2
-      // already enqueues to fsm_dispatch_queue and notifies the fsmscheduler
-      // internally — no separate enqueueDispatch call needed here.
+      // true = also create the instance's pgmq queue and send
+      // initialTransition_event; the fsm_dispatch_queue enqueue alone only gets
+      // a worker started for this instance — the worker then reads from the
+      // per-instance pgmq queue, so that queue must exist and have a message.
       const result = await createFsmInstanceFromName(
         deps,
         fsmName!,
         fsmVersion!,
         context,
-        false,
+        true,
       ) as Record<string, string> | null;
       if (!result?.fsm_instance_id) {
         await pool.end();
@@ -150,7 +151,7 @@ try {
         Deno.exit(1);
       }
       await pool.end();
-      logger.info(result.fsm_instance_id);
+      logger.info("Created FSM instance: {result}", { result });
       break;
     }
 

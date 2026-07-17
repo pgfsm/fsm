@@ -75,7 +75,7 @@ export async function createFsmInstanceFromName(
   input_fsm_version: CreateInstanceArgs["input_fsm_version"],
   input_fsm_context: CreateInstanceArgs["input_fsm_context"],
   create_pgmq_queue: NonNullable<CreateInstanceArgs["create_pgmq_queue"]> =
-    false,
+    true,
 ): Promise<Json> {
   try {
     const text = `
