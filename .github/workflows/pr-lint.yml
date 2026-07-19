@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  conventions:
+    name: Enforce PR conventions
     # Renovate manages its own PRs; the issue-linkage convention applies to
     # human/agent work only.
     if: "!startsWith(github.head_ref, 'renovate/')"
