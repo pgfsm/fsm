@@ -119,3 +119,40 @@ jobs:
       # pgrx crates gate their PG version behind a feature; clippy needs one selected.
       - name: Clippy
         run: cargo clippy --features pg15 --no-default-features -- -D warnings
+
+  database:
+    name: Database (pgTAP)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/database-src
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Installs proto and runs `proto install` against the root .prototools.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      # moonrepo/setup-toolchain only resolves the root .prototools (Deno).
+      # Node is pinned separately in packages/database-src/.prototools, so run
+      # `proto install` again scoped to this directory to pick that pin up too.
+      - name: Install Node (from packages/database-src/.prototools)
+        run: proto install
+
+      - name: npm install
+        run: npm install
+
+      # Full local Supabase stack (Postgres + gotrue + storage + pgmq, etc.) via
+      # Docker, which ubuntu-latest already has. First pull is several GB and
+      # takes a couple of minutes — no image-layer caching here yet.
+      - name: Start local Supabase
+        run: npm run supabase:start
+
+      # Compiles supabase/schemas/*.sql into migrations and applies them.
+      - name: Apply schema (db reset)
+        run: npm run supabase:db:reset
+
+      # Runs the pgTAP suite in supabase/tests/ (see docs/guides/development.md).
+      - name: Run pgTAP tests
+        run: npm run supabase:test:db
