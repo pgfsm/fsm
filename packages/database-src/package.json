@@ -22,6 +22,7 @@
     "supabase:gen:types": "supabase gen types typescript --local --schema public,fsm_core,pgmq > database.types.ts",
     "supabase:db:addfakeusers": "tsx create-fake-user.ts",
     "supabase:db:deletefakeusers": "tsx delete-fake-user.ts",
+    "supabase:test:db": "supabase test db",
     "supabase:restart:with:diff:withUpgradeScript:patch": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:patch && npm run supabase:start:env && npm run supabase:gen:types",
     "supabase:restart:with:diff:withUpgradeScript:minor": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:minor && npm run supabase:start:env && npm run supabase:gen:types",
     "supabase:restart:with:diff:withUpgradeScript:major": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:major && npm run supabase:start:env && npm run supabase:gen:types",
