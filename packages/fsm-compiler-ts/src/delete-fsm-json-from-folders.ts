@@ -1,17 +1,15 @@
 import { getLogger } from "@logtape/logtape";
-import { v4 as uuidv4 } from "uuid";
-import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "delete"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 
 async function deleteFsmJSONFromFolder(
   dirEntryName: string,
-  dirEntryNameVersion: string,
-  folderPath: string,
+  _dirEntryNameVersion: string,
+  _folderPath: string,
   absFolderPath: string,
-  parentSource: string,
-  workflowType: WorkflowType,
+  _parentSource: string,
+  _workflowType: WorkflowType,
 ) {
   try {
     await Deno.remove(`${absFolderPath}/xstate-fsm.json`);

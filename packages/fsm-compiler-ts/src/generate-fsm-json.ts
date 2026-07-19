@@ -1,5 +1,4 @@
 import { getLogger } from "@logtape/logtape";
-import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "generate"]);
@@ -21,14 +20,14 @@ import type { Json } from "@pgfsm/db/database.types";
  * @param obj The FSM JSON object
  * @returns A new object with nulls removed from all actions arrays
  */
-function removeNullActions(obj: any): any {
+function removeNullActions(obj: Json): Json {
   const clone = JSON.parse(JSON.stringify(obj));
 
-  function filterNulls(arr: any[]): any[] {
-    return arr.filter((a: any) => a !== null);
+  function filterNulls(arr: Json[]): Json[] {
+    return arr.filter((a: Json) => a !== null);
   }
 
-  function visitState(state: any) {
+  function visitState(state: Json) {
     if (Array.isArray(state.entry)) state.entry = filterNulls(state.entry);
     if (Array.isArray(state.exit)) state.exit = filterNulls(state.exit);
 
@@ -77,15 +76,15 @@ function removeNullActions(obj: any): any {
 export function normalizeActionsToObjects(obj: Json): Json {
   const clone = JSON.parse(JSON.stringify(obj));
 
-  function toActionObject(a: any): any {
+  function toActionObject(a: Json): Json {
     return typeof a === "string" ? { type: a } : a;
   }
 
-  function normalizeActionArray(arr: any[]): any[] {
+  function normalizeActionArray(arr: Json[]): Json[] {
     return arr.map(toActionObject);
   }
 
-  function visitState(state: any) {
+  function visitState(state: Json) {
     if (Array.isArray(state.entry)) {
       state.entry = normalizeActionArray(state.entry);
     }
@@ -139,8 +138,8 @@ export function addActionNameFromDelay(obj: Json): Json {
   const clone = JSON.parse(JSON.stringify(obj));
 
   /** Collect full transition objects whose event contains "xstate.after." and have a delay key */
-  function getAfterTransitions(state: any): any[] {
-    const afterTransitions: any[] = [];
+  function getAfterTransitions(state: Json): Json[] {
+    const afterTransitions: Json[] = [];
 
     if (state.on && typeof state.on === "object") {
       for (const eventKey of Object.keys(state.on)) {
@@ -170,7 +169,10 @@ export function addActionNameFromDelay(obj: Json): Json {
   }
 
   /** Map each xstate.raise/xstate.cancel action to the next after-transition's delay value */
-  function enrichActionArray(actions: any[], afterTransitions: any[]): any[] {
+  function enrichActionArray(
+    actions: Json[],
+    afterTransitions: Json[],
+  ): Json[] {
     let i = 0;
     return actions.map((a) => {
       if (
@@ -189,7 +191,7 @@ export function addActionNameFromDelay(obj: Json): Json {
     });
   }
 
-  function visitState(state: any) {
+  function visitState(state: Json) {
     const afterTransitions = getAfterTransitions(state);
 
     if (Array.isArray(state.entry)) {
@@ -243,7 +245,7 @@ export function addMissingFsmTypeToInvokeActors(
     }
   > = [];
 
-  function visitState(state: any) {
+  function visitState(state: Json) {
     if (Array.isArray(state.invoke)) {
       for (const invokeObj of state.invoke) {
         // Only process if src exists

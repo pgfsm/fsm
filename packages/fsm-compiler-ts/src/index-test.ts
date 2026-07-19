@@ -26,7 +26,7 @@ import {
 const logger = getLogger(["@pgfsm/compiler", "test"]);
 await configureCompilerLogger();
 
-(async () => {
+(() => {
   logger.info("=== index.ts exports ===");
 
   const exports = {

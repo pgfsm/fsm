@@ -1,17 +1,16 @@
 import { getLogger } from "@logtape/logtape";
-import { v4 as uuidv4 } from "uuid";
-import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
+import type { Json } from "@pgfsm/db/database.types";
 
 async function loadFsmJSONFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
-  folderPath: string,
+  _folderPath: string,
   absFolderPath: string,
-  parentSource: string,
+  _parentSource: string,
   workflowType: WorkflowType,
   deps: DBDeps,
 ) {
@@ -62,7 +61,7 @@ export async function loadFsmJSONFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   deps: DBDeps,
-): Promise<any[]> {
+): Promise<Json[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
       `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
@@ -86,7 +85,7 @@ export async function loadFsmJSONFromFolders(
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
-  const folderResults: any[] = [];
+  const folderResults: Json[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {

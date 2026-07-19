@@ -1,3 +1,5 @@
+import type { Json } from "@pgfsm/db/database.types";
+
 export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 
 export type ActorReference = {
@@ -39,13 +41,13 @@ export type FsmPluginValidationResult = {
   fsmParentDirName: string;
   fsmParentAbsFolderPath: string;
   fsmParentRelativeFolderPath: string;
-  fsmJsonConfigData: any;
+  fsmJsonConfigData: Json;
   fsmJsonPresent: boolean;
   fsmJsonFollowSchema: boolean;
   isFsmModuleVerified: boolean;
-  fsmModuleDefinition: any;
+  fsmModuleDefinition: Json;
   failedMethods: FailedMethod[];
-  asyncOperationActors: any[];
+  asyncOperationActors: ActorReference[];
   isAsyncOperationActorsVerified?: boolean;
 };
 
@@ -67,14 +69,17 @@ export type ActorPluginValidationResult = {
 
 export const DELAY_ACTION_NAME_PREFIX = "delay";
 
-export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);
+export const RAISE_CANCEL: Set<string> = new Set([
+  "xstate.raise",
+  "xstate.cancel",
+]);
 
 /**
  * Recursively traverses FSM JSON and collects all action, guard, delay, and actor names.
  * Actors are returned as objects preserving fsmType, fsmVersion, and fsmLanguage
  * (fsmLanguage defaults to "typescript" when absent on the invoke object).
  */
-export function extractFsmPluginRefs(fsmData: any): {
+export function extractFsmPluginRefs(fsmData: Json): {
   actions: string[];
   guards: string[];
   delays: string[];
@@ -85,14 +90,14 @@ export function extractFsmPluginRefs(fsmData: any): {
   const delaysSet = new Set<string>();
   const actorsArr: ActorReference[] = [];
 
-  function collectActionName(a: any) {
+  function collectActionName(a: Json) {
     if (typeof a === "string") actionsSet.add(a);
     else if (a && typeof a === "object" && typeof a.type === "string") {
       actionsSet.add(a.type);
     }
   }
 
-  function visitState(state: any) {
+  function visitState(state: Json) {
     if (Array.isArray(state.entry)) state.entry.forEach(collectActionName);
     if (Array.isArray(state.exit)) state.exit.forEach(collectActionName);
 
@@ -206,7 +211,7 @@ export function isTimestampFolderName(name: string): boolean {
 /**
  * Recursively replaces underscores with spaces in keys and string values of an object.
  */
-export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
+export function replaceUnderscoresWithSpaces(objWithMachine: Json): Json {
   const obj = objWithMachine?.machine ? objWithMachine.machine : objWithMachine;
   if (Array.isArray(obj)) {
     return obj.map(replaceUnderscoresWithSpaces);
@@ -215,7 +220,7 @@ export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
       const newKey = typeof key === "string" ? key.replace(/_/g, " ") : key;
       acc[newKey] = replaceUnderscoresWithSpaces(value);
       return acc;
-    }, {} as any);
+    }, {} as Json);
   } else if (typeof obj === "string") {
     return obj.replace(/_/g, " ");
   } else {
@@ -226,7 +231,7 @@ export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
 /**
  * Recursively replaces spaces with underscores in keys and string values of an object.
  */
-export function replaceSpacesWithUnderscores(obj: any): any {
+export function replaceSpacesWithUnderscores(obj: Json): Json {
   if (Array.isArray(obj)) {
     return obj.map(replaceSpacesWithUnderscores);
   } else if (obj && typeof obj === "object") {
@@ -234,7 +239,7 @@ export function replaceSpacesWithUnderscores(obj: any): any {
       const newKey = typeof key === "string" ? key.replace(/ /g, "_") : key;
       acc[newKey] = replaceSpacesWithUnderscores(value);
       return acc;
-    }, {} as any);
+    }, {} as Json);
   } else if (typeof obj === "string") {
     return obj.replace(/ /g, "_");
   } else {
