@@ -5,7 +5,7 @@ import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";
 import { resolveStateValue } from "@pgfsm/db";
-import { macrostep_v2 } from "@pgfsm/worker";
+import { macrostepV2 } from "@pgfsm/worker";
 import {
   replaceSpacesWithUnderscores,
   replaceUnderscoresWithSpaces,
@@ -78,18 +78,18 @@ Deno.test({
       const msg = {
         msg_id: 1,
         message: {
-          event_data: {
-            event_type: "initialTransition_event",
-            event_payload: {},
+          eventData: {
+            eventType: "initialTransition_event",
+            eventPayload: {},
           },
         },
       };
 
-      const macrostepState: any = await macrostep_v2(
+      const macrostepState: any = await macrostepV2(
         dbDeps,
         queueName,
         msg as any,
-        fsm_instance_row,
+        fsm_instance_row as any,
         resolved_state_value,
         fsm_name,
         fsm_version,
@@ -167,14 +167,14 @@ Deno.test({
       const msg = {
         msg_id: 1,
         message: {
-          event_data: {
-            event_type: submitEvent.type,
-            event_payload: submitEvent.payload,
+          eventData: {
+            eventType: submitEvent.type,
+            eventPayload: submitEvent.payload,
           },
         },
       };
 
-      const macrostepState: any = await macrostep_v2(
+      const macrostepState: any = await macrostepV2(
         dbDeps,
         queueName,
         msg as any,
@@ -278,14 +278,14 @@ Deno.test({
       const msg = {
         msg_id: 1,
         message: {
-          event_data: {
-            event_type: doneEvent.type,
-            event_payload: doneEvent.payload,
+          eventData: {
+            eventType: doneEvent.type,
+            eventPayload: doneEvent.payload,
           },
         },
       };
 
-      const macrostepState: any = await macrostep_v2(
+      const macrostepState: any = await macrostepV2(
         dbDeps,
         queueName,
         msg as any,

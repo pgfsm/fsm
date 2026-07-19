@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
-import { stopFSMWorker } from "../index.ts";
 import {
   API_SYSTEM_EVENT_NAME,
   API_SYSTEM_QUEUE_TYPE,
@@ -12,6 +11,7 @@ import {
   getFSMData,
   resumeEventForFsmWorker,
   sendEventToFsmQueueWithEventLogs,
+  stopEventForFsmWorker,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
 
@@ -206,7 +206,7 @@ try {
 
     case "stop": {
       const pool = new Pool({ connectionString: resolvedDbUrl });
-      await stopFSMWorker({ db: pool, useSupabase: false }, queueName!);
+      await stopEventForFsmWorker({ db: pool, useSupabase: false }, queueName!);
       logger.info("Stop signal sent for worker: {queueName}", { queueName });
       await pool.end();
       break;
