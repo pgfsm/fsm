@@ -18,6 +18,7 @@ import {
   type WorkflowType,
 } from "./util.ts";
 import type { Json } from "@pgfsm/db/database.types";
+import type { FsmMachineJson } from "./generated/fsm-machine-schema.types.ts";
 
 type AnyFunction = (...args: unknown[]) => unknown;
 
@@ -98,7 +99,7 @@ export async function validateLanguageModules(
 }
 
 export async function validateSyncOperationFromFolder(
-  fsmData: Json,
+  fsmData: FsmMachineJson,
   dirName: string,
   versionName: string,
   absPath: string,
@@ -110,7 +111,7 @@ export async function validateSyncOperationFromFolder(
   _availableActors: ActorReference[],
 ): Promise<FsmPluginValidationResult> {
   const fsmJsonPresent = true;
-  const fsmJsonConfigData: Json = undefined;
+  const fsmJsonConfigData: FsmMachineJson | undefined = undefined;
   let fsmJsonFollowSchema = false;
   let fsmModuleDefinition: Json = undefined;
   let isFsmModuleVerified = false;

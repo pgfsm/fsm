@@ -10,7 +10,8 @@
     "cli": "deno run --allow-all src/cli/index.ts",
     "test": "deno test --allow-all test/",
     "test:watch": "deno test --allow-all --watch test/",
-    "build:npm": "deno run --allow-all --allow-read --allow-write --allow-env --allow-run scripts/build-npm.ts"
+    "build:npm": "deno run --allow-all --allow-read --allow-write --allow-env --allow-run scripts/build-npm.ts",
+    "generate:fsm-types": "deno run --allow-read --allow-write --allow-sys --allow-env scripts/generate-fsm-json-types.ts"
   },
   "imports": {
     "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
@@ -20,6 +21,7 @@
     "@types/pg": "npm:@types/pg@^8.18.0",
     "ajv": "npm:ajv@^8.18.0",
     "dotenv": "npm:dotenv@^16.5.0",
+    "json-schema-to-typescript": "npm:json-schema-to-typescript@^15.0.4",
     "pg": "npm:pg@^8.20.0",
     "type-fest": "npm:type-fest@^4.41.0",
     "uuid": "npm:uuid@^11.1.0",

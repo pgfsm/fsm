@@ -4,6 +4,7 @@ const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
+import type { FsmMachineJson } from "./generated/fsm-machine-schema.types.ts";
 
 async function loadFsmJSONFromFolder(
   dirEntryName: string,
@@ -18,7 +19,9 @@ async function loadFsmJSONFromFolder(
   try {
     await Deno.stat(fsmJson);
     // 1. Load fsm.json file
-    const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+    const fsmData: FsmMachineJson = JSON.parse(
+      await Deno.readTextFile(fsmJson),
+    );
 
     // 2. Process fsmData and insert into database using helper functions
     // Call loadFsmStateFromJsonV2 and loadFsmTransitionFromJsonV2 with fsmData

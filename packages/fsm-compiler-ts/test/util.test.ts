@@ -5,11 +5,31 @@ import {
   isValidDateFolderName,
   isVersionFolderName,
 } from "../src/util.ts";
+import type { FsmMachineJson } from "../src/generated/fsm-machine-schema.types.ts";
+
+// Minimal fixtures — only `states` matters for extractFsmPluginRefs, but the
+// full FsmMachineJson contract (matching what real callers always have) is
+// enforced at the type level, so the required id/key/type fields are filled
+// in with placeholders here.
+const baseFsm = { id: "root", key: "root", type: "compound" as const };
+
+const baseInvoke = {
+  type: "xstate.invoke",
+  id: "0.idle",
+  fsmType: "promise" as const,
+  fsmVersion: "v01",
+};
+const baseState = { id: "root.idle", key: "idle", type: "atomic" as const };
 
 Deno.test("extractFsmPluginRefs - defaults actor fsmLanguage to typescript", () => {
-  const fsmData = {
+  const fsmData: FsmMachineJson = {
+    ...baseFsm,
     states: {
-      idle: { invoke: [{ src: "someActor" }] },
+      idle: {
+        ...baseState,
+        invoke: [{ ...baseInvoke, src: "someActor" }],
+        on: {},
+      },
     },
   };
   const { actors } = extractFsmPluginRefs(fsmData);
@@ -19,9 +39,14 @@ Deno.test("extractFsmPluginRefs - defaults actor fsmLanguage to typescript", () 
 });
 
 Deno.test("extractFsmPluginRefs - preserves explicit actor fsmLanguage", () => {
-  const fsmData = {
+  const fsmData: FsmMachineJson = {
+    ...baseFsm,
     states: {
-      idle: { invoke: [{ src: "pyActor", fsmLanguage: "python" }] },
+      idle: {
+        ...baseState,
+        invoke: [{ ...baseInvoke, src: "pyActor", fsmLanguage: "python" }],
+        on: {},
+      },
     },
   };
   const { actors } = extractFsmPluginRefs(fsmData);
