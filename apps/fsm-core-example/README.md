@@ -47,6 +47,22 @@ This starts a server that mounts all FSMs in this folder as plugin roots. See
 the root [README](../../README.md) for the full quick-start flow including
 database setup.
 
+## Running the DB-backed tests
+
+The `*-test.ts` files under each FSM's version folder (e.g.
+`fsm/creditCheck/v01/fsm-core-macrostep-v2-test.ts`) exercise real DB functions
+(`macrostepV2`, `resolveStateValue`, worker journeys) against a live Postgres
+connection and compare the result to the FSM's own XState machine. They need
+that FSM already loaded into `fsm_core.fsm_states`/`fsm_transitions` — run this
+once per fresh/reset DB:
+
+```bash
+deno task load   # from this directory, or `deno task -f fsm-core-example load` from the repo root
+```
+
+Skipping this step doesn't fail loudly — the tests just get `undefined` back
+from DB calls and fail on unrelated-looking assertions.
+
 ## Adding a new FSM
 
 1. Create `fsm/<yourFsmName>/v01/fsm.json` (see

@@ -1,17 +1,32 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
+import type { Pool } from "pg";
 import { configureWorkerLogger } from "../logger.ts";
 import {
   bootstrapFsmModules,
   createAndStartFSMWorker,
   createAndStartPromiseWorker,
-  pgListenerForWorkerStopEvent,
   startFSMPromiseWorker,
   startFSMWorkerWithDBLock,
-  stopFSMWorker,
 } from "../index.ts";
 import type { FsmStartupConfig, FsmWorkerEntry } from "../index.ts";
+import { stopEventForFsmWorker } from "@pgfsm/db";
+
+// Sets up a single shared LISTEN connection for the app's lifetime.
+// The client is intentionally never released — dedicated to receiving stop signals.
+async function pgListenerForWorkerStopEvent(
+  pool: Pool,
+  onStop: (queueName: string) => void,
+): Promise<void> {
+  const listenClient = await pool.connect();
+  await listenClient.query("LISTEN fsm_worker_stop");
+  listenClient.on("notification", (msg) => {
+    if (msg.payload) {
+      onStop(msg.payload);
+    }
+  });
+}
 
 const logger = getLogger(["@pgfsm/worker", "cli"]);
 await configureWorkerLogger();
@@ -307,7 +322,10 @@ try {
     case "stop-worker": {
       const { Pool } = await import("pg");
       const stopPool = new Pool({ connectionString: resolvedDbUrl });
-      await stopFSMWorker({ db: stopPool, useSupabase: false }, queueName!);
+      await stopEventForFsmWorker(
+        { db: stopPool, useSupabase: false },
+        queueName!,
+      );
       logger.info("Stop signal sent for worker queue: {queueName}", {
         queueName,
       });

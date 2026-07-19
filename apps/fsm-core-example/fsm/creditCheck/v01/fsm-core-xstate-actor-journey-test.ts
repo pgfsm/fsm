@@ -283,13 +283,15 @@ Deno.test({
         { timeout: 5000 },
       );
       // start promise worker for verifyCredentials actor
+      const promiseActorFsmAbsFolderPath = verifiedModule
+        .fsmAbsFolderPath as string;
       const promiseActor = {
         src: "verifyCredentials",
-        fsmType: "promise",
+        fsmType: "promise" as const,
         fsmVersion: "v01",
         parentFsmName: fsm_name,
         parentFsmVersion: fsm_version,
-        fsmAbsFolderPath: verifiedModule.fsmAbsFolderPath as string,
+        fsmAbsFolderPath: promiseActorFsmAbsFolderPath,
         controller: new AbortController(),
       };
       try {
@@ -299,7 +301,23 @@ Deno.test({
           promiseActor.src,
           promiseActor.fsmType,
           promiseActor.fsmVersion,
-          { fsmAbsFolderPath: promiseActor.fsmAbsFolderPath },
+          {
+            src: promiseActor.src,
+            method: promiseActor.src,
+            fsmName: promiseActor.src,
+            fsmType: promiseActor.fsmType,
+            fsmVersion: promiseActor.parentFsmVersion,
+            fsmLanguage: "typescript",
+            isVerified: true,
+            fsmModulePath:
+              `${promiseActor.fsmAbsFolderPath}/typescript/actors/${promiseActor.src}/${promiseActor.src}.ts`,
+            parentFsmName: promiseActor.parentFsmName,
+            parentFsmVersion: promiseActor.parentFsmVersion,
+            comment:
+              "for fsmType promise fsmVersion will be its parentFsmVersion value",
+            parentFsmPath: promiseActor.fsmAbsFolderPath,
+            errorMessage: null,
+          },
           promiseActor.controller.signal,
         );
         console.log(

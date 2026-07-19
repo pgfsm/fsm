@@ -52,13 +52,27 @@ via proto/rustup get the shims on the user `PATH` automatically.
 cd apps/fsm-core-ts-hono-deno
 deno run --allow-all --env-file=.env --watch main.ts
 
-# Tests
-deno test
-
 # Local database
 cd packages/database-src
 npm run supabase:start
+
+# Load the example FSMs (creditCheck, carVitals, taskMachineConfig) into the
+# local DB — required before running apps/fsm-core-example's DB-backed tests
+deno task load
+
+# Tests
+deno test
 ```
+
+The example FSM tests under `apps/fsm-core-example/fsm/*/v*/*-test.ts` compare
+live DB behavior (`macrostepV2`, `resolveStateValue`, worker journeys) against
+the FSM's own XState machine, so they need that FSM's `fsm.json` already loaded
+into `fsm_core.fsm_states`/`fsm_transitions` — otherwise they fail with
+`undefined` results rather than a useful error. `deno task load` (defined in
+`apps/fsm-core-example/deno.json`) re-runs the compiler's `load` command against
+every FSM in `apps/fsm-core-example/fsm/`; it's idempotent, so re-run it any
+time you reset the local DB (`supabase:db:reset`) or change an example FSM's
+`fsm.json`.
 
 See [CLAUDE.md](CLAUDE.md) for the full command reference.
 

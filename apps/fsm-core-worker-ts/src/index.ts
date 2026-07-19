@@ -19,8 +19,6 @@ export {
   type FSMPromiseArchiveData,
   processFSMPromiseQueueMessage,
 } from "./asyncOperationWorkerlet/fsmpromiseworker-helper.ts";
-export { stopFSMWorker } from "./stop-fsm-worker.ts";
-export { pgListenerForWorkerStopEvent } from "./pg-listener-for-worker-stop-event.ts";
 export type {
   BootstrapResult,
   DbConfig,

@@ -9,7 +9,6 @@ import type {
   StopRoute,
 } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
-import { stopFSMWorker } from "@pgfsm/worker";
 import {
   API_SYSTEM_EVENT_NAME,
   API_SYSTEM_QUEUE_TYPE,
@@ -19,6 +18,7 @@ import {
   type Json,
   listFsmInstances,
   sendEventToFsmQueueWithEventLogs,
+  stopEventForFsmWorker,
 } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/api", "fsm"]);
@@ -69,7 +69,7 @@ export const stop: AppRouteHandler<StopRoute> = async (c) => {
   const deps = { db, useSupabase: false };
 
   try {
-    await stopFSMWorker(deps, queue);
+    await stopEventForFsmWorker(deps, queue);
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {
     logger.error("Error in stop handler: {error}", { error: _err });
