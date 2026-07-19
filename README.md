@@ -9,114 +9,81 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
 
-This document is a **design specification** for the end-to-end lifecycle of an
-FSM: how you go from a state-machine definition to a running workflow. You
-**design** a machine, **scaffold** the code that implements its operation logic,
-then run two cooperating pairs of node-agent + scheduler daemons that execute it
-— the **`asyncOperationWorkerlet`** (runs async operation logic / actors) and
-the **`fsmlet`** (drives the state machine itself).
+This document is the lifecycle spec for an FSM — **design/generate** →
+**scaffold** → **validate** → **run the cluster**.
 
-> **Status — read this first.** This is the _target_ design. Each step below is
-> tagged **✅ Shipped** or **🔭 Planned**. The
-> [Maps to today's code](#appendix-maps-to-todays-code) appendix ties every
-> design term to what exists now. Scaffolding and validation (sections 2–3) are
-> polyglot across all four languages. **Execution** is narrower: the `fsmlet`
-> only runs TypeScript sync operation logic, and the `asyncOperationWorkerlet`
-> can run TypeScript (in-process) and Python (subprocess) actors — Go and Rust
-> actors validate but cannot yet be executed (section 4).
-
-```
-┌───────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│ 1. design │─▶│ 2. scaffold     │─▶│ 3. validate      │─▶│ 4. run workers   │
-│  fsm.json │  │ fsm operation   │  │  + load to PG    │  │  (async + fsm)   │
-└───────────┘  └─────────────────┘  └──────────────────┘  └──────────────────┘
-              every step reads and writes through PostgreSQL as the source of truth
+```mermaid
+flowchart LR
+    A["<b>1. design / generate</b><br/>fsm.json"] --> B["<b>2. scaffold</b><br/>operation logic"]
+    B --> C["<b>3. validate</b><br/>+ load to PG"]
+    C --> D["<b>4. run the cluster</b><br/>node agents (kubelet) + scheduler + ctl"]
 ```
 
-**Two kinds of operation logic.** A state machine references two families of
-user code:
-
-- **Sync operation logic** — `actions`, `guards`, `delays`. Pure/inline; runs
-  inside a single macrostep of the `fsmlet`.
-- **Async operation logic** — `actors` (the `invoke` objects on a state).
-  Long-running; each runs in its own queue and process, driven by the
-  `asyncOperationWorkerlet`, and reports back with `xstate.done.actor.<id>` /
-  `xstate.error.actor.<id>` events.
+_Every step reads and writes through PostgreSQL as the source of truth._
 
 ---
 
-## 1. Design your FSM JSON schema
+## 1. Design or generate fsm.json
 
-An FSM is authored as an XState 5 machine and compiled into `fsm.json` (the
-normalized form loaded into PostgreSQL) plus `xstate-fsm.json` (the raw XState
-representation). Definitions live in versioned folders, e.g.
-`apps/fsm-core-example/fsm/creditCheck/v01/`.
-
-Reference: the JSON Schema at
-[`packages/database-src/fsm.machine.schema.v3.json`](./packages/database-src/fsm.machine.schema.v3.json)
-and the format guide at
-[`fsm-definition-format.md`](./packages/fsm-compiler-ts/docs/reference/fsm-definition-format.md).
-
-### 1.a From an existing XState machine — ✅ Shipped
-
-If you already have an XState machine, point the compiler at its `machine.ts`
-and it emits `fsm.json` + `xstate-fsm.json`:
-
-```bash
-# From a single machine.ts
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c generate \
-  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
-```
-
-### 1.b From scratch — ✅ Shipped
-
-Hand-author `fsm.json` directly against
-[`fsm.machine.schema.v3.json`](./packages/database-src/fsm.machine.schema.v3.json)
-— no XState source needed. Author the states, transitions, and `invoke` objects
-by hand, then validate the file against the schema with any JSON Schema
-validator, e.g. [`ajv-cli`](https://github.com/ajv-validator/ajv-cli):
-
-```bash
-npx ajv-cli validate \
-  -s packages/database-src/fsm.machine.schema.v3.json \
-  -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json
-```
-
-### The `invoke` object
-
-Each state may declare async operation logic through an `invoke` array. This is
-the seam between the machine and its actors:
+Sample fsm json
 
 ```jsonc
+// fsm.json excerpt — one state using both kinds of operation logic
 {
-  "invoke": [
-    {
-      "type": "xstate.invoke",
-      "id": "creditBureauCheck",
-      "src": "checkBureau", // exported fn in <lang>/actors/checkBureau/checkBureau.<ext>
-      "fsmType": "promise", // promise | sharedPromise | sharedFsm | fsm
-      "fsmVersion": "1",
-      "fsmLanguage": "typescript" // typescript | python | rust | llm  (🔭 reserved)
+  "states": {
+    "verifyingCredentials": {
+      "entry": [{ "type": "logAttempt" }], // action — sync
+      "invoke": [
+        {
+          // actor — async, driven by asyncOperationWorkerlet
+          "type": "xstate.invoke",
+          "id": "creditBureauCheck",
+          "src": "checkBureau", // exported fn in <lang>/actors/checkBureau/checkBureau.<ext>
+          "fsmType": "promise", // promise | sharedPromise | sharedFsm | fsm
+          "fsmVersion": "1",
+          "fsmLanguage": "typescript" // the routing key for the polyglot model // typescript | python | rust | go | llm  (🔭 reserved)
+        }
+      ],
+      "on": {
+        "xstate.done.actor.creditBureauCheck": {
+          "target": "checkingCreditScores",
+          "guard": { "type": "isEligible" } // guard — sync
+        }
+      }
     }
-  ]
+  }
 }
 ```
 
-`fsmType` and `fsmVersion` are required and understood today. `fsmLanguage` is
-reserved in the schema (default `typescript`) and selects which language's actor
-folder implements the operation logic — the routing key for the polyglot model
-in sections 2 and 4.
+JSON Schema Reference:
+[`packages/database-src/fsm.machine.schema.v3.json`](./packages/database-src/fsm.machine.schema.v3.json)
+
+Format guide:
+[`fsm-definition-format.md`](./packages/fsm-compiler-ts/docs/reference/fsm-definition-format.md).
+
+Example :
+[apps/fsm-core-example/fsm/creditCheck/v01/](./apps/fsm-core-example/fsm/creditCheck/v01/)
+
+| Info    | Generate From an existing XState machine                                                                                                                                                                                                                                                                                                                                                                                    | Design From scratch                                                                                                                                                                   |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source  | An existing XState 5 `machine.ts`                                                                                                                                                                                                                                                                                                                                                                                           | No XState source — hand-author `fsm.json` directly against the schema                                                                                                                 |
+| How     | Point the compiler at `machine.ts`; it emits `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                 | Author states, transitions, and `invoke` objects by hand, then validate against the schema with any JSON Schema validator, e.g. [`ajv-cli`](https://github.com/ajv-validator/ajv-cli) |
+| Command | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts`                                                                                                                                                                                                                                                                                        | `npx ajv-cli validate -s packages/database-src/fsm.machine.schema.v3.json -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json`                                                      |
+| Steps   | 1. Export raw XState JSON → write `xstate-fsm.json`<br>2. Strip null entries from action arrays<br>3. Normalize string actions to `{ type }` objects<br>4. Set `actionName` from `delay` on raise/cancel actions<br>5. Fill in missing `fsmType`/`fsmVersion` on `invoke` (actor) entries<br>6. Write `fsm.json`<br>7. _(optional, `--show-recommendation`)_ validate `fsm.json` against the schema and log recommendations | None — you author `fsm.json` by hand, then run the `ajv-cli` command yourself                                                                                                         |
+| Output  | `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                                                              | `fsm.json`                                                                                                                                                                            |
 
 ---
 
 ## 2. Scaffold FSM operation
 
 From a compiled `fsm.json`, generate **base (stub) code** for the two families
-of operation logic a machine can reference: async operation logic (`actors`, via
-`invoke` objects) and sync operation logic (`actions`, `guards`, `delays`). Both
-are driven by the same compiler CLI; they differ in command, language routing,
-and where the resulting code runs.
+of operation logic a machine can reference:
+
+1. **Async operation logic** — `actors`, via `invoke` objects
+2. **Sync operation logic** — `actions`, `guards`, `delays`
+
+Both are driven by the same compiler CLI; they differ in command, language
+routing, and where the resulting code runs.
 
 | Info                | Async Operation                                                                                                                                                                 | Sync Operation                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -130,7 +97,6 @@ and where the resulting code runs.
 | Supported languages | `typescript`, `python`, `rust`, `go` — unsupported `fsmLanguage` values are skipped with a warning                                                                              | `typescript`, `python`, `rust`, `go`                                                                                                                                     |
 | File naming         | One file per invoke, in its own subfolder: `<src>/<src>.<ext>` (exports one function named after the actor `src`)                                                               | One stub per `action` / `guard` / `delay` referenced in `fsm.json`                                                                                                       |
 | Output layout       | `<fsmLanguage>/actors/<src>/<src>.<ext>`                                                                                                                                        | `<lang>/actions/<index>`, `<lang>/guards/<index>`, `<lang>/delays/<index>`                                                                                               |
-| Status              | ✅ Shipped                                                                                                                                                                      | ✅ Shipped for all four languages                                                                                                                                        |
 | Planned gaps        | Generated actor stub signature doesn't yet match the worker's `(input) => Promise<output>` calling convention; external actors are still stubbed locally rather than referenced | Action stubs are emitted as `(context, event)` and guard stubs as `(context, event)`, but the worker invokes them as `(context, params, meta)` / `(context, cond, meta)` |
 
 See the compiler [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md) for both
@@ -182,7 +148,6 @@ of the seam the `asyncOperationWorkerlet` and `fsmlet` (section 4) consume.
 | Validate-only command | `validate-async-operation`                                                                                                      | `validate-sync-operation`                                                                  |
 | Language scope        | `--lang` (comma-separated) restricts to a language subset; omitted = all actor languages are checked                            | Validates whatever `--lang` languages were scaffolded in section 2                         |
 | Per-language check    | Each language's runtime is invoked to confirm the function is defined — not just that the file exists (see runtime table below) | Validated via `validateSyncOperationFromFolder`                                            |
-| Status                | ✅ Shipped for validation across all four languages                                                                             | ✅ Shipped for validation                                                                  |
 
 ### Async operation logic — runtime called per language
 
@@ -241,7 +206,6 @@ identical; only the tables and per-language execution differ.
 | Concurrency model           | One long-running worker per unique actor queue, bounded by `--max-concurrency` semaphore. TypeScript runs in-process (`startFSMPromiseWorker`); Python spawns a subprocess; Go/Rust actors validate but log a warning and are not yet runnable | One FSM worker per claimed instance, bounded by `--max-concurrency` semaphore                                                                                                                                                                                                          |
 | Heartbeat                   | `asyncOperationWorkerletHeartbeat` every 5s (tracks `active_pid_number`), 30s fallback poll                                                                                                                                                    | `fsmletHeartbeat` every 5s (tracks `active_workers`), 30s fallback poll                                                                                                                                                                                                                |
 | Graceful shutdown           | `SIGINT`/`SIGTERM` aborts active queue-workers, drains, deregisters from `async_operation_workerlet`                                                                                                                                           | `SIGINT`/`SIGTERM` aborts active workers, drains, deregisters from `fsm_workerlet`                                                                                                                                                                                                     |
-| Status                      | ✅ Shipped                                                                                                                                                                                                                                     | ✅ Shipped                                                                                                                                                                                                                                                                             |
 
 ### Start the async-operation worker
 
@@ -295,7 +259,6 @@ after a `LISTEN` connection drop.
 | `--stale-threshold`     | Seconds before a workerlet with no heartbeat is treated as dead (default `30`)         | Seconds before a fsmlet with no heartbeat is treated as dead (default `30`)  |
 | `--poll-interval`       | Fallback poll interval in ms, catches missed notifications (default `30000`)           | Fallback poll interval in ms, catches missed notifications (default `30000`) |
 | Deployment              | Control plane, alongside the API server — **not** on worker nodes                      | Control plane, alongside the API server — **not** on worker nodes            |
-| Status                  | ✅ Shipped                                                                             | ✅ Shipped                                                                   |
 
 ### Start the async-operation scheduler
 
@@ -317,6 +280,47 @@ deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts
 
 ---
 
+## 6. Control the cluster (`ctl`)
+
+Each dispatch model has a one-shot **control CLI** (kubectl equivalent) — unlike
+the node agents and schedulers in sections 4–5, these issue a single command
+against PostgreSQL and exit; they don't validate, register, or listen for work.
+
+| Info                  | `fsmctl`                                                                                                           | `async-operation-ctl`                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Controls              | FSM instances — the dispatch-queue model driven by the `fsmscheduler`/`fsmlet` pair                                | Async-operation instances — the dispatch tables driven by the async-operation scheduler/workerlet pair                                                      |
+| CLI                   | `apps/fsm-core-worker-ts/src/cli/fsmctl.ts`                                                                        | `apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts`                                                                                                    |
+| Commands              | `create`, `resume`, `send`, `stop`                                                                                 | `list-instances`, `list-meta`, `dispatch`                                                                                                                   |
+| `create` / `dispatch` | Creates a new FSM instance, its pgmq queue, sends `initialTransition_event`, and enqueues to `fsm_dispatch_queue`  | Creates a new async-operation instance and calls `createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork` to notify the async-operation scheduler |
+| `resume`              | Re-enqueues an existing FSM instance to the `fsmscheduler` via `resumeEventForFsmWorker`                           | — (no equivalent)                                                                                                                                           |
+| `send`                | Sends an event to a running FSM instance via `sendEventToFsmQueueWithEventLogs`                                    | — (no equivalent)                                                                                                                                           |
+| `stop`                | Sends a stop signal to a running `fsmlet` worker via `pg_notify` (`stopFSMWorker`)                                 | — (no equivalent)                                                                                                                                           |
+| `list-instances`      | — (no equivalent)                                                                                                  | Lists `async_operation_instance_and_async_operation_workerlet` rows via `listAsyncOperationInstances`                                                       |
+| `list-meta`           | — (no equivalent)                                                                                                  | Lists `async_operation_meta` rows (the actor registry) via `listAsyncOperationMeta`                                                                         |
+| Required flags        | `-c/--command`, plus per-command: `create` needs `-n/-v`; `resume`/`send`/`stop` need `-q`; `send` also needs `-e` | `-c/--command`, plus for `dispatch`: `-n/-v/-t`, `--parent-fsm-name`, `--parent-fsm-version`, `-l`                                                          |
+| Depends on            | `fsmscheduler` + `fsmlet` running to pick up the dispatched/resumed/sent work                                      | async-operation scheduler + `asyncOperationWorkerlet` running to pick up dispatched work                                                                    |
+
+```bash
+# fsmctl
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c create -n creditCheck -v 1
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c resume -q <instance-uuid>
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c send -q <instance-uuid> -e APPROVE
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c stop -q <instance-uuid>
+
+# async-operation-ctl
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts -c list-instances
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts -c list-meta
+deno run --allow-all apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts -c dispatch \
+  -n checkBureau -v 1 -t promise \
+  --parent-fsm-name creditCheck --parent-fsm-version 1 \
+  -l typescript
+```
+
+See [`CLI-USAGE.md`](./apps/fsm-core-worker-ts/docs/guides/CLI-USAGE.md) for the
+full flag reference.
+
+---
+
 ## Appendix: Maps to today's code
 
 | Design term (this spec)                     | Today's implementation                                                                                                                                                                                | Status                                                          |
@@ -334,6 +338,8 @@ deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmscheduler.ts
 | scheduler / dispatch (FSM)                  | `fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                                                                                                           | ✅ Shipped                                                      |
 | scheduler / dispatch (async operation)      | `async-operation-scheduler.ts`, `async_operation_schedule_next_pending`, `createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork`, `async_operation_instance_and_async_operation_workerlet` | ✅ Shipped                                                      |
 | fsmlet ↔ async-actor liveness check         | `asyncOperationVerificationMode` (`checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — library option, not exposed as an `fsmlet` CLI flag                                      | ⚠️ Shipped, not wired to CLI                                    |
+| `fsmctl` (control CLI)                      | `apps/fsm-core-worker-ts/src/cli/fsmctl.ts` — `create` / `resume` / `send` / `stop`                                                                                                                   | ✅ Shipped                                                      |
+| `async-operation-ctl` (control CLI)         | `apps/fsm-core-worker-ts/src/cli/async-operation-ctl.ts` — `list-instances` / `list-meta` / `dispatch`                                                                                                | ✅ Shipped                                                      |
 
 ## References
 
