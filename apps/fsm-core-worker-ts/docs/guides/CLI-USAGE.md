@@ -11,8 +11,9 @@ This package provides six CLIs:
 | **fsmctl**                    | `src/cli/fsmctl.ts`                    | One-shot control CLI (kubectl equivalent) — create/resume/send/stop against the dispatch-queue model, then exits                                                             |
 | **async-operation-ctl**       | `src/cli/async-operation-ctl.ts`       | One-shot control CLI (kubectl equivalent) — list-instances/list-meta/dispatch against the async-operation dispatch tables, then exits                                        |
 
-> **Also present, not covered here:** `src/cli/deprecated_inprocess_worker.ts` —
-> the legacy pre-scheduler CLI (`resume-worker`, `start-promise-worker`,
+> **Also present, not covered here:**
+> `src/deprecated-inprocess-approach/deprecated_inprocess_worker.ts` — the
+> legacy pre-scheduler CLI (`resume-worker`, `start-promise-worker`,
 > `create-and-start-worker`, `create-and-start-promise-worker`, `stop-worker`).
 > Superseded by the `fsmlet` / `fsmscheduler` dispatch model above; still
 > present in the tree but not the recommended path for new work.
@@ -355,9 +356,9 @@ deno run --allow-all apps/fsm-core-worker-ts/src/cli/fsmctl.ts -c <command> [opt
 
 > **`deno task cli` / `deno task dev` are currently broken.** `deno.json` points
 > them at `src/cli/index.ts`, which no longer exists — it was renamed to
-> `src/cli/deprecated_inprocess_worker.ts` when `fsmctl` was introduced. Invoke
-> `fsmctl.ts` directly as shown above until `deno.json` is updated (see
-> [`deno.json` tasks](#denojson-tasks)).
+> `src/deprecated-inprocess-approach/deprecated_inprocess_worker.ts` when
+> `fsmctl` was introduced. Invoke `fsmctl.ts` directly as shown above until
+> `deno.json` is updated (see [`deno.json` tasks](#denojson-tasks)).
 
 ### Commands
 

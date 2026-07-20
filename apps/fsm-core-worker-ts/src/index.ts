@@ -5,7 +5,7 @@ export {
   type VerifiedModule,
 } from "./fsmlet/fsmworker.ts";
 export type { FsmQueueMessage, FsmQueueMessageEventData } from "./types.ts";
-export { createAndStartFSMWorker } from "./create-and-start-fsm-worker.ts";
+export { createAndStartFSMWorker } from "./deprecated-inprocess-approach/create-and-start-fsm-worker.ts";
 export {
   type FsmModuleDefinition,
   macrostepV2,
@@ -14,7 +14,7 @@ export {
   splitBySendEventName,
 } from "./fsmlet/fsmworker-helper.ts";
 export { startFSMPromiseWorker } from "./asyncOperationWorkerlet/fsmpromiseworker.ts";
-export { createAndStartPromiseWorker } from "./create-and-start-promise-worker.ts";
+export { createAndStartPromiseWorker } from "./deprecated-inprocess-approach/create-and-start-promise-worker.ts";
 export {
   type FSMPromiseArchiveData,
   processFSMPromiseQueueMessage,

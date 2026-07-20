@@ -4,7 +4,7 @@ import { createFsmInstanceFromName } from "@pgfsm/db";
 import {
   startFSMWorkerWithDBLock,
   type VerifiedModule,
-} from "./fsmlet/fsmworker.ts";
+} from "../fsmlet/fsmworker.ts";
 
 type FsmInstanceResult =
   & { fsm_instance_id: string; fsm_version: string }

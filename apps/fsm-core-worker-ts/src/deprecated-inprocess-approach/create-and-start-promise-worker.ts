@@ -3,7 +3,7 @@ import type { DBDeps } from "@pgfsm/db";
 
 const logger = getLogger(["@pgfsm/worker", "promise"]);
 import { createPgmqQueue } from "@pgfsm/db";
-import { startFSMPromiseWorker } from "./asyncOperationWorkerlet/fsmpromiseworker.ts";
+import { startFSMPromiseWorker } from "../asyncOperationWorkerlet/fsmpromiseworker.ts";
 import type { ActorPluginValidationResult } from "@pgfsm/compiler";
 
 export async function createAndStartPromiseWorker(
