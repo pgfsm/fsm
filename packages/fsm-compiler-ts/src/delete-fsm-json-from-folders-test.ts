@@ -22,12 +22,12 @@ dotenv.config({ path: "./../../.env" });
   const skipFSMDirs = ["carVitals", "taskMachineConfig"];
   // const skipSharedFSMDirs = [];
   // const skipFSMDirs = [];
-  const outputSharedFSM = await deleteFsmJSONFromFolders(
+  await deleteFsmJSONFromFolders(
     sharedFSMfolderPath,
     "sharedFsm",
     skipSharedFSMDirs,
   );
-  const outputFSM = await deleteFsmJSONFromFolders(
+  await deleteFsmJSONFromFolders(
     fsmfolderPath,
     "fsm",
     skipFSMDirs,

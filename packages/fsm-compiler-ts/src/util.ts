@@ -1,3 +1,14 @@
+import type { Json } from "@pgfsm/db/database.types";
+import type {
+  ActionObject,
+  AtomicStateNode,
+  CompoundStateNode,
+  FinalStateNode,
+  FsmMachineJson,
+  HistoryStateNode,
+  ParallelStateNode,
+} from "./generated/fsm-machine-schema.types.ts";
+
 export type WorkflowType = "fsm" | "sharedFsm" | "sharedPromise" | "promise";
 
 export type ActorReference = {
@@ -12,23 +23,6 @@ export type FailedMethod = {
   modulePath: string;
 };
 
-export type InternalActor = {
-  src: string;
-  fsmName: string;
-  fsmType?: string;
-  fsmVersion?: string;
-  fsmAbsFolderPath: string;
-  fsmRelativeFolderPath: string;
-  resolved: boolean;
-};
-
-export type ExternalActor = {
-  src: string;
-  fsmType?: string;
-  fsmVersion?: string;
-  resolved: boolean;
-};
-
 export type FsmPluginValidationResult = {
   src: string;
   fsmName: string;
@@ -39,13 +33,13 @@ export type FsmPluginValidationResult = {
   fsmParentDirName: string;
   fsmParentAbsFolderPath: string;
   fsmParentRelativeFolderPath: string;
-  fsmJsonConfigData: any;
+  fsmJsonConfigData: FsmMachineJson | undefined;
   fsmJsonPresent: boolean;
   fsmJsonFollowSchema: boolean;
   isFsmModuleVerified: boolean;
-  fsmModuleDefinition: any;
+  fsmModuleDefinition: Json;
   failedMethods: FailedMethod[];
-  asyncOperationActors: any[];
+  asyncOperationActors: ActorReference[];
   isAsyncOperationActorsVerified?: boolean;
 };
 
@@ -67,14 +61,25 @@ export type ActorPluginValidationResult = {
 
 export const DELAY_ACTION_NAME_PREFIX = "delay";
 
-export const RAISE_CANCEL = new Set(["xstate.raise", "xstate.cancel"]);
+export const RAISE_CANCEL: Set<string> = new Set([
+  "xstate.raise",
+  "xstate.cancel",
+]);
+
+type FsmStateOrMachine =
+  | FsmMachineJson
+  | AtomicStateNode
+  | CompoundStateNode
+  | ParallelStateNode
+  | HistoryStateNode
+  | FinalStateNode;
 
 /**
  * Recursively traverses FSM JSON and collects all action, guard, delay, and actor names.
  * Actors are returned as objects preserving fsmType, fsmVersion, and fsmLanguage
  * (fsmLanguage defaults to "typescript" when absent on the invoke object).
  */
-export function extractFsmPluginRefs(fsmData: any): {
+export function extractFsmPluginRefs(fsmData: FsmMachineJson): {
   actions: string[];
   guards: string[];
   delays: string[];
@@ -85,62 +90,58 @@ export function extractFsmPluginRefs(fsmData: any): {
   const delaysSet = new Set<string>();
   const actorsArr: ActorReference[] = [];
 
-  function collectActionName(a: any) {
-    if (typeof a === "string") actionsSet.add(a);
-    else if (a && typeof a === "object" && typeof a.type === "string") {
-      actionsSet.add(a.type);
-    }
+  // Not every fsm.json on disk has necessarily been regenerated with the
+  // current compiler (which always emits actionObjects); tolerate the older
+  // plain-string action shorthand defensively.
+  function collectActionName(a: ActionObject) {
+    const value: unknown = a;
+    if (typeof value === "string") actionsSet.add(value);
+    else if (a && typeof a.type === "string") actionsSet.add(a.type);
   }
 
-  function visitState(state: any) {
-    if (Array.isArray(state.entry)) state.entry.forEach(collectActionName);
-    if (Array.isArray(state.exit)) state.exit.forEach(collectActionName);
+  function visitState(state: FsmStateOrMachine) {
+    if ("entry" in state && Array.isArray(state.entry)) {
+      state.entry.forEach(collectActionName);
+    }
+    if ("exit" in state && Array.isArray(state.exit)) {
+      state.exit.forEach(collectActionName);
+    }
 
-    if (state.on && typeof state.on === "object") {
+    if ("on" in state && state.on) {
       for (const eventKey of Object.keys(state.on)) {
         const transitions = state.on[eventKey];
-        if (Array.isArray(transitions)) {
-          for (const transition of transitions) {
-            if (Array.isArray(transition.actions)) {
-              transition.actions.forEach(collectActionName);
-            }
-            if (transition.guard && typeof transition.guard === "string") {
-              guardsSet.add(transition.guard);
-            }
-            if (transition.delay) delaysSet.add(transition.delay);
+        for (const transition of transitions) {
+          transition.actions.forEach(collectActionName);
+          if (transition.guard) guardsSet.add(transition.guard);
+          if (transition.delay !== undefined) {
+            delaysSet.add(String(transition.delay));
           }
         }
       }
     }
 
-    if (Array.isArray(state.transitions)) {
+    if ("transitions" in state && state.transitions) {
       for (const transition of state.transitions) {
-        if (Array.isArray(transition.actions)) {
-          transition.actions.forEach(collectActionName);
+        transition.actions.forEach(collectActionName);
+        if (transition.guard) guardsSet.add(transition.guard);
+        if (transition.delay !== undefined) {
+          delaysSet.add(String(transition.delay));
         }
-        if (transition.guard && typeof transition.guard === "string") {
-          guardsSet.add(transition.guard);
-        }
-        if (transition.delay) delaysSet.add(transition.delay);
       }
     }
 
-    if (Array.isArray(state.invoke)) {
+    if ("invoke" in state && state.invoke) {
       for (const inv of state.invoke) {
-        if (inv && typeof inv.src === "string") {
-          actorsArr.push({
-            src: inv.src,
-            fsmType: inv.fsmType,
-            fsmVersion: inv.fsmVersion,
-            fsmLanguage: typeof inv.fsmLanguage === "string"
-              ? inv.fsmLanguage
-              : "typescript",
-          });
-        }
+        actorsArr.push({
+          src: inv.src,
+          fsmType: inv.fsmType,
+          fsmVersion: inv.fsmVersion,
+          fsmLanguage: inv.fsmLanguage ?? "typescript",
+        });
       }
     }
 
-    if (state.states && typeof state.states === "object") {
+    if ("states" in state && state.states) {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -206,7 +207,7 @@ export function isTimestampFolderName(name: string): boolean {
 /**
  * Recursively replaces underscores with spaces in keys and string values of an object.
  */
-export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
+export function replaceUnderscoresWithSpaces(objWithMachine: Json): Json {
   const obj = objWithMachine?.machine ? objWithMachine.machine : objWithMachine;
   if (Array.isArray(obj)) {
     return obj.map(replaceUnderscoresWithSpaces);
@@ -215,7 +216,7 @@ export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
       const newKey = typeof key === "string" ? key.replace(/_/g, " ") : key;
       acc[newKey] = replaceUnderscoresWithSpaces(value);
       return acc;
-    }, {} as any);
+    }, {} as Json);
   } else if (typeof obj === "string") {
     return obj.replace(/_/g, " ");
   } else {
@@ -226,7 +227,7 @@ export function replaceUnderscoresWithSpaces(objWithMachine: any): any {
 /**
  * Recursively replaces spaces with underscores in keys and string values of an object.
  */
-export function replaceSpacesWithUnderscores(obj: any): any {
+export function replaceSpacesWithUnderscores(obj: Json): Json {
   if (Array.isArray(obj)) {
     return obj.map(replaceSpacesWithUnderscores);
   } else if (obj && typeof obj === "object") {
@@ -234,7 +235,7 @@ export function replaceSpacesWithUnderscores(obj: any): any {
       const newKey = typeof key === "string" ? key.replace(/ /g, "_") : key;
       acc[newKey] = replaceSpacesWithUnderscores(value);
       return acc;
-    }, {} as any);
+    }, {} as Json);
   } else if (typeof obj === "string") {
     return obj.replace(/ /g, "_");
   } else {

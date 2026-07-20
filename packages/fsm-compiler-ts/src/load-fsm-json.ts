@@ -1,17 +1,17 @@
 import { getLogger } from "@logtape/logtape";
-import { v4 as uuidv4 } from "uuid";
-import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { isVersionFolderName, type WorkflowType } from "./util.ts";
 import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
+import type { Json } from "@pgfsm/db/database.types";
+import type { FsmMachineJson } from "./generated/fsm-machine-schema.types.ts";
 
 async function loadFsmJSONFromFolder(
   dirEntryName: string,
   dirEntryNameVersion: string,
-  folderPath: string,
+  _folderPath: string,
   absFolderPath: string,
-  parentSource: string,
+  _parentSource: string,
   workflowType: WorkflowType,
   deps: DBDeps,
 ) {
@@ -19,7 +19,9 @@ async function loadFsmJSONFromFolder(
   try {
     await Deno.stat(fsmJson);
     // 1. Load fsm.json file
-    const fsmData = JSON.parse(await Deno.readTextFile(fsmJson));
+    const fsmData: FsmMachineJson = JSON.parse(
+      await Deno.readTextFile(fsmJson),
+    );
 
     // 2. Process fsmData and insert into database using helper functions
     // Call loadFsmStateFromJsonV2 and loadFsmTransitionFromJsonV2 with fsmData
@@ -62,7 +64,7 @@ export async function loadFsmJSONFromFolders(
   workflowType: WorkflowType,
   skipDirs: string[] = [],
   deps: DBDeps,
-): Promise<any[]> {
+): Promise<Json[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
       `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
@@ -86,7 +88,7 @@ export async function loadFsmJSONFromFolders(
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
-  const folderResults: any[] = [];
+  const folderResults: Json[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {

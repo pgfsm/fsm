@@ -4,6 +4,7 @@ import {
   isFunction,
   validateSyncOperationFromFolder,
 } from "../src/validate-sync-operation-logic.ts";
+import type { FsmMachineJson } from "../src/generated/fsm-machine-schema.types.ts";
 
 // isFunction
 Deno.test("isFunction - returns true for functions", () => {
@@ -47,7 +48,9 @@ Deno.test("hasArity - returns false for non-functions", () => {
 
 // validateSyncOperationFromFolder - early return on schema failure
 Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fails schema", async () => {
-  const invalidFsmData = { not: "a valid fsm" };
+  // Intentionally malformed to exercise the AJV rejection path — cast past
+  // the compile-time contract since real callers always pass parsed JSON.
+  const invalidFsmData = { not: "a valid fsm" } as unknown as FsmMachineJson;
 
   const result = await validateSyncOperationFromFolder(
     invalidFsmData,

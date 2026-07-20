@@ -1,6 +1,7 @@
 import { assertEquals, assertExists } from "@std/assert";
 import {
   addMissingFsmTypeToInvokeActors,
+  type FsmDraftStateNode,
   generateFsmJSONFromFolders,
   normalizeActionsToObjects,
 } from "../src/generate-fsm-json.ts";
@@ -8,7 +9,7 @@ import {
 // --- addMissingFsmTypeToInvokeActors unit tests ---
 
 Deno.test("addMissingFsmTypeToInvokeActors - adds missing fsmType and fsmVersion", () => {
-  const fsmJSON = {
+  const fsmJSON: FsmDraftStateNode = {
     states: {
       idle: {
         invoke: [{ src: "someActor" }],
@@ -20,9 +21,9 @@ Deno.test("addMissingFsmTypeToInvokeActors - adds missing fsmType and fsmVersion
     "v01",
   );
 
-  assertEquals(fulljson.states.idle.invoke[0].fsmType, "promise");
-  assertEquals(fulljson.states.idle.invoke[0].fsmVersion, "v01");
-  assertEquals(fulljson.states.idle.invoke[0].fsmLanguage, "typescript");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmType, "promise");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmVersion, "v01");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmLanguage, "typescript");
   assertEquals(childActorsInfo.length, 1);
   assertEquals(childActorsInfo[0].child_actor_src, "someActor");
   assertEquals(childActorsInfo[0].child_actor_fsmType, "promise");
@@ -31,7 +32,7 @@ Deno.test("addMissingFsmTypeToInvokeActors - adds missing fsmType and fsmVersion
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - preserves existing fsmType and fsmVersion", () => {
-  const fsmJSON = {
+  const fsmJSON: FsmDraftStateNode = {
     states: {
       idle: {
         invoke: [{
@@ -48,16 +49,16 @@ Deno.test("addMissingFsmTypeToInvokeActors - preserves existing fsmType and fsmV
     "v01",
   );
 
-  assertEquals(fulljson.states.idle.invoke[0].fsmType, "sharedFsm");
-  assertEquals(fulljson.states.idle.invoke[0].fsmVersion, "v02");
-  assertEquals(fulljson.states.idle.invoke[0].fsmLanguage, "python");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmType, "sharedFsm");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmVersion, "v02");
+  assertEquals(fulljson.states!.idle.invoke![0].fsmLanguage, "python");
   assertEquals(childActorsInfo[0].child_actor_fsmType, "sharedFsm");
   assertEquals(childActorsInfo[0].child_actor_fsmVersion, "v02");
   assertEquals(childActorsInfo[0].child_actor_fsmLanguage, "python");
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - handles nested states", () => {
-  const fsmJSON = {
+  const fsmJSON: FsmDraftStateNode = {
     states: {
       outer: {
         states: {
@@ -74,7 +75,7 @@ Deno.test("addMissingFsmTypeToInvokeActors - handles nested states", () => {
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - handles root-level invoke", () => {
-  const fsmJSON = {
+  const fsmJSON: FsmDraftStateNode = {
     invoke: [{ src: "rootActor" }],
     states: {},
   };
@@ -84,13 +85,13 @@ Deno.test("addMissingFsmTypeToInvokeActors - handles root-level invoke", () => {
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - returns empty childActorsInfo when no invoke", () => {
-  const fsmJSON = { states: { idle: {} } };
+  const fsmJSON: FsmDraftStateNode = { states: { idle: {} } };
   const { childActorsInfo } = addMissingFsmTypeToInvokeActors(fsmJSON, "v01");
   assertEquals(childActorsInfo.length, 0);
 });
 
 Deno.test("addMissingFsmTypeToInvokeActors - does not mutate original", () => {
-  const fsmJSON = {
+  const fsmJSON: FsmDraftStateNode = {
     states: { idle: { invoke: [{ src: "actor" }] } },
   };
   const original = JSON.stringify(fsmJSON);
@@ -101,7 +102,7 @@ Deno.test("addMissingFsmTypeToInvokeActors - does not mutate original", () => {
 // --- normalizeActionsToObjects unit tests ---
 
 Deno.test("normalizeActionsToObjects - converts string entry/exit actions to { type }", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: {
       idle: {
         entry: ["doEnter", "doAlso"],
@@ -110,14 +111,14 @@ Deno.test("normalizeActionsToObjects - converts string entry/exit actions to { t
     },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.states.idle.entry, [{ type: "doEnter" }, {
+  assertEquals(result.states!.idle.entry, [{ type: "doEnter" }, {
     type: "doAlso",
   }]);
-  assertEquals(result.states.idle.exit, [{ type: "doExit" }]);
+  assertEquals(result.states!.idle.exit, [{ type: "doExit" }]);
 });
 
 Deno.test("normalizeActionsToObjects - converts string actions in on-transitions", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: {
       idle: {
         on: {
@@ -132,13 +133,14 @@ Deno.test("normalizeActionsToObjects - converts string actions in on-transitions
     },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.states.idle.on.NEXT[0].actions, [{ type: "assignFoo" }, {
-    type: "assignBar",
-  }]);
+  assertEquals(
+    result.states!.idle.on!.NEXT[0].actions,
+    [{ type: "assignFoo" }, { type: "assignBar" }],
+  );
 });
 
 Deno.test("normalizeActionsToObjects - converts string actions in transitions array", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: {
       idle: {
         transitions: [{
@@ -151,22 +153,22 @@ Deno.test("normalizeActionsToObjects - converts string actions in transitions ar
     },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.states.idle.transitions[0].actions, [{
+  assertEquals(result.states!.idle.transitions![0].actions, [{
     type: "doSomething",
   }]);
 });
 
 Deno.test("normalizeActionsToObjects - converts string actions in initial transition", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     initial: { actions: ["initAction"], source: "root", target: ["idle"] },
     states: { idle: {} },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.initial.actions, [{ type: "initAction" }]);
+  assertEquals(result.initial!.actions, [{ type: "initAction" }]);
 });
 
 Deno.test("normalizeActionsToObjects - leaves existing actionObjects unchanged", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: {
       idle: {
         entry: [{ type: "alreadyObject", extra: true }],
@@ -174,14 +176,14 @@ Deno.test("normalizeActionsToObjects - leaves existing actionObjects unchanged",
     },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.states.idle.entry, [{
+  assertEquals(result.states!.idle.entry, [{
     type: "alreadyObject",
     extra: true,
   }]);
 });
 
 Deno.test("normalizeActionsToObjects - handles nested states recursively", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: {
       outer: {
         states: {
@@ -193,13 +195,13 @@ Deno.test("normalizeActionsToObjects - handles nested states recursively", () =>
     },
   };
   const result = normalizeActionsToObjects(input);
-  assertEquals(result.states.outer.states.inner.entry, [{
+  assertEquals(result.states!.outer.states!.inner.entry, [{
     type: "nestedAction",
   }]);
 });
 
 Deno.test("normalizeActionsToObjects - does not mutate original", () => {
-  const input = {
+  const input: FsmDraftStateNode = {
     states: { idle: { entry: ["doEnter"] } },
   };
   const original = JSON.stringify(input);

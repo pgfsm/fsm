@@ -20,9 +20,9 @@ import {
 
 export async function validateAsyncOperationFromFoldersV2(
   folderPath: string,
-  workflowType: WorkflowType,
+  _workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: ActorReference[] = [],
+  _availableActors: ActorReference[] = [],
   runtimeLanguages: OperationLang[] = [],
 ): Promise<ActorPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {

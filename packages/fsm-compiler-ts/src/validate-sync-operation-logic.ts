@@ -10,18 +10,19 @@ import machineSchema from "../../database-src/fsm.machine.schema.v3.json" with {
 import {
   type ActorReference,
   DELAY_ACTION_NAME_PREFIX,
-  type ExternalActor,
   extractFsmPluginRefs,
   type FailedMethod,
   type FsmPluginValidationResult,
-  type InternalActor,
   isVersionFolderName,
   RAISE_CANCEL,
   type WorkflowType,
 } from "./util.ts";
 import type { Json } from "@pgfsm/db/database.types";
+import type { FsmMachineJson } from "./generated/fsm-machine-schema.types.ts";
 
-export const isFunction = (v: unknown): v is Function =>
+type AnyFunction = (...args: unknown[]) => unknown;
+
+export const isFunction = (v: unknown): v is AnyFunction =>
   typeof v === "function";
 
 export const hasArity = (n: number) => (fn: unknown): boolean =>
@@ -33,7 +34,7 @@ export async function validateLanguageModules(
   actions: string[],
   guards: string[],
   delays: string[],
-) {
+): Promise<{ modules: Record<string, Json>; failedMethods: FailedMethod[] }> {
   const failedMethods: FailedMethod[] = [];
 
   const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
@@ -44,7 +45,7 @@ export async function validateLanguageModules(
     { type: "delays", names: prefixedDelays },
   ];
 
-  const modules: Record<string, any> = {
+  const modules: Record<string, Json> = {
     actions: null,
     guards: null,
     delays: null,
@@ -98,7 +99,7 @@ export async function validateLanguageModules(
 }
 
 export async function validateSyncOperationFromFolder(
-  fsmData: Json,
+  fsmData: FsmMachineJson,
   dirName: string,
   versionName: string,
   absPath: string,
@@ -107,18 +108,18 @@ export async function validateSyncOperationFromFolder(
   parentAbsPath: string,
   parentRelPath: string,
   workflowType: WorkflowType,
-  availableActors: ActorReference[],
+  _availableActors: ActorReference[],
 ): Promise<FsmPluginValidationResult> {
-  let fsmJsonPresent = true;
-  let fsmJsonConfigData: any = undefined;
+  const fsmJsonPresent = true;
+  const fsmJsonConfigData: FsmMachineJson | undefined = undefined;
   let fsmJsonFollowSchema = false;
-  let fsmModuleDefinition: any = undefined;
+  let fsmModuleDefinition: Json = undefined;
   let isFsmModuleVerified = false;
   let failedMethods: FailedMethod[] = [];
   let actions: string[] = [];
   let guards: string[] = [];
   let delays: string[] = [];
-  let asyncOperationActors: any[] = [];
+  let asyncOperationActors: ActorReference[] = [];
 
   const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
   const validate = ajv.compile(machineSchema);

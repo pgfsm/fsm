@@ -70,8 +70,7 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "compound"
+              "const": "compound"
             },
             "entry": {
               "type": "array",
@@ -109,8 +108,7 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "parallel"
+              "const": "parallel"
             },
             "entry": {
               "type": "array",
@@ -145,8 +143,7 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "atomic"
+              "const": "atomic"
             },
             "entry": {
               "type": "array",
@@ -178,8 +175,7 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "history"
+              "const": "history"
             },
             "history": {
               "type": "string",
@@ -197,11 +193,11 @@
           "type": "object",
           "properties": {
             "type": {
-              "type": "string",
-              "pattern": "final"
+              "const": "final"
             },
             "data": {
-              "type": "object"
+              "type": "object",
+              "additionalProperties": true
             }
           }
         }
@@ -239,6 +235,9 @@
             "type": "string"
           },
           "minItems": 1
+        },
+        "eventType": {
+          "anyOf": [{ "type": "string" }, { "type": "null" }]
         }
       },
       "required": ["actions", "source", "target"]
@@ -264,7 +263,17 @@
           }
         },
         "cond": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Legacy guard payload consumed by the PostgreSQL extension's transition loader (transition->'cond'). Not emitted by this compiler, which emits `guard` instead."
+        },
+        "guard": {
+          "type": "string",
+          "description": "Name of the guard function to evaluate for this transition."
+        },
+        "delay": {
+          "anyOf": [{ "type": "string" }, { "type": "integer" }],
+          "description": "Delay identifier (xstate.after.* transitions) or duration in ms."
         },
         "eventType": {
           "type": "string"
@@ -347,7 +356,8 @@
       "enum": ["compound", "parallel"]
     },
     "context": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true
     },
     "states": {
       "$ref": "#/$defs/statesObject"
@@ -362,10 +372,16 @@
       }
     },
     "entry": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actionObject"
+      }
     },
     "exit": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actionObject"
+      }
     },
     "order": {
       "$ref": "#/$defs/order"

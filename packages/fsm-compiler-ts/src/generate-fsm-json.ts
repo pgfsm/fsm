@@ -1,5 +1,4 @@
 import { getLogger } from "@logtape/logtape";
-import { v4 as uuidv4 } from "uuid";
 import { writeFileSync } from "node:fs";
 
 const logger = getLogger(["@pgfsm/compiler", "generate"]);
@@ -13,22 +12,66 @@ import {
   RAISE_CANCEL,
   type WorkflowType,
 } from "./util.ts";
-import type { Json } from "@pgfsm/db/database.types";
+import type { AnyStateNodeDefinition } from "xstate";
+import type {
+  ActionObject,
+  InvokeObject,
+} from "./generated/fsm-machine-schema.types.ts";
+
+/**
+ * Working shape for the compiler's internal transform pipeline — the space
+ * between raw XState `.toJSON()` output and the fully-compiled FsmMachineJson
+ * (see ./generated/fsm-machine-schema.types.ts, generated from
+ * ../../database-src/fsm.machine.schema.v3.json). Entry/exit items may still
+ * be plain strings (XState 5 action shorthand, normalized to actionObjects by
+ * normalizeActionsToObjects below) or `null` placeholders left by
+ * conditionally-skipped actions in machine.ts (stripped by
+ * removeNullActions). By the time generateFsmJSONFromMachineFile finishes the
+ * pipeline, the result should satisfy FsmMachineJson — enforced at runtime by
+ * the AJV validation in the showRecommendation step.
+ */
+type FsmDraftAction = string | ActionObject;
+
+type FsmDraftTransition = {
+  actions?: FsmDraftAction[];
+  eventType?: string;
+  delay?: string | number;
+  guard?: string;
+  source?: string;
+  target?: string[];
+};
+
+type FsmDraftInvoke = Partial<InvokeObject> & { src?: string };
+
+export type FsmDraftStateNode = {
+  id?: string;
+  key?: string;
+  type?: string;
+  entry?: FsmDraftAction[];
+  exit?: FsmDraftAction[];
+  initial?: { actions?: FsmDraftAction[]; source?: string; target?: string[] };
+  on?: Record<string, FsmDraftTransition[]>;
+  transitions?: FsmDraftTransition[];
+  invoke?: FsmDraftInvoke[];
+  states?: Record<string, FsmDraftStateNode>;
+};
 
 /**
  * Pure function — returns a new FSM JSON object with all null values removed
  * from every entry/exit/initial/on/transitions actions array. Does not mutate the input.
- * @param obj The FSM JSON object
+ * @param obj The raw XState machine definition (machineConfig.toJSON())
  * @returns A new object with nulls removed from all actions arrays
  */
-function removeNullActions(obj: any): any {
-  const clone = JSON.parse(JSON.stringify(obj));
+function removeNullActions(obj: AnyStateNodeDefinition): FsmDraftStateNode {
+  const clone: FsmDraftStateNode = JSON.parse(JSON.stringify(obj));
 
-  function filterNulls(arr: any[]): any[] {
-    return arr.filter((a: any) => a !== null);
+  // Real .toJSON() output can contain `null` entries for conditionally
+  // skipped actions in machine.ts, which FsmDraftAction doesn't admit.
+  function filterNulls(arr: FsmDraftAction[]): FsmDraftAction[] {
+    return arr.filter((a) => (a as unknown) !== null);
   }
 
-  function visitState(state: any) {
+  function visitState(state: FsmDraftStateNode) {
     if (Array.isArray(state.entry)) state.entry = filterNulls(state.entry);
     if (Array.isArray(state.exit)) state.exit = filterNulls(state.exit);
 
@@ -36,14 +79,11 @@ function removeNullActions(obj: any): any {
       state.initial.actions = filterNulls(state.initial.actions);
     }
 
-    if (state.on && typeof state.on === "object") {
+    if (state.on) {
       for (const eventKey of Object.keys(state.on)) {
-        const transitions = state.on[eventKey];
-        if (Array.isArray(transitions)) {
-          for (const transition of transitions) {
-            if (Array.isArray(transition.actions)) {
-              transition.actions = filterNulls(transition.actions);
-            }
+        for (const transition of state.on[eventKey]) {
+          if (Array.isArray(transition.actions)) {
+            transition.actions = filterNulls(transition.actions);
           }
         }
       }
@@ -56,7 +96,7 @@ function removeNullActions(obj: any): any {
       }
     }
 
-    if (state.states && typeof state.states === "object") {
+    if (state.states) {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -74,18 +114,20 @@ function removeNullActions(obj: any): any {
  * @param obj The FSM JSON object
  * @returns A new object with all string actions replaced by { type: string }
  */
-export function normalizeActionsToObjects(obj: Json): Json {
-  const clone = JSON.parse(JSON.stringify(obj));
+export function normalizeActionsToObjects(
+  obj: FsmDraftStateNode,
+): FsmDraftStateNode {
+  const clone: FsmDraftStateNode = JSON.parse(JSON.stringify(obj));
 
-  function toActionObject(a: any): any {
+  function toActionObject(a: FsmDraftAction): ActionObject {
     return typeof a === "string" ? { type: a } : a;
   }
 
-  function normalizeActionArray(arr: any[]): any[] {
+  function normalizeActionArray(arr: FsmDraftAction[]): ActionObject[] {
     return arr.map(toActionObject);
   }
 
-  function visitState(state: any) {
+  function visitState(state: FsmDraftStateNode) {
     if (Array.isArray(state.entry)) {
       state.entry = normalizeActionArray(state.entry);
     }
@@ -97,14 +139,11 @@ export function normalizeActionsToObjects(obj: Json): Json {
       state.initial.actions = normalizeActionArray(state.initial.actions);
     }
 
-    if (state.on && typeof state.on === "object") {
+    if (state.on) {
       for (const eventKey of Object.keys(state.on)) {
-        const transitions = state.on[eventKey];
-        if (Array.isArray(transitions)) {
-          for (const transition of transitions) {
-            if (Array.isArray(transition.actions)) {
-              transition.actions = normalizeActionArray(transition.actions);
-            }
+        for (const transition of state.on[eventKey]) {
+          if (Array.isArray(transition.actions)) {
+            transition.actions = normalizeActionArray(transition.actions);
           }
         }
       }
@@ -117,7 +156,7 @@ export function normalizeActionsToObjects(obj: Json): Json {
       }
     }
 
-    if (state.states && typeof state.states === "object") {
+    if (state.states) {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -135,21 +174,22 @@ export function normalizeActionsToObjects(obj: Json): Json {
  * @param obj The FSM JSON object
  * @returns A new object with actionName populated on matching entry/exit actions
  */
-export function addActionNameFromDelay(obj: Json): Json {
-  const clone = JSON.parse(JSON.stringify(obj));
+export function addActionNameFromDelay(
+  obj: FsmDraftStateNode,
+): FsmDraftStateNode {
+  const clone: FsmDraftStateNode = JSON.parse(JSON.stringify(obj));
 
   /** Collect full transition objects whose event contains "xstate.after." and have a delay key */
-  function getAfterTransitions(state: any): any[] {
-    const afterTransitions: any[] = [];
+  function getAfterTransitions(
+    state: FsmDraftStateNode,
+  ): FsmDraftTransition[] {
+    const afterTransitions: FsmDraftTransition[] = [];
 
-    if (state.on && typeof state.on === "object") {
+    if (state.on) {
       for (const eventKey of Object.keys(state.on)) {
         if (eventKey.includes("xstate.after.")) {
-          const transitions = state.on[eventKey];
-          if (Array.isArray(transitions)) {
-            for (const t of transitions) {
-              if ("delay" in t) afterTransitions.push(t);
-            }
+          for (const t of state.on[eventKey]) {
+            if ("delay" in t) afterTransitions.push(t);
           }
         }
       }
@@ -170,7 +210,10 @@ export function addActionNameFromDelay(obj: Json): Json {
   }
 
   /** Map each xstate.raise/xstate.cancel action to the next after-transition's delay value */
-  function enrichActionArray(actions: any[], afterTransitions: any[]): any[] {
+  function enrichActionArray(
+    actions: FsmDraftAction[],
+    afterTransitions: FsmDraftTransition[],
+  ): FsmDraftAction[] {
     let i = 0;
     return actions.map((a) => {
       if (
@@ -189,7 +232,7 @@ export function addActionNameFromDelay(obj: Json): Json {
     });
   }
 
-  function visitState(state: any) {
+  function visitState(state: FsmDraftStateNode) {
     const afterTransitions = getAfterTransitions(state);
 
     if (Array.isArray(state.entry)) {
@@ -199,7 +242,7 @@ export function addActionNameFromDelay(obj: Json): Json {
       state.exit = enrichActionArray(state.exit, afterTransitions);
     }
 
-    if (state.states && typeof state.states === "object") {
+    if (state.states) {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -220,10 +263,10 @@ export function addActionNameFromDelay(obj: Json): Json {
  * @returns { fulljson, childActorsInfo }
  */
 export function addMissingFsmTypeToInvokeActors(
-  fsmJSON: Json,
+  fsmJSON: FsmDraftStateNode,
   parentFsmVersion: string,
 ): {
-  fulljson: Json;
+  fulljson: FsmDraftStateNode;
   childActorsInfo: Array<
     {
       child_actor_src: string;
@@ -233,7 +276,7 @@ export function addMissingFsmTypeToInvokeActors(
     }
   >;
 } {
-  const clone = JSON.parse(JSON.stringify(fsmJSON));
+  const clone: FsmDraftStateNode = JSON.parse(JSON.stringify(fsmJSON));
   const childActorsInfo: Array<
     {
       child_actor_src: string;
@@ -243,34 +286,34 @@ export function addMissingFsmTypeToInvokeActors(
     }
   > = [];
 
-  function visitState(state: any) {
+  function fillInvokeDefaults(invokeObj: FsmDraftInvoke) {
+    if (!("fsmType" in invokeObj)) {
+      invokeObj.fsmType = "promise";
+    }
+    if (!("fsmVersion" in invokeObj)) {
+      invokeObj.fsmVersion = parentFsmVersion;
+    }
+    if (!("fsmLanguage" in invokeObj)) {
+      invokeObj.fsmLanguage = "typescript";
+    }
+    if (invokeObj.src) {
+      childActorsInfo.push({
+        child_actor_src: invokeObj.src,
+        child_actor_fsmType: invokeObj.fsmType ?? "promise",
+        child_actor_fsmVersion: invokeObj.fsmVersion ?? parentFsmVersion,
+        child_actor_fsmLanguage: invokeObj.fsmLanguage ?? "typescript",
+      });
+    }
+  }
+
+  function visitState(state: FsmDraftStateNode) {
     if (Array.isArray(state.invoke)) {
       for (const invokeObj of state.invoke) {
-        // Only process if src exists
-        if (invokeObj && typeof invokeObj.src === "string") {
-          // Add missing fsmType
-          if (!("fsmType" in invokeObj)) {
-            invokeObj.fsmType = "promise";
-          }
-          // Add missing fsmVersion
-          if (!("fsmVersion" in invokeObj)) {
-            invokeObj.fsmVersion = parentFsmVersion;
-          }
-          // Add missing fsmLanguage (defaults to typescript)
-          if (!("fsmLanguage" in invokeObj)) {
-            invokeObj.fsmLanguage = "typescript";
-          }
-          childActorsInfo.push({
-            child_actor_src: invokeObj.src,
-            child_actor_fsmType: invokeObj.fsmType,
-            child_actor_fsmVersion: invokeObj.fsmVersion,
-            child_actor_fsmLanguage: invokeObj.fsmLanguage,
-          });
-        }
+        if (invokeObj.src) fillInvokeDefaults(invokeObj);
       }
     }
     // Recursively visit substates
-    if (state.states && typeof state.states === "object") {
+    if (state.states) {
       for (const subKey of Object.keys(state.states)) {
         visitState(state.states[subKey]);
       }
@@ -278,7 +321,7 @@ export function addMissingFsmTypeToInvokeActors(
   }
 
   // Visit all states recursively
-  if (clone.states && typeof clone.states === "object") {
+  if (clone.states) {
     for (const stateKey of Object.keys(clone.states)) {
       visitState(clone.states[stateKey]);
     }
@@ -287,23 +330,7 @@ export function addMissingFsmTypeToInvokeActors(
   // Also check root-level invoke (rare, but possible)
   if (Array.isArray(clone.invoke)) {
     for (const invokeObj of clone.invoke) {
-      if (invokeObj && typeof invokeObj.src === "string") {
-        if (!("fsmType" in invokeObj)) {
-          invokeObj.fsmType = "promise";
-        }
-        if (!("fsmVersion" in invokeObj)) {
-          invokeObj.fsmVersion = parentFsmVersion;
-        }
-        if (!("fsmLanguage" in invokeObj)) {
-          invokeObj.fsmLanguage = "typescript";
-        }
-        childActorsInfo.push({
-          child_actor_src: invokeObj.src,
-          child_actor_fsmType: invokeObj.fsmType,
-          child_actor_fsmVersion: invokeObj.fsmVersion,
-          child_actor_fsmLanguage: invokeObj.fsmLanguage,
-        });
-      }
+      if (invokeObj.src) fillInvokeDefaults(invokeObj);
     }
   }
 
@@ -339,7 +366,7 @@ export async function generateFsmJSONFromMachineFile(
       typeof machineConfig.toJSON === "function"
     ) {
       // step 1 — export raw XState JSON and write xstate-fsm.json
-      const xstateFsmJSON = machineConfig.toJSON();
+      const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
       writeFileSync(
         `${absFolderPath}/xstate-fsm.json`,
         JSON.stringify(xstateFsmJSON, null, 2),

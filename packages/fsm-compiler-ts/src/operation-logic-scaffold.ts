@@ -4,6 +4,7 @@ import {
   DELAY_ACTION_NAME_PREFIX,
   isVersionFolderName,
 } from "./util.ts";
+import type { FsmMachineJson } from "./generated/fsm-machine-schema.types.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "scaffold"]);
 
@@ -178,7 +179,7 @@ export async function writeActorFile(
 export async function eachVersionedFsmFolder(
   folderPath: string,
   skipDirs: string[],
-  handler: (absFolderPath: string, fsmData: unknown) => Promise<void>,
+  handler: (absFolderPath: string, fsmData: FsmMachineJson) => Promise<void>,
 ): Promise<void> {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -212,7 +213,9 @@ export async function eachVersionedFsmFolder(
       const versionFolderPath = `${fsmDirPath}/${subEntry.name}`;
       const fsmJsonPath = `${versionFolderPath}/fsm.json`;
       try {
-        const fsmData = JSON.parse(await Deno.readTextFile(fsmJsonPath));
+        const fsmData: FsmMachineJson = JSON.parse(
+          await Deno.readTextFile(fsmJsonPath),
+        );
         await handler(versionFolderPath, fsmData);
       } catch (err) {
         if (err instanceof Deno.errors.NotFound) {
