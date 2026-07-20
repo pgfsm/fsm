@@ -23,23 +23,6 @@ export type FailedMethod = {
   modulePath: string;
 };
 
-export type InternalActor = {
-  src: string;
-  fsmName: string;
-  fsmType?: string;
-  fsmVersion?: string;
-  fsmAbsFolderPath: string;
-  fsmRelativeFolderPath: string;
-  resolved: boolean;
-};
-
-export type ExternalActor = {
-  src: string;
-  fsmType?: string;
-  fsmVersion?: string;
-  resolved: boolean;
-};
-
 export type FsmPluginValidationResult = {
   src: string;
   fsmName: string;

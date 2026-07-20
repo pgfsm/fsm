@@ -35,10 +35,8 @@ export {
 export type {
   ActorPluginValidationResult,
   ActorReference,
-  ExternalActor,
   FailedMethod,
   FsmPluginValidationResult,
-  InternalActor,
 } from "./util.ts";
 export type { WorkflowType } from "./util.ts";
 export {
