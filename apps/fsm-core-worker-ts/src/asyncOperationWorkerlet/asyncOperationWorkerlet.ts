@@ -114,7 +114,7 @@ async function startPromiseWorkerForLang(
       signal,
     );
   } else if (lang === "python") {
-    const scriptPath = `${_srcDir}create-and-start-promise-worker.py`;
+    const scriptPath = `${_srcDir}fsmpromiseworker.py`;
     const proc = new Deno.Command("python3", {
       args: [
         scriptPath,

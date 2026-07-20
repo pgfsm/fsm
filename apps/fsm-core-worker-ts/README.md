@@ -43,16 +43,16 @@ DB layer (packages/fsm-core-db-ts)
 
 ## Key files
 
-| File                                     | Purpose                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `src/fsmworker.ts`                       | `startFSMWorker()` — polling loop; `startFSMWorkerWithDBLock()` — acquires PG advisory lock |
-| `src/fsmworker-helper.ts`                | `macrostepV2()` — orchestrates one full processing cycle                                    |
-| `src/create-and-start-fsm-worker.ts`     | `createAndStartFSMWorker()` — creates instance + starts worker                              |
-| `src/fsmpromiseworker.ts`                | `startFSMPromiseWorker()` — promise worker polling loop                                     |
-| `src/fsmpromiseworker-helper.ts`         | `processFSMPromiseQueueMessage()` — runs one actor invocation                               |
-| `src/create-and-start-promise-worker.ts` | `createAndStartPromiseWorker()` — creates queue + starts promise worker                     |
-| `src/types.ts`                           | `FsmQueueMessage` — derived from DB composite type `fsm_queue_msg_data_v2`                  |
-| `src/cli/index.ts`                       | CLI entry point — 5 commands for standalone use                                             |
+| File                                                                   | Purpose                                                                                     |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/fsmworker.ts`                                                     | `startFSMWorker()` — polling loop; `startFSMWorkerWithDBLock()` — acquires PG advisory lock |
+| `src/fsmworker-helper.ts`                                              | `macrostepV2()` — orchestrates one full processing cycle                                    |
+| `src/deprecated-inprocess-approach/create-and-start-fsm-worker.ts`     | `createAndStartFSMWorker()` — creates instance + starts worker                              |
+| `src/fsmpromiseworker.ts`                                              | `startFSMPromiseWorker()` — promise worker polling loop                                     |
+| `src/fsmpromiseworker-helper.ts`                                       | `processFSMPromiseQueueMessage()` — runs one actor invocation                               |
+| `src/deprecated-inprocess-approach/create-and-start-promise-worker.ts` | `createAndStartPromiseWorker()` — creates queue + starts promise worker                     |
+| `src/types.ts`                                                         | `FsmQueueMessage` — derived from DB composite type `fsm_queue_msg_data_v2`                  |
+| `src/cli/index.ts`                                                     | CLI entry point — 5 commands for standalone use                                             |
 
 ## Exports
 
