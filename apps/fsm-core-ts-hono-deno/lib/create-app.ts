@@ -1,4 +1,3 @@
-import type { Schema } from "hono";
 import { cors } from "hono/cors";
 import { getLogger } from "@logtape/logtape";
 import { startFsmlet } from "@pgfsm/worker";
@@ -21,7 +20,7 @@ import configureOpenAPI from "./configure-open-api.ts";
 import { logtapeLogger } from "./../middlewares/logtape-logger.ts";
 import { otelTrace } from "./../middlewares/otel-trace.ts";
 
-import type { AppBindings, AppOpenAPI, FsmStartupConfig } from "./types.ts";
+import type { AppBindings, FsmStartupConfig } from "./types.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
@@ -84,7 +83,7 @@ export default async function createApp(
   // app.use(requestId()).use(serveEmojiFavicon("📝")).use(pinoLogger());
   app.use(requestId()).use(serveEmojiFavicon("📝")).use(logtapeLogger());
   if (otelEnabled) app.use(otelTrace());
-  app.use("*", async (c, next) => {
+  app.use("*", (c, next) => {
     const corsMiddlewareHandler = cors({
       origin: env.CORS_ORIGIN,
     });

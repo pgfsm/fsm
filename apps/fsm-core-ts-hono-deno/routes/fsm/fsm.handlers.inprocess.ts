@@ -41,8 +41,7 @@ export const createAndStart: AppRouteHandler<CreateRoute> = async (c) => {
 
     const verifiedModules = c.get("verifiedFsmModules");
     const matchedModule = verifiedModules?.find(
-      (m: any) =>
-        m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version,
+      (m) => m.fsmName === input_fsm_name && m.fsmVersion === input_fsm_version,
     );
 
     const controller = new AbortController();
@@ -113,7 +112,7 @@ export const resumeWithWorker: AppRouteHandler<ResumeRoute> = async (c) => {
 
     const verifiedModules = c.get("verifiedFsmModules");
     const matchedModule = verifiedModules?.find(
-      (m: any) =>
+      (m) =>
         m.fsmName === (fsmData.fsm_instance_row.fsm_name ?? "") &&
         m.fsmVersion === (fsmData.fsm_instance_row.fsm_version ?? ""),
     );
@@ -149,7 +148,7 @@ export const resumeWithWorker: AppRouteHandler<ResumeRoute> = async (c) => {
   }
 };
 
-export const currentActive: AppRouteHandler<CurrentActiveRoute> = async (c) => {
+export const currentActive: AppRouteHandler<CurrentActiveRoute> = (c) => {
   const data = Object.fromEntries(
     Object.entries(activeWorkers).map(([k, v]) => [k, v.lock]),
   );

@@ -4,10 +4,7 @@ import {
   jsonContent,
   jsonContentRequired,
 } from "stoker/openapi/helpers/index.ts";
-import {
-  createErrorSchema,
-  IdParamsSchema,
-} from "stoker/openapi/schemas/index.ts";
+import { IdParamsSchema } from "stoker/openapi/schemas/index.ts";
 
 // import { insertfsmSchema, patchfsmSchema, selectfsmSchema } from "./../../db/schema.ts";
 import { notFoundSchema } from "../../lib/constants.ts";

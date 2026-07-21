@@ -5,8 +5,6 @@ import {
   jsonContentRequired,
 } from "stoker/openapi/helpers/index.ts";
 
-import { notFoundSchema } from "../../lib/constants.ts";
-
 const tags = ["fsmpromise"];
 
 export const list = createRoute({
@@ -59,35 +57,6 @@ export const resume = createRoute({
   },
 });
 
-export const createAndStart = createRoute({
-  path: "/fsmpromise/create-and-start",
-  method: "post",
-  request: {
-    body: jsonContentRequired(
-      z.object({
-        queue_name: z.string().describe("The PGMQ queue name to create"),
-        fsm_name: z.string().describe(
-          "Parent FSM name (for verifiedModule lookup)",
-        ),
-        promise_type: z.string().describe("The actor type name to invoke"),
-        fsm_version: z.string().describe("Parent FSM version"),
-      }),
-      "Promise worker creation config",
-    ),
-  },
-  tags,
-  responses: {
-    [HttpStatusCodes.OK]: jsonContent(
-      z.object({}),
-      "Promise queue created and worker started",
-    ),
-    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({ error: z.string() }),
-      "Error",
-    ),
-  },
-});
-
 export const stop = createRoute({
   path: "/fsmpromise/stop",
   method: "post",
@@ -118,5 +87,4 @@ export const stop = createRoute({
 
 export type ListRoute = typeof list;
 export type ResumeRoute = typeof resume;
-export type CreateAndStartRoute = typeof createAndStart;
 export type StopRoute = typeof stop;
