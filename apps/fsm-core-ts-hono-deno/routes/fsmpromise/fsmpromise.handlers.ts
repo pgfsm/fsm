@@ -5,18 +5,10 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 
 const logger = getLogger(["@pgfsm/api", "fsmpromise"]);
 
-import type {
-  CreateAndStartRoute,
-  ListRoute,
-  ResumeRoute,
-  StopRoute,
-} from "./fsmpromise.routes.ts";
+import type { ListRoute, ResumeRoute, StopRoute } from "./fsmpromise.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 
-import {
-  createAndStartPromiseWorker,
-  startFSMPromiseWorker,
-} from "@pgfsm/worker";
+import { startFSMPromiseWorker } from "@pgfsm/worker";
 import { pgmqQueueExists } from "@pgfsm/db";
 
 // lock=true: worker running. lock=false: stop requested, worker finishing current iteration.
@@ -24,7 +16,7 @@ import { pgmqQueueExists } from "@pgfsm/db";
 type FsmPromiseWorkerEntry = { lock: boolean; controller: AbortController };
 export const activePromiseWorkers: Record<string, FsmPromiseWorkerEntry> = {};
 
-export const list: AppRouteHandler<ListRoute> = async (c) => {
+export const list: AppRouteHandler<ListRoute> = (c) => {
   const data = Object.fromEntries(
     Object.entries(activePromiseWorkers).map(([k, v]) => [k, v.lock]),
   );
@@ -68,7 +60,7 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
 
     const verifiedModules = c.get("verifiedFsmModules");
     const matchedModule = verifiedModules?.find(
-      (m: any) => m.fsmName === fsm_name && m.fsmVersion === fsm_version,
+      (m) => m.fsmName === fsm_name && m.fsmVersion === fsm_version,
     );
 
     const controller = new AbortController();
@@ -103,63 +95,7 @@ export const resume: AppRouteHandler<ResumeRoute> = async (c) => {
   }
 };
 
-export const createAndStart: AppRouteHandler<CreateAndStartRoute> = async (
-  c,
-) => {
-  const supabase = getSupabase(c);
-  const db = c.get("db");
-  const deps = {
-    db: db,
-    useSupabase: true,
-    supabase: supabase,
-  };
-  const body = c.req.valid("json");
-  const { queue_name, fsm_name, promise_type, fsm_version } = body;
-
-  try {
-    if (activePromiseWorkers[queue_name]) {
-      return c.json(
-        { error: `Promise worker already running for "${queue_name}"` },
-        HttpStatusCodes.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    const verifiedModules = c.get("verifiedFsmModules");
-    const matchedModule = verifiedModules?.find(
-      (m: any) => m.fsmName === fsm_name && m.fsmVersion === fsm_version,
-    );
-
-    const controller = new AbortController();
-    const started = await createAndStartPromiseWorker(
-      deps,
-      queue_name,
-      queue_name,
-      promise_type,
-      fsm_version,
-      matchedModule,
-      controller.signal,
-      () => delete activePromiseWorkers[queue_name],
-    );
-
-    if (!started) {
-      return c.json(
-        { error: "Failed to create queue or start promise worker" },
-        HttpStatusCodes.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    activePromiseWorkers[queue_name] = { lock: true, controller };
-    return c.json({}, HttpStatusCodes.OK);
-  } catch (_err) {
-    logger.error("Error in createAndStart handler: {error}", { error: _err });
-    return c.json(
-      { error: "Unexpected error" },
-      HttpStatusCodes.INTERNAL_SERVER_ERROR,
-    );
-  }
-};
-
-export const stop: AppRouteHandler<StopRoute> = async (c) => {
+export const stop: AppRouteHandler<StopRoute> = (c) => {
   const { queue } = c.req.valid("json");
   const entry = activePromiseWorkers[queue];
   if (!entry) {

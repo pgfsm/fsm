@@ -98,7 +98,7 @@ describe("POST /fsmpromise/resume", () => {
 
   it("returns 422 when body is empty", async () => {
     const res = await client.fsmpromise.resume.$post({
-      // @ts-expect-error
+      // @ts-expect-error — intentionally omitting all required fields
       json: {},
     });
     expect(res.status).toBe(422);

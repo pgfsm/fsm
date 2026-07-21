@@ -6,7 +6,6 @@ import * as routes from "./fsmpromise.routes.ts";
 const router = createRouter()
   .openapi(routes.list, handlers.list)
   .openapi(routes.resume, handlers.resume)
-  .openapi(routes.createAndStart, handlers.createAndStart)
   .openapi(routes.stop, handlers.stop);
 
 export default router;
