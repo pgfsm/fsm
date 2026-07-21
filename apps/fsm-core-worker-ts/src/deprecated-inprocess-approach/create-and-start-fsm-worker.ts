@@ -1,10 +1,8 @@
 import type { DBDeps } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
 import { createFsmInstanceFromName } from "@pgfsm/db";
-import {
-  startFSMWorkerWithDBLock,
-  type VerifiedModule,
-} from "../fsmlet/fsmworker.ts";
+import { startFSMWorkerWithDBLock } from "../fsmlet/fsmworker.ts";
+import type { FsmPluginValidationResult } from "@pgfsm/compiler";
 
 type FsmInstanceResult =
   & { fsm_instance_id: string; fsm_version: string }
@@ -15,7 +13,7 @@ export async function createAndStartFSMWorker(
   deps: DBDeps,
   fsm_name: string,
   fsm_version: string,
-  matchedModule: VerifiedModule,
+  matchedModule: FsmPluginValidationResult,
   fsm_context: Json,
   validatePlugin?: boolean,
   signal?: AbortSignal,

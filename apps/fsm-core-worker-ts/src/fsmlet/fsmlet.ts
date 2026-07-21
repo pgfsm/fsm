@@ -1,7 +1,12 @@
 import { getLogger } from "@logtape/logtape";
 import { Pool } from "pg";
-import type { PoolConfig } from "pg";
-import type { DbConfig, FsmStartupConfig } from "./type.ts";
+import type {
+  ActiveWorker,
+  DbConfig,
+  FsmletHandle,
+  FsmletOptions,
+  FsmStartupConfig,
+} from "./type.ts";
 import type { FsmPluginValidationResult } from "@pgfsm/compiler";
 import { validateSyncOperationFromFolders } from "@pgfsm/compiler";
 import type { FsmModule } from "@pgfsm/db";
@@ -52,31 +57,6 @@ class Semaphore {
     }
   }
 }
-
-type ActiveWorker = { controller: AbortController };
-
-export type FsmletOptions = {
-  signal?: AbortSignal;
-  maxConcurrency?: number;
-  asyncOperationVerificationMode?: string; // "none" | "checkReistry" | "checkRegistryAndWorking" default: "checkRegistryAndWorking"
-  /** Called when a fsm_worker_stop pg_notify fires, after the fsmlet's own abort. */
-  onWorkerStop?: (instanceId: string) => void;
-  /**
-   * Stable identity for this fsmlet node. If omitted a random UUID is generated
-   * each startup. Pass a fixed value (e.g. from FSMLET_ID env var) so the
-   * scheduler recognises restarts as the same node.
-   */
-  fsmletId?: string;
-};
-
-export type FsmletHandle = {
-  pool: Pool | null;
-  verifiedFsmWithAsyncOps: FsmPluginValidationResult[];
-  fsmletId: string;
-  /** Resolves when the fsmlet exits cleanly. Does NOT close the pool. */
-  daemon: Promise<void>;
-  getActiveWorkerIds: () => string[];
-};
 
 /**
  * FSM fsmlet — node agent (kubelet equivalent).

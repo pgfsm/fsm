@@ -2,12 +2,10 @@ export { configureWorkerLogger, type LogLevel } from "./logger.ts";
 export {
   startFSMWorker,
   startFSMWorkerWithDBLock,
-  type VerifiedModule,
 } from "./fsmlet/fsmworker.ts";
 export type { FsmQueueMessage, FsmQueueMessageEventData } from "./types.ts";
 export { createAndStartFSMWorker } from "./deprecated-inprocess-approach/create-and-start-fsm-worker.ts";
 export {
-  type FsmModuleDefinition,
   macrostepV2,
   runActionImplementation,
   splitByEventTypes,
@@ -23,10 +21,12 @@ export type {
   BootstrapResult,
   DbConfig,
   FsmFolderConfig,
+  FsmletHandle,
+  FsmletOptions,
+  FsmModuleDefinition,
   FsmStartupConfig,
 } from "./fsmlet/type.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
-export type { FsmletHandle, FsmletOptions } from "./fsmlet/fsmlet.ts";
 export { runFsmScheduler } from "./fsmscheduler/fsmscheduler.ts";
 export type { FsmSchedulerOptions } from "./fsmscheduler/fsmscheduler.ts";
 export { claimScheduledForFsmlet, fsmletNotifyChannel } from "@pgfsm/db";

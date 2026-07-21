@@ -1,5 +1,4 @@
 import { getLogger } from "@logtape/logtape";
-import type { Database } from "@pgfsm/db/database.types";
 
 import type { DBDeps } from "@pgfsm/db";
 
@@ -13,26 +12,18 @@ import {
 } from "@pgfsm/db";
 
 import { validateSyncOperationFromFolder } from "@pgfsm/compiler";
-import type { WorkflowType } from "@pgfsm/compiler";
+import type { FsmPluginValidationResult, WorkflowType } from "@pgfsm/compiler";
 
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
 import type { FsmQueueMessage } from "../types.ts";
-
-export type VerifiedModule = {
-  fsmAbsFolderPath?: string | null;
-  fsmRelativeFolderPath?: string;
-  fsmParentDirName?: string;
-  fsmParentAbsFolderPath?: string;
-  fsmParentRelativeFolderPath?: string;
-  fsmType?: string;
-};
+import type { FsmModuleDefinition } from "./type.ts";
 
 export async function startFSMWorker(
   deps: DBDeps,
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  fsmModuleDefinition?: any,
+  fsmModuleDefinition?: FsmModuleDefinition,
   signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
@@ -82,7 +73,8 @@ export async function startFSMWorker(
               const archiveResult = await archiveEventFromFsmTypeWorker(
                 deps,
                 macrostepV2Result.remove_from_current_fsm_instance_queue_id,
-                macrostepV2Result.remove_current_queue_msg_id,
+                // Non-null: msg.msg_id was truthy-checked at the top of this loop.
+                macrostepV2Result.remove_current_queue_msg_id!,
                 macrostepV2Result.remove_schedule_queue_msg_ids,
                 macrostepV2Result.remove_promise_queue_msg_ids,
                 macrostepV2Result.new_schedule_queue_data,
@@ -118,12 +110,12 @@ export async function startFSMWorkerWithDBLock(
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  verifiedModule?: VerifiedModule,
+  verifiedModule?: FsmPluginValidationResult,
   validatePlugin?: boolean,
   signal?: AbortSignal,
   onStop?: () => void,
 ): Promise<{ status: "success" | "fail"; message: string }> {
-  let fsmModuleDefinition: any = undefined;
+  let fsmModuleDefinition: FsmModuleDefinition | undefined = undefined;
   if (verifiedModule?.fsmAbsFolderPath) {
     try {
       if (validatePlugin) {
@@ -142,7 +134,10 @@ export async function startFSMWorkerWithDBLock(
           (verifiedModule.fsmType ?? "fsm") as WorkflowType,
           [],
         );
-        fsmModuleDefinition = result.fsmModuleDefinition;
+        // validateSyncOperationFromFolder types this as Json, but it's always
+        // the { actions, guards, delays, actors } module-namespace record.
+        fsmModuleDefinition = result
+          .fsmModuleDefinition as unknown as FsmModuleDefinition;
         logger.info(
           "Loaded fsmModuleDefinition via validateSyncOperationFromFolder for {fsmName}/{fsmVersion}",
           { fsmName: fsm_name, fsmVersion: fsm_version },

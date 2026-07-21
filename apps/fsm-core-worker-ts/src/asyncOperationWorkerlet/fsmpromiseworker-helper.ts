@@ -23,10 +23,10 @@ export type FSMPromiseArchiveData = {
 };
 
 export async function processFSMPromiseQueueMessage(
-  deps: DBDeps,
+  _deps: DBDeps,
   promise_queue_name: string,
   msg: Database["pgmq"]["CompositeTypes"]["message_record"],
-  promise_fn_name: string,
+  _promise_fn_name: string,
   promise_version?: string,
   promise_queue_type?: string,
   actorFn?: ((input: unknown) => Promise<unknown>) | undefined,
