@@ -27,7 +27,8 @@ const DOCKER_VOLUME_LABEL = "label=com.supabase.cli.project=database-src";
 // such PATH mangling, so a bare "supabase" here would instead pick up
 // whatever's on the user's global PATH — silently running a different,
 // possibly incompatible CLI version. Resolve the pinned binary explicitly.
-const SUPABASE_BIN = join(SCRIPT_DIR, "node_modules/.bin/supabase");
+// const SUPABASE_BIN = join(SCRIPT_DIR, "node_modules/.bin/supabase");
+const SUPABASE_BIN = "supabase";
 
 // Loaded up front (not just before `supabase start`) — every supabase CLI
 // subcommand parses config.toml, which interpolates env(...) references
