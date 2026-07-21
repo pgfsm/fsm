@@ -640,76 +640,57 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      api_system_event_name: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
-      api_system_queue_type: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
-      api_system_queue_uuid: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
+      api_system_event_name: { Args: never; Returns: string };
+      api_system_queue_type: { Args: never; Returns: string };
+      api_system_queue_uuid: { Args: never; Returns: string };
       archive_event_from_fsm_promise_type_worker_v2: {
         Args: {
-          input_promise_queue_name: string;
-          input_promise_queue_type: string;
-          input_promise_queue_version: string;
-          input_promise_queue_msg_id: number;
-          input_event_name: string;
+          input_error_message: string;
           input_event_action_type: string;
           input_event_data: Json;
           input_event_delay: number;
-          input_send_to_parent_queue_id: string;
-          input_send_to_parent_queue_id_event_name: string;
-          input_execution_started_at: string;
+          input_event_name: string;
+          input_event_output: Json;
+          input_event_status: string;
           input_execution_duration: number;
           input_execution_finished_at: string;
-          input_event_status: string;
-          input_event_output: Json;
-          input_error_message: string;
+          input_execution_started_at: string;
+          input_promise_queue_msg_id: number;
+          input_promise_queue_name: string;
+          input_promise_queue_type: string;
+          input_promise_queue_version: string;
+          input_send_to_parent_queue_id: string;
+          input_send_to_parent_queue_id_event_name: string;
         };
         Returns: Json;
       };
       archive_event_from_fsm_type_worker_v2: {
         Args: {
-          remove_from_current_fsm_instance_queue_id: string;
-          remove_current_queue_msg_id: number;
-          to_be_removed_schedule_queue_msg_ids: Json;
-          to_be_removed_promise_queue_msg_ids: Json;
-          to_be_added_schedule_queue_data: Json;
-          to_be_added_promise_queue_data: Json;
-          input_total_schedule_queue_data: Json;
-          input_total_promise_queue_data: Json;
-          fsm_instance_data_save_fsm_status: Json;
-          fsm_instance_data_save_fsm_state: Json;
           fsm_instance_data_save_fsm_context: Json;
+          fsm_instance_data_save_fsm_state: Json;
+          fsm_instance_data_save_fsm_status: Json;
           fsm_instance_data_save_fsm_xstate_state: Json;
+          input_total_promise_queue_data: Json;
+          input_total_schedule_queue_data: Json;
+          remove_current_queue_msg_id: number;
+          remove_from_current_fsm_instance_queue_id: string;
           send_to_parent_queue_id: string;
-          send_to_parent_queue_type: string;
           send_to_parent_queue_id_event_name: string;
+          send_to_parent_queue_type: string;
+          to_be_added_promise_queue_data: Json;
+          to_be_added_schedule_queue_data: Json;
+          to_be_removed_promise_queue_msg_ids: Json;
+          to_be_removed_schedule_queue_msg_ids: Json;
         };
         Returns: Json;
       };
       async_operation_schedule_next_pending: {
-        Args: {
-          input_stale_threshold_seconds?: number;
-        };
+        Args: { input_stale_threshold_seconds?: number };
         Returns: boolean;
       };
-      build_nested_json_recursive: {
-        Args: {
-          paths: string[];
-        };
-        Returns: Json;
-      };
+      build_nested_json_recursive: { Args: { paths: string[] }; Returns: Json };
       cancel_event_for_fsm_promise_type_worker_v2: {
-        Args: {
-          promise_type_worker_name: string;
-          queue_msg_id: number;
-        };
+        Args: { promise_type_worker_name: string; queue_msg_id: number };
         Returns: Json;
       };
       check_registry_and_working_for_async_actors_for_fsm_instance_an: {
@@ -729,171 +710,161 @@ export type Database = {
         Returns: Json;
       };
       claim_scheduled_for_async_operation_workerlet: {
-        Args: {
-          input_workerlet_id: string;
-        };
+        Args: { input_workerlet_id: string };
         Returns: Json;
       };
       claim_scheduled_for_fsmlet: {
-        Args: {
-          input_fsmlet_id: string;
-        };
+        Args: { input_fsmlet_id: string };
         Returns: Json;
       };
       compute_child_exit_set_v1: {
-        Args: {
-          transition_domain_lca: unknown;
-          state_node_set: unknown[];
-        };
+        Args: { state_node_set: unknown[]; transition_domain_lca: unknown };
         Returns: string[];
       };
       compute_child_exit_set_v2: {
-        Args: {
-          transition_domain_lca: unknown;
-          state_node_set: unknown[];
-        };
+        Args: { state_node_set: unknown[]; transition_domain_lca: unknown };
         Returns: string[];
       };
       compute_entry_actions_v1: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
           fsm_name_param: string;
           fsm_version_param: string;
           is_initial_transition: boolean;
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
       compute_entry_actions_v2: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
           fsm_name_param: string;
           fsm_version_param: string;
           is_initial_transition: boolean;
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
       compute_exit_actions_v1: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-          p_state_node_set: string[];
           p_fsm_name: string;
           p_fsm_version: string;
+          p_state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
       compute_exit_actions_v2: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-          input_state_node_set: string[];
           input_fsm_name: string;
           input_fsm_version: string;
+          input_state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
       compute_full_exit_set_v1: {
         Args: {
+          state_node_set: string[];
           transition_record:
             Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-          state_node_set: string[];
         };
         Returns: string[];
       };
       compute_full_exit_set_v2: {
         Args: {
+          state_node_set: string[];
           transition_record:
             Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-          state_node_set: string[];
         };
         Returns: string[];
       };
       create_async_operation_instance_and_notify_async_operation_sche: {
         Args: {
           input_async_operation_instance_id: string;
+          input_async_operation_language: string;
           input_async_operation_name: string;
-          input_async_operation_version: string;
           input_async_operation_type: string;
+          input_async_operation_version: string;
           input_parent_fsm_name: string;
           input_parent_fsm_version: string;
-          input_async_operation_language: string;
         };
         Returns: undefined;
       };
       create_fsm_instance_from_name_v2: {
         Args: {
+          create_pgmq_queue?: boolean;
+          input_fsm_context: Json;
           input_fsm_name: string;
           input_fsm_version: string;
-          input_fsm_context: Json;
-          create_pgmq_queue?: boolean;
         };
         Returns: Json;
       };
       create_fsm_queue_and_send_event_from_fsm_instance_id_v2: {
         Args: {
-          event_name: string;
-          event_input: Json;
-          id: string;
           action_type: string;
-          src: string;
+          event_input: Json;
+          event_name: string;
+          from_source_fsm_instance_id: string;
           fsmname: string;
           fsmtype: string;
           fsmversion: string;
+          id: string;
           parentfsmname: string;
           parentfsmversion: string;
-          from_source_fsm_instance_id: string;
+          src: string;
         };
         Returns: Json;
       };
       create_promise_queue_and_send_event_from_fsm_instance_id_v2: {
         Args: {
-          event_name: string;
-          event_input: Json;
-          id: string;
           action_type: string;
-          src: string;
+          event_input: Json;
+          event_name: string;
+          from_source_fsm_instance_id: string;
           fsmname: string;
           fsmtype: string;
           fsmversion: string;
+          id: string;
           parentfsmname: string;
           parentfsmversion: string;
-          from_source_fsm_instance_id: string;
+          src: string;
         };
         Returns: Json;
       };
       enqueue_fsm_dispatch_v1: {
         Args: {
-          input_instance_id: string;
+          input_dispatch_type?: string;
           input_fsm_name: string;
           input_fsm_version: string;
-          input_dispatch_type?: string;
+          input_instance_id: string;
         };
         Returns: undefined;
       };
       enqueue_fsm_dispatch_v2: {
         Args: {
-          input_instance_id: string;
+          input_dispatch_type?: string;
           input_fsm_name: string;
           input_fsm_version: string;
-          input_dispatch_type?: string;
+          input_instance_id: string;
         };
         Returns: undefined;
       };
       fsm_get_all_state_nodes_v1: {
         Args: {
-          p_state_paths: string[];
           p_fsm_name: string;
           p_fsm_version: string;
+          p_state_paths: string[];
         };
         Returns: string[];
       };
       fsm_get_all_state_nodes_v2: {
         Args: {
-          input_state_paths: string[];
           input_fsm_name: string;
           input_fsm_version: string;
+          input_state_paths: string[];
         };
         Returns: string[];
       };
@@ -929,201 +900,181 @@ export type Database = {
         };
         Returns: string[];
       };
-      fsm_json_schema: {
-        Args: Record<PropertyKey, never>;
-        Returns: Json;
-      };
+      fsm_json_schema: { Args: never; Returns: Json };
       fsm_worker_v1: {
         Args: {
           event_name: string;
-          p_state_value: Json;
           fsm_name_param: string;
           fsm_version_param: string;
+          p_state_value: Json;
         };
         Returns: Json;
       };
       fsm_worker_v2: {
         Args: {
           event_name: string;
-          input_state_value: Json;
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_value: Json;
         };
         Returns: Json;
       };
       get_ancestor_states_for_entry_v1: {
         Args: {
           ancestors: string[];
-          reentrancy_domain: string;
           fsm_name_param: string;
           fsm_version_param: string;
+          reentrancy_domain: string;
         };
         Returns:
           Database["fsm_core"]["CompositeTypes"]["ancestor_states_result_v1"];
+        SetofOptions: {
+          from: "*";
+          to: "ancestor_states_result_v1";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       get_ancestor_states_for_entry_v2: {
         Args: {
           ancestors: string[];
-          reentrancy_domain: string;
           fsm_name_param: string;
           fsm_version_param: string;
+          reentrancy_domain: string;
         };
         Returns:
           Database["fsm_core"]["CompositeTypes"]["ancestor_states_result_v2"];
+        SetofOptions: {
+          from: "*";
+          to: "ancestor_states_result_v2";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       get_descendant_states_for_entry_v1: {
         Args: {
-          input_state_id: string;
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_id: string;
         };
         Returns:
           Database["fsm_core"]["CompositeTypes"]["descendant_states_result_v1"];
+        SetofOptions: {
+          from: "*";
+          to: "descendant_states_result_v1";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       get_descendant_states_for_entry_v2: {
         Args: {
-          input_state_id: string;
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_id: string;
         };
         Returns:
           Database["fsm_core"]["CompositeTypes"]["descendant_states_result_v2"];
+        SetofOptions: {
+          from: "*";
+          to: "descendant_states_result_v2";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       get_entry_actions_v1: {
         Args: {
-          p_state_paths: string[];
           p_fsm_name: string;
           p_fsm_version: string;
+          p_state_paths: string[];
         };
         Returns: Json;
       };
       get_entry_actions_v2: {
         Args: {
-          input_state_paths: string[];
           input_fsm_name: string;
           input_fsm_version: string;
+          input_state_paths: string[];
         };
         Returns: Json;
       };
       get_exit_actions_v1: {
         Args: {
-          p_state_paths: string[];
           p_fsm_name: string;
           p_fsm_version: string;
+          p_state_paths: string[];
         };
         Returns: Json;
       };
       get_exit_actions_v2: {
         Args: {
-          input_state_paths: string[];
           input_fsm_name: string;
           input_fsm_version: string;
+          input_state_paths: string[];
         };
         Returns: Json;
       };
       get_fsm_data_resolve_state_value_v2: {
-        Args: {
-          input_fsm_id: string;
-        };
+        Args: { input_fsm_id: string };
         Returns: Json;
       };
       get_initial_actions_v1: {
         Args: {
-          p_state_paths: string[];
           p_fsm_name: string;
           p_fsm_version: string;
+          p_state_paths: string[];
         };
         Returns: Json;
       };
       get_initial_actions_v2: {
         Args: {
-          input_state_paths: string[];
           input_fsm_name: string;
           input_fsm_version: string;
+          input_state_paths: string[];
         };
         Returns: Json;
       };
       get_proper_ancestors: {
-        Args: {
-          state_path_ltree: string;
-          to_state_path_ltree: string;
-        };
+        Args: { state_path_ltree: string; to_state_path_ltree: string };
         Returns: string[];
       };
       get_proper_ancestors_ltree: {
-        Args: {
-          state_path_ltree: unknown;
-          to_state_path_ltree: unknown;
-        };
+        Args: { state_path_ltree: unknown; to_state_path_ltree: unknown };
         Returns: unknown[];
       };
-      hello: {
-        Args: {
-          input_text: string;
-        };
-        Returns: undefined;
-      };
-      hello_niraj: {
-        Args: {
-          input_text: string;
-        };
-        Returns: undefined;
-      };
+      hello: { Args: { input_text: string }; Returns: undefined };
+      hello_niraj: { Args: { input_text: string }; Returns: undefined };
       insert_fsm_dependencies: {
         Args: {
+          p_dependent_children: Json;
           p_parent_name: string;
           p_parent_version: string;
-          p_dependent_children: Json;
         };
         Returns: undefined;
       };
       json_matches_schema: {
-        Args: {
-          schema: Json;
-          instance: Json;
-        };
+        Args: { instance: Json; schema: Json };
         Returns: boolean;
       };
       jsonb_all_paths: {
-        Args: {
-          j: Json;
-          prefix?: string;
-        };
+        Args: { j: Json; prefix?: string };
         Returns: string[];
       };
-      jsonb_deep_merge: {
-        Args: {
-          a: Json;
-          b: Json;
-        };
-        Returns: Json;
-      };
+      jsonb_deep_merge: { Args: { a: Json; b: Json }; Returns: Json };
       jsonb_matches_schema: {
-        Args: {
-          schema: Json;
-          instance: Json;
-        };
+        Args: { instance: Json; schema: Json };
         Returns: boolean;
       };
-      jsonschema_is_valid: {
-        Args: {
-          schema: Json;
-        };
-        Returns: boolean;
-      };
+      jsonschema_is_valid: { Args: { schema: Json }; Returns: boolean };
       jsonschema_validation_errors: {
-        Args: {
-          schema: Json;
-          instance: Json;
-        };
+        Args: { instance: Json; schema: Json };
         Returns: string[];
       };
       load_async_operation_meta_v2: {
         Args: {
-          input_async_operation_name: string;
-          input_async_operation_version: string;
-          input_async_operation_type: string;
           input_async_operation_language: string;
+          input_async_operation_name: string;
+          input_async_operation_type: string;
+          input_async_operation_version: string;
           input_parent_fsm_name: string;
           input_parent_fsm_version: string;
           input_updated_by_pid: string;
@@ -1132,211 +1083,160 @@ export type Database = {
       };
       load_fsm_from_json_v2: {
         Args: {
+          input_dependent_children?: Json;
+          input_fsm_name: string;
+          input_fsm_type: string;
+          input_fsm_version: string;
           json_input: Json;
           root_node_text: string;
-          input_fsm_type: string;
-          input_fsm_name: string;
-          input_fsm_version: string;
-          input_dependent_children?: Json;
         };
         Returns: Json;
       };
       load_fsm_state_from_json_v1: {
         Args: {
-          json_input: Json;
-          root_node_text: string;
           input_fsm_name: string;
           input_fsm_version: string;
+          json_input: Json;
+          root_node_text: string;
         };
         Returns: Json;
       };
       load_fsm_state_from_json_v2: {
         Args: {
-          json_input: Json;
-          root_node_text: string;
           input_fsm_name: string;
           input_fsm_version: string;
+          json_input: Json;
+          root_node_text: string;
         };
         Returns: Json;
       };
       load_fsm_transition_from_json_v1: {
         Args: {
-          json_input: Json;
-          root_node_text: string;
           fsm_name: string;
           fsm_version: string;
+          json_input: Json;
+          root_node_text: string;
         };
         Returns: Json;
       };
       load_fsm_transition_from_json_v2: {
         Args: {
-          json_input: Json;
-          root_node_text: string;
           fsm_name: string;
           fsm_version: string;
+          json_input: Json;
+          root_node_text: string;
         };
         Returns: Json;
       };
       lock_fsm_instance: {
-        Args: {
-          input_fsm_instance_id: string;
-          input_locked_by: string;
-        };
+        Args: { input_fsm_instance_id: string; input_locked_by: string };
         Returns: boolean;
       };
       macrostep_v1: {
         Args: {
           event_name: string;
-          p_state_value: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          p_state_value: string[];
         };
         Returns: Json;
       };
       macrostep_v2: {
         Args: {
           event_name: string;
-          input_state_value: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_value: string[];
         };
         Returns: Json;
       };
       microstep_v1: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
           event_name: string;
-          state_value_node_set: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          state_value_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
       microstep_v2: {
         Args: {
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
           event_name: string;
-          state_value_node_set: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          state_value_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
-      path_string_to_jsonb: {
-        Args: {
-          path: string;
-        };
-        Returns: Json;
-      };
+      path_string_to_jsonb: { Args: { path: string }; Returns: Json };
       pg_advisory_unlock:
-        | {
-          Args: {
-            key: number;
-          };
-          Returns: boolean;
-        }
-        | {
-          Args: {
-            key1: number;
-            key2: number;
-          };
-          Returns: boolean;
-        };
-      pg_system_event_name: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
-      pg_system_queue_type: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
-      pg_system_queue_uuid: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
+        | { Args: { key: number }; Returns: boolean }
+        | { Args: { key1: number; key2: number }; Returns: boolean };
+      pg_system_event_name: { Args: never; Returns: string };
+      pg_system_queue_type: { Args: never; Returns: string };
+      pg_system_queue_uuid: { Args: never; Returns: string };
       pg_try_advisory_lock:
-        | {
-          Args: {
-            key: number;
-          };
-          Returns: boolean;
-        }
-        | {
-          Args: {
-            key1: number;
-            key2: number;
-          };
-          Returns: boolean;
-        };
+        | { Args: { key: number }; Returns: boolean }
+        | { Args: { key1: number; key2: number }; Returns: boolean };
       remove_hashtag_from_text: {
-        Args: {
-          input_text: string;
-        };
+        Args: { input_text: string };
         Returns: string;
       };
       resolve_state_value_v1: {
         Args: {
-          input_json: Json;
           input_fsm_name: string;
           input_fsm_version: string;
+          input_json: Json;
         };
         Returns: Json;
       };
       resolve_state_value_v2: {
         Args: {
-          input_json: Json;
           input_fsm_name: string;
           input_fsm_version: string;
+          input_json: Json;
         };
         Returns: Json;
       };
       resume_event_for_fsm_worker_v2: {
-        Args: {
-          input_fsm_instance_id: string;
-        };
+        Args: { input_fsm_instance_id: string };
         Returns: Json;
       };
       sanitize_text_array_to_ltree_array: {
-        Args: {
-          input_array: string[];
-        };
+        Args: { input_array: string[] };
         Returns: unknown[];
       };
       sanitize_text_array_to_ltree_text_array: {
-        Args: {
-          input_array: string[];
-        };
+        Args: { input_array: string[] };
         Returns: string[];
       };
       sanitize_text_to_ltree: {
-        Args: {
-          input_text: string;
-        };
+        Args: { input_text: string };
         Returns: unknown;
       };
       schedule_next_pending: {
-        Args: {
-          input_stale_threshold_seconds?: number;
-        };
+        Args: { input_stale_threshold_seconds?: number };
         Returns: boolean;
       };
       select_all_transitions_v1: {
         Args: {
           event_name: string;
-          p_state_value: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          p_state_value: string[];
         };
         Returns: Json;
       };
       select_all_transitions_v2: {
         Args: {
           event_name: string;
-          input_state_value: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_value: string[];
         };
         Returns: Json;
       };
@@ -1359,6 +1259,12 @@ export type Database = {
           source: string;
           target: string[] | null;
         }[];
+        SetofOptions: {
+          from: "*";
+          to: "fsm_transitions";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       select_transitions_with_guard_eval_v2: {
         Args: {
@@ -1379,88 +1285,80 @@ export type Database = {
           source: string;
           target: string[] | null;
         }[];
+        SetofOptions: {
+          from: "*";
+          to: "fsm_transitions";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       send_event_to_fsm_queue_with_event_logs_v2: {
         Args: {
+          input_error_message?: string;
+          input_event_action_type: string;
+          input_event_data: Json;
+          input_event_delay?: number;
+          input_event_name: string;
+          input_event_output?: Json;
+          input_event_status?: string;
+          input_execution_duration?: number;
+          input_execution_finished_at?: string;
+          input_execution_started_at?: string;
           input_fsm_instance_id: string;
           input_fsm_instance_id_fsm_type: string;
           input_fsm_instance_id_fsm_version: string;
           input_send_to_parent_queue_id: string;
-          input_send_to_parent_queue_type: string;
           input_send_to_parent_queue_id_event_name: string;
-          input_event_name: string;
-          input_event_action_type: string;
-          input_event_data: Json;
-          input_event_delay?: number;
-          input_event_status?: string;
-          input_event_output?: Json;
-          input_error_message?: string;
-          input_execution_started_at?: string;
-          input_execution_duration?: number;
-          input_execution_finished_at?: string;
+          input_send_to_parent_queue_type: string;
         };
         Returns: Json;
       };
       send_event_to_promise_queue_with_event_logs_v2: {
         Args: {
-          input_promise_queue_name: string;
-          input_promise_fn_name: string;
-          input_promise_queue_type: string;
-          input_promise_queue_version: string;
-          input_send_to_parent_queue_id: string;
-          input_send_to_parent_queue_type: string;
-          input_send_to_parent_queue_id_event_name: string;
-          input_event_name: string;
+          input_error_message?: string;
           input_event_action_type: string;
           input_event_data: Json;
           input_event_delay?: number;
-          input_event_status?: string;
+          input_event_name: string;
           input_event_output?: Json;
-          input_error_message?: string;
-          input_execution_started_at?: string;
+          input_event_status?: string;
           input_execution_duration?: number;
           input_execution_finished_at?: string;
+          input_execution_started_at?: string;
+          input_promise_fn_name: string;
+          input_promise_queue_name: string;
+          input_promise_queue_type: string;
+          input_promise_queue_version: string;
+          input_send_to_parent_queue_id: string;
+          input_send_to_parent_queue_id_event_name: string;
+          input_send_to_parent_queue_type: string;
         };
         Returns: Json;
       };
       send_event_to_queue_from_fsm_instance_id_v2: {
         Args: {
-          event_name: string;
-          event_input: Json;
-          id: string;
           action_type: string;
-          src: string;
+          event_input: Json;
+          event_name: string;
+          from_source_fsm_instance_id: string;
           fsmname: string;
           fsmtype: string;
           fsmversion: string;
+          id: string;
           parentfsmname: string;
           parentfsmversion: string;
-          from_source_fsm_instance_id: string;
+          src: string;
         };
         Returns: Json;
       };
-      sql_lca_for_transition: {
-        Args: {
-          transition: Json;
-        };
-        Returns: unknown;
-      };
-      sql_lca_from_array: {
-        Args: {
-          paths: unknown[];
-        };
-        Returns: unknown;
-      };
+      sql_lca_for_transition: { Args: { transition: Json }; Returns: unknown };
+      sql_lca_from_array: { Args: { paths: unknown[] }; Returns: unknown };
       stop_event_for_fsm_worker_v1: {
-        Args: {
-          input_fsm_instance_id: string;
-        };
+        Args: { input_fsm_instance_id: string };
         Returns: Json;
       };
       stop_event_for_fsm_worker_v2: {
-        Args: {
-          input_fsm_instance_id: string;
-        };
+        Args: { input_fsm_instance_id: string };
         Returns: Json;
       };
       test_event_transition_for_entry_v1: {
@@ -1480,19 +1378,15 @@ export type Database = {
         Returns: Json;
       };
       test_jsonb_roundtrip: {
-        Args: {
-          input_jsonb: Json;
-        };
+        Args: { input_jsonb: Json };
         Returns: {
           original: Json;
-          reconstructed: Json;
           paths: string[];
+          reconstructed: Json;
         }[];
       };
       unlock_fsm_instance: {
-        Args: {
-          input_fsm_instance_id: string;
-        };
+        Args: { input_fsm_instance_id: string };
         Returns: boolean;
       };
     };
@@ -1565,188 +1459,141 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      _belongs_to_pgmq: {
-        Args: {
-          table_name: string;
-        };
-        Returns: boolean;
-      };
-      _ensure_pg_partman_installed: {
-        Args: Record<PropertyKey, never>;
-        Returns: undefined;
-      };
+      _belongs_to_pgmq: { Args: { table_name: string }; Returns: boolean };
+      _ensure_pg_partman_installed: { Args: never; Returns: undefined };
       _get_partition_col: {
-        Args: {
-          partition_interval: string;
-        };
+        Args: { partition_interval: string };
         Returns: string;
       };
-      _get_pg_partman_major_version: {
-        Args: Record<PropertyKey, never>;
-        Returns: number;
-      };
-      _get_pg_partman_schema: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
+      _get_pg_partman_major_version: { Args: never; Returns: number };
+      _get_pg_partman_schema: { Args: never; Returns: string };
       archive:
+        | { Args: { msg_id: number; queue_name: string }; Returns: boolean }
         | {
-          Args: {
-            queue_name: string;
-            msg_id: number;
-          };
-          Returns: boolean;
-        }
-        | {
-          Args: {
-            queue_name: string;
-            msg_ids: number[];
-          };
+          Args: { msg_ids: number[]; queue_name: string };
           Returns: number[];
         };
       convert_archive_partitioned: {
         Args: {
-          table_name: string;
+          leading_partition?: number;
           partition_interval?: string;
           retention_interval?: string;
-          leading_partition?: number;
+          table_name: string;
         };
         Returns: undefined;
       };
-      create: {
-        Args: {
-          queue_name: string;
-        };
-        Returns: undefined;
-      };
+      create: { Args: { queue_name: string }; Returns: undefined };
       create_non_partitioned: {
-        Args: {
-          queue_name: string;
-        };
+        Args: { queue_name: string };
         Returns: undefined;
       };
       create_partitioned: {
         Args: {
-          queue_name: string;
           partition_interval?: string;
+          queue_name: string;
           retention_interval?: string;
         };
         Returns: undefined;
       };
-      create_unlogged: {
-        Args: {
-          queue_name: string;
-        };
-        Returns: undefined;
-      };
+      create_unlogged: { Args: { queue_name: string }; Returns: undefined };
       delete:
+        | { Args: { msg_id: number; queue_name: string }; Returns: boolean }
         | {
-          Args: {
-            queue_name: string;
-            msg_id: number;
-          };
-          Returns: boolean;
-        }
-        | {
-          Args: {
-            queue_name: string;
-            msg_ids: number[];
-          };
+          Args: { msg_ids: number[]; queue_name: string };
           Returns: number[];
         };
-      detach_archive: {
-        Args: {
-          queue_name: string;
-        };
-        Returns: undefined;
-      };
-      drop_queue: {
-        Args: {
-          queue_name: string;
-        };
-        Returns: boolean;
-      };
+      detach_archive: { Args: { queue_name: string }; Returns: undefined };
+      drop_queue: { Args: { queue_name: string }; Returns: boolean };
       format_table_name: {
-        Args: {
-          queue_name: string;
-          prefix: string;
-        };
+        Args: { prefix: string; queue_name: string };
         Returns: string;
       };
       list_queues: {
-        Args: Record<PropertyKey, never>;
+        Args: never;
         Returns: Database["pgmq"]["CompositeTypes"]["queue_record"][];
+        SetofOptions: {
+          from: "*";
+          to: "queue_record";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       metrics: {
-        Args: {
-          queue_name: string;
-        };
+        Args: { queue_name: string };
         Returns: Database["pgmq"]["CompositeTypes"]["metrics_result"];
+        SetofOptions: {
+          from: "*";
+          to: "metrics_result";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       metrics_all: {
-        Args: Record<PropertyKey, never>;
+        Args: never;
         Returns: Database["pgmq"]["CompositeTypes"]["metrics_result"][];
+        SetofOptions: {
+          from: "*";
+          to: "metrics_result";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       pop: {
-        Args: {
-          queue_name: string;
-        };
+        Args: { queue_name: string };
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][];
-      };
-      purge_queue: {
-        Args: {
-          queue_name: string;
+        SetofOptions: {
+          from: "*";
+          to: "message_record";
+          isOneToOne: false;
+          isSetofReturn: true;
         };
-        Returns: number;
       };
+      purge_queue: { Args: { queue_name: string }; Returns: number };
       read: {
-        Args: {
-          queue_name: string;
-          vt: number;
-          qty: number;
-        };
+        Args: { qty: number; queue_name: string; vt: number };
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][];
+        SetofOptions: {
+          from: "*";
+          to: "message_record";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       read_with_poll: {
         Args: {
-          queue_name: string;
-          vt: number;
-          qty: number;
           max_poll_seconds?: number;
           poll_interval_ms?: number;
+          qty: number;
+          queue_name: string;
+          vt: number;
         };
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][];
+        SetofOptions: {
+          from: "*";
+          to: "message_record";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       send: {
-        Args: {
-          queue_name: string;
-          msg: Json;
-          delay?: number;
-        };
+        Args: { delay?: number; msg: Json; queue_name: string };
         Returns: number[];
       };
       send_batch: {
-        Args: {
-          queue_name: string;
-          msgs: Json[];
-          delay?: number;
-        };
+        Args: { delay?: number; msgs: Json[]; queue_name: string };
         Returns: number[];
       };
       set_vt: {
-        Args: {
-          queue_name: string;
-          msg_id: number;
-          vt: number;
-        };
+        Args: { msg_id: number; queue_name: string; vt: number };
         Returns: Database["pgmq"]["CompositeTypes"]["message_record"][];
-      };
-      validate_queue_name: {
-        Args: {
-          queue_name: string;
+        SetofOptions: {
+          from: "*";
+          to: "message_record";
+          isOneToOne: false;
+          isSetofReturn: true;
         };
-        Returns: undefined;
       };
+      validate_queue_name: { Args: { queue_name: string }; Returns: undefined };
     };
     Enums: {
       [_ in never]: never;
@@ -1783,153 +1630,16 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      _ltree_compress: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      _ltree_gist_options: {
-        Args: {
-          "": unknown;
-        };
-        Returns: undefined;
-      };
-      lca: {
-        Args: {
-          "": unknown[];
-        };
-        Returns: unknown;
-      };
-      lquery_in: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      lquery_out: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      lquery_recv: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      lquery_send: {
-        Args: {
-          "": unknown;
-        };
-        Returns: string;
-      };
-      ltree_compress: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_decompress: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_gist_in: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_gist_options: {
-        Args: {
-          "": unknown;
-        };
-        Returns: undefined;
-      };
-      ltree_gist_out: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_in: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_out: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_recv: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltree_send: {
-        Args: {
-          "": unknown;
-        };
-        Returns: string;
-      };
-      ltree2text: {
-        Args: {
-          "": unknown;
-        };
-        Returns: string;
-      };
-      ltxtq_in: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltxtq_out: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltxtq_recv: {
-        Args: {
-          "": unknown;
-        };
-        Returns: unknown;
-      };
-      ltxtq_send: {
-        Args: {
-          "": unknown;
-        };
-        Returns: string;
-      };
-      nlevel: {
-        Args: {
-          "": unknown;
-        };
-        Returns: number;
-      };
       test_event_transition_for_exit_v2: {
         Args: {
           event_name: string;
-          input_state_node_set: string[];
           fsm_name_param: string;
           fsm_version_param: string;
+          input_state_node_set: string[];
         };
         Returns: Json;
       };
-      text2ltree: {
-        Args: {
-          "": string;
-        };
-        Returns: unknown;
-      };
+      text2ltree: { Args: { "": string }; Returns: unknown };
     };
     Enums: {
       [_ in never]: never;
@@ -1940,103 +1650,150 @@ export type Database = {
   };
 };
 
-type PublicSchema = Database[Extract<keyof Database, "public">];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+
+type DefaultSchema =
+  DatabaseWithoutInternals[Extract<keyof Database, "public">];
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof (
-      & Database[PublicTableNameOrOptions["schema"]]["Tables"]
-      & Database[PublicTableNameOrOptions["schema"]]["Views"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  } ? keyof (
+      & DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+        "Tables"
+      ]
+      & DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+        "Views"
+      ]
     )
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database } ? (
-    & Database[PublicTableNameOrOptions["schema"]]["Tables"]
-    & Database[PublicTableNameOrOptions["schema"]]["Views"]
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+} ? (
+    & DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+      "Tables"
+    ]
+    & DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+      "Views"
+    ]
   )[TableName] extends {
     Row: infer R;
   } ? R
   : never
-  : PublicTableNameOrOptions extends keyof (
-    & PublicSchema["Tables"]
-    & PublicSchema["Views"]
+  : DefaultSchemaTableNameOrOptions extends keyof (
+    & DefaultSchema["Tables"]
+    & DefaultSchema["Views"]
   ) ? (
-      & PublicSchema["Tables"]
-      & PublicSchema["Views"]
-    )[PublicTableNameOrOptions] extends {
+      & DefaultSchema["Tables"]
+      & DefaultSchema["Views"]
+    )[DefaultSchemaTableNameOrOptions] extends {
       Row: infer R;
     } ? R
     : never
   : never;
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  } ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+      "Tables"
+    ]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+} ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+    "Tables"
+  ][TableName] extends {
     Insert: infer I;
   } ? I
   : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
       Insert: infer I;
     } ? I
     : never
   : never;
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  } ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+      "Tables"
+    ]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+} ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]][
+    "Tables"
+  ][TableName] extends {
     Update: infer U;
   } ? U
   : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
       Update: infer U;
     } ? U
     : never
   : never;
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof PublicSchema["Enums"]
-    | { schema: keyof Database },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
+  } ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]][
+      "Enums"
+    ]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
-    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+} ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][
+    EnumName
+  ]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
   : never;
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof PublicSchema["CompositeTypes"]
-    | { schema: keyof Database },
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database;
-  } ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]][
-      "CompositeTypes"
-    ]
+    schema: keyof DatabaseWithoutInternals;
+  } ? keyof DatabaseWithoutInternals[
+      PublicCompositeTypeNameOrOptions["schema"]
+    ]["CompositeTypes"]
     : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][
-    CompositeTypeName
-  ]
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals;
+} ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]][
+    "CompositeTypes"
+  ][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends
-    keyof PublicSchema["CompositeTypes"]
-    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
   : never;
+
+export const Constants = {
+  fsm_core: {
+    Enums: {
+      fsm_state_type: ["atomic", "compound", "parallel", "final", "history"],
+    },
+  },
+  pgmq: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const;
