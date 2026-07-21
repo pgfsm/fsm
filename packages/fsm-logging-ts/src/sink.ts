@@ -10,7 +10,7 @@ import { isFlatObject, RENDER_KEY, type RenderPayload } from "./render.ts";
 // True when stdout is an interactive TTY (Deno first, Node fallback). Gates the
 // rich table/dir rendering below — those are for humans at a terminal; piped
 // output falls back to a single greppable line.
-export const isTerminal = typeof Deno !== "undefined"
+export const isTerminal: boolean = typeof Deno !== "undefined"
   ? Deno.stdout.isTerminal()
   : typeof process !== "undefined" && !!process.stdout?.isTTY;
 
