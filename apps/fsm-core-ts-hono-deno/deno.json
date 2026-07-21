@@ -4,7 +4,7 @@
     "@asteasolutions/zod-to-openapi": "npm:@asteasolutions/zod-to-openapi@^7.3.2",
     "@hono/zod-openapi": "npm:@hono/zod-openapi@^0.19.6",
     "@libsql/client": "npm:@libsql/client@^0.15.7",
-    "@scalar/hono-api-reference": "npm:@scalar/hono-api-reference@^0.9.1",
+    "@scalar/hono-api-reference": "npm:@scalar/hono-api-reference@^0.11.0",
     "@supabase/ssr": "npm:@supabase/ssr@^0.6.1",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.49.8",
     "@types/pg": "npm:@types/pg@^8.15.2",
