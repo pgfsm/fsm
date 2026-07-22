@@ -36,6 +36,6 @@ Flow:
 
 ## Index
 
-| Spec | Title | Status |
-| ---- | ----- | ------ |
-| —    | —     | —      |
+| Spec                                                | Title                                                       | Status |
+| --------------------------------------------------- | ----------------------------------------------------------- | ------ |
+| [SPEC-001](spec-001-compiled-lang-actor-workers.md) | Polyglot Actor Workers for Compiled Languages via Local IPC | Draft  |
