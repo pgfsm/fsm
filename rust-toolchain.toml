@@ -4,6 +4,6 @@
 # rustup-native on purpose: `cargo` proxies, CI's bare `rustup toolchain
 # install`, and proto (which delegates Rust to rustup) all resolve this file.
 [toolchain]
-channel = "1.95.0"
+channel = "1.98.0"
 profile = "minimal"
 components = ["rustfmt", "clippy"]
