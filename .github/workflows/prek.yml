@@ -9,7 +9,7 @@ jobs:
   prek:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # prek.toml's deno-fmt / cargo-fmt hooks are language = "system": they call
       # `deno` / `cargo` directly, so the pinned toolchains must be on PATH.
@@ -28,4 +28,4 @@ jobs:
         with:
           auto-install: true
 
-      - uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d # v2.0.4
+      - uses: j178/prek-action@5337cb91e0fa35a7ff31b9ca345126d8bbbcdf16 # v2.0.6
