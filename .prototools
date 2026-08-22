@@ -8,7 +8,7 @@
 #
 # CI (prek.yml, ci.yml) installs from these files via moonrepo/setup-toolchain
 # and a bare `rustup toolchain install` — never hardcode versions in workflows.
-proto = "0.55.4"
+proto = "0.61.0"
 deno = "2.9.4"
 
 # only-prototools stops proto from detecting tools out of ecosystem files —
