@@ -5,7 +5,6 @@ import { ACTOR_REGISTRATIONS as vitalsworkflow_v01 } from "../../fsm/vitalsWorkf
 import { ACTOR_REGISTRATIONS as vitalsworkflow_v02 } from "../../fsm/vitalsWorkflow/v02/typescript/actors/generated-registry.ts";
 import { ACTOR_REGISTRATIONS as taskmachineconfig_v01 } from "../../fsm/taskMachineConfig/v01/typescript/actors/generated-registry.ts";
 import { ACTOR_REGISTRATIONS as taskmachineconfig_v02 } from "../../fsm/taskMachineConfig/v02/typescript/actors/generated-registry.ts";
-import { ACTOR_REGISTRATIONS as sharedAsyncOps } from "../../shared-async-op/v01/typescript/actors/generated-registry.ts";
 
 export const ACTOR_REGISTRATIONS = [
   ...creditcheck_v01,
@@ -14,5 +13,4 @@ export const ACTOR_REGISTRATIONS = [
   ...vitalsworkflow_v02,
   ...taskmachineconfig_v01,
   ...taskmachineconfig_v02,
-  ...sharedAsyncOps,
 ];
