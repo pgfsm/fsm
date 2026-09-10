@@ -43,6 +43,7 @@ const args = parseArgs(Deno.args, {
     "version",
     "name",
     "output",
+    "plugin-root",
   ],
   boolean: ["help", "show-recommendation"],
   alias: {
@@ -59,6 +60,7 @@ const args = parseArgs(Deno.args, {
     v: "version",
     n: "name",
     o: "output",
+    g: "plugin-root",
   },
 });
 
@@ -71,7 +73,7 @@ USAGE
 
 COMMANDS
   generate                            Generate fsm.json from a folder or a .ts file
-  generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required; aggregate registry/worker SDK refreshed from the whole plugin root either way)
+  generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required for a single fsm.json; --plugin-root always required and controls only where the aggregate registry/worker SDK get written, not which actors get aggregated)
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--output required)
   create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
   delete                              Delete generated fsm.json / xstate-fsm.json files
@@ -88,6 +90,7 @@ OPTIONS
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
   -o, --output <folder>                Version folder to write stubs into, when --folder is a single fsm.json file (generate-sync-logic/generate-async-logic only; required in that case, unused otherwise). Relative (resolved against cwd) or absolute; independent of --folder's location
+  -g, --plugin-root <folder>          Where worker-sdk-generated/ (aggregate registry + worker SDK) gets written (generate-async-logic only; required in both --folder modes). Pure write destination — doesn't need to contain any FSM itself. The actor set aggregated always comes from the real FSM tree (--folder in folder mode; fsm.json's own location, three levels up, in single-fsm.json mode), regardless of what this points at
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
@@ -103,9 +106,11 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
   deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
+  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example/fsm --worker-sdk-protocol legacy
+  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root /tmp/worker-sdk-preview
+  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01 --plugin-root apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output /tmp/scratch/v01 --plugin-root apps/fsm-core-example/fsm
   deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
   deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
   deno run --allow-all src/cli/index.ts -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
@@ -299,6 +304,19 @@ if (folderIsFsmJsonFile && !args["output"]) {
   Deno.exit(1);
 }
 
+// --plugin-root is required for generate-async-logic in both --folder modes
+// (a plugin-root folder or a single fsm.json), not just the single-fsm.json
+// case, so the aggregate registry/worker SDK always rebuilds from — and
+// writes next to — an explicit plugin root instead of one derived/guessed
+// from --folder/--output.
+if (command === "generate-async-logic" && !args["plugin-root"]) {
+  logger.error(
+    "generate-async-logic requires --plugin-root <folder>",
+  );
+  printHelp();
+  Deno.exit(1);
+}
+
 async function loadAvailableActors(): Promise<ActorReference[]> {
   const actorsFile = args["available-actors"];
   if (!actorsFile) return [];
@@ -362,22 +380,32 @@ try {
       }
       break;
     }
-    case "generate-async-logic":
+    case "generate-async-logic": {
+      // Validated required above (both --folder modes). Purely where
+      // worker-sdk-generated/ gets written -- the actor set to aggregate
+      // always comes from the real FSM tree (--folder in folder mode,
+      // fsm.json's own location in single-file mode), never from this.
+      const writeRootAbsPath = resolvePluginRootAbsPath(
+        args["plugin-root"]!,
+      );
       if (folderIsFsmJsonFile) {
         const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
         await generateAsyncOperationLogicFromFsmJson(
           folder!,
           versionFolderPath,
           workerSdkProtocol,
+          writeRootAbsPath,
         );
       } else {
         await generateAsyncOperationLogicFromFolders(
           folder!,
           skipDirs,
           workerSdkProtocol,
+          writeRootAbsPath,
         );
       }
       break;
+    }
     case "generate-sync-logic":
       if (folderIsFsmJsonFile) {
         const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
