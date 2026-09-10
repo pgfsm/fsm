@@ -71,7 +71,7 @@ USAGE
 
 COMMANDS
   generate                            Generate fsm.json from a folder or a .ts file
-  generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required; no aggregate registry/worker SDK in that mode)
+  generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required; aggregate registry/worker SDK refreshed from the whole plugin root either way)
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--output required)
   create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
   delete                              Delete generated fsm.json / xstate-fsm.json files
@@ -368,6 +368,7 @@ try {
         await generateAsyncOperationLogicFromFsmJson(
           folder!,
           versionFolderPath,
+          workerSdkProtocol,
         );
       } else {
         await generateAsyncOperationLogicFromFolders(

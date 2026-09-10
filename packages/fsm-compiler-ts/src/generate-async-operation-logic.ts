@@ -19,8 +19,10 @@ import {
   writeWorkerSdk,
 } from "./operation-logic-scaffold.ts";
 import type {
+  ActorReference,
   ActorsBarrelLang,
   FsmMachineJson,
+  OperationLang,
   RegisteredActor,
   WorkerSdkProtocol,
   WorkflowType,
@@ -31,27 +33,22 @@ const logger = getLogger(["@pgfsm/compiler", "async-logic"]);
 const BARREL_LANGS: ActorsBarrelLang[] = ["typescript", "python", "rust"];
 
 /**
- * Writes actor files, the per-version `actors-manifest.json`, and each
- * language's per-version barrel/registry for one already-parsed fsm.json,
- * into `absVersionFolderPath`. Shared by
- * {@linkcode generateAsyncOperationLogicFromFolders} (one call per versioned
- * FSM folder it walks) and {@linkcode generateAsyncOperationLogicFromFsmJson}
- * (a single call for one fsm.json). Mutates `tsFiles`/`rustFiles` in place so
- * callers can batch-format everything written across a whole run.
+ * Selects the invoke-object actors from one fsm.json that get their own
+ * scaffolded file: `internalAsyncOperation` only, a supported
+ * `asyncOperationLanguage`, deduped by language +
+ * `<asyncOperationType>_<asyncOperationVersion>_<src>` so identical invokes
+ * resolve to one file while actors differing in type/version/src get their
+ * own. Pure (no I/O) so it can be reused both when actually writing a
+ * version's files ({@linkcode scaffoldAsyncLogicForVersion}) and when only
+ * re-deriving a sibling version's already-written actors for the aggregate
+ * step ({@linkcode deriveRegisteredActorsForVersion}).
  */
-async function scaffoldAsyncLogicForVersion(
-  absVersionFolderPath: string,
+function selectRegisterableActors(
   fsmData: FsmMachineJson,
-  tsFiles: string[],
-  rustFiles: string[],
-): Promise<RegisteredActor[]> {
+): { actor: ActorReference; lang: OperationLang }[] {
   const { actors } = extractFsmPluginRefs(fsmData);
-
-  // Dedupe by language + `<asyncOperationType>_<asyncOperationVersion>_<src>`
-  // so identical invokes are written once, while actors that differ in
-  // type/version/src get their own files.
   const seen = new Set<string>();
-  const writtenActors: RegisteredActor[] = [];
+  const selected: { actor: ActorReference; lang: OperationLang }[] = [];
   for (const actor of actors) {
     const asyncOperationType = actor.asyncOperationType ??
       "internalAsyncOperation";
@@ -76,7 +73,46 @@ async function scaffoldAsyncLogicForVersion(
     const key = `${lang}/${actorFileBaseName(actor)}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    selected.push({ actor, lang });
+  }
+  return selected;
+}
 
+/**
+ * Re-derives the {@linkcode RegisteredActor}s a version folder's fsm.json
+ * would resolve to, without writing anything — used to rebuild the
+ * aggregate registry/worker SDK from every version under a plugin root (see
+ * {@linkcode generateAsyncOperationLogicFromFsmJson}) without re-scaffolding
+ * versions the caller isn't currently targeting.
+ */
+function deriveRegisteredActorsForVersion(
+  absVersionFolderPath: string,
+  fsmData: FsmMachineJson,
+): RegisteredActor[] {
+  return selectRegisterableActors(fsmData).map(({ actor, lang }) =>
+    toRegisteredActor(absVersionFolderPath, lang, actor)
+  );
+}
+
+/**
+ * Writes actor files, the per-version `actors-manifest.json`, and each
+ * language's per-version barrel/registry for one already-parsed fsm.json,
+ * into `absVersionFolderPath`. Shared by
+ * {@linkcode generateAsyncOperationLogicFromFolders} (one call per versioned
+ * FSM folder it walks) and {@linkcode generateAsyncOperationLogicFromFsmJson}
+ * (a single call for one fsm.json). Mutates `tsFiles`/`rustFiles` in place so
+ * callers can batch-format everything written across a whole run.
+ */
+async function scaffoldAsyncLogicForVersion(
+  absVersionFolderPath: string,
+  fsmData: FsmMachineJson,
+  tsFiles: string[],
+  rustFiles: string[],
+): Promise<RegisteredActor[]> {
+  const selected = selectRegisterableActors(fsmData);
+
+  const writtenActors: RegisteredActor[] = [];
+  for (const { actor, lang } of selected) {
     const file = await writeActorFile(absVersionFolderPath, lang, actor);
     if (lang === "typescript") tsFiles.push(file);
     writtenActors.push(toRegisteredActor(absVersionFolderPath, lang, actor));
@@ -124,6 +160,80 @@ async function scaffoldAsyncLogicForVersion(
   }
 
   return writtenActors;
+}
+
+/**
+ * Writes the once-per-app-root aggregate registry (TS/Python/Rust) and Go
+ * registry, plus the worker SDK, from `allRegisteredActors` — the complete
+ * set of actors across every version folder under `pluginRootAbsPath`, not
+ * just whichever version(s) the caller scaffolded this run. Shared by
+ * {@linkcode generateAsyncOperationLogicFromFolders} (which already has the
+ * complete set, from the folders it just walked) and
+ * {@linkcode generateAsyncOperationLogicFromFsmJson} (which re-derives it by
+ * walking `pluginRootAbsPath` itself — see that function's doc comment).
+ * Mutates `tsFiles`/`rustFiles`/`goFiles`/`goModDirs` in place so callers can
+ * batch-format everything written across a whole run, aggregate step
+ * included.
+ */
+async function writeAggregateArtifacts(
+  pluginRootAbsPath: string,
+  allRegisteredActors: RegisteredActor[],
+  workerSdkProtocol: WorkerSdkProtocol,
+  tsFiles: string[],
+  rustFiles: string[],
+  goFiles: string[],
+  goModDirs: string[],
+): Promise<void> {
+  // One level above the plugin root (e.g. apps/fsm-core-example/fsm ->
+  // apps/fsm-core-example) -- a sibling of every FSM name folder this run
+  // processed, not nested inside any one of them.
+  const pluginRootDirName = pluginRootAbsPath.split("/").at(-1)!;
+  const appRootAbsPath = pluginRootAbsPath.split("/").slice(0, -1).join("/");
+
+  for (const lang of BARREL_LANGS) {
+    const aggregateFile = await writeAggregateActorsRegistry(
+      appRootAbsPath,
+      pluginRootDirName,
+      allRegisteredActors,
+      lang,
+    );
+    if (aggregateFile) {
+      if (lang === "typescript") tsFiles.push(aggregateFile);
+      if (lang === "rust") rustFiles.push(aggregateFile);
+      logger.info("Wrote {lang} aggregate actors registry {file}", {
+        lang,
+        file: aggregateFile,
+      });
+    }
+  }
+
+  const goRegistryFile = await writeAggregateGoRegistry(
+    appRootAbsPath,
+    pluginRootDirName,
+    allRegisteredActors,
+  );
+  if (goRegistryFile) {
+    goFiles.push(goRegistryFile);
+    goModDirs.push(goRegistryFile.slice(0, goRegistryFile.lastIndexOf("/")));
+    logger.info("Wrote go aggregate actors registry {file}", {
+      file: goRegistryFile,
+    });
+  }
+
+  const wrote = await writeWorkerSdk(
+    appRootAbsPath,
+    pluginRootDirName,
+    allRegisteredActors,
+    { protocol: workerSdkProtocol },
+  );
+  tsFiles.push(...wrote.tsFiles);
+  rustFiles.push(...wrote.rustFiles);
+  goFiles.push(...wrote.goFiles);
+  if (wrote.goModDir) goModDirs.push(wrote.goModDir);
+  logger.info(
+    "Wrote worker-sdk-generated/ (typescript={ts}, python={py}, rust={rust}, go={go})",
+    { ts: wrote.typescript, py: wrote.python, rust: wrote.rust, go: wrote.go },
+  );
 }
 
 /**
@@ -198,56 +308,15 @@ export async function generateAsyncOperationLogicFromFolders(
     },
   );
 
-  // One level above the plugin root (e.g. apps/fsm-core-example/fsm ->
-  // apps/fsm-core-example) -- a sibling of every FSM name folder this run
-  // processed, not nested inside any one of them.
   const pluginRootAbsPath = resolvePluginRootAbsPath(folderPath);
-  const pluginRootDirName = pluginRootAbsPath.split("/").at(-1)!;
-  const appRootAbsPath = pluginRootAbsPath.split("/").slice(0, -1).join("/");
-
-  for (const lang of BARREL_LANGS) {
-    const aggregateFile = await writeAggregateActorsRegistry(
-      appRootAbsPath,
-      pluginRootDirName,
-      allRegisteredActors,
-      lang,
-    );
-    if (aggregateFile) {
-      if (lang === "typescript") tsFiles.push(aggregateFile);
-      if (lang === "rust") rustFiles.push(aggregateFile);
-      logger.info("Wrote {lang} aggregate actors registry {file}", {
-        lang,
-        file: aggregateFile,
-      });
-    }
-  }
-
-  const goRegistryFile = await writeAggregateGoRegistry(
-    appRootAbsPath,
-    pluginRootDirName,
+  await writeAggregateArtifacts(
+    pluginRootAbsPath,
     allRegisteredActors,
-  );
-  if (goRegistryFile) {
-    goFiles.push(goRegistryFile);
-    goModDirs.push(goRegistryFile.slice(0, goRegistryFile.lastIndexOf("/")));
-    logger.info("Wrote go aggregate actors registry {file}", {
-      file: goRegistryFile,
-    });
-  }
-
-  const wrote = await writeWorkerSdk(
-    appRootAbsPath,
-    pluginRootDirName,
-    allRegisteredActors,
-    { protocol: workerSdkProtocol },
-  );
-  tsFiles.push(...wrote.tsFiles);
-  rustFiles.push(...wrote.rustFiles);
-  goFiles.push(...wrote.goFiles);
-  if (wrote.goModDir) goModDirs.push(wrote.goModDir);
-  logger.info(
-    "Wrote worker-sdk-generated/ (typescript={ts}, python={py}, rust={rust}, go={go})",
-    { ts: wrote.typescript, py: wrote.python, rust: wrote.rust, go: wrote.go },
+    workerSdkProtocol,
+    tsFiles,
+    rustFiles,
+    goFiles,
+    goModDirs,
   );
 
   await formatTsFilesBestEffort(tsFiles);
@@ -266,19 +335,28 @@ export async function generateAsyncOperationLogicFromFolders(
  * independently of `fsmJsonPath`'s own location; it does not have to be
  * `fsmJsonPath`'s own containing directory).
  *
- * Unlike {@linkcode generateAsyncOperationLogicFromFolders}, this does
- * **not** write the once-per-app-root aggregate registry or worker SDK (see
- * {@linkcode writeAggregateActorsRegistry}, {@linkcode writeAggregateGoRegistry},
- * {@linkcode writeWorkerSdk}): those combine every FSM version's actors for a
- * language into one file, which isn't well-defined for a single arbitrary
- * fsm.json — running it here would silently overwrite that aggregate with
- * only this one file's actors, discarding every other FSM's entries. Run
- * `generate-async-logic` in folder mode over the whole plugin-root afterward
- * to refresh the aggregate registry / worker SDK.
+ * Also refreshes the once-per-app-root aggregate registry and worker SDK
+ * (see {@linkcode writeAggregateArtifacts}), same as
+ * {@linkcode generateAsyncOperationLogicFromFolders} — but since this run
+ * only has this one fsm.json's actors in hand, it can't just pass those to
+ * the aggregate writers (that would silently overwrite the aggregate with
+ * only this file's actors, discarding every other FSM's entries). Instead it
+ * derives the plugin root from `absVersionFolderPath`'s own
+ * `<pluginRoot>/<fsmName>/<version>` nesting (the same layout
+ * {@linkcode eachVersionedFsmFolder} walks — two levels up) and re-walks
+ * every version folder under it, re-deriving each one's actors from its own
+ * fsm.json (see {@linkcode deriveRegisteredActorsForVersion}; read-only,
+ * nothing under those other version folders is rewritten) to reassemble the
+ * complete set the aggregate step needs. `absVersionFolderPath` therefore
+ * needs to actually sit inside a real plugin root for the aggregate refresh
+ * to make sense — an arbitrary `--output` elsewhere still gets its own
+ * files/manifest/barrel/registry written correctly, but the "plugin root"
+ * two levels up from it won't be a real one.
  */
 export async function generateAsyncOperationLogicFromFsmJson(
   fsmJsonPath: string,
   absVersionFolderPath: string,
+  workerSdkProtocol: WorkerSdkProtocol = "grpc",
 ): Promise<void> {
   logger.info(
     "Scaffolding async operation logic from {path} into {versionFolder}",
@@ -290,6 +368,9 @@ export async function generateAsyncOperationLogicFromFsmJson(
   );
   const tsFiles: string[] = [];
   const rustFiles: string[] = [];
+  const goFiles: string[] = [];
+  const goModDirs: string[] = [];
+
   await scaffoldAsyncLogicForVersion(
     absVersionFolderPath,
     fsmData,
@@ -297,6 +378,33 @@ export async function generateAsyncOperationLogicFromFsmJson(
     rustFiles,
   );
 
+  // <pluginRoot>/<fsmName>/<version> -> <pluginRoot> is two levels up.
+  const pluginRootAbsPath = absVersionFolderPath.split("/").slice(0, -2)
+    .join("/");
+
+  const allRegisteredActors: RegisteredActor[] = [];
+  await eachVersionedFsmFolder(
+    pluginRootAbsPath,
+    [],
+    async (versionFolderPath, versionFsmData) => {
+      allRegisteredActors.push(
+        ...deriveRegisteredActorsForVersion(versionFolderPath, versionFsmData),
+      );
+    },
+  );
+
+  await writeAggregateArtifacts(
+    pluginRootAbsPath,
+    allRegisteredActors,
+    workerSdkProtocol,
+    tsFiles,
+    rustFiles,
+    goFiles,
+    goModDirs,
+  );
+
   await formatTsFilesBestEffort(tsFiles);
   await formatRustFilesBestEffort(rustFiles);
+  await formatGoFilesBestEffort(goFiles);
+  await goModTidyManyBestEffort(goModDirs);
 }
