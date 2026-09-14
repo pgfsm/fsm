@@ -12,5 +12,7 @@ dotenv.config({ path: "./../../.env" });
   await generateAsyncOperationLogicFromFolders(
     fsmfolderPath,
     skipFSMDirs,
+    "grpc",
+    fsmfolderPath,
   );
 })();

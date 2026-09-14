@@ -22,10 +22,11 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 ## Usage
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
-below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate-sync-logic`/`generate-async-logic` — applies the same rule to that
-path: it must **not** start with `.` (use a bare relative path like `fsm`, or an
-absolute path — not `./fsm`) and must **not** end with `/`.
+below that takes `-f`/`--folder` for a directory — and `-o`/`--output` /
+`-g`/`--plugin-root`, for `generate-sync-logic`/`generate-async-logic` — applies
+the same rule to that path: it must **not** start with `.` (use a bare relative
+path like `fsm`, or an absolute path — not `./fsm`) and must **not** end with
+`/`.
 
 ### `generate` — compile `fsm.json` from a state machine definition
 
@@ -101,16 +102,15 @@ have already run.
 
 **Input** — `-f`/`--folder` accepts either:
 
-- A **plugin-root directory** — every version folder under it is scaffolded,
-  plus the once-per-app-root aggregate registry/worker SDK (see below).
+- A **plugin-root directory** — every version folder under it is scaffolded.
 - A **single `fsm.json` file path** — only that one version's actor
-  files/manifest/barrel/registry are scaffolded; the aggregate registry and
-  worker SDK are **not** written (see Output). Requires `-o`/`--output`, the
+  files/manifest/barrel/registry are scaffolded. Requires `-o`/`--output`, the
   version folder to write into: a relative (resolved against the current working
   directory) or absolute path, unrelated to `--folder`'s own location.
 
-`-p`/`--worker-sdk-protocol`: `grpc` (default) or `legacy` — directory mode
-only. `-s`/`--skip-dirs`: directory mode only.
+`-g`/`--plugin-root` is **required in both modes** — see Output below for what
+it controls. `-p`/`--worker-sdk-protocol`: `grpc` (default) or `legacy` —
+directory mode only. `-s`/`--skip-dirs`: directory mode only.
 
 **Output** — per version folder (or, in single-file mode, into `--output`):
 
@@ -123,19 +123,23 @@ only. `-s`/`--skip-dirs`: directory mode only.
 - A per-language `generated-registry.*`, written only when that language has at
   least one actor
 
-Directory mode only, once per app root (not per version folder), at
-`<appRoot>/worker-sdk-generated/<lang>/`: an aggregate registry plus worker SDK
-combining every FSM version's actors for that language — a worker process serves
-its language's actors across every FSM, not just one. Single-file mode skips
-this: combining "every FSM version's actors" isn't well-defined for one
-arbitrary `fsm.json`, and running it there would overwrite the aggregate with
-only that file's actors. Run directory mode afterward to refresh the aggregate
-registry/worker SDK once you're done scaffolding individual files.
+Both modes also refresh the aggregate registry plus worker SDK — one per
+language, combining every FSM version's actors, at
+`<plugin-root>/worker-sdk-generated/<lang>/` — since a worker process serves its
+language's actors across every FSM, not just one. `-g`/`--plugin-root` is what
+determines `<plugin-root>` above: it's a **pure write destination**, not
+re-walked to find actors, so it doesn't need to itself contain any FSM (it can
+point anywhere — a scratch directory, a build output folder, etc.). The actor
+set aggregated always comes from the real FSM tree instead: `--folder`'s own
+walk in directory mode, or the target `fsm.json`'s own location (found by
+walking three directories up) in single-file mode — never from `--plugin-root`.
+In the common case, pass the same plugin-root directory for both `--folder` and
+`--plugin-root`.
 
 ```bash
-npx @pgfsm/compiler -c generate-async-logic -f fsm
-npx @pgfsm/compiler -c generate-async-logic -f fsm --worker-sdk-protocol legacy
-npx @pgfsm/compiler -c generate-async-logic -f fsm/creditCheck/v01/fsm.json --output fsm/creditCheck/v01
+npx @pgfsm/compiler -c generate-async-logic -f fsm --plugin-root fsm
+npx @pgfsm/compiler -c generate-async-logic -f fsm --plugin-root fsm --worker-sdk-protocol legacy
+npx @pgfsm/compiler -c generate-async-logic -f fsm/creditCheck/v01/fsm.json --output fsm/creditCheck/v01 --plugin-root fsm
 ```
 
 ### `create-async-logic` — scaffold one actor outside any FSM's `invoke` list
@@ -218,6 +222,11 @@ import type { OperationLang, WorkflowType } from "@pgfsm/compiler";
 // WorkflowType  = "fsm" | "sharedAsyncOperation" | "internalAsyncOperation"
 // OperationLang = "typescript" | "python" | "rust" | "go"
 ```
+
+`generateAsyncOperationLogicFromFolders`'s 4th parameter, `writeRootAbsPath`, is
+required — the programmatic equivalent of `-g`/`--plugin-root` above (a pure
+write destination for the aggregate registry/worker SDK; see the CLI section for
+what it does and doesn't control).
 
 The REST API and workers use these at startup to discover and validate FSM
 plugins before accepting requests.

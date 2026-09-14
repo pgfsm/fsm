@@ -39,6 +39,40 @@ format this compiler consumes. `README.md` is the npm/npx-consumer-facing
 document (published to `dist/` — see below); keep source-only detail here
 instead of there.
 
+## `generate-async-logic` — `--plugin-root` is a pure write destination
+
+`-g`/`--plugin-root` is required in both `--folder` modes (directory and
+single-`fsm.json`). It controls **only** where `worker-sdk-generated/` gets
+written (`<writeRootAbsPath>/worker-sdk-generated/<lang>/`) — it is never
+re-walked to find actors and doesn't need to contain any FSM itself. See
+`README.md`/`docs/guides/cli-usage.md` for the user-facing explanation; the
+gotchas below are for whoever next touches
+`generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:
+
+- **Three distinct roots, don't conflate them**: `writeRootAbsPath` (where files
+  land — arbitrary), `realPluginRootAbsPath` (the actual FSM tree — `--folder`
+  itself in directory mode, or derived from the target `fsm.json`'s own location
+  three levels up in single-file mode), and `goModuleAppRoot` (the real app-root
+  directory name, e.g. `"fsm-core-example"`, that each individual Go actor's own
+  `go.mod` already names itself under — see `goActorModulePath`). Only
+  `realPluginRootAbsPath` is walked for actors; only `goModuleAppRoot` feeds Go
+  module names. Passing `writeRootAbsPath` where one of the other two belongs
+  breaks either the aggregate (wrong/empty actor set) or Go module resolution
+  silently.
+- **Every cross-directory reference is a real computed `relative()`** (from
+  `@std/path/posix`, via `operation-logic-scaffold.ts`'s `relativeImportDir`
+  helper) between the write location and `realPluginRootAbsPath` — TS/Rust
+  imports, Python's `sys.path` bootstrap, both Go `replace` targets, and the
+  `gatewaySidecarProtoGen*`/`gatewaySidecarProtocolImportPath` helpers (proto-
+  codegen paths, which still assume `realPluginRootAbsPath` sits at the
+  conventional `<repo-root>/apps/<appName>/<pluginRootDirName>` depth — true for
+  `apps/fsm-core-example/fsm`, this codegen's only consumer so far; a
+  `realPluginRootAbsPath` elsewhere needs those recomputed). None of this is a
+  fixed `../../` string anymore — if you're debugging a wrong import path in
+  generated output, check `relativeImportDir`'s two arguments first.
+- **`deno.json` gained `@std/path`** for the above; nothing else in this package
+  needed it before.
+
 ## npm publish (`deno task build:npm`)
 
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, not `deno pack`
