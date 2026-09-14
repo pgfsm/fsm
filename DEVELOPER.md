@@ -379,7 +379,7 @@ and exit; they don't validate, register, or listen for work.
 | `stop`         | Sends a stop signal to a running `fsmlet` worker via `pg_notify` (`stopFSMWorker`)                                 | — (no equivalent)                                                                                                                                                                                   |
 | `list`         | — (no equivalent)                                                                                                  | Calls `ListRegisteredActors` and prints the actor keys currently registered with the gateway                                                                                                        |
 | `invoke`       | — (no equivalent)                                                                                                  | Calls `Invoke` for a given actor identity against the gateway and prints the result — debug/test only                                                                                               |
-| Required flags | `-c/--command`, plus per-command: `create` needs `-n/-v`; `resume`/`send`/`stop` need `-q`; `send` also needs `-e` | none for `list`; `invoke` needs `--parent-fsm-name`, `--parent-fsm-version`, `--fsm-type`, `--fsm-name`, `--fsm-version`, `--fsm-language`                                                          |
+| Required flags | `-c/--command`, plus per-command: `create` needs `-n/-v`; `resume`/`send`/`stop` need `-q`; `send` also needs `-e` | none for `list`; `invoke` needs `--parent-fsm-name`, `--parent-fsm-version`, `--async-operation-type`, `--async-operation-name`, `--async-operation-version`, `--async-operation-language`          |
 | Depends on     | `fsmscheduler` + `fsmlet` running to pick up the dispatched/resumed/sent work                                      | A running `async-operation-worker-gateway` process (`--target`, default `unix:/tmp/pgfsm-activity-gateway.sock`) — talks only to the gateway, never touches Postgres or the sidecar socket directly |
 
 ```bash
@@ -393,8 +393,8 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c stop -q <i
 deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts list
 deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts invoke \
   --parent-fsm-name creditCheck --parent-fsm-version v01 \
-  --fsm-type internalAsyncOperation --fsm-name checkBureau --fsm-version v01 \
-  --fsm-language typescript \
+  --async-operation-type internalAsyncOperation --async-operation-name checkBureau --async-operation-version v01 \
+  --async-operation-language typescript \
   --input '{"ssn":"123"}'
 ```
 
