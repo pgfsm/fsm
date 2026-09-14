@@ -104,22 +104,26 @@ doesn't need to contain any FSM itself (it can point at a scratch/output-only
 directory). The actor set to aggregate always comes from the real FSM tree
 instead — `--folder`'s own walk in directory mode, or the target `fsm.json`'s
 own location (found by walking three directories up: `fsm.json` → `<version>` →
-`<fsmName>` → plugin root) in single-file mode — never from `--plugin-root`. In
-the common case, pass the same directory to both `--folder` and `--plugin-root`.
+`<fsmName>` → plugin root) in single-file mode — never from `--plugin-root`. To
+reproduce the pre-`--plugin-root` on-disk layout (`worker-sdk-generated/` beside
+the plugin-root folder, not inside it — the layout `apps/fsm-core-example/`
+actually uses), pass the **app root** (one level above `--folder`) as
+`--plugin-root`; it isn't limited to that convention though and can point
+anywhere, including the same directory as `--folder`.
 
 ```bash
 # Directory mode — every versioned FSM under fsm/, plus the aggregate registry/worker SDK
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-async-logic \
   -f apps/fsm-core-example/fsm \
-  --plugin-root apps/fsm-core-example/fsm
+  --plugin-root apps/fsm-core-example
 
 # Single fsm.json mode
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-async-logic \
   -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json \
   --output apps/fsm-core-example/fsm/creditCheck/v01 \
-  --plugin-root apps/fsm-core-example/fsm
+  --plugin-root apps/fsm-core-example
 
 # --plugin-root pointing somewhere with no FSMs at all -- still aggregates
 # actors from the real tree (--folder), just writes worker-sdk-generated/
@@ -340,7 +344,7 @@ separate step.
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
 
 # 2. Generate stubs (if starting fresh): actors, then actions/guards/delays
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example/fsm
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript
 
 # 3. Validate plugin exports without DB

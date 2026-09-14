@@ -133,13 +133,16 @@ point anywhere — a scratch directory, a build output folder, etc.). The actor
 set aggregated always comes from the real FSM tree instead: `--folder`'s own
 walk in directory mode, or the target `fsm.json`'s own location (found by
 walking three directories up) in single-file mode — never from `--plugin-root`.
-In the common case, pass the same plugin-root directory for both `--folder` and
-`--plugin-root`.
+To reproduce the pre-`--plugin-root` on-disk layout (`worker-sdk-generated/`
+sitting beside the plugin-root folder, not inside it), pass the **app root** —
+one level above `--folder` — as `--plugin-root`. `--plugin-root` isn't limited
+to that convention though — it can point anywhere, including the same directory
+as `--folder`.
 
 ```bash
-npx @pgfsm/compiler -c generate-async-logic -f fsm --plugin-root fsm
-npx @pgfsm/compiler -c generate-async-logic -f fsm --plugin-root fsm --worker-sdk-protocol legacy
-npx @pgfsm/compiler -c generate-async-logic -f fsm/creditCheck/v01/fsm.json --output fsm/creditCheck/v01 --plugin-root fsm
+npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example
+npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example --worker-sdk-protocol legacy
+npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01 --plugin-root apps/fsm-core-example
 ```
 
 ### `create-async-logic` — scaffold one actor outside any FSM's `invoke` list
