@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { relative } from "@std/path/posix";
 import {
   DenoCommand,
   isValidPythonIdentifier,
@@ -475,11 +476,11 @@ export async function formatRustFilesBestEffort(
 }
 
 /**
- * Directory (relative to `appRootAbsPath`) every worker-sdk artifact lives
+ * Directory (relative to `writeRootAbsPath`) every worker-sdk artifact lives
  * under, generated registries included — one fixed root so the whole worker
  * SDK for a language (registry + cli/main + sdk + protocol + build manifest)
  * ships from a single self-contained directory, e.g.
- * `apps/fsm-core-example/worker-sdk-generated/typescript/`.
+ * `apps/fsm-core-example/fsm/worker-sdk-generated/typescript/`.
  */
 const WORKER_SDK_DIR_NAME = "worker-sdk-generated";
 
@@ -523,23 +524,33 @@ function groupKeyToIdentifier(key: string): string {
  * generate:templates`' output silently fail to import at worker-sdk runtime.
  */
 function assertPythonAggregateImportPathsAreValid(
-  pluginRootDirName: string,
   groupKeys: string[],
 ): void {
-  const segments = [
-    pluginRootDirName,
-    ...groupKeys.flatMap((key) => key.split("/")),
-  ];
+  const segments = groupKeys.flatMap((key) => key.split("/"));
   const invalid = [
     ...new Set(segments.filter((s) => !isValidPythonIdentifier(s))),
   ];
   if (invalid.length > 0) {
     throw new Error(
-      `Python worker-sdk aggregate registry codegen requires every plugin-root/FSM-name/version folder name to be a valid Python identifier (letters, digits, underscores, not starting with a digit, not a keyword) since it statically imports them via a dotted path. Invalid folder name(s): ${
+      `Python worker-sdk aggregate registry codegen requires every FSM-name/version folder name to be a valid Python identifier (letters, digits, underscores, not starting with a digit, not a keyword) since it statically imports them via a dotted path. Invalid folder name(s): ${
         invalid.join(", ")
       }`,
     );
   }
+}
+
+/**
+ * A POSIX relative path from `fromDir` to `toDir`, always prefixed with
+ * `./` or `../` — `@std/path`'s `relative()` omits the leading `./` for a
+ * plain descendant (e.g. `relative("/a/b", "/a/b/c")` → `"c"`), which reads
+ * as a bare package specifier to TS/Deno and a Go module path to `go.mod`'s
+ * `replace` directive, not a relative filesystem path. Both require the
+ * explicit prefix; Rust's `#[path]` and Python's `sys.path` entry don't
+ * strictly need it but accept it fine.
+ */
+function relativeImportDir(fromDir: string, toDir: string): string {
+  const rel = relative(fromDir, toDir);
+  return rel.startsWith(".") ? rel : `./${rel}`;
 }
 
 /**
@@ -558,32 +569,38 @@ function assertPythonAggregateImportPathsAreValid(
  * functions only, no competing type) under a unique per-group module alias,
  * and re-derives entries against one `ActorRegistration` type defined once
  * in the template.
+ *
+ * `writeDir` (where the aggregate file itself lands) and
+ * `realPluginRootAbsPath` (where the actual FSM version folders live) can be
+ * arbitrarily far apart now that `writeRootAbsPath`/`--plugin-root` is a
+ * pure write destination — so every import/path below is computed via a
+ * real `relative()` between the two, not a fixed number of `../`.
  */
 function buildAggregateRegistryContent(
   langActors: RegisteredActor[],
   lang: ActorsBarrelLang,
-  pluginRootDirName: string,
+  writeDir: string,
+  realPluginRootAbsPath: string,
 ): string {
   const groups = groupByParentFsm(langActors);
   const groupList = [...groups.keys()].map((key) => ({
     key,
     alias: groupKeyToIdentifier(key),
+    relDir: relativeImportDir(writeDir, `${realPluginRootAbsPath}/${key}`),
   }));
 
   switch (lang) {
     case "typescript":
       return renderTsActorsRegistryAggregate({
         groups: groupList,
-        pluginRootDirName,
       });
     case "python":
       assertPythonAggregateImportPathsAreValid(
-        pluginRootDirName,
         groupList.map((g) => g.key),
       );
       return renderPyActorsRegistryAggregate({
         groups: groupList,
-        pluginRootDirName,
+        pluginRootRelPath: relativeImportDir(writeDir, realPluginRootAbsPath),
       });
     case "rust": {
       const actorsWithAlias = langActors.map((a) => ({
@@ -593,7 +610,6 @@ function buildAggregateRegistryContent(
       return renderRustActorsRegistryAggregate({
         groups: groupList,
         actors: actorsWithAlias,
-        pluginRootDirName,
       });
     }
   }
@@ -601,35 +617,39 @@ function buildAggregateRegistryContent(
 
 /**
  * Writes ONE aggregate registration registry per language at
- * `<appRootAbsPath>/worker-sdk-generated/<lang>/<aggregate filename>` —
- * alongside that language's `cli`/`main` entrypoint (see
- * {@linkcode writeWorkerSdk}), combining actors across every FSM/version
- * processed in a single run (see `generateAsyncOperationLogicFromFolders`).
- * This is the fixed, known file a worker SDK build imports — a worker
- * process serves every actor for its language across the whole plugin root,
- * so its build has exactly one thing to import, not a per-FSM-version file
- * it would have to discover. Returns `undefined` (writes nothing) when there
- * are no actors for that language across the whole run.
+ * `<writeRootAbsPath>/worker-sdk-generated/<lang>/<aggregate filename>` —
+ * directly under the plugin root itself, alongside that language's
+ * `cli`/`main` entrypoint (see {@linkcode writeWorkerSdk}), combining actors
+ * across every FSM/version processed in a single run (see
+ * `generateAsyncOperationLogicFromFolders`). This is the fixed, known file a
+ * worker SDK build imports — a worker process serves every actor for its
+ * language across the whole plugin root, so its build has exactly one thing
+ * to import, not a per-FSM-version file it would have to discover. Returns
+ * `undefined` (writes nothing) when there are no actors for that language
+ * across the whole run.
  *
- * `pluginRootDirName` is the plugin root's own directory name (e.g. `"fsm"`)
- * — every generated import/`#[path]` re-descends into it by name, two levels
- * up from `worker-sdk-generated/<lang>/` back to the app root.
+ * `writeRootAbsPath` and `realPluginRootAbsPath` (where the actual FSM
+ * version folders live) can be different trees entirely now that
+ * `--plugin-root` is a pure write destination — every generated
+ * import/`#[path]` is a real computed relative path between the two (see
+ * {@linkcode relativeImportDir}), not a fixed `../../<fsmName>/<version>/...`
+ * climb.
  */
 export async function writeAggregateActorsRegistry(
-  appRootAbsPath: string,
-  pluginRootDirName: string,
+  writeRootAbsPath: string,
+  realPluginRootAbsPath: string,
   actors: RegisteredActor[],
   lang: ActorsBarrelLang,
 ): Promise<string | undefined> {
   const langActors = actors.filter((a) => a.asyncOperationLanguage === lang);
   if (langActors.length === 0) return undefined;
 
-  const dir = `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/${lang}`;
+  const dir = `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${AGGREGATE_ACTORS_REGISTRY_FILE_NAME[lang]}`;
   await Deno.writeTextFile(
     file,
-    buildAggregateRegistryContent(langActors, lang, pluginRootDirName),
+    buildAggregateRegistryContent(langActors, lang, dir, realPluginRootAbsPath),
   );
   return file;
 }
@@ -701,7 +721,7 @@ export async function goModTidyManyBestEffort(dirs: string[]): Promise<void> {
 /**
  * Writes a standalone Go module aggregating every Go actor across the whole
  * run into one `ActorRegistrations()` function, at
- * `<appRootAbsPath>/worker-sdk-generated/go/go-actors-registry-generated/`
+ * `<writeRootAbsPath>/worker-sdk-generated/go/go-actors-registry-generated/`
  * (`go.mod` + `registry.go`) — nested inside the `go/` worker-sdk directory
  * (see {@linkcode writeWorkerSdk}), alongside `main.go`. Returns `undefined`
  * (writes nothing) when there are no Go actors.
@@ -713,37 +733,50 @@ export async function goModTidyManyBestEffort(dirs: string[]): Promise<void> {
  * wiring here means a *consumer's* `go.mod` (worker-sdk/go, one directory up)
  * only ever needs ONE `require`/`replace`, pointing at this module, instead
  * of being hand-edited every time a Go actor is added or removed. The
- * module's own logical name (`<appRoot>/go-actors-registry-generated`) is
- * unrelated to its on-disk nesting — Go resolves it via this module's
+ * module's own logical name (`<goModuleAppRoot>/go-actors-registry-generated`)
+ * is unrelated to its on-disk nesting — Go resolves it via this module's
  * `require`+`replace`, so it doesn't need to change even though the
  * directory now sits three levels below the app root instead of one.
+ *
+ * `goModuleAppRoot` is the *real* app-root directory name (e.g.
+ * `"fsm-core-example"`) that each individual actor's own `go.mod` already
+ * names itself under (see {@linkcode goActorModulePath}) — independent of
+ * `writeRootAbsPath`, which only determines where this aggregate's files
+ * get physically written, not the logical Go module names they reference.
+ * Passing the wrong value here breaks `require`/`replace` resolution against
+ * actors' own `go.mod`s. `realPluginRootAbsPath` is where those actors'
+ * `go.mod`s actually live on disk — see {@linkcode relativeImportDir}, used
+ * here the same way {@linkcode writeAggregateActorsRegistry} uses it for
+ * TS/Python/Rust.
  */
 export async function writeAggregateGoRegistry(
-  appRootAbsPath: string,
-  pluginRootDirName: string,
+  writeRootAbsPath: string,
+  goModuleAppRoot: string,
+  realPluginRootAbsPath: string,
   actors: RegisteredActor[],
 ): Promise<string | undefined> {
   const goActors = actors.filter((a) => a.asyncOperationLanguage === "go");
   if (goActors.length === 0) return undefined;
 
-  const appRoot = appRootAbsPath.split("/").at(-1)!;
   const dir =
-    `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/go/${GO_AGGREGATE_DIR_NAME}`;
+    `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/go/${GO_AGGREGATE_DIR_NAME}`;
   await Deno.mkdir(dir, { recursive: true });
 
   const withMeta = goActors.map((a) => ({
     ...a,
-    modulePath: goActorModulePathFromRegisteredActor(appRoot, a),
+    modulePath: goActorModulePathFromRegisteredActor(goModuleAppRoot, a),
     alias: goImportAlias(a),
   }));
 
   const goModContent = renderGoModAggregate({
-    moduleName: `${appRoot}/${GO_AGGREGATE_DIR_NAME}`,
+    moduleName: `${goModuleAppRoot}/${GO_AGGREGATE_DIR_NAME}`,
     requires: withMeta.map((a) => ({ modulePath: a.modulePath })),
     replaces: withMeta.map((a) => ({
       modulePath: a.modulePath,
-      target:
-        `../../../${pluginRootDirName}/${a.parentFsmName}/${a.parentFsmVersion}/go/actors/${a.fileBaseName}`,
+      target: relativeImportDir(
+        dir,
+        `${realPluginRootAbsPath}/${a.parentFsmName}/${a.parentFsmVersion}/go/actors/${a.fileBaseName}`,
+      ),
     })),
   });
   await Deno.writeTextFile(`${dir}/go.mod`, goModContent);
@@ -784,54 +817,89 @@ const GATEWAY_SIDECAR_PROTO_CONNECT_IMPORT_PATH =
 const GATEWAY_SIDECAR_PROTO_PB_IMPORT_PATH =
   "@pgfsm/proto-codegen/sidecargateway/v1/pb";
 /**
- * pip `-e` (editable install) target from
- * `<appRoot>/worker-sdk-generated/python/` (where `requirements.txt` lives)
- * to the `pgfsm-proto-codegen` package wrapping
+ * pip `-e` (editable install) target from wherever `requirements.txt`
+ * actually lands to the `pgfsm-proto-codegen` package wrapping
  * `packages/fsm-proto-codegen/gen/python/` — see #106. Once installed,
  * `sdk.py` just does `from pgfsm.sidecargateway.v1 import ...` like any
  * other installed package; no `sys.path` manipulation needed at import
  * time the way a bare relative directory reference would require.
+ *
+ * Computed via {@linkcode relativeImportDir} rather than a fixed depth,
+ * like the other `gatewaySidecarProtoGen*` targets below — `dir` (where
+ * this actually gets written) and `repoRootAbsPath` can be arbitrarily far
+ * apart now that `writeRootAbsPath`/`--plugin-root` is a pure write
+ * destination.
  */
-const GATEWAY_SIDECAR_PROTO_GEN_PYTHON_EDITABLE_PATH =
-  "../../../../packages/fsm-proto-codegen/gen/python";
+function gatewaySidecarProtoGenPythonEditablePath(
+  dir: string,
+  repoRootAbsPath: string,
+): string {
+  return relativeImportDir(
+    dir,
+    `${repoRootAbsPath}/packages/fsm-proto-codegen/gen/python`,
+  );
+}
 /**
- * Cargo `path` dependency target from `<appRoot>/worker-sdk-generated/rust/`
- * (where `Cargo.toml` lives — same depth as the other three languages'
- * `worker-sdk-generated/<lang>/`) to the `pgfsm-proto-codegen` crate
- * wrapping `packages/fsm-proto-codegen/gen/rust/` — see #106. Replaced a
- * `#[path]`-included generated file at one extra `../` of depth (accounting
- * for `main.rs` living under `src/`), since Rust now has a real crate
- * boundary instead.
+ * Cargo `path` dependency target from wherever `Cargo.toml` actually lands
+ * to the `pgfsm-proto-codegen` crate wrapping
+ * `packages/fsm-proto-codegen/gen/rust/` — see #106. Same computed-not-fixed
+ * approach as {@linkcode gatewaySidecarProtoGenPythonEditablePath}.
  */
-const GATEWAY_SIDECAR_PROTO_GEN_RUST_CRATE_PATH =
-  "../../../../packages/fsm-proto-codegen/gen/rust";
+function gatewaySidecarProtoGenRustCratePath(
+  dir: string,
+  repoRootAbsPath: string,
+): string {
+  return relativeImportDir(
+    dir,
+    `${repoRootAbsPath}/packages/fsm-proto-codegen/gen/rust`,
+  );
+}
 /**
- * Go module path (matching sidecar_gateway.proto's `go_package` option) and
- * relative `replace` target for the generated grpc-go stub
- * (`packages/fsm-proto-codegen/gen/go/`) — required+replaced in
- * worker-sdk/go's own go.mod the same way each compiled-in actor module is
- * (see the `replace` comment in {@linkcode writeWorkerSdk} below), since Go
- * `replace` directives don't propagate transitively through a dependency.
+ * Go module path (matching sidecar_gateway.proto's `go_package` option) for
+ * the generated grpc-go stub (`packages/fsm-proto-codegen/gen/go/`) —
+ * required+replaced in worker-sdk/go's own go.mod the same way each
+ * compiled-in actor module is (see the `replace` comment in
+ * {@linkcode writeWorkerSdk} below), since Go `replace` directives don't
+ * propagate transitively through a dependency. This one's a bare module
+ * path, not a filesystem path, so it stays a fixed constant — see
+ * {@linkcode gatewaySidecarProtoGenGoRelPath} for the `replace` target.
  */
 const GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH =
   "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go";
-const GATEWAY_SIDECAR_PROTO_GEN_GO_REL_PATH =
-  "../../../../packages/fsm-proto-codegen/gen/go";
+/** The `replace` target for {@linkcode GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH} — computed, see {@linkcode gatewaySidecarProtoGenPythonEditablePath}. */
+function gatewaySidecarProtoGenGoRelPath(
+  dir: string,
+  repoRootAbsPath: string,
+): string {
+  return relativeImportDir(
+    dir,
+    `${repoRootAbsPath}/packages/fsm-proto-codegen/gen/go`,
+  );
+}
 
 /**
- * Fixed relative path from `<appRoot>/worker-sdk-generated/typescript/` to
- * the Activity Gateway's sidecar wire protocol
+ * Relative path from wherever `sdk.ts` actually lands to the Activity
+ * Gateway's sidecar wire protocol
  * (`packages/fsm-core-async-op-worker/src/sidecar/protocol.ts`) — only used
  * when `--worker-sdk-protocol legacy` selects the pre-#100 hand-rolled
  * length-prefixed-JSON envelope over the current default (proto/grpc, see
- * the `GATEWAY_SIDECAR_PROTO_*` constants above).
+ * the `GATEWAY_SIDECAR_PROTO_*`/`gatewaySidecarProtoGen*` names above).
+ * Computed, not fixed — same reasoning as
+ * {@linkcode gatewaySidecarProtoGenPythonEditablePath}.
  */
-const GATEWAY_SIDECAR_PROTOCOL_IMPORT_PATH =
-  "../../../../packages/fsm-core-async-op-worker/src/sidecar/protocol.ts";
+function gatewaySidecarProtocolImportPath(
+  dir: string,
+  repoRootAbsPath: string,
+): string {
+  return relativeImportDir(
+    dir,
+    `${repoRootAbsPath}/packages/fsm-core-async-op-worker/src/sidecar/protocol.ts`,
+  );
+}
 
 /**
  * Writes the cli/main entrypoint + sdk protocol implementation + build
- * manifest for one language, at `<appRootAbsPath>/worker-sdk-generated/<lang>/`
+ * manifest for one language, at `<writeRootAbsPath>/worker-sdk-generated/<lang>/`
  * — the same directory {@linkcode writeAggregateActorsRegistry} (TS/Python/
  * Rust) and {@linkcode writeAggregateGoRegistry} (Go) write that language's
  * aggregate registry into, so the entire worker SDK for a language — registry
@@ -852,10 +920,20 @@ const GATEWAY_SIDECAR_PROTOCOL_IMPORT_PATH =
  * written as plain strings, for the same reason every other generated file
  * in this package is: consistency, and so the "AUTO-GENERATED, do not edit"
  * header is never forgotten.
+ *
+ * `goModuleAppRoot` — see {@linkcode writeAggregateGoRegistry}'s doc comment;
+ * same real-app-root-name-vs-write-location distinction applies here for the
+ * Go worker-sdk's own consumer `go.mod`. `realPluginRootAbsPath` is where
+ * the actual FSM tree lives — used to compute every
+ * `gatewaySidecarProtoGen*`/`gatewaySidecarProtocolImportPath` target and
+ * this Go worker-sdk's own actor `replace` targets via
+ * {@linkcode relativeImportDir}, since `writeRootAbsPath` can now be
+ * anywhere.
  */
 export async function writeWorkerSdk(
-  appRootAbsPath: string,
-  pluginRootDirName: string,
+  writeRootAbsPath: string,
+  goModuleAppRoot: string,
+  realPluginRootAbsPath: string,
   actors: RegisteredActor[],
   options: WriteWorkerSdkOptions = {},
 ): Promise<{
@@ -869,7 +947,12 @@ export async function writeWorkerSdk(
   goModDir?: string;
 }> {
   const protocol = options.protocol ?? "grpc";
-  const appRoot = appRootAbsPath.split("/").at(-1)!;
+  const appRoot = goModuleAppRoot;
+  // <realPluginRoot> sits at <repoRoot>/apps/<appName>/<pluginRootDirName>
+  // -- three levels below repo root (same assumption the fixed-depth
+  // GATEWAY_SIDECAR_* constants used to bake in directly).
+  const repoRootAbsPath = realPluginRootAbsPath.split("/").slice(0, -3)
+    .join("/");
   const hasLang = (lang: OperationLang) =>
     actors.some((a) => a.asyncOperationLanguage === lang);
 
@@ -880,7 +963,7 @@ export async function writeWorkerSdk(
 
   const wroteTypescript = hasLang("typescript");
   if (wroteTypescript) {
-    const dir = `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/typescript`;
+    const dir = `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/typescript`;
     await Deno.mkdir(dir, { recursive: true });
     const cliFile = `${dir}/cli.ts`;
     await Deno.writeTextFile(
@@ -894,7 +977,10 @@ export async function writeWorkerSdk(
       sdkFile,
       protocol === "legacy"
         ? renderTsWorkerSdkSdkLegacy({
-          protocolImportPath: GATEWAY_SIDECAR_PROTOCOL_IMPORT_PATH,
+          protocolImportPath: gatewaySidecarProtocolImportPath(
+            dir,
+            repoRootAbsPath,
+          ),
         })
         : renderTsWorkerSdkSdk({
           protoConnectImportPath: GATEWAY_SIDECAR_PROTO_CONNECT_IMPORT_PATH,
@@ -906,7 +992,7 @@ export async function writeWorkerSdk(
 
   const wrotePython = hasLang("python");
   if (wrotePython) {
-    const dir = `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/python`;
+    const dir = `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/python`;
     await Deno.mkdir(dir, { recursive: true });
     await Deno.writeTextFile(
       `${dir}/cli.py`,
@@ -932,8 +1018,10 @@ export async function writeWorkerSdk(
       await Deno.writeTextFile(
         `${dir}/requirements.txt`,
         renderPyWorkerSdkRequirements({
-          protoGenPythonEditablePath:
-            GATEWAY_SIDECAR_PROTO_GEN_PYTHON_EDITABLE_PATH,
+          protoGenPythonEditablePath: gatewaySidecarProtoGenPythonEditablePath(
+            dir,
+            repoRootAbsPath,
+          ),
         }),
       );
     }
@@ -941,7 +1029,7 @@ export async function writeWorkerSdk(
 
   const wroteRust = hasLang("rust");
   if (wroteRust) {
-    const dir = `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/rust`;
+    const dir = `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/rust`;
     await Deno.mkdir(`${dir}/src`, { recursive: true });
     const mainFile = `${dir}/src/main.rs`;
     const sdkFile = `${dir}/src/sdk.rs`;
@@ -972,7 +1060,10 @@ export async function writeWorkerSdk(
       await Deno.writeTextFile(
         `${dir}/Cargo.toml`,
         renderRustWorkerSdkCargoToml({
-          protoGenRustCratePath: GATEWAY_SIDECAR_PROTO_GEN_RUST_CRATE_PATH,
+          protoGenRustCratePath: gatewaySidecarProtoGenRustCratePath(
+            dir,
+            repoRootAbsPath,
+          ),
         }),
       );
     }
@@ -985,7 +1076,7 @@ export async function writeWorkerSdk(
 
   const wroteGo = hasLang("go");
   if (wroteGo) {
-    const dir = `${appRootAbsPath}/${WORKER_SDK_DIR_NAME}/go`;
+    const dir = `${writeRootAbsPath}/${WORKER_SDK_DIR_NAME}/go`;
     await Deno.mkdir(dir, { recursive: true });
     const mainFile = `${dir}/main.go`;
     await Deno.writeTextFile(mainFile, renderGoWorkerSdkMain({}));
@@ -1038,13 +1129,15 @@ export async function writeWorkerSdk(
         },
         ...goActors.map((a) => ({
           modulePath: goActorModulePathFromRegisteredActor(appRoot, a),
-          target:
-            `../../${pluginRootDirName}/${a.parentFsmName}/${a.parentFsmVersion}/go/actors/${a.fileBaseName}`,
+          target: relativeImportDir(
+            dir,
+            `${realPluginRootAbsPath}/${a.parentFsmName}/${a.parentFsmVersion}/go/actors/${a.fileBaseName}`,
+          ),
         })),
         ...(protocol === "grpc"
           ? [{
             modulePath: GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH,
-            target: GATEWAY_SIDECAR_PROTO_GEN_GO_REL_PATH,
+            target: gatewaySidecarProtoGenGoRelPath(dir, repoRootAbsPath),
           }]
           : []),
       ],

@@ -71,7 +71,12 @@ fn actor_key(
 ) -> String {
     format!(
         "{}@{}@{}@{}@{}@{}",
-        parent_fsm_name, parent_fsm_version, async_operation_type, async_operation_name, async_operation_version, async_operation_language
+        parent_fsm_name,
+        parent_fsm_version,
+        async_operation_type,
+        async_operation_name,
+        async_operation_version,
+        async_operation_language
     )
 }
 
