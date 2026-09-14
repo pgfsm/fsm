@@ -46,8 +46,8 @@ deno run --allow-all --env-file=.env --watch main.ts
 ```
 
 This starts a server that mounts all FSMs in this folder as plugin roots. See
-the root [README](../../README.md) for the full quick-start flow including
-database setup.
+the root [DEVELOPER.md](../../DEVELOPER.md) for the full quick-start flow
+including database setup.
 
 ## Running the DB-backed tests
 

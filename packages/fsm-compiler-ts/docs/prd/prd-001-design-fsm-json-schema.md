@@ -9,7 +9,7 @@ The first stage of the FSM lifecycle is **designing the state machine**: turning
 a workflow into a versioned `fsm.json` that PostgreSQL can load and execute. The
 compiler is responsible for producing and validating that `fsm.json`. This PRD
 captures the two authoring paths and the shape of the definition, derived from
-§1 of the root [`README.md`](../../../../README.md).
+§1 of the root [`DEVELOPER.md`](../../../../DEVELOPER.md).
 
 ## Background
 

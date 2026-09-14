@@ -11,7 +11,7 @@ Partially implemented — see [Gaps](#gaps) and [TODO.md](../todo/TODO.md).
 Once the action / guard / delay stubs scaffolded in PRD-003 are filled in, the
 compiler **validates** that each is exported with the right shape. This is part
 of §3 ("Validate operation logic") of the root
-[`README.md`](../../../../README.md).
+[`DEVELOPER.md`](../../../../DEVELOPER.md).
 
 ## Background
 
