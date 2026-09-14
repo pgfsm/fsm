@@ -10,7 +10,7 @@ Partially implemented — see [Gaps](#gaps) and [TODO.md](../todo/TODO.md).
 Once an `fsm.json` exists, the compiler scaffolds **base (stub) code** for the
 machine's **async operation logic** — the actors named by each state's `invoke`
 objects. This is part of §2 ("Scaffold FSM operation") of the root
-[`README.md`](../../../../README.md), the same section that covers sync
+[`DEVELOPER.md`](../../../../DEVELOPER.md), the same section that covers sync
 operation-logic scaffolding (PRD-003). The developer fills in the generated
 stubs; the `asyncOperationWorkerlet` / promise worker later executes them.
 

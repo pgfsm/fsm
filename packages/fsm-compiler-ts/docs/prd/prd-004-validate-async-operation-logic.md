@@ -10,7 +10,7 @@ Implemented — see [Gaps](#gaps) and [TODO.md](../todo/TODO.md). **Related:**
 Once the actor stubs scaffolded in PRD-002 are filled in, this stage
 **validates** that each async operation-logic module actually exports its named
 function. This is part of §3 ("Validate operation logic") of the root
-[`README.md`](../../../../README.md).
+[`DEVELOPER.md`](../../../../DEVELOPER.md).
 
 ## Background
 
