@@ -388,6 +388,10 @@ try {
       const writeRootAbsPath = resolvePluginRootAbsPath(
         args["plugin-root"]!,
       );
+      logger.info(
+        "Writing worker-sdk-generated/ to {writeRootAbsPath}",
+        { writeRootAbsPath },
+      );
       if (folderIsFsmJsonFile) {
         const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
         await generateAsyncOperationLogicFromFsmJson(

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { table } from "@pgfsm/logging";
 import { extractFsmPluginRefs } from "./util.ts";
 import {
   actorFileBaseName,
@@ -116,12 +117,15 @@ async function scaffoldAsyncLogicForVersion(
     const file = await writeActorFile(absVersionFolderPath, lang, actor);
     if (lang === "typescript") tsFiles.push(file);
     writtenActors.push(toRegisteredActor(absVersionFolderPath, lang, actor));
-    logger.info("Wrote actor file {file}", { file });
   }
 
-  logger.info("Wrote {count} actor file(s) in {path}", {
+  // table() drives the TTY console.table; one row per actor beats a
+  // "Wrote actor file X" line per iteration once there's more than a
+  // handful.
+  logger.info("Wrote {count} actor file(s) in {path}:", {
     count: writtenActors.length,
     path: absVersionFolderPath,
+    ...table(writtenActors, ["src", "asyncOperationLanguage", "filePath"]),
   });
 
   const manifestFile = await writeActorsManifest(
@@ -130,19 +134,18 @@ async function scaffoldAsyncLogicForVersion(
   );
   logger.info("Wrote actors manifest {file}", { file: manifestFile });
 
+  const barrelRows: {
+    lang: ActorsBarrelLang;
+    barrelFile?: string;
+    registryFile?: string;
+  }[] = [];
   for (const lang of BARREL_LANGS) {
     const barrelFile = await writeActorsBarrel(
       absVersionFolderPath,
       writtenActors,
       lang,
     );
-    if (barrelFile) {
-      if (lang === "typescript") tsFiles.push(barrelFile);
-      logger.info("Wrote {lang} actors barrel {file}", {
-        lang,
-        file: barrelFile,
-      });
-    }
+    if (barrelFile && lang === "typescript") tsFiles.push(barrelFile);
 
     const registryFile = await writeActorsRegistry(
       absVersionFolderPath,
@@ -152,11 +155,21 @@ async function scaffoldAsyncLogicForVersion(
     if (registryFile) {
       if (lang === "typescript") tsFiles.push(registryFile);
       if (lang === "rust") rustFiles.push(registryFile);
-      logger.info("Wrote {lang} actors registry {file}", {
-        lang,
-        file: registryFile,
-      });
     }
+
+    if (barrelFile || registryFile) {
+      barrelRows.push({ lang, barrelFile, registryFile });
+    }
+  }
+  if (barrelRows.length > 0) {
+    logger.info(
+      "Wrote {count} per-language barrel/registry file(s) in {path}:",
+      {
+        count: barrelRows.length,
+        path: absVersionFolderPath,
+        ...table(barrelRows, ["lang", "barrelFile", "registryFile"]),
+      },
+    );
   }
 
   return writtenActors;
@@ -194,6 +207,7 @@ async function writeAggregateArtifacts(
   goFiles: string[],
   goModDirs: string[],
 ): Promise<void> {
+  const aggregateRows: { lang: OperationLang; file: string }[] = [];
   for (const lang of BARREL_LANGS) {
     const aggregateFile = await writeAggregateActorsRegistry(
       writeRootAbsPath,
@@ -204,10 +218,7 @@ async function writeAggregateArtifacts(
     if (aggregateFile) {
       if (lang === "typescript") tsFiles.push(aggregateFile);
       if (lang === "rust") rustFiles.push(aggregateFile);
-      logger.info("Wrote {lang} aggregate actors registry {file}", {
-        lang,
-        file: aggregateFile,
-      });
+      aggregateRows.push({ lang, file: aggregateFile });
     }
   }
 
@@ -220,8 +231,13 @@ async function writeAggregateArtifacts(
   if (goRegistryFile) {
     goFiles.push(goRegistryFile);
     goModDirs.push(goRegistryFile.slice(0, goRegistryFile.lastIndexOf("/")));
-    logger.info("Wrote go aggregate actors registry {file}", {
-      file: goRegistryFile,
+    aggregateRows.push({ lang: "go", file: goRegistryFile });
+  }
+
+  if (aggregateRows.length > 0) {
+    logger.info("Wrote {count} aggregate actors registry file(s):", {
+      count: aggregateRows.length,
+      ...table(aggregateRows, ["lang", "file"]),
     });
   }
 
@@ -236,10 +252,15 @@ async function writeAggregateArtifacts(
   rustFiles.push(...wrote.rustFiles);
   goFiles.push(...wrote.goFiles);
   if (wrote.goModDir) goModDirs.push(wrote.goModDir);
-  logger.info(
-    "Wrote worker-sdk-generated/ (typescript={ts}, python={py}, rust={rust}, go={go})",
-    { ts: wrote.typescript, py: wrote.python, rust: wrote.rust, go: wrote.go },
-  );
+  logger.info("Wrote worker-sdk-generated/ into {path}:", {
+    path: writeRootAbsPath,
+    ...table({
+      typescript: wrote.typescript,
+      python: wrote.python,
+      rust: wrote.rust,
+      go: wrote.go,
+    }),
+  });
 }
 
 /**
@@ -286,11 +307,13 @@ async function writeAggregateArtifacts(
  * {@linkcode formatTsFilesBestEffort} and friends.
  *
  * `writeRootAbsPath` (`--plugin-root`) is purely where `worker-sdk-generated/`
- * gets written — it defaults to `folderPath` itself (the conventional case,
- * matching today's on-disk layout) but can point anywhere, including a
- * directory with no FSMs in it at all. It has no bearing on which actors get
- * aggregated: that set always comes from `folderPath`'s own walk above (the
- * real FSM tree — `--folder` names it directly in this mode, unlike
+ * gets written — required, not derived/guessed (matching the CLI's own
+ * `--plugin-root` requirement), so a caller always states it explicitly
+ * rather than silently falling back to `folderPath` itself. It can point
+ * anywhere, including a directory with no FSMs in it at all — it has no
+ * bearing on which actors get aggregated: that set always comes from
+ * `folderPath`'s own walk above (the real FSM tree — `--folder` names it
+ * directly in this mode, unlike
  * {@linkcode generateAsyncOperationLogicFromFsmJson}'s single-file mode,
  * which has to re-derive it), same as it always has.
  */
@@ -298,7 +321,7 @@ export async function generateAsyncOperationLogicFromFolders(
   folderPath: string,
   skipDirs: string[] = [],
   workerSdkProtocol: WorkerSdkProtocol = "grpc",
-  writeRootAbsPath: string = resolvePluginRootAbsPath(folderPath),
+  writeRootAbsPath: string,
 ): Promise<void> {
   logger.info("Scaffolding async operation logic from {path}", {
     path: folderPath,
@@ -330,6 +353,11 @@ export async function generateAsyncOperationLogicFromFolders(
   // operation-logic-scaffold.ts's goActorModulePath) -- derived from
   // folderPath (the real FSM tree), independent of writeRootAbsPath.
   const goModuleAppRoot = realPluginRootAbsPath.split("/").at(-2)!;
+
+  logger.info("Resolved paths for {path}:", {
+    path: folderPath,
+    ...table({ writeRootAbsPath, realPluginRootAbsPath, goModuleAppRoot }),
+  });
 
   await writeAggregateArtifacts(
     writeRootAbsPath,
@@ -411,6 +439,14 @@ export async function generateAsyncOperationLogicFromFsmJson(
     rustFiles,
   );
 
+  logger.info(
+    "Scaffolded async operation logic for {fsmName} {version} in {versionFolder}",
+    {
+      fsmName: fsmData.key,
+      version: fsmData.version ?? "<no version>",
+      versionFolder: absVersionFolderPath,
+    },
+  );
   // <realPluginRoot>/<fsmName>/<version>/fsm.json -> <realPluginRoot> is
   // three levels up from the file itself.
   const absFsmJsonPath = fsmJsonPath.startsWith("/")
@@ -430,6 +466,25 @@ export async function generateAsyncOperationLogicFromFsmJson(
       );
     },
   );
+  logger.info(
+    "Re-derived {count} registered actors across every version under {pluginRoot}",
+    {
+      count: allRegisteredActors.length,
+      pluginRoot: realPluginRootAbsPath,
+    },
+  );
+  // log the re-derived actors in a table
+  logger.info("Re-derived registered actors:", {
+    ...table(allRegisteredActors, [
+      "parentFsmName",
+      "parentFsmVersion",
+      "asyncOperationType",
+      "asyncOperationName",
+      "asyncOperationVersion",
+      "asyncOperationLanguage",
+      "filePath",
+    ]),
+  });
 
   await writeAggregateArtifacts(
     writeRootAbsPath ?? realPluginRootAbsPath,
