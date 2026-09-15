@@ -9,7 +9,7 @@ FROM golang:1.26-bookworm AS go-plugins
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
 
-FROM rust:1.95-bookworm AS rust-plugins
+FROM rust:1.98-bookworm AS rust-plugins
 RUN cargo install protoc-gen-prost@0.5.0 protoc-gen-tonic@0.5.0
 
 FROM node:22-bookworm-slim
