@@ -74,7 +74,7 @@ Example :
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source  | An existing XState 5 `machine.ts`                                                                                                                                                                                                                                                                                                                                                                                           | No XState source — hand-author `fsm.json` directly against the schema                                                                                                                 |
 | How     | Point the compiler at `machine.ts`; it emits `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                 | Author states, transitions, and `invoke` objects by hand, then validate against the schema with any JSON Schema validator, e.g. [`ajv-cli`](https://github.com/ajv-validator/ajv-cli) |
-| Command | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts`                                                                                                                                                                                                                                                                                        | `npx ajv-cli validate -s packages/database-src/fsm.machine.schema.v3.json -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json`                                                      |
+| Command | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01`                                                                                                                                                                                                                                     | `npx ajv-cli validate -s packages/database-src/fsm.machine.schema.v3.json -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json`                                                      |
 | Steps   | 1. Export raw XState JSON → write `xstate-fsm.json`<br>2. Strip null entries from action arrays<br>3. Normalize string actions to `{ type }` objects<br>4. Set `actionName` from `delay` on raise/cancel actions<br>5. Fill in missing `fsmType`/`fsmVersion` on `invoke` (actor) entries<br>6. Write `fsm.json`<br>7. _(optional, `--show-recommendation`)_ validate `fsm.json` against the schema and log recommendations | None — you author `fsm.json` by hand, then run the `ajv-cli` command yourself                                                                                                         |
 | Output  | `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                                                              | `fsm.json`                                                                                                                                                                            |
 
@@ -97,7 +97,7 @@ routing, and where the resulting code runs.
 | PRD                 | [PRD-002](./packages/fsm-compiler-ts/docs/prd/prd-002-scaffold-async-operation-logic.md)                                                                                        | [PRD-003](./packages/fsm-compiler-ts/docs/prd/prd-003-scaffold-sync-operation-logic.md)                                                                                  |
 | Execution model     | Long-running; each runs in its own queue and process, driven by the `asyncOperationWorkerlet`; reports back via `xstate.done.actor.<id>` / `xstate.error.actor.<id>` events     | Pure/inline; runs inside a single macrostep of the `fsmlet` — no separate process                                                                                        |
 | CLI command         | `generate-async-logic`                                                                                                                                                          | `generate-sync-logic`                                                                                                                                                    |
-| Command             | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --plugin-root apps/fsm-core-example`                       | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm`                                                     |
+| Command             | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm`                                                           | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm`                                                     |
 | Language selection  | Per-invoke, from that invoke object's `fsmLanguage` field — a single machine can spread its actors across runtimes                                                              | Via `--lang` flag, applied uniformly to the whole generation run; default (and currently only accepted value) `typescript`                                               |
 | Languages generated | It will generate code for all 4 languages, one invoke at a time, according to each invoke's `fsmLanguage`                                                                       | It will generate TS stubs only — `--lang` with any value other than `typescript` is rejected                                                                             |
 | Supported languages | `typescript`, `python`, `rust`, `go` — unsupported `fsmLanguage` values are skipped with a warning                                                                              | `typescript` only (`python`/`rust`/`go` are members of `OperationLang` but not yet maintained/tested for this command, so the CLI rejects them)                          |
@@ -112,12 +112,11 @@ Both `generate-sync-logic` and `generate-async-logic`'s `-f`/`--folder` also
 accept a single `fsm.json` file (instead of only a plugin-root directory), in
 which case `-o`/`--output` is required — a relative or absolute path naming the
 version folder to scaffold stubs into, resolved independently of where the
-`fsm.json` itself lives. `generate-async-logic` additionally **requires
-`-g`/`--plugin-root` in both `-f`/`--folder` shapes** — a pure write destination
-for the aggregate registry/worker SDK
-(`<plugin-root>/worker-sdk-generated/<lang>/`, see the table above), not
-re-walked to find actors and independent of where `-f`/`-o` point; both modes
-refresh the aggregate now, not just directory mode. See
+`fsm.json` itself lives. `generate-async-logic` additionally refreshes the
+aggregate registry/worker SDK (`worker-sdk-generated/<lang>/`, see the table
+above) in both `-f`/`--folder` shapes, not just directory mode — there's no
+separate flag for where that lands: one level above `-f`/`--folder` (the app
+root) in directory mode, or into `-o`/`--output` in single-`fsm.json` mode. See
 [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md) for
 details and examples.
 
@@ -223,10 +222,11 @@ for the full flag reference, startup sequence, and PGMQ message payload shape.
 One process per language that has actors, generated by `fsm-compiler-ts`'s
 `generate-async-logic` command into
 `apps/fsm-core-example/worker-sdk-generated/<lang>/` (run that command first if
-the directory doesn't exist yet — with `--plugin-root apps/fsm-core-example`,
-the **app root** one level above `--folder`, since that flag is what determines
-this path; see above). Each connects to the gateway's `--sidecar-socket` above
-and serves invocations for every actor compiled into its registry until stopped.
+the directory doesn't exist yet — `-f apps/fsm-core-example/fsm` is enough; the
+command writes the aggregate one level above `--folder`, i.e. the **app root**,
+automatically; see above). Each connects to the gateway's `--sidecar-socket`
+above and serves invocations for every actor compiled into its registry until
+stopped.
 
 Each of these is a **long-running foreground process** (it serves invocations
 until stopped) — run one at a time, each in its own fresh terminal at the repo

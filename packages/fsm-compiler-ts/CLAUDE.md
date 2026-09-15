@@ -39,14 +39,20 @@ format this compiler consumes. `README.md` is the npm/npx-consumer-facing
 document (published to `dist/` — see below); keep source-only detail here
 instead of there.
 
-## `generate-async-logic` — `--plugin-root` is a pure write destination
+## `generate-async-logic` — the aggregate write destination has no dedicated flag
 
-`-g`/`--plugin-root` is required in both `--folder` modes (directory and
-single-`fsm.json`). It controls **only** where `worker-sdk-generated/` gets
-written (`<writeRootAbsPath>/worker-sdk-generated/<lang>/`) — it is never
-re-walked to find actors and doesn't need to contain any FSM itself. See
-`README.md`/`docs/guides/cli-usage.md` for the user-facing explanation; the
-gotchas below are for whoever next touches
+There is no separate CLI input for where `worker-sdk-generated/` gets written
+(`<writeRootAbsPath>/worker-sdk-generated/<lang>/`) — the CLI derives it: in
+directory mode it's one level above `--folder` (the app root — matching the
+`apps/fsm-core-example/` convention, where `worker-sdk-generated/` sits beside
+`fsm/`, not inside it); in single-`fsm.json` mode it's `--output`. It is never
+re-walked to find actors and doesn't need to contain any FSM itself. (An earlier
+revision exposed this as its own required `-g`/`--plugin-root` flag, decoupled
+from `--folder`/`--output` entirely — that flag was removed as an unnecessary
+extra input once every caller had a good default; the internal
+`writeRootAbsPath` parameter documented below still exists and library callers
+can still point it anywhere.) See `README.md`/`docs/guides/cli-usage.md` for the
+user-facing explanation; the gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:
 
 - **Three distinct roots, don't conflate them**: `writeRootAbsPath` (where files
