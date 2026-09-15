@@ -182,8 +182,9 @@ async function scaffoldAsyncLogicForVersion(
  * the caller scaffolded this run. Everything gets written directly under
  * `writeRootAbsPath` (`<writeRootAbsPath>/worker-sdk-generated/...`), which
  * is a pure write destination — it does not need to itself be, or contain,
- * any FSM (that's why `--plugin-root` is a required CLI argument rather than
- * derived/guessed, but callers are responsible for deriving
+ * any FSM (the CLI derives it from one level above `--folder` in folder mode,
+ * or from `--output` in single-fsm.json mode, rather than exposing it as its
+ * own argument, but callers are still responsible for deriving
  * `allRegisteredActors`/`goModuleAppRoot`/`realPluginRootAbsPath` from the
  * *real* tree, not from `writeRootAbsPath`). `realPluginRootAbsPath` is that
  * real tree — used to compute a genuine relative path from wherever each
@@ -306,14 +307,14 @@ async function writeAggregateArtifacts(
  * `gofmt`, one `go mod tidy` per Go module) — see
  * {@linkcode formatTsFilesBestEffort} and friends.
  *
- * `writeRootAbsPath` (`--plugin-root`) is purely where `worker-sdk-generated/`
- * gets written — required, not derived/guessed (matching the CLI's own
- * `--plugin-root` requirement), so a caller always states it explicitly
- * rather than silently falling back to `folderPath` itself. It can point
- * anywhere, including a directory with no FSMs in it at all — it has no
- * bearing on which actors get aggregated: that set always comes from
- * `folderPath`'s own walk above (the real FSM tree — `--folder` names it
- * directly in this mode, unlike
+ * `writeRootAbsPath` is purely where `worker-sdk-generated/` gets written —
+ * required, not defaulted by this function itself (the CLI now always passes
+ * one level above `--folder`'s own value here in folder mode — the app root,
+ * matching the on-disk convention `apps/fsm-core-example/` uses — rather than
+ * exposing a separate flag for it). It can point anywhere, including a
+ * directory with no FSMs in it at all — it has no bearing on which actors get
+ * aggregated: that set always comes from `folderPath`'s own walk above (the
+ * real FSM tree — `--folder` names it directly in this mode, unlike
  * {@linkcode generateAsyncOperationLogicFromFsmJson}'s single-file mode,
  * which has to re-derive it), same as it always has.
  */
@@ -402,16 +403,19 @@ export async function generateAsyncOperationLogicFromFolders(
  * The real plugin root is derived from `fsmJsonPath`'s own location — not
  * from `absVersionFolderPath`/`--output` (which can point anywhere, e.g. a
  * scratch directory outside the real FSM tree) and not from
- * `writeRootAbsPath`/`--plugin-root` (a pure write destination — see
- * {@linkcode writeAggregateArtifacts}). `fsmJsonPath` is expected to sit at
- * the conventional `<realPluginRoot>/<fsmName>/<version>/fsm.json` depth
- * (the same layout {@linkcode eachVersionedFsmFolder} walks); passing one
- * that doesn't means the aggregate step walks the wrong tree (or nothing).
+ * `writeRootAbsPath` (a pure write destination — see
+ * {@linkcode writeAggregateArtifacts}; the CLI now always passes `--output`'s
+ * own value here rather than exposing a separate flag for it). `fsmJsonPath`
+ * is expected to sit at the conventional
+ * `<realPluginRoot>/<fsmName>/<version>/fsm.json` depth (the same layout
+ * {@linkcode eachVersionedFsmFolder} walks); passing one that doesn't means
+ * the aggregate step walks the wrong tree (or nothing).
  *
- * `writeRootAbsPath` defaults to that real plugin root (writing
+ * `writeRootAbsPath` defaults to the real plugin root when omitted (writing
  * `worker-sdk-generated/` inside it, matching
- * {@linkcode generateAsyncOperationLogicFromFolders}'s own default), but can
- * point anywhere.
+ * {@linkcode generateAsyncOperationLogicFromFolders}'s own default) — kept for
+ * direct library callers, though the CLI itself always passes `--output`
+ * explicitly instead of relying on this default.
  */
 export async function generateAsyncOperationLogicFromFsmJson(
   fsmJsonPath: string,

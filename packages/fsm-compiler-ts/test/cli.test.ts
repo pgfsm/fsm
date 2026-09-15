@@ -150,21 +150,23 @@ Deno.test("cli generate-async-logic runs successfully on example folder", async 
     "generate-async-logic",
     "-f",
     FSM_FOLDER,
-    "--plugin-root",
-    FSM_FOLDER,
   ]);
   assertEquals(code, 0);
 });
 
-Deno.test("cli generate-async-logic requires --plugin-root even in folder mode", async () => {
-  const { code, stderr } = await runCli([
+Deno.test("cli generate-async-logic folder mode writes the aggregate registry one level above --folder, with no --plugin-root flag needed", async () => {
+  const { code } = await runCli([
     "-c",
     "generate-async-logic",
     "-f",
     FSM_FOLDER,
   ]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "requires --plugin-root");
+  assertEquals(code, 0);
+  // APP_ROOT is one level above FSM_FOLDER.
+  const aggregateContent = await Deno.readTextFile(
+    `${APP_ROOT}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+  );
+  assertStringIncludes(aggregateContent, "creditcheck_v01");
 });
 
 Deno.test("cli generate-sync-logic runs successfully on example folder", async () => {
@@ -317,8 +319,6 @@ Deno.test("cli generate-async-logic --folder fsm.json + --output writes actor fi
     SINGLE_FSM_JSON,
     "--output",
     outDir,
-    "--plugin-root",
-    FSM_FOLDER,
   ]);
   assertEquals(code, 0);
   await Deno.stat(`${outDir}/actors-manifest.json`);
@@ -332,7 +332,7 @@ Deno.test("cli generate-async-logic --folder fsm.json + --output writes actor fi
   assert(registryStat.isFile);
 });
 
-Deno.test("cli generate-async-logic single-fsm.json mode also refreshes the aggregate registry / worker SDK at --plugin-root", async () => {
+Deno.test("cli generate-async-logic single-fsm.json mode refreshes the aggregate registry / worker SDK at --output, with no --plugin-root flag needed", async () => {
   const outDir = `${FIXTURE_ROOT}/async-single-file-aggregate`;
   const { code } = await runCli([
     "-c",
@@ -341,38 +341,16 @@ Deno.test("cli generate-async-logic single-fsm.json mode also refreshes the aggr
     SINGLE_FSM_JSON,
     "--output",
     outDir,
-    "--plugin-root",
-    FSM_FOLDER,
   ]);
   assertEquals(code, 0);
   const aggregateContent = await Deno.readTextFile(
-    `${FSM_FOLDER}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+    `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
   );
   // SINGLE_FSM_JSON is creditCheck/v01 -- its actors should be in the
   // rebuilt aggregate even though this run only scaffolded --output, not
   // the whole plugin root.
   assertStringIncludes(aggregateContent, "creditcheck_v01");
-});
-
-Deno.test("cli generate-async-logic --plugin-root can point somewhere with no FSMs at all -- it's a pure write destination, not re-walked for actors", async () => {
-  const emptyWriteRoot = `${FIXTURE_ROOT}/empty-write-destination`;
-  await Deno.mkdir(emptyWriteRoot, { recursive: true });
-  const { code } = await runCli([
-    "-c",
-    "generate-async-logic",
-    "-f",
-    FSM_FOLDER,
-    "--plugin-root",
-    emptyWriteRoot,
-  ]);
-  assertEquals(code, 0);
-  const aggregateContent = await Deno.readTextFile(
-    `${emptyWriteRoot}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
-  );
-  // The real actors (from FSM_FOLDER) must still show up, even though
-  // emptyWriteRoot itself has no fsm.json anywhere under it.
-  assertStringIncludes(aggregateContent, "creditcheck_v01");
-  // And the import path must correctly cross from emptyWriteRoot back to
+  // And the import path must correctly cross from outDir back to
   // FSM_FOLDER's actual creditCheck/v01, not assume they're the same tree.
   assertStringIncludes(
     aggregateContent,
