@@ -20,21 +20,21 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 
 ## Global Options
 
-| Flag                        | Alias | Description                                                                                                                                                                                                                                                                       |
-| --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--command <command>`       | `-c`  | Command to run (required)                                                                                                                                                                                                                                                         |
-| `--folder <folder>`         | `-f`  | Path to FSM folder, `.ts` file, or `fsm.json` file (required; a single `.ts` file is accepted for `generate` only; a single `fsm.json` file is accepted for `generate-sync-logic`/`generate-async-logic` only, and requires `--output`)                                           |
-| `--workflow-type <type>`    | `-w`  | Workflow type — required for `validate-sync-operation`, `validate-async-operation`, `load`                                                                                                                                                                                        |
-| `--db-url <url>`            | `-d`  | PostgreSQL connection string — overrides `DATABASE_URL` env var                                                                                                                                                                                                                   |
-| `--skip-dirs <dirs>`        | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                                                                                                |
-| `--available-actors <file>` | `-a`  | Path to a JSON file listing actor names available to resolve (used by `validate-sync-operation`, `validate-async-operation`)                                                                                                                                                      |
-| `--lang <langs>`            | `-l`  | Comma-separated language(s): `typescript`, `python`, `rust`, `go`. For `generate-sync-logic` defaults to `typescript`; for `validate-async-operation` defaults to all languages (omit to check all); for `create-async-logic` exactly one language is required                    |
-| `--version <version>`       | `-v`  | FSM version folder name, e.g. `v01` (`create-async-logic` only, required)                                                                                                                                                                                                         |
-| `--output <folder>`         | `-o`  | Version folder to write stubs into (`generate-sync-logic`/`generate-async-logic` only, required when `-f`/`--folder` is a single `fsm.json` file, unused otherwise). Relative (resolved against the current working directory) or absolute — independent of `--folder`'s location |
-| `--plugin-root <folder>`    | `-g`  | Where the aggregate registry/worker SDK get written (`generate-async-logic` only, **required in both `--folder` modes**). A pure write destination -- not re-walked to find actors, doesn't need to contain any FSM itself. Relative or absolute, same rules as `--output`        |
-| `--name <name>`             | `-n`  | Actor function name, used for `<name>/<name>.ext` (`create-async-logic` only, required)                                                                                                                                                                                           |
-| `--show-recommendation`     | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate` only)                                                                                                                                                                                                   |
-| `--help`                    | `-h`  | Show help message                                                                                                                                                                                                                                                                 |
+| Flag                        | Alias | Description                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--command <command>`       | `-c`  | Command to run (required)                                                                                                                                                                                                                                                                                                          |
+| `--folder <folder>`         | `-f`  | Path to FSM folder, `.ts` file, or `fsm.json` file (required; a single `.ts` file is accepted for `generate` only, and requires `--output`; a single `fsm.json` file is accepted for `generate-sync-logic`/`generate-async-logic` only, and requires `--output`)                                                                   |
+| `--workflow-type <type>`    | `-w`  | Workflow type — required for `validate-sync-operation`, `validate-async-operation`, `load`                                                                                                                                                                                                                                         |
+| `--db-url <url>`            | `-d`  | PostgreSQL connection string — overrides `DATABASE_URL` env var                                                                                                                                                                                                                                                                    |
+| `--skip-dirs <dirs>`        | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                                                                                                                                                 |
+| `--available-actors <file>` | `-a`  | Path to a JSON file listing actor names available to resolve (used by `validate-sync-operation`, `validate-async-operation`)                                                                                                                                                                                                       |
+| `--lang <langs>`            | `-l`  | Comma-separated language(s): `typescript`, `python`, `rust`, `go`. For `generate-sync-logic` defaults to `typescript`; for `validate-async-operation` defaults to all languages (omit to check all); for `create-async-logic` exactly one language is required                                                                     |
+| `--version <version>`       | `-v`  | FSM version folder name, e.g. `v01` (`create-async-logic` only, required)                                                                                                                                                                                                                                                          |
+| `--output <folder>`         | `-o`  | Version folder to write generated output into, required when `-f`/`--folder` is a single `machine.ts` file (`generate`) or a single `fsm.json` file (`generate-sync-logic`/`generate-async-logic`); unused otherwise. Relative (resolved against the current working directory) or absolute — independent of `--folder`'s location |
+| `--plugin-root <folder>`    | `-g`  | Where the aggregate registry/worker SDK get written (`generate-async-logic` only, **required in both `--folder` modes**). A pure write destination -- not re-walked to find actors, doesn't need to contain any FSM itself. Relative or absolute, same rules as `--output`                                                         |
+| `--name <name>`             | `-n`  | Actor function name, used for `<name>/<name>.ext` (`create-async-logic` only, required)                                                                                                                                                                                                                                            |
+| `--show-recommendation`     | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate` only)                                                                                                                                                                                                                                                    |
+| `--help`                    | `-h`  | Show help message                                                                                                                                                                                                                                                                                                                  |
 
 ### Workflow Types
 
@@ -56,7 +56,9 @@ types detected from the `-f` path:
 - **Directory** — walks the tree, finds every versioned subdirectory (e.g.
   `creditCheck/v01/`), and compiles each `machine.ts` found
 - **`.ts` file** — compiles that single `machine.ts` directly; version is
-  derived from the parent directory name
+  derived from the parent directory name. Requires `-o`/`--output`: the version
+  folder to write `fsm.json`/`xstate-fsm.json` into, independent of
+  `machine.ts`'s own location
 
 ```bash
 # Generate for standard FSM folder (walks all versioned subdirectories)
@@ -73,7 +75,8 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 # Generate from a single machine.ts file
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate \
-  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
+  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts \
+  --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
 ---

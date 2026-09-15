@@ -36,10 +36,15 @@ path like `fsm`, or an absolute path — not `./fsm`) and must **not** end with
   version subfolders (`v01`, `v02`, …), each containing a `machine.ts` whose
   default export is an XState machine (from `createMachine(...)`). Version
   folders without a `machine.ts` are skipped, not an error.
-- A **single `.ts` file path** — only its containing directory is used; that
-  directory must contain a file literally named `machine.ts` (the filename you
-  pass is only used to locate the directory). The version name is taken from the
-  directory's own name, e.g. `.../creditCheck/v01/machine.ts` → `v01`.
+- A **single `.ts` file path** — only its containing directory is read from;
+  that directory must contain a file literally named `machine.ts` (the filename
+  you pass is only used to locate the directory). The version name (used when
+  filling in missing `asyncOperationVersion` on invoke actors) is taken from
+  that directory's own name, e.g. `.../creditCheck/v01/machine.ts` → `v01`.
+  Requires `-o`/`--output`, the version folder to write `fsm.json`/
+  `xstate-fsm.json` into: a relative (resolved against the current working
+  directory) or absolute path, unrelated to `--folder`'s own location — it does
+  not need to be, and is not derived from, machine.ts's containing directory.
 
 Other flags: `-s`/`--skip-dirs` (comma-separated FSM names to skip, directory
 mode only), `-r`/`--show-recommendation` (also validates the generated
@@ -57,7 +62,7 @@ what's written).
 ```bash
 npx @pgfsm/compiler -c generate -f fsm
 npx @pgfsm/compiler -c generate -f fsm --skip-dirs carVitals
-npx @pgfsm/compiler -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
+npx @pgfsm/compiler -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
 The full `fsm.json` spec (states, transitions, guards, actions, actors, delays)
