@@ -11,6 +11,7 @@
     "getNextVersion": "tsx get-next-pkg-version.ts",
     "generate:fsm-types": "deno task generate:fsm-types",
     "generate:pg-types": "deno task generate:pg-types",
+    "stress": "deno task stress",
     "supabase:init": "supabase init",
     "supabase:start": "supabase start --debug --workdir \"${SUPABASE_WORKDIR:-.}\"",
     "supabase:start:env": "dotenv -e ./../../.env -- npm run supabase:start",

@@ -1,2 +1,3 @@
 *.zip
 pgxn-dist/
+scripts/stress/results/
