@@ -308,15 +308,18 @@ export function addMissingAsyncOperationTypeToInvokeActors(
 
 /**
  * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
- * and writes fsm.json + xstate-fsm.json alongside it.
- * @param absFolderPath Absolute path to the versioned FSM directory (e.g. /…/creditCheck/v01)
+ * and writes fsm.json + xstate-fsm.json into absOutputFolderPath (defaults to
+ * absFolderPath itself, alongside machine.ts).
+ * @param absFolderPath Absolute path to the versioned FSM directory containing machine.ts (e.g. /…/creditCheck/v01)
  * @param version Version string (e.g. "v01") used when filling in missing asyncOperationVersion on invoke actors
  * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
+ * @param absOutputFolderPath Where fsm.json/xstate-fsm.json get written — independent of absFolderPath, which is only ever read from. Defaults to absFolderPath.
  */
 export async function generateFsmJSONFromMachineFile(
   absFolderPath: string,
   version: string,
   showRecommendation: boolean = false,
+  absOutputFolderPath: string = absFolderPath,
 ) {
   const machineTsPath = `${absFolderPath}/machine.ts`;
   try {
@@ -335,7 +338,7 @@ export async function generateFsmJSONFromMachineFile(
       // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
       writeFileSync(
-        `${absFolderPath}/xstate-fsm.json`,
+        `${absOutputFolderPath}/xstate-fsm.json`,
         JSON.stringify(xstateFsmJSON, null, 2),
       );
 
@@ -356,7 +359,7 @@ export async function generateFsmJSONFromMachineFile(
 
       // step 6 — write fsm.json
       writeFileSync(
-        `${absFolderPath}/fsm.json`,
+        `${absOutputFolderPath}/fsm.json`,
         JSON.stringify(fsmJSON, null, 2),
       );
 
@@ -368,12 +371,12 @@ export async function generateFsmJSONFromMachineFile(
         if (!valid) {
           logger.warning(
             "[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}",
-            { path: absFolderPath, errors: validate.errors },
+            { path: absOutputFolderPath, errors: validate.errors },
           );
         } else {
           logger.info(
             "[recommendation] fsm.json passes schema validation in {path}",
-            { path: absFolderPath },
+            { path: absOutputFolderPath },
           );
         }
       }
