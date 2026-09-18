@@ -73,6 +73,7 @@ COMMANDS
   generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required for a single fsm.json). The aggregate registry/worker SDK are written one level above --folder (the app root) in folder mode, or to --output in single-fsm.json mode
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--output required)
+  generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder or a single machine.ts file (--output required for a single machine.ts file). In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
   create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
   delete                              Delete generated fsm.json / xstate-fsm.json files
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for an FSM folder
@@ -83,17 +84,17 @@ WORKFLOW TYPES
 
 OPTIONS
   -c, --command <command>             Command to run (required)
-  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic only, and requires --output; app root for create-async-logic)
+  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic only, and requires --output; app root for create-async-logic)
   -w, --workflow-type <type>          Workflow type (required for validate-sync-operation, load)
-  -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
+  -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
-  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic single-fsm.json mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
+  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
-  -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json only)
+  -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation)
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
-  -p, --worker-sdk-protocol <proto>   Sidecar wire protocol for generated worker SDKs: grpc (default) or legacy (generate-async-logic only)
+  -p, --worker-sdk-protocol <proto>   Sidecar wire protocol for generated worker SDKs: grpc (default) or legacy (generate-async-logic/generate-all only)
   -h, --help                          Show this help message
 
 ENVIRONMENT
@@ -108,6 +109,8 @@ EXAMPLES
   deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
   deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
   deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
+  deno run --allow-all src/cli/index.ts -c generate-all -f apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
   deno run --allow-all src/cli/index.ts -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
   deno run --allow-all src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm -w fsm
   deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig
@@ -130,7 +133,7 @@ const skipDirs = args["skip-dirs"]
 
 const workerSdkProtocol: WorkerSdkProtocol =
   (args["worker-sdk-protocol"] ?? "grpc") as WorkerSdkProtocol;
-if (command === "generate-async-logic") {
+if (command === "generate-async-logic" || command === "generate-all") {
   if (!WORKER_SDK_PROTOCOLS.includes(workerSdkProtocol)) {
     logger.error(
       "Invalid --worker-sdk-protocol value: {value}. Must be one of: {valid}",
@@ -149,7 +152,7 @@ const langs: OperationLang[] =
   (args["lang"]
     ? args["lang"].split(",").map((s: string) => s.trim()).filter(Boolean)
     : ["typescript"]) as OperationLang[];
-if (command === "generate-sync-logic") {
+if (command === "generate-sync-logic" || command === "generate-all") {
   const invalidLangs = langs.filter((l) => !isOperationLang(l));
   if (invalidLangs.length > 0) {
     logger.error(
@@ -168,8 +171,8 @@ if (command === "generate-sync-logic") {
   const unsupportedLangs = langs.filter((l) => l !== "typescript");
   if (unsupportedLangs.length > 0) {
     logger.error(
-      "generate-sync-logic currently only supports --lang typescript. Unsupported: {unsupported}",
-      { unsupported: unsupportedLangs.join(", ") },
+      "{command} currently only supports --lang typescript for sync-logic generation. Unsupported: {unsupported}",
+      { command, unsupported: unsupportedLangs.join(", ") },
     );
     Deno.exit(1);
   }
@@ -261,11 +264,19 @@ const SINGLE_FSM_JSON_FILE_COMMANDS = [
   "generate-async-logic",
 ];
 
+// Commands that accept --folder pointing at a single machine.ts file
+// (single-file mode) instead of only a plugin-root folder — both require
+// --output for the version folder to write into.
+const MACHINE_TS_FILE_COMMANDS = [
+  "generate-fsm-json",
+  "generate-all",
+];
+
 // True when --folder points at a single fsm.json file rather than a
 // plugin-root folder.
 let folderIsFsmJsonFile = false;
-// True when --folder points at a single machine.ts file (generate-fsm-json
-// only) rather than a plugin-root folder.
+// True when --folder points at a single machine.ts file rather than a
+// plugin-root folder.
 let folderIsMachineTsFile = false;
 if (folder) {
   try {
@@ -282,7 +293,9 @@ if (folder) {
         Deno.exit(1);
       }
       folderIsFsmJsonFile = true;
-    } else if (command === "generate-fsm-json" && stat.isFile) {
+    } else if (
+      command && MACHINE_TS_FILE_COMMANDS.includes(command) && stat.isFile
+    ) {
       if (!folder.endsWith(".ts")) {
         logger.error(
           "--folder is not a recognized type. Use a .ts file or a directory: {folder}",
@@ -291,8 +304,12 @@ if (folder) {
         Deno.exit(1);
       }
       folderIsMachineTsFile = true;
-    } else if (command !== "generate-fsm-json" && !stat.isDirectory) {
-      // generate-fsm-json accepts .ts/.json files too; all other commands require a directory
+    } else if (
+      command && !MACHINE_TS_FILE_COMMANDS.includes(command) &&
+      !stat.isDirectory
+    ) {
+      // generate-fsm-json/generate-all accept .ts/.json files too; all other
+      // commands require a directory
       logger.error("--folder is not a directory: {folder}", { folder });
       Deno.exit(1);
     }
@@ -351,6 +368,14 @@ async function buildDeps(connectionString?: string) {
   return { db: new Pool({ connectionString: dbUrl }), useSupabase: false };
 }
 
+// The app root — one level above a plugin-root folder, e.g.
+// apps/fsm-core-example/fsm -> apps/fsm-core-example. Used by
+// generate-async-logic (and generate-all's own folder-mode call into it) as
+// the default worker-sdk-generated/ write destination.
+function oneLevelUp(absPath: string): string {
+  return absPath.substring(0, absPath.lastIndexOf("/"));
+}
+
 try {
   switch (command) {
     case "generate-fsm-json": {
@@ -399,11 +424,7 @@ try {
         // One level above --folder (the app root), matching the on-disk
         // layout apps/fsm-core-example/ actually uses: worker-sdk-generated/
         // sits beside the fsm/ plugin-root folder, not inside it.
-        const absFolder = resolvePluginRootAbsPath(folder!);
-        const writeRootAbsPath = absFolder.substring(
-          0,
-          absFolder.lastIndexOf("/"),
-        );
+        const writeRootAbsPath = oneLevelUp(resolvePluginRootAbsPath(folder!));
         logger.info(
           "Writing worker-sdk-generated/ to {writeRootAbsPath}",
           { writeRootAbsPath },
@@ -433,6 +454,89 @@ try {
         );
       }
       break;
+    case "generate-all": {
+      if (folderIsMachineTsFile) {
+        // Single-file mode: chain all three steps for just this one FSM
+        // version, --output serving as the destination for every step alike
+        // (fsm.json/xstate-fsm.json, actor stubs + aggregate registry, sync
+        // stubs) -- a step's failure here simply aborts (there's only one
+        // FSM, so there's nothing left for a later step to still succeed on).
+        const absPath = folder!.startsWith("/")
+          ? folder!
+          : `${Deno.cwd()}/${folder!}`;
+        const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
+        const version = absDir.split("/").at(-1) ?? "v01";
+        const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
+
+        await generateFsmJSONFromMachineFile(
+          absDir,
+          version,
+          args["show-recommendation"],
+          versionFolderPath,
+        );
+        const fsmJsonPath = `${versionFolderPath}/fsm.json`;
+        await generateAsyncOperationLogicFromFsmJson(
+          fsmJsonPath,
+          versionFolderPath,
+          workerSdkProtocol,
+          versionFolderPath,
+        );
+        await generateSyncOperationLogicFromFsmJson(
+          fsmJsonPath,
+          versionFolderPath,
+          langs,
+        );
+      } else {
+        // Folder mode: run all three steps across the whole tree. Each step
+        // already walks every versioned FSM best-effort on its own (a single
+        // bad FSM doesn't stop the others within that step — see #214/#211)
+        // and only throws once it's done, summarizing every failure it hit
+        // as an AggregateError. Catching each step's own AggregateError here
+        // (rather than letting it propagate immediately) means one step's
+        // partial failure still lets the next step run for whichever FSMs
+        // did succeed — e.g. a bad machine.ts in one FSM shouldn't block
+        // every other FSM's actor/sync stubs from being scaffolded.
+        const stepErrors: Error[] = [];
+
+        try {
+          await generateFsmJSONFromFolders(
+            folder!,
+            skipDirs,
+            args["show-recommendation"],
+          );
+        } catch (err) {
+          stepErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
+
+        try {
+          const writeRootAbsPath = oneLevelUp(
+            resolvePluginRootAbsPath(folder!),
+          );
+          await generateAsyncOperationLogicFromFolders(
+            folder!,
+            skipDirs,
+            workerSdkProtocol,
+            writeRootAbsPath,
+          );
+        } catch (err) {
+          stepErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
+
+        try {
+          await generateSyncOperationLogicFromFolders(folder!, langs, skipDirs);
+        } catch (err) {
+          stepErrors.push(err instanceof Error ? err : new Error(String(err)));
+        }
+
+        if (stepErrors.length > 0) {
+          throw new AggregateError(
+            stepErrors,
+            `generate-all failed for ${stepErrors.length} step(s) under ${folder}`,
+          );
+        }
+      }
+      break;
+    }
     case "create-async-logic":
       await createAsyncOperationLogic(
         folder!,
