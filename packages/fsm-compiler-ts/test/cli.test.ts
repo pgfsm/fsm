@@ -142,6 +142,43 @@ Deno.test("cli generate with -r shorthand exits 0", async () => {
   assertEquals(code, 0);
 });
 
+// --- generate single-machine.ts-file (--output) mode ---
+
+Deno.test("cli generate requires --output when --folder is a single machine.ts file", async () => {
+  const { code, stderr } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "requires --output");
+});
+
+Deno.test("cli generate --folder machine.ts + --output creates --output (even nested/nonexistent) and writes fsm.json/xstate-fsm.json into it", async () => {
+  // Reads the real, tracked machine.ts rather than the FIXTURE_ROOT copy —
+  // unlike the copy, it's a recognized member of this repo's Deno workspace,
+  // so its "xstate" import actually resolves (a plain temp-dir copy isn't a
+  // workspace member, so dynamic import() of machine.ts from one fails with
+  // "not a dependency and not in import map", regardless of this test). Safe
+  // to read despite the #125 rule above: with --output given, single-file
+  // mode only ever writes into --output, never back beside --folder.
+  const outDir = `${FIXTURE_ROOT}/generate-single-file-fresh-output/nested/v04`;
+  const { code } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    `${Deno.cwd()}/apps/fsm-core-example/fsm/creditCheck/v01/machine.ts`,
+    "--output",
+    outDir,
+  ]);
+  assertEquals(code, 0);
+  const fsmJsonStat = await Deno.stat(`${outDir}/fsm.json`);
+  assert(fsmJsonStat.isFile);
+  const xstateFsmJsonStat = await Deno.stat(`${outDir}/xstate-fsm.json`);
+  assert(xstateFsmJsonStat.isFile);
+});
+
 // --- generate-async-logic / generate-sync-logic ---
 
 Deno.test("cli generate-async-logic runs successfully on example folder", async () => {

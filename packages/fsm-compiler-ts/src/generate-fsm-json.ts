@@ -335,6 +335,11 @@ export async function generateFsmJSONFromMachineFile(
       typeof machineConfig.config === "object" &&
       typeof machineConfig.toJSON === "function"
     ) {
+      // absOutputFolderPath can be an arbitrary, possibly-nonexistent path
+      // (e.g. a fresh --output) unlike absFolderPath, which by definition
+      // already exists (machine.ts was just read from it).
+      await Deno.mkdir(absOutputFolderPath, { recursive: true });
+
       // step 1 — export raw XState JSON and write xstate-fsm.json
       const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
       writeFileSync(
