@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { copy } from "@std/fs/copy";
+import { makeWorkspaceTempDir } from "./test-helpers.ts";
 
 // Absolute, not relative to "packages/fsm-compiler-ts/..." — some tests below
 // run the CLI with a different subprocess `cwd` (to exercise --output's
@@ -9,8 +10,9 @@ const CLI = `${Deno.cwd()}/packages/fsm-compiler-ts/src/cli/index.ts`;
 // subprocess against these paths, so they must never point at the tracked
 // apps/fsm-core-example — that would delete/regenerate real committed files
 // (see #125). Work on a disposable copy instead, cleaned up by the final
-// test in this file.
-const FIXTURE_ROOT = await Deno.makeTempDir({ prefix: "fsm-compiler-cli-" });
+// test in this file. Must live inside this repo's own workspace tree, not a
+// plain OS tmpdir — see test-helpers.ts.
+const FIXTURE_ROOT = await makeWorkspaceTempDir("cli");
 const APP_ROOT = `${FIXTURE_ROOT}/fsm-core-example`;
 await copy("apps/fsm-core-example", APP_ROOT);
 const FSM_FOLDER = `${APP_ROOT}/fsm`;
@@ -156,19 +158,12 @@ Deno.test("cli generate requires --output when --folder is a single machine.ts f
 });
 
 Deno.test("cli generate --folder machine.ts + --output creates --output (even nested/nonexistent) and writes fsm.json/xstate-fsm.json into it", async () => {
-  // Reads the real, tracked machine.ts rather than the FIXTURE_ROOT copy —
-  // unlike the copy, it's a recognized member of this repo's Deno workspace,
-  // so its "xstate" import actually resolves (a plain temp-dir copy isn't a
-  // workspace member, so dynamic import() of machine.ts from one fails with
-  // "not a dependency and not in import map", regardless of this test). Safe
-  // to read despite the #125 rule above: with --output given, single-file
-  // mode only ever writes into --output, never back beside --folder.
   const outDir = `${FIXTURE_ROOT}/generate-single-file-fresh-output/nested/v04`;
   const { code } = await runCli([
     "-c",
     "generate",
     "-f",
-    `${Deno.cwd()}/apps/fsm-core-example/fsm/creditCheck/v01/machine.ts`,
+    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
     "--output",
     outDir,
   ]);
@@ -177,6 +172,25 @@ Deno.test("cli generate --folder machine.ts + --output creates --output (even ne
   assert(fsmJsonStat.isFile);
   const xstateFsmJsonStat = await Deno.stat(`${outDir}/xstate-fsm.json`);
   assert(xstateFsmJsonStat.isFile);
+});
+
+Deno.test("cli generate exits 1 (not 0) when machine.ts's export is not a valid xstate machine config (#214)", async () => {
+  const brokenDir = `${FIXTURE_ROOT}/broken-machine-single-file`;
+  await Deno.mkdir(brokenDir, { recursive: true });
+  await Deno.writeTextFile(
+    `${brokenDir}/machine.ts`,
+    "export default { notAMachine: true };\n",
+  );
+  const { code, stderr } = await runCli([
+    "-c",
+    "generate",
+    "-f",
+    `${brokenDir}/machine.ts`,
+    "--output",
+    `${FIXTURE_ROOT}/broken-machine-single-file-output`,
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "not a valid xstate machine config");
 });
 
 // --- generate-async-logic / generate-sync-logic ---

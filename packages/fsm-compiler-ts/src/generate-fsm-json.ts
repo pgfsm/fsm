@@ -310,6 +310,15 @@ export function addMissingAsyncOperationTypeToInvokeActors(
  * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
  * and writes fsm.json + xstate-fsm.json into absOutputFolderPath (defaults to
  * absFolderPath itself, alongside machine.ts).
+ *
+ * A missing machine.ts is the one expected, non-fatal outcome — logged and
+ * returned normally, since {@linkcode generateFsmJSONFromFolders} calls this
+ * for every versioned subdirectory it walks and version folders without a
+ * machine.ts are meant to be skipped, not treated as an error. Every other
+ * failure (bad/missing export, invalid machine config, import or write
+ * failure) throws instead of being logged and swallowed — see #214: a
+ * swallowed error here previously let the CLI report "completed
+ * successfully" with exit 0 even when nothing was actually written.
  * @param absFolderPath Absolute path to the versioned FSM directory containing machine.ts (e.g. /…/creditCheck/v01)
  * @param version Version string (e.g. "v01") used when filling in missing asyncOperationVersion on invoke actors
  * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
@@ -322,82 +331,86 @@ export async function generateFsmJSONFromMachineFile(
   absOutputFolderPath: string = absFolderPath,
 ) {
   const machineTsPath = `${absFolderPath}/machine.ts`;
+
   try {
     await Deno.stat(machineTsPath);
-    const module = await import(`file://${machineTsPath}`);
-    const machineConfig = module.default;
-    if (!machineConfig) {
-      logger.error("No valid export found in {path}", { path: machineTsPath });
-      return;
-    }
-    if (
-      typeof machineConfig.id === "string" &&
-      typeof machineConfig.config === "object" &&
-      typeof machineConfig.toJSON === "function"
-    ) {
-      // absOutputFolderPath can be an arbitrary, possibly-nonexistent path
-      // (e.g. a fresh --output) unlike absFolderPath, which by definition
-      // already exists (machine.ts was just read from it).
-      await Deno.mkdir(absOutputFolderPath, { recursive: true });
-
-      // step 1 — export raw XState JSON and write xstate-fsm.json
-      const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
-      writeFileSync(
-        `${absOutputFolderPath}/xstate-fsm.json`,
-        JSON.stringify(xstateFsmJSON, null, 2),
-      );
-
-      // step 2 — removeNullActions (pure): strip null entries from all action arrays
-      const cleanedJSON = removeNullActions(xstateFsmJSON);
-
-      // step 3 — normalizeActionsToObjects (pure): convert plain string actions to { type: string }
-      const normalizedJSON = normalizeActionsToObjects(cleanedJSON);
-
-      // step 4 — addActionNameFromDelay (pure): set actionName from delay on xstate.raise/xstate.cancel actions
-      const enrichedJSON = addActionNameFromDelay(normalizedJSON);
-
-      // step 5 — addMissingAsyncOperationTypeToInvokeActors (pure): fill in asyncOperationType/asyncOperationVersion on invoke entries
-      const { fulljson: fsmJSON } = addMissingAsyncOperationTypeToInvokeActors(
-        enrichedJSON,
-        version,
-      );
-
-      // step 6 — write fsm.json
-      writeFileSync(
-        `${absOutputFolderPath}/fsm.json`,
-        JSON.stringify(fsmJSON, null, 2),
-      );
-
-      // step 7 — (optional) validate fsm.json against schema and show recommendations
-      if (showRecommendation) {
-        const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
-        const validate = ajv.compile(machineSchema);
-        const valid = validate(fsmJSON);
-        if (!valid) {
-          logger.warning(
-            "[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}",
-            { path: absOutputFolderPath, errors: validate.errors },
-          );
-        } else {
-          logger.info(
-            "[recommendation] fsm.json passes schema validation in {path}",
-            { path: absOutputFolderPath },
-          );
-        }
-      }
-    } else {
-      logger.error("Export in {path} is not a valid xstate machine config", {
-        path: machineTsPath,
-      });
-    }
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       logger.info("machine.ts is missing in {path}", { path: absFolderPath });
+      return;
+    }
+    throw err;
+  }
+
+  // deno-lint-ignore no-explicit-any
+  let module: any;
+  try {
+    module = await import(`file://${machineTsPath}`);
+  } catch (err) {
+    throw new Error(`Failed to import ${machineTsPath}`, { cause: err });
+  }
+  const machineConfig = module.default;
+  if (!machineConfig) {
+    throw new Error(`No valid export found in ${machineTsPath}`);
+  }
+  if (
+    !(typeof machineConfig.id === "string" &&
+      typeof machineConfig.config === "object" &&
+      typeof machineConfig.toJSON === "function")
+  ) {
+    throw new Error(
+      `Export in ${machineTsPath} is not a valid xstate machine config`,
+    );
+  }
+
+  // absOutputFolderPath can be an arbitrary, possibly-nonexistent path (e.g.
+  // a fresh --output) unlike absFolderPath, which by definition already
+  // exists (machine.ts was just read from it).
+  await Deno.mkdir(absOutputFolderPath, { recursive: true });
+
+  // step 1 — export raw XState JSON and write xstate-fsm.json
+  const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
+  writeFileSync(
+    `${absOutputFolderPath}/xstate-fsm.json`,
+    JSON.stringify(xstateFsmJSON, null, 2),
+  );
+
+  // step 2 — removeNullActions (pure): strip null entries from all action arrays
+  const cleanedJSON = removeNullActions(xstateFsmJSON);
+
+  // step 3 — normalizeActionsToObjects (pure): convert plain string actions to { type: string }
+  const normalizedJSON = normalizeActionsToObjects(cleanedJSON);
+
+  // step 4 — addActionNameFromDelay (pure): set actionName from delay on xstate.raise/xstate.cancel actions
+  const enrichedJSON = addActionNameFromDelay(normalizedJSON);
+
+  // step 5 — addMissingAsyncOperationTypeToInvokeActors (pure): fill in asyncOperationType/asyncOperationVersion on invoke entries
+  const { fulljson: fsmJSON } = addMissingAsyncOperationTypeToInvokeActors(
+    enrichedJSON,
+    version,
+  );
+
+  // step 6 — write fsm.json
+  writeFileSync(
+    `${absOutputFolderPath}/fsm.json`,
+    JSON.stringify(fsmJSON, null, 2),
+  );
+
+  // step 7 — (optional) validate fsm.json against schema and show recommendations
+  if (showRecommendation) {
+    const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
+    const validate = ajv.compile(machineSchema);
+    const valid = validate(fsmJSON);
+    if (!valid) {
+      logger.warning(
+        "[recommendation] fsm.json schema issues in {path}/fsm.json: {errors}",
+        { path: absOutputFolderPath, errors: validate.errors },
+      );
     } else {
-      logger.error("Failed to import or process {path}: {error}", {
-        path: machineTsPath,
-        error: err,
-      });
+      logger.info(
+        "[recommendation] fsm.json passes schema validation in {path}",
+        { path: absOutputFolderPath },
+      );
     }
   }
 }
@@ -417,6 +430,15 @@ async function generateFsmJSONFromFolder(
   );
 }
 
+/**
+ * Walks every versioned FSM folder under `folderPath` and compiles each
+ * machine.ts found (see {@linkcode generateFsmJSONFromMachineFile}). A single
+ * FSM's failure doesn't abort the whole run — every other FSM/version still
+ * gets a chance to generate — but once the walk finishes, any failures
+ * collected along the way are thrown together as an {@linkcode AggregateError}
+ * so the caller (the CLI) still reports overall failure instead of silently
+ * exiting 0 (see #214).
+ */
 export async function generateFsmJSONFromFolders(
   folderPath: string,
   skipDirs: string[] = [],
@@ -445,6 +467,7 @@ export async function generateFsmJSONFromFolders(
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
+  const errors: Error[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
     if (dirEntry.isDirectory) {
       if (skipDirs.includes(dirEntry.name)) {
@@ -456,14 +479,25 @@ export async function generateFsmJSONFromFolders(
       for await (const subEntry of Deno.readDir(fsmDirPath)) {
         if (subEntry.isDirectory) {
           if (isVersionFolderName(subEntry.name)) {
-            await generateFsmJSONFromFolder(
-              dirEntry.name,
-              subEntry.name,
-              folderPath,
-              `${fsmDirPath}/${subEntry.name}`,
-              dirEntry.name,
-              showRecommendation,
-            );
+            try {
+              await generateFsmJSONFromFolder(
+                dirEntry.name,
+                subEntry.name,
+                folderPath,
+                `${fsmDirPath}/${subEntry.name}`,
+                dirEntry.name,
+                showRecommendation,
+              );
+            } catch (err) {
+              const wrapped = err instanceof Error
+                ? err
+                : new Error(String(err));
+              logger.error("Failed to generate fsm.json for {path}: {error}", {
+                path: `${fsmDirPath}/${subEntry.name}`,
+                error: wrapped,
+              });
+              errors.push(wrapped);
+            }
           } else {
             logger.info("Skipping non-versioned folder: {name} in {dir}", {
               name: subEntry.name,
@@ -473,5 +507,11 @@ export async function generateFsmJSONFromFolders(
         }
       }
     }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(
+      errors,
+      `generate failed for ${errors.length} FSM version folder(s) under ${folderPath}`,
+    );
   }
 }

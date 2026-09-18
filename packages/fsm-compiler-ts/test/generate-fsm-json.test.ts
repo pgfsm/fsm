@@ -1,11 +1,13 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { copy } from "@std/fs/copy";
 import {
   addMissingAsyncOperationTypeToInvokeActors,
   generateFsmJSONFromFolders,
+  generateFsmJSONFromMachineFile,
   normalizeActionsToObjects,
 } from "../src/generate-fsm-json.ts";
 import type { FsmDraftStateNode } from "../src/types/index.ts";
+import { makeWorkspaceTempDir } from "./test-helpers.ts";
 
 // --- addMissingAsyncOperationTypeToInvokeActors unit tests ---
 
@@ -239,11 +241,10 @@ Deno.test("normalizeActionsToObjects - does not mutate original", () => {
 // --- generateFsmJSONFromFolders integration tests ---
 // generateFsmJSONFromFolders writes fsm.json/xstate-fsm.json in place, so
 // these must run against a disposable copy, never the tracked
-// apps/fsm-core-example (see #125).
+// apps/fsm-core-example (see #125). Must live inside this repo's own
+// workspace tree, not a plain OS tmpdir — see test-helpers.ts.
 
-const FIXTURE_ROOT = await Deno.makeTempDir({
-  prefix: "fsm-compiler-generate-fsm-json-",
-});
+const FIXTURE_ROOT = await makeWorkspaceTempDir("generate-fsm-json");
 const APP_ROOT = `${FIXTURE_ROOT}/fsm-core-example`;
 await copy("apps/fsm-core-example", APP_ROOT);
 const FSM_FOLDER = `${APP_ROOT}/fsm`;
@@ -313,6 +314,65 @@ Deno.test("generateFsmJSONFromFolders - throws on path ending with '/'", async (
     assertExists((e as Error).message.match(/cannot end with/i));
   }
   assertEquals(threw, true);
+});
+
+// --- Error propagation (see #214) ---
+// generateFsmJSONFromMachineFile/generateFsmJSONFromFolders must surface real
+// failures instead of swallowing them — a swallowed error previously let the
+// CLI report "completed successfully" with exit 0 even when nothing was
+// written.
+
+Deno.test("generateFsmJSONFromMachineFile - throws when machine.ts export is not a valid xstate machine config", async () => {
+  const dir = `${FIXTURE_ROOT}/invalid-machine-export`;
+  await Deno.mkdir(dir, { recursive: true });
+  await Deno.writeTextFile(
+    `${dir}/machine.ts`,
+    "export default { notAMachine: true };\n",
+  );
+  await assertRejects(
+    () => generateFsmJSONFromMachineFile(dir, "v01"),
+    Error,
+    "not a valid xstate machine config",
+  );
+});
+
+Deno.test("generateFsmJSONFromMachineFile - resolves without throwing when machine.ts is missing", async () => {
+  const dir = `${FIXTURE_ROOT}/no-machine-ts`;
+  await Deno.mkdir(dir, { recursive: true });
+  // Should not throw — a missing machine.ts is an expected skip, not a
+  // failure (generateFsmJSONFromFolders walks many version folders, not all
+  // of which have one).
+  await generateFsmJSONFromMachineFile(dir, "v01");
+});
+
+Deno.test("generateFsmJSONFromFolders - generates every other FSM and throws an AggregateError when one FSM's machine.ts is invalid", async () => {
+  const dir = `${FIXTURE_ROOT}/partial-failure`;
+  await Deno.mkdir(`${dir}/goodFsm/v01`, { recursive: true });
+  await Deno.mkdir(`${dir}/badFsm/v01`, { recursive: true });
+  await copy(
+    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
+    `${dir}/goodFsm/v01/machine.ts`,
+  );
+  await Deno.writeTextFile(
+    `${dir}/badFsm/v01/machine.ts`,
+    "export default { notAMachine: true };\n",
+  );
+
+  await assertRejects(
+    () => generateFsmJSONFromFolders(dir, []),
+    AggregateError,
+    "1 FSM version folder(s)",
+  );
+
+  const goodFsmJson = await Deno.stat(`${dir}/goodFsm/v01/fsm.json`);
+  assertEquals(goodFsmJson.isFile, true);
+  let badFsmJsonExists = true;
+  try {
+    await Deno.stat(`${dir}/badFsm/v01/fsm.json`);
+  } catch {
+    badFsmJsonExists = false;
+  }
+  assertEquals(badFsmJsonExists, false);
 });
 
 // --- Cleanup ---
