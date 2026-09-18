@@ -19,7 +19,6 @@ import {
   validateSyncOperationFromFolders,
 } from "../index.ts";
 import type {
-  ActorReference,
   OperationLang,
   WorkerSdkProtocol,
   WorkflowType,
@@ -36,7 +35,6 @@ const args = parseArgs(Deno.args, {
     "folder",
     "workflow-type",
     "skip-dirs",
-    "available-actors",
     "db-url",
     "lang",
     "worker-sdk-protocol",
@@ -52,7 +50,6 @@ const args = parseArgs(Deno.args, {
     w: "workflow-type",
     r: "show-recommendation",
     s: "skip-dirs",
-    a: "available-actors",
     d: "db-url",
     l: "lang",
     p: "worker-sdk-protocol",
@@ -92,7 +89,6 @@ OPTIONS
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
-  -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation)
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
   -p, --worker-sdk-protocol <proto>   Sidecar wire protocol for generated worker SDKs: grpc (default) or legacy (generate-async-logic/generate-all only)
   -h, --help                          Show this help message
@@ -337,21 +333,6 @@ if (folderIsMachineTsFile && !args["output"]) {
   Deno.exit(1);
 }
 
-async function loadAvailableActors(): Promise<ActorReference[]> {
-  const actorsFile = args["available-actors"];
-  if (!actorsFile) return [];
-  try {
-    const content = await Deno.readTextFile(actorsFile);
-    return JSON.parse(content) as ActorReference[];
-  } catch (err) {
-    logger.error(
-      "Failed to read --available-actors file {actorsFile}: {error}",
-      { actorsFile, error: err },
-    );
-    Deno.exit(1);
-  }
-}
-
 async function buildDeps(connectionString?: string) {
   const dbUrl = connectionString ?? (() => {
     dotenv.config({ path: ".env" });
@@ -549,12 +530,11 @@ try {
       await deleteFsmJSONFromFolders(folder!, skipDirs);
       break;
     case "validate-sync-operation": {
-      const availableActors = await loadAvailableActors();
       await validateSyncOperationFromFolders(
         folder!,
         workflowType!,
         skipDirs,
-        availableActors,
+        [],
       );
       break;
     }
@@ -562,11 +542,10 @@ try {
       logger.warn(
         "validate-async-operation is deprecated: it shells out to each actor's own language runtime and only works under the Deno-native CLI, never via the npm/npx build.",
       );
-      const availableActors = await loadAvailableActors();
       await validateAsyncOperationFromFolders(
         folder!,
         skipDirs,
-        availableActors,
+        [],
         validateLangs,
       );
       break;
