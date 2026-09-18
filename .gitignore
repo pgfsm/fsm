@@ -17,6 +17,9 @@ build/
 deno.lock
 deno_dir/
 
+# --- Test fixtures (must live inside the workspace tree, see #214) ---
+packages/fsm-compiler-ts/.test-fixtures/
+
 # --- Python ---
 __pycache__/
 *.py[cod]
