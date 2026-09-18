@@ -119,9 +119,10 @@ only checks that stubs are exported with the right shape.
 - [ ] **Validate non-TypeScript sync stubs.** `validateSyncOperationFromFolder`
       calls `validateLanguageModules(absPath, "typescript", …)` with the
       language hardcoded, so `python`/`rust`/`go` stubs are never validated.
-- [ ] **`--available-actors` / external-actor resolution is a no-op.**
-      `validateSyncOperationFromFolder` and `validateSyncOperationFromFolders`
-      accept and pass through an `availableActors` parameter (wired to
-      `--available-actors` on the CLI), but nothing in the current
-      implementation reads it — no external-actor dependency check actually
-      happens. Either wire it up or remove the dead parameter and flag.
+- [x] **`--available-actors` CLI flag removed.** Nothing read the loaded value —
+      no external-actor dependency check ever happened. Removed the flag and
+      `loadAvailableActors()` from the CLI (#222); every caller of
+      `validateSyncOperationFromFolder(s)` (in this package and in
+      `fsm-sync-worker-ts`) already passed `[]` for `availableActors`, so the
+      dead parameter still exists on the function signatures but is no longer
+      reachable from any CLI input.

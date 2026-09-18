@@ -213,10 +213,7 @@ npx @pgfsm/compiler -c delete -f fsm
 ### `validate-sync-operation` — check action/guard/delay stubs are implemented
 
 **Input** — `-f`/`--folder`: plugin-root directory. `-w`/`--workflow-type`:
-required. `-a`/`--available-actors`: path to a JSON file of
-`{ src, asyncOperationType?, asyncOperationVersion?, asyncOperationLanguage? }[]`
-— actors resolvable from elsewhere (e.g. a shared pool) so invoke references
-pointing at them aren't reported as unresolved. `-s`/`--skip-dirs`.
+required. `-s`/`--skip-dirs`.
 
 **Output** — writes nothing; validates that every action/guard/delay in
 `fsm.json` has a matching export in `<lang>/actions|guards|delays/index.*` and

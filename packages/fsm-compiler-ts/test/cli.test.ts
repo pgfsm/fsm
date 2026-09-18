@@ -694,26 +694,6 @@ Deno.test("cli --skip-dirs flag is accepted", async () => {
   assertEquals(code, 0);
 });
 
-Deno.test("cli --available-actors flag is accepted", async () => {
-  const tmpFile = await Deno.makeTempFile({ suffix: ".json" });
-  await Deno.writeTextFile(tmpFile, "[]");
-  try {
-    const { code } = await runCli([
-      "-c",
-      "validate-sync-operation",
-      "-f",
-      FSM_FOLDER,
-      "-w",
-      "fsm",
-      "--available-actors",
-      tmpFile,
-    ]);
-    assertEquals(code, 0);
-  } finally {
-    await Deno.remove(tmpFile);
-  }
-});
-
 // --- Cleanup ---
 // Deno runs tests within a file sequentially in declaration order (absent
 // --parallel), so this runs last and removes the fixture copy every prior

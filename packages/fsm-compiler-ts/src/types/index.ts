@@ -44,10 +44,7 @@ export type WorkflowType = InvokeObject["asyncOperationType"];
  * real construction site already populates them from a parsed `InvokeObject`
  * (or a value drawn from its enum, e.g. `OperationLang`), and callers already
  * do literal comparisons like `actor.asyncOperationType === "fsm"` — the
- * tighter type catches typos there instead of just widening past them. The one
- * path that bypasses this (`cli/index.ts`'s `--available-actors` file, loaded
- * via a raw `JSON.parse` `as ActorReference[]` cast) isn't affected either way,
- * since a type assertion from `any` skips structural checking regardless.
+ * tighter type catches typos there instead of just widening past them.
  */
 export type ActorReference = {
   src: string;

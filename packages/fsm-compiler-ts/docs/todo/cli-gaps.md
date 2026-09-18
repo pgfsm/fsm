@@ -63,28 +63,27 @@ Calls: `deleteFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs)`
 
 ### `validate-sync-operation`
 
-Calls:
-`validateSyncOperationFromFolders(folder, workflowType, skipDirs, availableActors)`
+Calls: `validateSyncOperationFromFolders(folder, workflowType, skipDirs, [])`
 
-| Parameter         | CLI Flag                 | Status                                               | Impact |
-| ----------------- | ------------------------ | ---------------------------------------------------- | ------ |
-| `folderPath`      | `-f, --folder`           | ✅                                                   | —      |
-| `workflowType`    | `-w, --workflow-type`    | ✅                                                   | —      |
-| `skipDirs`        | `-s, --skip-dirs`        | ✅ parsed and passed through                         | —      |
-| `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()` | —      |
+| Parameter         | CLI Flag              | Status                                                                                   | Impact |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------------- | ------ |
+| `folderPath`      | `-f, --folder`        | ✅                                                                                       | —      |
+| `workflowType`    | `-w, --workflow-type` | ✅                                                                                       | —      |
+| `skipDirs`        | `-s, --skip-dirs`     | ✅ parsed and passed through                                                             | —      |
+| `availableActors` | _(none — removed)_    | Dead parameter, always `[]`; `--available-actors`/`loadAvailableActors()` removed (#222) | —      |
 
 ### `validate-async-operation`
 
 Calls:
 `validateAsyncOperationFromFoldersV2(folder, workflowType, skipDirs, availableActors, validateLangs)`
 
-| Parameter         | CLI Flag                 | Status                                                  | Impact |
-| ----------------- | ------------------------ | ------------------------------------------------------- | ------ |
-| `folderPath`      | `-f, --folder`           | ✅                                                      | —      |
-| `workflowType`    | `-w, --workflow-type`    | ✅                                                      | —      |
-| `skipDirs`        | `-s, --skip-dirs`        | ✅ parsed and passed through                            | —      |
-| `availableActors` | `-a, --available-actors` | ✅ loaded from JSON file via `loadAvailableActors()`    | —      |
-| `validateLangs`   | `-l, --lang`             | ✅ comma-separated; empty (omitted) means all languages | —      |
+| Parameter         | CLI Flag              | Status                                                                                   | Impact |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------------- | ------ |
+| `folderPath`      | `-f, --folder`        | ✅                                                                                       | —      |
+| `workflowType`    | `-w, --workflow-type` | ✅                                                                                       | —      |
+| `skipDirs`        | `-s, --skip-dirs`     | ✅ parsed and passed through                                                             | —      |
+| `availableActors` | _(none — removed)_    | Dead parameter, always `[]`; `--available-actors`/`loadAvailableActors()` removed (#222) | —      |
+| `validateLangs`   | `-l, --lang`          | ✅ comma-separated; empty (omitted) means all languages                                  | —      |
 
 ### `load`
 
@@ -136,13 +135,12 @@ separate step.
 
 Location: `printHelp()` in `src/cli/index.ts`.
 
-| Issue                                                             | Status                                                                                                         |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `--skip-dirs` flag missing from help and CLI                      | ✅ Fixed — flag exists, documented in help, passed to all commands                                             |
-| `--available-actors` flag missing from help and CLI               | ✅ Fixed — flag exists, documented in help, passed to `validate-sync-operation` and `validate-async-operation` |
-| `DATABASE_URL` env var not mentioned for DB commands              | ✅ Fixed — documented under `ENVIRONMENT` in help text                                                         |
-| `--show-recommendation` not scoped to `generate-fsm-json` in help | ✅ Fixed — help text notes it applies to `generate-fsm-json` only                                              |
-| `-w` description scoping for scaffold/delete commands             | ✅ Fixed — help says "optional for generate-fsm-json, generate-async-logic, generate-sync-logic, delete"       |
+| Issue                                                             | Status                                                                                                   |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `--skip-dirs` flag missing from help and CLI                      | ✅ Fixed — flag exists, documented in help, passed to all commands                                       |
+| `DATABASE_URL` env var not mentioned for DB commands              | ✅ Fixed — documented under `ENVIRONMENT` in help text                                                   |
+| `--show-recommendation` not scoped to `generate-fsm-json` in help | ✅ Fixed — help text notes it applies to `generate-fsm-json` only                                        |
+| `-w` description scoping for scaffold/delete commands             | ✅ Fixed — help says "optional for generate-fsm-json, generate-async-logic, generate-sync-logic, delete" |
 
 ---
 
@@ -167,7 +165,6 @@ Test files: `test/cli.test.ts`, `src/cli/index-test.ts`.
 | Missing DB connection string for DB commands     | ✅                  |
 | `--db-url` flag accepted and parsed              | ✅                  |
 | `--skip-dirs` flag                               | ✅                  |
-| `--available-actors` flag                        | ✅                  |
 | `generate-fsm-json` with `.ts` file path         | ❌ (not yet tested) |
 | `generate-fsm-json` with `.json` file path       | ❌ (not yet tested) |
 | `load` (real DB)                                 | ❌ (needs DB)       |
