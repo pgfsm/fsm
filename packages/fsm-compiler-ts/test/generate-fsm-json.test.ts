@@ -259,6 +259,19 @@ Deno.test("generateFsmJSONFromFolders - generates fsm.json for fsm folder", asyn
   assertEquals(stat.isFile, true);
 });
 
+Deno.test("generateFsmJSONFromFolders - fsm.json and xstate-fsm.json end with a trailing newline (#220)", async () => {
+  await generateFsmJSONFromFolders(FSM_FOLDER, []);
+
+  const fsmJson = await Deno.readTextFile(
+    `${FSM_FOLDER}/creditCheck/v01/fsm.json`,
+  );
+  const xstateFsmJson = await Deno.readTextFile(
+    `${FSM_FOLDER}/creditCheck/v01/xstate-fsm.json`,
+  );
+  assertEquals(fsmJson.endsWith("}\n"), true);
+  assertEquals(xstateFsmJson.endsWith("}\n"), true);
+});
+
 Deno.test("generateFsmJSONFromFolders - generates fsm.json for vitalsWorkflow (shared)", async () => {
   await generateFsmJSONFromFolders(
     FSM_FOLDER,

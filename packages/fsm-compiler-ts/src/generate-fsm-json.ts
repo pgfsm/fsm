@@ -372,7 +372,7 @@ export async function generateFsmJSONFromMachineFile(
   const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
   writeFileSync(
     `${absOutputFolderPath}/xstate-fsm.json`,
-    JSON.stringify(xstateFsmJSON, null, 2),
+    JSON.stringify(xstateFsmJSON, null, 2) + "\n",
   );
 
   // step 2 — removeNullActions (pure): strip null entries from all action arrays
@@ -393,7 +393,7 @@ export async function generateFsmJSONFromMachineFile(
   // step 6 — write fsm.json
   writeFileSync(
     `${absOutputFolderPath}/fsm.json`,
-    JSON.stringify(fsmJSON, null, 2),
+    JSON.stringify(fsmJSON, null, 2) + "\n",
   );
 
   // step 7 — (optional) validate fsm.json against schema and show recommendations
