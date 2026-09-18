@@ -70,7 +70,7 @@ USAGE
   deno run --allow-all src/cli/index.ts -c <command> -f <folder> [options]
 
 COMMANDS
-  generate                            Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
+  generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required for a single fsm.json). The aggregate registry/worker SDK are written one level above --folder (the app root) in folder mode, or to --output in single-fsm.json mode
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--output required)
   create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
@@ -83,13 +83,13 @@ WORKFLOW TYPES
 
 OPTIONS
   -c, --command <command>             Command to run (required)
-  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic only, and requires --output; app root for create-async-logic)
+  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic only, and requires --output; app root for create-async-logic)
   -w, --workflow-type <type>          Workflow type (required for validate-sync-operation, load)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
-  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic single-fsm.json mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
+  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic single-fsm.json mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
-  -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate only)
+  -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -a, --available-actors <file>       Path to a JSON file containing available actor references (for validate-sync-operation, validate-async-operation)
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
@@ -100,9 +100,9 @@ ENVIRONMENT
   DATABASE_URL    Fallback connection string for load. Ignored if --db-url is provided.
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
-  deno run --allow-all src/cli/index.ts -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm
+  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
+  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
   deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm
   deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
   deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
@@ -264,8 +264,8 @@ const SINGLE_FSM_JSON_FILE_COMMANDS = [
 // True when --folder points at a single fsm.json file rather than a
 // plugin-root folder.
 let folderIsFsmJsonFile = false;
-// True when --folder points at a single machine.ts file (generate only)
-// rather than a plugin-root folder.
+// True when --folder points at a single machine.ts file (generate-fsm-json
+// only) rather than a plugin-root folder.
 let folderIsMachineTsFile = false;
 if (folder) {
   try {
@@ -282,7 +282,7 @@ if (folder) {
         Deno.exit(1);
       }
       folderIsFsmJsonFile = true;
-    } else if (command === "generate" && stat.isFile) {
+    } else if (command === "generate-fsm-json" && stat.isFile) {
       if (!folder.endsWith(".ts")) {
         logger.error(
           "--folder is not a recognized type. Use a .ts file or a directory: {folder}",
@@ -291,8 +291,8 @@ if (folder) {
         Deno.exit(1);
       }
       folderIsMachineTsFile = true;
-    } else if (command !== "generate" && !stat.isDirectory) {
-      // generate accepts .ts/.json files too; all other commands require a directory
+    } else if (command !== "generate-fsm-json" && !stat.isDirectory) {
+      // generate-fsm-json accepts .ts/.json files too; all other commands require a directory
       logger.error("--folder is not a directory: {folder}", { folder });
       Deno.exit(1);
     }
@@ -353,7 +353,7 @@ async function buildDeps(connectionString?: string) {
 
 try {
   switch (command) {
-    case "generate": {
+    case "generate-fsm-json": {
       if (folderIsMachineTsFile) {
         const absPath = folder!.startsWith("/")
           ? folder!

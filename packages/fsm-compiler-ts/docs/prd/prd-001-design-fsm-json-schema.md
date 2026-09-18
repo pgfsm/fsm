@@ -45,18 +45,20 @@ emits `fsm.json` + `xstate-fsm.json`.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
-  -c generate \
-  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts
+  -c generate-fsm-json \
+  -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts \
+  --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
-- Accepts a single `.ts` file (version derived from the parent folder name) or a
-  directory (walks every versioned subdirectory).
+- Accepts a single `.ts` file (version derived from the parent folder name;
+  requires `--output`, the version folder to write into) or a directory (walks
+  every versioned subdirectory).
 - `--show-recommendation` validates the generated `fsm.json` against the schema
   and prints issues.
 
 **Status:** ✅ Implemented — `generateFsmJSONFromMachineFile` /
 `generateFsmJSONFromFolders` (`src/generate-fsm-json.ts`), wired to the
-`generate` command in `src/cli/index.ts`.
+`generate-fsm-json` command in `src/cli/index.ts`.
 
 ### R2 — Author from scratch (1.b)
 
@@ -104,7 +106,8 @@ gap.)
 Definitions live in versioned sub-folders (`v01`, `v02`, …), immutable once
 deployed. Existing instances keep running against their creation version.
 
-**Status:** ✅ Implemented — versioned folder walking in the `generate` command.
+**Status:** ✅ Implemented — versioned folder walking in the `generate-fsm-json`
+command.
 
 ## Gaps
 
@@ -124,8 +127,8 @@ Tracked in [TODO.md](../todo/TODO.md):
 
 ## Acceptance criteria
 
-- `generate` produces schema-valid `fsm.json` + `xstate-fsm.json` from a
-  `machine.ts` or folder. ✅
+- `generate-fsm-json` produces schema-valid `fsm.json` + `xstate-fsm.json` from
+  a `machine.ts` or folder. ✅
 - A hand-authored `fsm.json` validates against `fsm.machine.schema.v3.json`. ✅
   (external tool)
 - Every `invoke` object resolves `type`, `id`, `src`, `asyncOperationType`,

@@ -23,11 +23,11 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
 below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate`/`generate-sync-logic`/`generate-async-logic` — applies the same rule
-to that path: it must **not** start with `.` (use a bare relative path like
-`fsm`, or an absolute path — not `./fsm`) and must **not** end with `/`.
+`generate-fsm-json`/`generate-sync-logic`/`generate-async-logic` — applies the
+same rule to that path: it must **not** start with `.` (use a bare relative path
+like `fsm`, or an absolute path — not `./fsm`) and must **not** end with `/`.
 
-### `generate` — compile `fsm.json` from a state machine definition
+### `generate-fsm-json` — compile `fsm.json` from a state machine definition
 
 **Input** — `-f`/`--folder` accepts either:
 
@@ -59,9 +59,9 @@ what's written).
   other command below reads.
 
 ```bash
-npx @pgfsm/compiler -c generate -f fsm
-npx @pgfsm/compiler -c generate -f fsm --skip-dirs carVitals
-npx @pgfsm/compiler -c generate -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+npx @pgfsm/compiler -c generate-fsm-json -f fsm
+npx @pgfsm/compiler -c generate-fsm-json -f fsm --skip-dirs carVitals
+npx @pgfsm/compiler -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
 The full `fsm.json` spec (states, transitions, guards, actions, actors, delays)
@@ -70,7 +70,8 @@ is documented in
 
 ### `generate-sync-logic` — scaffold action/guard/delay stubs
 
-Reads a version folder's `fsm.json`, so `generate` must have already run.
+Reads a version folder's `fsm.json`, so `generate-fsm-json` must have already
+run.
 
 **Input** — `-f`/`--folder` accepts either:
 
@@ -101,8 +102,8 @@ npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --out
 
 ### `generate-async-logic` — scaffold actor stubs
 
-Reads a version folder's `fsm.json` (every `invoke` object), so `generate` must
-have already run.
+Reads a version folder's `fsm.json` (every `invoke` object), so
+`generate-fsm-json` must have already run.
 
 **Input** — `-f`/`--folder` accepts either:
 
