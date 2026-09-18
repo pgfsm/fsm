@@ -118,9 +118,10 @@ version folder to scaffold stubs into, resolved independently of where the
 aggregate registry/worker SDK in both `-f`/`--folder` shapes, not just directory
 mode — there's no separate flag for where that lands: one level above
 `-f`/`--folder` (the app root) in directory mode, or into `-o`/`--output` in
-single-`fsm.json` mode. See
-[the package's own README](./packages/fsm-compiler-ts/README.md) for details and
-examples.
+single-`fsm.json` mode. `generate-all` runs `generate-fsm-json`, then
+`generate-async-logic`, then `generate-sync-logic` in one invocation instead of
+three. See [the package's own README](./packages/fsm-compiler-ts/README.md) for
+details and examples.
 
 ### Async operation logic — example layout
 

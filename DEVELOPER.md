@@ -116,7 +116,9 @@ version folder to scaffold stubs into, resolved independently of where the
 aggregate registry/worker SDK (`worker-sdk-generated/<lang>/`, see the table
 above) in both `-f`/`--folder` shapes, not just directory mode — there's no
 separate flag for where that lands: one level above `-f`/`--folder` (the app
-root) in directory mode, or into `-o`/`--output` in single-`fsm.json` mode. See
+root) in directory mode, or into `-o`/`--output` in single-`fsm.json` mode.
+`generate-all` runs `generate-fsm-json`, then `generate-async-logic`, then
+`generate-sync-logic` in one invocation instead of three. See
 [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md) for
 details and examples.
 

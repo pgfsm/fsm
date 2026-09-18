@@ -23,9 +23,10 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
 below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate-fsm-json`/`generate-sync-logic`/`generate-async-logic` — applies the
-same rule to that path: it must **not** start with `.` (use a bare relative path
-like `fsm`, or an absolute path — not `./fsm`) and must **not** end with `/`.
+`generate-fsm-json`/`generate-sync-logic`/`generate-async-logic`/`generate-all`
+— applies the same rule to that path: it must **not** start with `.` (use a bare
+relative path like `fsm`, or an absolute path — not `./fsm`) and must **not**
+end with `/`.
 
 ### `generate-fsm-json` — compile `fsm.json` from a state machine definition
 
@@ -142,6 +143,36 @@ walking three directories up) in single-file mode.
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
+```
+
+### `generate-all` — run all three generate steps in sequence
+
+Runs `generate-fsm-json`, then `generate-async-logic`, then
+`generate-sync-logic` — for a fresh FSM (or a whole plugin-root tree), one
+invocation instead of three. Accepts the same two input shapes as
+`generate-fsm-json`:
+
+- **Directory** — runs all three steps across every versioned FSM under the
+  folder. A step's own best-effort walk collects failures per FSM without
+  stopping (same as running the three commands separately would); one FSM's
+  failure in an earlier step doesn't block the next step from still running for
+  whichever FSMs did succeed. The command still exits non-zero if anything
+  failed anywhere.
+- **Single `.ts` file** — chains all three steps for just that one FSM version.
+  Requires `-o`/`--output`, which serves every step alike: the destination for
+  `fsm.json`/`xstate-fsm.json`, the actor stubs + aggregate registry, and the
+  sync stubs, all written into the same version folder. As with
+  `generate-async-logic`'s own single-file mode, `--output` should sit at the
+  conventional `<pluginRoot>/<fsmName>/<version>` depth so the aggregate step
+  can find the real plugin root three levels up.
+
+`-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
+`-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,
+same as the individual commands.
+
+```bash
+npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm
+npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
 ### `create-async-logic` — scaffold one actor outside any FSM's `invoke` list
