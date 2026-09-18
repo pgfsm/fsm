@@ -6,7 +6,7 @@ import { makeWorkspaceTempDir } from "./test-helpers.ts";
 // run the CLI with a different subprocess `cwd` (to exercise --output's
 // relative-path resolution), which would otherwise break this path.
 const CLI = `${Deno.cwd()}/packages/fsm-compiler-ts/src/cli/index.ts`;
-// generate/delete/create-async-logic below invoke the real CLI as a
+// generate-fsm-json/delete/create-async-logic below invoke the real CLI as a
 // subprocess against these paths, so they must never point at the tracked
 // apps/fsm-core-example — that would delete/regenerate real committed files
 // (see #125). Work on a disposable copy instead, cleaned up by the final
@@ -45,7 +45,7 @@ Deno.test("cli --help exits 0 and prints usage", async () => {
   assertEquals(code, 0);
   assertStringIncludes(stdout, "fsm-compiler");
   assertStringIncludes(stdout, "USAGE");
-  assertStringIncludes(stdout, "generate");
+  assertStringIncludes(stdout, "generate-fsm-json");
 });
 
 Deno.test("cli no args exits 0 and prints help", async () => {
@@ -61,8 +61,8 @@ Deno.test("cli -h shorthand exits 0", async () => {
 
 // --- Missing required args ---
 
-Deno.test("cli generate without folder exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "generate"]);
+Deno.test("cli generate-fsm-json without folder exits 1", async () => {
+  const { code, stderr } = await runCli(["-c", "generate-fsm-json"]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--folder");
 });
@@ -113,7 +113,7 @@ Deno.test("cli invalid --workflow-type exits 1", async () => {
 Deno.test("cli nonexistent --folder exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     "this/path/does/not/exist",
   ]);
@@ -121,17 +121,17 @@ Deno.test("cli nonexistent --folder exits 1", async () => {
   assertStringIncludes(stderr, "does not exist");
 });
 
-// --- generate ---
+// --- generate-fsm-json ---
 
-Deno.test("cli generate runs successfully on example folder", async () => {
-  const { code } = await runCli(["-c", "generate", "-f", FSM_FOLDER]);
+Deno.test("cli generate-fsm-json runs successfully on example folder", async () => {
+  const { code } = await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]);
   assertEquals(code, 0);
 });
 
-Deno.test("cli generate with --show-recommendation exits 0", async () => {
+Deno.test("cli generate-fsm-json with --show-recommendation exits 0", async () => {
   const { code } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     FSM_FOLDER,
     "--show-recommendation",
@@ -139,17 +139,23 @@ Deno.test("cli generate with --show-recommendation exits 0", async () => {
   assertEquals(code, 0);
 });
 
-Deno.test("cli generate with -r shorthand exits 0", async () => {
-  const { code } = await runCli(["-c", "generate", "-f", FSM_FOLDER, "-r"]);
+Deno.test("cli generate-fsm-json with -r shorthand exits 0", async () => {
+  const { code } = await runCli([
+    "-c",
+    "generate-fsm-json",
+    "-f",
+    FSM_FOLDER,
+    "-r",
+  ]);
   assertEquals(code, 0);
 });
 
-// --- generate single-machine.ts-file (--output) mode ---
+// --- generate-fsm-json single-machine.ts-file (--output) mode ---
 
-Deno.test("cli generate requires --output when --folder is a single machine.ts file", async () => {
+Deno.test("cli generate-fsm-json requires --output when --folder is a single machine.ts file", async () => {
   const { code, stderr } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
   ]);
@@ -157,11 +163,11 @@ Deno.test("cli generate requires --output when --folder is a single machine.ts f
   assertStringIncludes(stderr, "requires --output");
 });
 
-Deno.test("cli generate --folder machine.ts + --output creates --output (even nested/nonexistent) and writes fsm.json/xstate-fsm.json into it", async () => {
+Deno.test("cli generate-fsm-json --folder machine.ts + --output creates --output (even nested/nonexistent) and writes fsm.json/xstate-fsm.json into it", async () => {
   const outDir = `${FIXTURE_ROOT}/generate-single-file-fresh-output/nested/v04`;
   const { code } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
     "--output",
@@ -174,7 +180,7 @@ Deno.test("cli generate --folder machine.ts + --output creates --output (even ne
   assert(xstateFsmJsonStat.isFile);
 });
 
-Deno.test("cli generate exits 1 (not 0) when machine.ts's export is not a valid xstate machine config (#214)", async () => {
+Deno.test("cli generate-fsm-json exits 1 (not 0) when machine.ts's export is not a valid xstate machine config (#214)", async () => {
   const brokenDir = `${FIXTURE_ROOT}/broken-machine-single-file`;
   await Deno.mkdir(brokenDir, { recursive: true });
   await Deno.writeTextFile(
@@ -183,7 +189,7 @@ Deno.test("cli generate exits 1 (not 0) when machine.ts's export is not a valid 
   );
   const { code, stderr } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     `${brokenDir}/machine.ts`,
     "--output",
@@ -498,10 +504,10 @@ Deno.test("cli create-async-logic writes a single actor file under shared-async-
 // --- delete ---
 
 Deno.test("cli delete runs successfully on example folder", async () => {
-  await runCli(["-c", "generate", "-f", FSM_FOLDER]);
+  await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]);
   const { code } = await runCli(["-c", "delete", "-f", FSM_FOLDER]);
   assertEquals(code, 0);
-  await runCli(["-c", "generate", "-f", FSM_FOLDER]); // restore generated files
+  await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]); // restore generated files
 });
 
 // --- validate-sync-operation ---
@@ -582,7 +588,7 @@ Deno.test("cli --db-url flag is accepted and parsed", async () => {
 Deno.test("cli --skip-dirs flag is accepted", async () => {
   const { code } = await runCli([
     "-c",
-    "generate",
+    "generate-fsm-json",
     "-f",
     FSM_FOLDER,
     "--skip-dirs",
