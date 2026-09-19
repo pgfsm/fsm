@@ -62,7 +62,6 @@ Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fail
     "/tmp/nonexistent",
     "testParent",
     "fsm",
-    [],
   );
 
   assertEquals(result.fsmJsonPresent, true);

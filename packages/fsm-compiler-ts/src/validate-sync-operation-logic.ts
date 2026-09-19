@@ -110,7 +110,6 @@ export async function validateSyncOperationFromFolder(
   parentAbsPath: string,
   parentRelPath: string,
   workflowType: WorkflowType,
-  _availableActors: ActorReference[],
 ): Promise<FsmPluginValidationResult> {
   const fsmJsonPresent = true;
   const fsmJsonConfigData: FsmMachineJson | undefined = undefined;
@@ -193,7 +192,6 @@ export async function validateSyncOperationFromFolders(
   folderPath: string,
   workflowType: WorkflowType,
   skipDirs: string[] = [],
-  availableActors: ActorReference[] = [],
 ): Promise<FsmPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
@@ -253,7 +251,6 @@ export async function validateSyncOperationFromFolders(
                   absFolderPath,
                   folderPath,
                   workflowType,
-                  availableActors,
                 );
 
                 /*

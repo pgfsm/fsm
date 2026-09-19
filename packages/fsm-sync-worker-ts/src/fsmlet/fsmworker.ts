@@ -132,7 +132,6 @@ export async function startFSMWorkerWithDBLock(
           verifiedModule.fsmParentAbsFolderPath ?? "",
           verifiedModule.fsmParentRelativeFolderPath ?? "",
           (verifiedModule.fsmType ?? "fsm") as WorkflowType,
-          [],
         );
         // validateSyncOperationFromFolder types this as Json, but it's always
         // the { actions, guards, delays, actors } module-namespace record.

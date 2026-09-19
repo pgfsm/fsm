@@ -534,7 +534,6 @@ try {
         folder!,
         workflowType!,
         skipDirs,
-        [],
       );
       break;
     }

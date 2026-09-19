@@ -108,7 +108,6 @@ export async function startFsmlet(
         fsmConfig.fsm.folderPath,
         "fsm",
         fsmConfig.fsm.skipDirs ?? [],
-        [],
       )
       : [];
     const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);
