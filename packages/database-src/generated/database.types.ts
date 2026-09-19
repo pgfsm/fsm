@@ -1106,7 +1106,6 @@ export type Database = {
         Args: {
           input_dependent_children?: Json;
           input_fsm_name: string;
-          input_fsm_type: string;
           input_fsm_version: string;
           json_input: Json;
           root_node_text: string;
