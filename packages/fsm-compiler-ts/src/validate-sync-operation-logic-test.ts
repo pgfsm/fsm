@@ -14,7 +14,6 @@ await configureCompilerLogger();
     fsmfolderPath,
     "fsm",
     [],
-    [],
   );
   logger.info("final output: {output}", { output: outputFSM });
 })();

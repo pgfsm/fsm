@@ -63,14 +63,16 @@ Calls: `deleteFsmJSONFromFolders(folder, workflowType ?? "fsm", skipDirs)`
 
 ### `validate-sync-operation`
 
-Calls: `validateSyncOperationFromFolders(folder, workflowType, skipDirs, [])`
+Calls: `validateSyncOperationFromFolders(folder, workflowType, skipDirs)`
 
-| Parameter         | CLI Flag              | Status                                                                                   | Impact |
-| ----------------- | --------------------- | ---------------------------------------------------------------------------------------- | ------ |
-| `folderPath`      | `-f, --folder`        | ✅                                                                                       | —      |
-| `workflowType`    | `-w, --workflow-type` | ✅                                                                                       | —      |
-| `skipDirs`        | `-s, --skip-dirs`     | ✅ parsed and passed through                                                             | —      |
-| `availableActors` | _(none — removed)_    | Dead parameter, always `[]`; `--available-actors`/`loadAvailableActors()` removed (#222) | —      |
+| Parameter      | CLI Flag              | Status                       | Impact |
+| -------------- | --------------------- | ---------------------------- | ------ |
+| `folderPath`   | `-f, --folder`        | ✅                           | —      |
+| `workflowType` | `-w, --workflow-type` | ✅                           | —      |
+| `skipDirs`     | `-s, --skip-dirs`     | ✅ parsed and passed through | —      |
+
+(`availableActors` was removed from the function signature entirely — #222, #224
+— it was never read by any caller.)
 
 ### `validate-async-operation`
 
