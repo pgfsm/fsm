@@ -27,6 +27,7 @@ export {
   validateLanguageModules,
   validateSyncOperationFromFolder,
   validateSyncOperationFromFolders,
+  validateSyncOperationFromFsmJson,
 } from "./validate-sync-operation-logic.ts";
 export { deleteFsmJSONFromFolders } from "./delete-fsm-json-from-folders.ts";
 export {

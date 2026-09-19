@@ -188,6 +188,63 @@ export async function validateSyncOperationFromFolder(
   };
 }
 
+/**
+ * Validates sync operation logic for a single fsm.json file, for the CLI's
+ * single-file `--folder` mode — used when the caller wants to target one
+ * fsm.json directly instead of walking a plugin-root folder for every
+ * versioned FSM under it. Unlike folder mode, there's no
+ * `<fsmName>/<fsmVersion>/fsm.json` directory structure to infer identity
+ * from, so `fsmName`/`fsmVersion` are caller-supplied. Action/guard/delay
+ * modules are still expected alongside fsm.json (`typescript/actions/`, etc.
+ * under fsm.json's own containing directory).
+ */
+export async function validateSyncOperationFromFsmJson(
+  fsmJsonPath: string,
+  fsmName: string,
+  fsmVersion: string,
+  workflowType: WorkflowType,
+): Promise<FsmPluginValidationResult> {
+  logger.info("Validating sync operation logic from {path}", {
+    path: fsmJsonPath,
+  });
+
+  const absFsmJsonPath = fsmJsonPath.startsWith("/")
+    ? fsmJsonPath
+    : `${Deno.cwd()}/${fsmJsonPath}`;
+  const absPath = absFsmJsonPath.substring(0, absFsmJsonPath.lastIndexOf("/"));
+
+  const fsmData: FsmMachineJson = JSON.parse(
+    await Deno.readTextFile(fsmJsonPath),
+  );
+
+  const result = await validateSyncOperationFromFolder(
+    fsmData,
+    fsmName,
+    fsmVersion,
+    absPath,
+    `${fsmName}/${fsmVersion}`,
+    fsmJsonPath,
+    absPath,
+    fsmJsonPath,
+    workflowType,
+  );
+
+  logger.info("Validation result for {fsmName}/{fsmVersion}:", {
+    fsmName,
+    fsmVersion,
+    ...table([result], [
+      "fsmName",
+      "fsmVersion",
+      "fsmType",
+      "fsmJsonPresent",
+      "fsmJsonFollowSchema",
+      "isFsmModuleVerified",
+    ]),
+  });
+
+  return result;
+}
+
 export async function validateSyncOperationFromFolders(
   folderPath: string,
   workflowType: WorkflowType,

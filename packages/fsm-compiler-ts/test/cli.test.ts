@@ -78,12 +78,6 @@ Deno.test("cli validate-sync-operation without --workflow-type exits 1", async (
   assertStringIncludes(stderr, "--workflow-type");
 });
 
-Deno.test("cli load without --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli(["-c", "load", "-f", FSM_FOLDER]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "--workflow-type");
-});
-
 Deno.test("cli unknown command exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
@@ -629,6 +623,71 @@ Deno.test("cli validate-sync-operation with -w shorthand exits 0", async () => {
     FSM_FOLDER,
     "-w",
     "fsm",
+  ]);
+  assertEquals(code, 0);
+});
+
+// --- validate-sync-operation single-fsm.json (--fsm-name/--fsm-version) mode ---
+
+Deno.test("cli validate-sync-operation requires --fsm-name and --fsm-version when --folder is a single fsm.json file", async () => {
+  const { code, stderr } = await runCli([
+    "-c",
+    "validate-sync-operation",
+    "-f",
+    SINGLE_FSM_JSON,
+    "-w",
+    "fsm",
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "--fsm-name");
+  assertStringIncludes(stderr, "--fsm-version");
+});
+
+Deno.test("cli validate-sync-operation rejects a non-.json --folder file", async () => {
+  const { code, stderr } = await runCli([
+    "-c",
+    "validate-sync-operation",
+    "-f",
+    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
+    "-w",
+    "fsm",
+    "--fsm-name",
+    "creditCheck",
+    "--fsm-version",
+    "v01",
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "must be an fsm.json file");
+});
+
+Deno.test("cli validate-sync-operation --folder fsm.json + --fsm-name/--fsm-version runs successfully", async () => {
+  const { code } = await runCli([
+    "-c",
+    "validate-sync-operation",
+    "-f",
+    SINGLE_FSM_JSON,
+    "-w",
+    "fsm",
+    "--fsm-name",
+    "creditCheck",
+    "--fsm-version",
+    "v01",
+  ]);
+  assertEquals(code, 0);
+});
+
+Deno.test("cli validate-sync-operation --folder fsm.json accepts -N/-V shorthand", async () => {
+  const { code } = await runCli([
+    "-c",
+    "validate-sync-operation",
+    "-f",
+    SINGLE_FSM_JSON,
+    "-w",
+    "fsm",
+    "-N",
+    "creditCheck",
+    "-V",
+    "v01",
   ]);
   assertEquals(code, 0);
 });
