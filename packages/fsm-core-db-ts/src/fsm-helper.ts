@@ -84,10 +84,6 @@ export async function loadFsmFromJson(
   deps: DBDeps,
   json_input: Json,
   root_node_text: string | null,
-  input_fsm_type:
-    DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
-      "input_fsm_type"
-    ],
   input_fsm_name:
     DatabaseGenerated["fsm_core"]["Functions"]["load_fsm_from_json_v2"]["Args"][
       "input_fsm_name"
@@ -107,14 +103,12 @@ export async function loadFsmFromJson(
         $2::text,
         $3::text,
         $4::text,
-        $5::text,
-        $6::jsonb
+        $5::jsonb
       ) AS result;
     `;
     const values = [
       toJsonbParam(json_input),
       root_node_text,
-      input_fsm_type,
       input_fsm_name,
       input_fsm_version,
       input_dependent_children != null

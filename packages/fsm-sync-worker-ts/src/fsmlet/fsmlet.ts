@@ -182,7 +182,6 @@ export async function startFsmlet(
             deps,
             fsmModule.fsmJsonConfigData,
             null,
-            fsmModule.fsmType,
             fsmModule.fsmName,
             fsmModule.fsmVersion,
           );

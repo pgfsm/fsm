@@ -1,126 +1,105 @@
-CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
-    input_fsm_instance_id uuid,
-    input_fsm_instance_id_fsm_type text,
-    input_fsm_instance_id_fsm_version text,
-    input_send_to_parent_queue_id uuid,
-    input_send_to_parent_queue_type text,
-    input_send_to_parent_queue_id_event_name text,
-    input_event_name text,
-    input_event_action_type text,
-    input_event_data jsonb,
-    input_event_delay integer DEFAULT 0,
-    input_event_status text DEFAULT 'ACTIVE',
-    input_event_output jsonb DEFAULT '{}'::jsonb,
-    input_error_message text DEFAULT NULL,
-    input_execution_started_at timestamp with time zone DEFAULT now(),
-    input_execution_duration integer DEFAULT NULL,
-    input_execution_finished_at timestamp with time zone DEFAULT now()
-)
-RETURNS JSONB
-AS $$
+drop function if exists "fsm_core"."load_fsm_from_json_v2"(json_input jsonb, root_node_text text, input_fsm_type text, input_fsm_name text, input_fsm_version text, input_dependent_children jsonb);
+
+set check_function_bodies = off;
+
+CREATE OR REPLACE FUNCTION fsm_core.load_fsm_from_json_v2(json_input jsonb, root_node_text text, input_fsm_name text, input_fsm_version text, input_dependent_children jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
-    queue_msg_data jsonb;
-    output_fsm_instance_queue_msg_id bigint;
-    output_fsm_instance_queue_event_log_id uuid;
+    state_result JSONB;
+    transition_result JSONB;
+    state_ok BOOLEAN;
+    transition_ok BOOLEAN;
+    schema_json JSON;
+    schema_errors TEXT[];
+    existing_fsm_json JSONB;
 BEGIN
-    IF input_fsm_instance_id IS NULL THEN
-        RAISE EXCEPTION 'fsm_instance_id is NULL';
+    SELECT fsm_json
+    INTO existing_fsm_json
+    FROM fsm_core.fsm_json
+    WHERE fsm_name = input_fsm_name
+      AND fsm_version = input_fsm_version
+    LIMIT 1;
+
+    IF existing_fsm_json IS NOT NULL THEN
+        IF existing_fsm_json = json_input THEN
+            RETURN jsonb_build_object(
+                'ok', to_jsonb(true),
+                'fsm_json', existing_fsm_json,
+                'cached', to_jsonb(true)
+            );
+        ELSE
+            RAISE EXCEPTION 'FSM % version % already loaded with different JSON content', input_fsm_name, input_fsm_version;
+        END IF;
     END IF;
 
-    queue_msg_data := jsonb_build_object(
-        'eventData', jsonb_build_object(
-            'eventType',    input_event_name,
-            'eventPayload', input_event_data,
-            'actionType',   input_event_action_type
-        ),
-        'queueId',                    input_fsm_instance_id,
-        'queueType',                  input_fsm_instance_id_fsm_type,
-        'queueVersion',               input_fsm_instance_id_fsm_version,
-        'sendToParentQueueId',        input_send_to_parent_queue_id,
-        'sendToParentQueueType',      input_send_to_parent_queue_type,
-        'sendToParentQueueIdEventName', input_send_to_parent_queue_id_event_name
-    );
+    -- SELECT config_value
+    -- INTO schema_json
+    -- FROM fsm_core.config_store
+    -- WHERE config_name = 'fsm_schema'
+    -- ORDER BY config_version DESC
+    -- LIMIT 1;
 
-    BEGIN
-        SELECT pgmq.send(queue_name := input_fsm_instance_id::text, msg := queue_msg_data, delay := input_event_delay)
-        INTO output_fsm_instance_queue_msg_id;
-    EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION 'pgmq.send failed for queue %: %', input_fsm_instance_id, SQLERRM;
-    END;
+    schema_json := fsm_core.fsm_json_schema();
 
-    IF output_fsm_instance_queue_msg_id IS NULL THEN
-        RAISE EXCEPTION 'Failed to send event to queue %', input_fsm_instance_id;
+    IF schema_json IS NULL THEN
+        RAISE EXCEPTION 'Missing fsm_schema in fsm_core.config_store for % version %', input_fsm_name, input_fsm_version;
     END IF;
 
-    -- Append queueMsgId to queue_msg_data
-    queue_msg_data := queue_msg_data || jsonb_build_object('queueMsgId', output_fsm_instance_queue_msg_id);
+    schema_errors := fsm_core.jsonschema_validation_errors(schema_json, json_input::JSON);
+    IF schema_errors IS NOT NULL AND array_length(schema_errors, 1) > 0 THEN
+        RAISE NOTICE 'FSM schema validation errors for % version %: %', input_fsm_name, input_fsm_version, schema_errors;
+        -- RAISE EXCEPTION 'json_input failed schema validation for % version %: %', input_fsm_name, input_fsm_version, schema_errors;
+    END IF;
 
-    -- Append queueMsgDelay to queue_msg_data
-    queue_msg_data := queue_msg_data || jsonb_build_object('queueMsgDelay', input_event_delay);
+    state_result := fsm_core.load_fsm_state_from_json_v2(json_input := json_input, root_node_text := root_node_text, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version);
 
-    INSERT INTO fsm_core.fsm_instance_queue_event_logs (
-        fsm_instance_id,
-        fsm_instance_id_fsm_type,
-        fsm_instance_id_fsm_version,
-        fsm_instance_queue_msg_id,
-        event_name,
-        event_data,
-        event_delay,
-        send_to_parent_queue_id,
-        send_to_parent_queue_id_event_name,
-        execution_started_at,
-        execution_duration,
-        execution_finished_at,
-        event_status,
-        event_output,
-        error_message
-    ) VALUES (
-        input_fsm_instance_id,
-        input_fsm_instance_id_fsm_type,
-        input_fsm_instance_id_fsm_version,
-        output_fsm_instance_queue_msg_id,
-        input_event_name,
-        input_event_data,
-        input_event_delay,
-        input_send_to_parent_queue_id,
-        input_send_to_parent_queue_id_event_name,
-        input_execution_started_at,
-        input_execution_duration,
-        input_execution_finished_at,
-        input_event_status,
-        input_event_output,
-        input_error_message
-    ) RETURNING fsm_instance_queue_event_log_id INTO output_fsm_instance_queue_event_log_id;
+    IF state_result IS NULL THEN
+        RAISE EXCEPTION 'fsm_core.load_fsm_state_from_json_v2 returned NULL for % version %', input_fsm_name, input_fsm_version;
+    END IF;
+
+    state_ok := COALESCE((state_result->>'ok')::BOOLEAN, false);
+    IF NOT state_ok THEN
+        RAISE EXCEPTION 'fsm_core.load_fsm_state_from_json_v2 reported failure: %', state_result;
+    END IF;
+
+    transition_result := fsm_core.load_fsm_transition_from_json_v2(json_input := json_input, root_node_text := root_node_text, fsm_name := input_fsm_name, fsm_version := input_fsm_version);
+
+    IF transition_result IS NULL THEN
+        RAISE EXCEPTION 'fsm_core.load_fsm_transition_from_json_v2 returned NULL for % version %', input_fsm_name, input_fsm_version;
+    END IF;
+
+    transition_ok := COALESCE((transition_result->>'ok')::BOOLEAN, false);
+    IF NOT transition_ok THEN
+        RAISE EXCEPTION 'fsm_core.load_fsm_transition_from_json_v2 reported failure: %', transition_result;
+    END IF;
+
+    IF input_dependent_children IS NOT NULL
+       AND jsonb_array_length(input_dependent_children) > 0 THEN
+        PERFORM fsm_core.insert_fsm_dependencies(
+            input_fsm_name, input_fsm_version, input_dependent_children
+        );
+    END IF;
+
+    INSERT INTO fsm_core.fsm_json (fsm_name, fsm_version, fsm_json)
+    VALUES (input_fsm_name, input_fsm_version, json_input);
 
     RETURN jsonb_build_object(
-     
-        'queue_data', queue_msg_data,
-        -- 'queue_msg_id', output_fsm_instance_queue_msg_id,
-        -- 'queue_msg_delay', input_event_delay,
-        'queue_event_log_id', output_fsm_instance_queue_event_log_id,
-        'event_status', input_event_status,
-        'event_output', input_event_output,
-        'error_message', input_error_message
-       
+        'ok', to_jsonb(true),
+        'cached', to_jsonb(false),
+        'fsm_json', json_input,
+        'state_result', state_result,
+        'transition_result', transition_result
     );
 END;
-$$ LANGUAGE plpgsql;
+$function$
+;
 
-
-
-
--- Function: fsm_core.create_fsm_instance_from_name_v2
--- Purpose: Given a fsm_name, create a fsm_instance and related fsm_instance_transitions_auth entries from the latest fsm_transitions and its auths.
-
-
-CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(
-    input_fsm_name text,
-    input_fsm_version TEXT,
-    input_fsm_context jsonb,
-    create_pgmq_queue boolean DEFAULT true
-)
-RETURNS JSONB
-AS $$
+CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(input_fsm_name text, input_fsm_version text, input_fsm_context jsonb, create_pgmq_queue boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
     output_queue_created boolean := false;
     output_message text := NULL;
@@ -237,7 +216,7 @@ BEGIN
         'extra_message', output_extra_message
     );
 END;
-$$ LANGUAGE plpgsql;
-
+$function$
+;
 
 

@@ -24,13 +24,11 @@ const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
   // pass, before the rest of the folders (which include its invoker).
   await loadFsmJSONFromFolders(
     fsmfolderPath,
-    "fsm",
     ["carVitals", "creditCheck", "taskMachineConfig"],
     deps,
   );
   await loadFsmJSONFromFolders(
     fsmfolderPath,
-    "fsm",
     ["vitalsWorkflow"],
     deps,
   );

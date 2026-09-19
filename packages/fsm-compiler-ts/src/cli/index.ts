@@ -82,7 +82,7 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic only, and requires --output; app root for create-async-logic)
-  -w, --workflow-type <type>          Workflow type (required for validate-sync-operation, load)
+  -w, --workflow-type <type>          Workflow type (required for validate-sync-operation)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
   -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
@@ -230,7 +230,6 @@ if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
 
 const needsWorkflowType = [
   "validate-sync-operation",
-  "load",
 ];
 
 const missing: string[] = [];
@@ -551,7 +550,7 @@ try {
     }
     case "load": {
       const deps = await buildDeps(args["db-url"]);
-      await loadFsmJSONFromFolders(folder!, workflowType!, skipDirs, deps);
+      await loadFsmJSONFromFolders(folder!, skipDirs, deps);
       break;
     }
     default:
