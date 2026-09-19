@@ -128,15 +128,30 @@ DECLARE
     fsm_instance_id uuid;
     send_event_result jsonb := NULL;
     derived_fsm_type text;
+    fsm_json_exists boolean;
     fsm_instance_row      fsm_core.fsm_instance;
 BEGIN
-    -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json and get fsm_type
-    SELECT fj.fsm_type INTO derived_fsm_type
-    FROM fsm_core.fsm_json fj
-    WHERE fj.fsm_name = input_fsm_name AND fj.fsm_version = input_fsm_version;
+    -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json
+    SELECT EXISTS (
+        SELECT 1
+        FROM fsm_core.fsm_json fj
+        WHERE fj.fsm_name = input_fsm_name AND fj.fsm_version = input_fsm_version
+    ) INTO fsm_json_exists;
 
-    IF derived_fsm_type IS NULL THEN
+    IF NOT fsm_json_exists THEN
         RAISE EXCEPTION 'FSM with name % and version % not found in fsm_core.fsm_json', input_fsm_name, input_fsm_version;
+    END IF;
+
+    -- 1.1. Derive fsm_type from fsm_core.fsm_dependencies: a row where this FSM
+    -- is a child means it's a childfsm, otherwise it's a top-level fsm.
+    IF EXISTS (
+        SELECT 1
+        FROM fsm_core.fsm_dependencies fd
+        WHERE fd.child_fsm_name = input_fsm_name AND fd.child_fsm_version = input_fsm_version
+    ) THEN
+        derived_fsm_type := 'childfsm';
+    ELSE
+        derived_fsm_type := 'fsm';
     END IF;
 
     -- 2. Create new fsm_instance

@@ -26,7 +26,6 @@ const EXAMPLE_FSM_DIR = `${REPO_ROOT}apps/fsm-core-example/fsm`;
 export async function ensureFixtureLoaded(deps: DBDeps): Promise<void> {
   await loadFsmJSONFromFolders(
     EXAMPLE_FSM_DIR,
-    "fsm",
     OTHER_EXAMPLE_FSMS,
     deps,
   );

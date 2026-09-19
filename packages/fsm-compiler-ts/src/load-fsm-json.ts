@@ -4,7 +4,7 @@ const logger = getLogger(["@pgfsm/compiler", "load"]);
 import { extractFsmPluginRefs, isVersionFolderName } from "./util.ts";
 import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
-import type { FsmMachineJson, WorkflowType } from "./types/index.ts";
+import type { FsmMachineJson } from "./types/index.ts";
 
 async function loadFsmJSONFromFolder(
   dirEntryName: string,
@@ -12,7 +12,6 @@ async function loadFsmJSONFromFolder(
   _folderPath: string,
   absFolderPath: string,
   _parentSource: string,
-  workflowType: WorkflowType,
   deps: DBDeps,
 ) {
   const fsmJson = `${absFolderPath}/fsm.json`;
@@ -50,7 +49,6 @@ async function loadFsmJSONFromFolder(
       deps,
       fsmData,
       null,
-      workflowType,
       fsmName,
       fsmVersion,
       dependentChildren,
@@ -80,7 +78,6 @@ async function loadFsmJSONFromFolder(
  */
 export async function loadFsmJSONFromFolders(
   folderPath: string,
-  workflowType: WorkflowType,
   skipDirs: string[] = [],
   deps: DBDeps,
 ): Promise<Json[]> {
@@ -123,7 +120,6 @@ export async function loadFsmJSONFromFolders(
               folderPath,
               `${fsmDirPath}/${subEntry.name}`,
               dirEntry.name,
-              workflowType,
               deps,
             );
             folderResults.push(folderResult);

@@ -1,5 +1,5 @@
 begin;
-select plan(11);
+select plan(13);
 
 select has_function('fsm_core', 'send_event_to_fsm_queue_with_event_logs_v2',
   ARRAY['uuid', 'text', 'text', 'uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz'],
@@ -53,9 +53,11 @@ select throws_ok(
 );
 
 delete from fsm_core.fsm_transitions where fsm_name = 'createFsm' and fsm_version = 'v1';
+delete from fsm_core.fsm_dependencies where parent_fsm_name = 'createFsm' and parent_fsm_version = 'v1';
+delete from fsm_core.fsm_dependencies where child_fsm_name = 'createFsm' and child_fsm_version = 'v1';
 delete from fsm_core.fsm_json where fsm_name = 'createFsm' and fsm_version = 'v1';
-insert into fsm_core.fsm_json (fsm_name, fsm_type, fsm_version, fsm_json)
-values ('createFsm', 'FSM', 'v1', '{"id": "createFsm"}'::jsonb);
+insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json)
+values ('createFsm', 'v1', '{"id": "createFsm"}'::jsonb);
 insert into fsm_core.fsm_transitions (source, computed_sanitized_source_ltree, event_type, fsm_name, fsm_version)
 values ('#createFsm', 'createFsm', 'NEXT', 'createFsm', 'v1');
 
@@ -83,6 +85,29 @@ select results_eq(
   $$ select count(*) from fsm_core.fsm_instance_and_fsm_workerlet where fsm_name = 'createFsm' and fsm_version = 'v1' $$,
   $$ values (1::bigint) $$,
   'the new instance is enqueued for dispatch'
+);
+select results_eq(
+  $$ select fsm_type from fsm_core.fsm_instance where fsm_name = 'createFsm' and fsm_version = 'v1' $$,
+  $$ values ('fsm'::text) $$,
+  'a FSM with no fsm_dependencies row as a child is derived as fsm_type=fsm'
+);
+
+delete from fsm_core.fsm_transitions where fsm_name = 'childFsm' and fsm_version = 'v1';
+delete from fsm_core.fsm_dependencies where child_fsm_name = 'childFsm' and child_fsm_version = 'v1';
+delete from fsm_core.fsm_json where fsm_name = 'childFsm' and fsm_version = 'v1';
+insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json)
+values ('childFsm', 'v1', '{"id": "childFsm"}'::jsonb);
+insert into fsm_core.fsm_transitions (source, computed_sanitized_source_ltree, event_type, fsm_name, fsm_version)
+values ('#childFsm', 'childFsm', 'NEXT', 'childFsm', 'v1');
+insert into fsm_core.fsm_dependencies (parent_fsm_name, parent_fsm_version, child_fsm_name, child_fsm_version)
+values ('createFsm', 'v1', 'childFsm', 'v1');
+
+select fsm_core.create_fsm_instance_from_name_v2('childFsm', 'v1', '{}'::jsonb, false);
+
+select results_eq(
+  $$ select fsm_type from fsm_core.fsm_instance where fsm_name = 'childFsm' and fsm_version = 'v1' $$,
+  $$ values ('childfsm'::text) $$,
+  'a FSM registered as a child in fsm_dependencies is derived as fsm_type=childfsm'
 );
 
 select * from finish();
