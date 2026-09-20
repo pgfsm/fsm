@@ -38,6 +38,10 @@ policy:
             keys: ["Logging (@pgfsm/logging)"]
           - name: "area: examples"
             keys: ["Example FSM definitions (apps/fsm-core-example)"]
+          - name: "area: tooling"
+            keys: [
+              "Dev tooling / CLI orchestration (packages/fsm-devstack-ts et al.)",
+            ]
           - name: "area: docs"
             keys: ["Documentation"]
 
