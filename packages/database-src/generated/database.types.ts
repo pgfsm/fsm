@@ -793,13 +793,13 @@ export type Database = {
       create_async_op_queue_and_send_event_from_fsm_instance_id_v2: {
         Args: {
           action_type: string;
+          asyncoperationlanguage: string;
+          asyncoperationname: string;
+          asyncoperationtype: string;
+          asyncoperationversion: string;
           event_input: Json;
           event_name: string;
           from_source_fsm_instance_id: string;
-          fsmlanguage: string;
-          fsmname: string;
-          fsmtype: string;
-          fsmversion: string;
           id: string;
           parentfsmname: string;
           parentfsmversion: string;
@@ -1362,13 +1362,13 @@ export type Database = {
       send_event_to_queue_from_fsm_instance_id_v2: {
         Args: {
           action_type: string;
+          asyncoperationlanguage: string;
+          asyncoperationname: string;
+          asyncoperationtype: string;
+          asyncoperationversion: string;
           event_input: Json;
           event_name: string;
           from_source_fsm_instance_id: string;
-          fsmlanguage: string;
-          fsmname: string;
-          fsmtype: string;
-          fsmversion: string;
           id: string;
           parentfsmname: string;
           parentfsmversion: string;
