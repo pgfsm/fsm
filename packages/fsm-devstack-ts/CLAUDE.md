@@ -1,7 +1,11 @@
 # CLAUDE.md — Dev Stack Orchestrator (`packages/fsm-devstack-ts/`)
 
 Scoped guidance for `@pgfsm/devstack`. Repo-wide conventions and session
-protocol live in the root `CLAUDE.md` / `AGENTS.md`.
+protocol live in the root `CLAUDE.md` / `AGENTS.md`. `README.md` is the
+npm/npx-consumer-facing document (published to `dist/` — see below); keep
+source-only detail here instead of there. Its scope is narrower than this
+file's: it only documents the currently-publishable library export
+(`runSupervised`/`runProcessGroup`), not `fsmdev` itself (see below).
 
 ## What it is
 
@@ -80,7 +84,11 @@ decisions, not filed as follow-up work yet.
 sibling dnt-built packages, colocates `supervisor.test.ts` under `src/`; without
 that, dnt also transforms/type-checks it as a Node test file and pulls in
 `@std/assert`, which needs a newer `lib` target than this package's
-`compilerOptions` sets.
+`compilerOptions` sets. `postBuild()` only copies `README.md` into `dist/` when
+`--copy-readme` is passed (`deno task build:npm <version>
+--copy-readme`, as CI
+does) — a plain local `deno task build:npm` skips it, same convention as the
+sibling packages.
 
 ## Commands
 

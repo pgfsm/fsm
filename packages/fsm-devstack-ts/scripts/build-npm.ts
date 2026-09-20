@@ -28,4 +28,9 @@ await build({
     lib: ["ES2022", "DOM"],
     target: "ES2022",
   },
+  postBuild() {
+    if (Deno.args.includes("--copy-readme")) {
+      Deno.copyFileSync("README.md", "dist/README.md");
+    }
+  },
 });
