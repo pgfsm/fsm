@@ -3,12 +3,16 @@ import { Pool } from "pg";
 import type {
   ActiveWorker,
   DbConfig,
+  FsmJsonFileConfig,
   FsmletHandle,
   FsmletOptions,
   FsmStartupConfig,
 } from "./type.ts";
 import type { FsmPluginValidationResult } from "@pgfsm/compiler";
-import { validateSyncOperationFromFolders } from "@pgfsm/compiler";
+import {
+  validateSyncOperationFromFolders,
+  validateSyncOperationFromFsmJson,
+} from "@pgfsm/compiler";
 import type { FsmModule } from "@pgfsm/db";
 import {
   checkRegistryAndWorkingForAsyncActors,
@@ -31,6 +35,10 @@ const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const isFsmJsonFileConfig = (
+  fsm: NonNullable<FsmStartupConfig["fsm"]>,
+): fsm is FsmJsonFileConfig => "fsmJsonPath" in fsm;
 
 class Semaphore {
   private permits: number;
@@ -102,18 +110,32 @@ export async function startFsmlet(
     },
   );
   if (fsmConfig) {
-    // Step 1: validateSyncOperationFromFolders FSM modules.
+    // Step 1: validateSyncOperationFromFolders FSM modules, or — for a single
+    // fsm.json file — validateSyncOperationFromFsmJson against just that FSM.
+    const fsmSource = fsmConfig.fsm
+      ? isFsmJsonFileConfig(fsmConfig.fsm)
+        ? fsmConfig.fsm.fsmJsonPath
+        : fsmConfig.fsm.folderPath
+      : undefined;
     const outputFsm = fsmConfig.fsm
-      ? await validateSyncOperationFromFolders(
-        fsmConfig.fsm.folderPath,
-        fsmConfig.fsm.skipDirs ?? [],
-      )
+      ? isFsmJsonFileConfig(fsmConfig.fsm)
+        ? [
+          await validateSyncOperationFromFsmJson(
+            fsmConfig.fsm.fsmJsonPath,
+            fsmConfig.fsm.fsmName,
+            fsmConfig.fsm.fsmVersion,
+          ),
+        ]
+        : await validateSyncOperationFromFolders(
+          fsmConfig.fsm.folderPath,
+          fsmConfig.fsm.skipDirs ?? [],
+        )
       : [];
     const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);
 
     if (verifiedFsm.length === 0) {
       throw new Error(
-        `Fsmlet ${fsmletId}: no verified FSM modules found in ${fsmConfig?.fsm?.folderPath}. Fix plugin validation errors and retry.`,
+        `Fsmlet ${fsmletId}: no verified FSM modules found in ${fsmSource}. Fix plugin validation errors and retry.`,
       );
     } else {
       pool = new Pool(dbConfig);
@@ -170,7 +192,7 @@ export async function startFsmlet(
       );
       if (verifiedFsmWithAsyncOps.length === 0) {
         throw new Error(
-          `Fsmlet ${fsmletId}: no FSM modules passed async actor verification (mode: ${asyncOperationVerificationMode}) in ${fsmConfig?.fsm?.folderPath}. Ensure async actors are registered and retry.`,
+          `Fsmlet ${fsmletId}: no FSM modules passed async actor verification (mode: ${asyncOperationVerificationMode}) in ${fsmSource}. Ensure async actors are registered and retry.`,
         );
       }
 
