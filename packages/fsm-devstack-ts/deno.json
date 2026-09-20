@@ -1,0 +1,16 @@
+{
+  "name": "@pgfsm/devstack",
+  "version": "0.1.0-alpha.1",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "tasks": {
+    "test": "deno test --allow-all src/",
+    "test:watch": "deno test --allow-all --watch src/",
+    "check": "deno check src/index.ts"
+  }
+}
