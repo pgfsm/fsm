@@ -25,10 +25,23 @@ export type FsmFolderConfig = {
   skipDirs?: string[];
 };
 
+/**
+ * Single fsm.json file config — the fsmlet equivalent of fsm-compiler-ts's
+ * `--folder <fsm.json>` single-file mode. There's no
+ * `<fsmName>/<fsmVersion>/fsm.json` directory structure to infer identity
+ * from, so `fsmName`/`fsmVersion` are caller-supplied.
+ * Used in: fsmlet.ts, cli/fsmlet.ts, index.ts (direct import)
+ */
+export type FsmJsonFileConfig = {
+  fsmJsonPath: string;
+  fsmName: string;
+  fsmVersion: string;
+};
+
 // Used in: fsmlet.ts, cli/fsmlet.ts, index.ts (direct import)
 export type FsmStartupConfig = {
   sharedAsyncOperation?: FsmFolderConfig;
-  fsm?: FsmFolderConfig;
+  fsm?: FsmFolderConfig | FsmJsonFileConfig;
 };
 
 // Used in: index.ts (direct import)
