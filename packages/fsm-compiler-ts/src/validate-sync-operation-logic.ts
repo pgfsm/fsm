@@ -19,7 +19,6 @@ import type {
   FailedMethod,
   FsmMachineJson,
   FsmPluginValidationResult,
-  WorkflowType,
 } from "./types/index.ts";
 
 type AnyFunction = (...args: unknown[]) => unknown;
@@ -109,7 +108,6 @@ export async function validateSyncOperationFromFolder(
   parentDirName: string,
   parentAbsPath: string,
   parentRelPath: string,
-  workflowType: WorkflowType,
 ): Promise<FsmPluginValidationResult> {
   const fsmJsonPresent = true;
   const fsmJsonConfigData: FsmMachineJson | undefined = undefined;
@@ -134,7 +132,6 @@ export async function validateSyncOperationFromFolder(
       src: dirName,
       fsmName: dirName,
       fsmVersion: versionName,
-      fsmType: workflowType,
       fsmAbsFolderPath: absPath,
       fsmRelativeFolderPath: relPath,
       fsmParentDirName: parentDirName,
@@ -172,7 +169,6 @@ export async function validateSyncOperationFromFolder(
     src: dirName,
     fsmName: dirName,
     fsmVersion: versionName,
-    fsmType: workflowType,
     fsmAbsFolderPath: absPath,
     fsmRelativeFolderPath: relPath,
     fsmParentDirName: parentDirName,
@@ -202,7 +198,6 @@ export async function validateSyncOperationFromFsmJson(
   fsmJsonPath: string,
   fsmName: string,
   fsmVersion: string,
-  workflowType: WorkflowType,
 ): Promise<FsmPluginValidationResult> {
   logger.info("Validating sync operation logic from {path}", {
     path: fsmJsonPath,
@@ -226,7 +221,6 @@ export async function validateSyncOperationFromFsmJson(
     fsmJsonPath,
     absPath,
     fsmJsonPath,
-    workflowType,
   );
 
   logger.info("Validation result for {fsmName}/{fsmVersion}:", {
@@ -235,7 +229,6 @@ export async function validateSyncOperationFromFsmJson(
     ...table([result], [
       "fsmName",
       "fsmVersion",
-      "fsmType",
       "fsmJsonPresent",
       "fsmJsonFollowSchema",
       "isFsmModuleVerified",
@@ -247,7 +240,6 @@ export async function validateSyncOperationFromFsmJson(
 
 export async function validateSyncOperationFromFolders(
   folderPath: string,
-  workflowType: WorkflowType,
   skipDirs: string[] = [],
 ): Promise<FsmPluginValidationResult[]> {
   if (folderPath.startsWith(".")) {
@@ -307,7 +299,6 @@ export async function validateSyncOperationFromFolders(
                   folderPath,
                   absFolderPath,
                   folderPath,
-                  workflowType,
                 );
 
                 /*
@@ -342,7 +333,6 @@ export async function validateSyncOperationFromFolders(
       ...table(allFolderResults, [
         "fsmName",
         "fsmVersion",
-        "fsmType",
         "fsmJsonPresent",
         "fsmJsonFollowSchema",
         "isFsmModuleVerified",

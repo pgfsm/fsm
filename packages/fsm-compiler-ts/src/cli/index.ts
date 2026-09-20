@@ -87,7 +87,7 @@ WORKFLOW TYPES
 OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/validate-sync-operation only, and requires --output for generate-sync-logic/generate-async-logic or --fsm-name/--fsm-version for validate-sync-operation; app root for create-async-logic)
-  -w, --workflow-type <type>          Workflow type (required for validate-sync-operation)
+  -w, --workflow-type <type>          Workflow type
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
   -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
@@ -236,9 +236,7 @@ if (workflowType && !VALID_WORKFLOW_TYPES.includes(workflowType)) {
   Deno.exit(1);
 }
 
-const needsWorkflowType = [
-  "validate-sync-operation",
-];
+const needsWorkflowType: string[] = [];
 
 const missing: string[] = [];
 if (!command) missing.push("--command");
@@ -567,12 +565,10 @@ try {
           folder!,
           args["fsm-name"]!,
           args["fsm-version"]!,
-          workflowType!,
         );
       } else {
         await validateSyncOperationFromFolders(
           folder!,
-          workflowType!,
           skipDirs,
         );
       }

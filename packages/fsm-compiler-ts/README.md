@@ -212,15 +212,14 @@ npx @pgfsm/compiler -c delete -f fsm
 
 ### `validate-sync-operation` — check action/guard/delay stubs are implemented
 
-**Input** — `-f`/`--folder`: plugin-root directory. `-w`/`--workflow-type`:
-required. `-s`/`--skip-dirs`.
+**Input** — `-f`/`--folder`: plugin-root directory. `-s`/`--skip-dirs`.
 
 **Output** — writes nothing; validates that every action/guard/delay in
 `fsm.json` has a matching export in `<lang>/actions|guards|delays/index.*` and
 logs a pass/fail result per method.
 
 ```bash
-npx @pgfsm/compiler -c validate-sync-operation -f fsm -w fsm
+npx @pgfsm/compiler -c validate-sync-operation -f fsm
 ```
 
 ### `load` — load a compiled `fsm.json` into the database
