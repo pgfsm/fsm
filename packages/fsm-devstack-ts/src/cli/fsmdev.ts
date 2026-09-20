@@ -1,5 +1,5 @@
 import { parseArgs } from "@std/cli/parse-args";
-import { dirname, fromFileUrl, join, resolve, toFileUrl } from "@std/path";
+import { dirname, fromFileUrl, join, resolve } from "@std/path";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureLogging, isTerminal } from "@pgfsm/logging";
@@ -87,15 +87,17 @@ DESCRIPTION
     1. generate-all (@pgfsm/compiler)                        — one-shot
     2. pgcron registration (@pgfsm/sync-worker)               — one-shot,
        idempotent
-    3. async-operation-worker-gateway + the generated TypeScript
-       worker SDK (@pgfsm/async-worker), and fsmlet
+    3. async-operation-worker-gateway (@pgfsm/async-worker) and fsmlet
        (@pgfsm/sync-worker)                                   — supervised
-       together: Ctrl+C stops all three, and if any one exits
-       unexpectedly the rest are torn down (see
+       together: Ctrl+C stops both, and if either exits
+       unexpectedly the other is torn down (see
        packages/fsm-devstack-ts/CLAUDE.md for the failure policy).
 
-  Worker SDK launch is TypeScript-only for now; polyglot (python/rust/go)
-  worker processes aren't wired up yet.
+  Worker SDK processes (one per language actually generated —
+  typescript/python/rust/go) are NOT started by fsmdev: they're
+  polyglot, per-project generated code with different toolchains, so
+  after generate-all runs, fsmdev prints the exact command to start
+  each one yourself in its own terminal.
 
 EXAMPLE
   deno run --allow-all src/cli/fsmdev.ts -f apps/fsm-core-example/fsm \\
@@ -178,6 +180,45 @@ function toProcessSpec(
   };
 }
 
+// How to start each generated worker-SDK language's process by hand — fsmdev
+// doesn't launch these itself (see printHelp's DESCRIPTION for why).
+const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
+  typescript: (dir) =>
+    `deno run --allow-all ${
+      join(dir, "cli.ts")
+    } start --gateway-socket ${socket}`,
+  python: (dir) =>
+    `python3 ${join(dir, "cli.py")} start --gateway-socket ${socket}`,
+  rust: (dir) =>
+    `(cd ${dir} && cargo run --release -- --gateway-socket ${socket})`,
+  go: (dir) => `(cd ${dir} && go run . --gateway-socket ${socket})`,
+};
+
+function printWorkerSdkStartInstructions(appRoot: string): void {
+  const workerSdkRoot = join(appRoot, "worker-sdk-generated");
+  let entries: Deno.DirEntry[];
+  try {
+    entries = Array.from(Deno.readDirSync(workerSdkRoot));
+  } catch {
+    return; // no async-operation actors generated -- nothing to start
+  }
+  const langs = entries
+    .filter((e) => e.isDirectory && e.name in WORKER_SDK_START_COMMAND)
+    .map((e) => e.name)
+    .sort();
+  if (langs.length === 0) return;
+
+  logger.info(
+    "Generated worker SDK(s) — start each one yourself in its own terminal:",
+  );
+  for (const lang of langs) {
+    logger.info("  {lang}: {command}", {
+      lang,
+      command: WORKER_SDK_START_COMMAND[lang](join(workerSdkRoot, lang)),
+    });
+  }
+}
+
 // 1. generate-all — one-shot, must succeed before anything starts.
 await runOnce("generate-all", COMPILER_CLI, [
   "-c",
@@ -189,23 +230,13 @@ await runOnce("generate-all", COMPILER_CLI, [
 // generate-all writes the aggregate worker SDK one level above --folder (the
 // app root) — see fsm-compiler-ts/CLAUDE.md's "generate-async-logic" note.
 const appRoot = dirname(fsmFolder);
-const workerSdkCliUrl = toFileUrl(
-  join(appRoot, "worker-sdk-generated", "typescript", "cli.ts"),
-);
-try {
-  await Deno.stat(fromFileUrl(workerSdkCliUrl));
-} catch {
-  logger.error(
-    "Expected generated worker SDK at {path} after generate-all — is --fsm-folder the FSM plugin-root (not its parent)?",
-    { path: fromFileUrl(workerSdkCliUrl) },
-  );
-  Deno.exit(1);
-}
+printWorkerSdkStartInstructions(appRoot);
 
 // 2. pgcron registration — one-shot, idempotent.
 await runOnce("pgcron", PGCRON_CLI, ["-s", pgcronSchedule, ...dbArgs()]);
 
-// 3. gateway + worker SDK + fsmlet — supervised together.
+// 3. gateway + fsmlet — supervised together. Worker SDK processes are
+// started separately (see printWorkerSdkStartInstructions above).
 const specs: ProcessSpec[] = [
   toProcessSpec("gateway", GATEWAY_CLI, [
     "-b",
@@ -216,11 +247,6 @@ const specs: ProcessSpec[] = [
     pollIntervalMs,
     ...(ensureQueueOnRegister ? ["--ensure-queue-on-register"] : []),
     ...dbArgs(),
-  ]),
-  toProcessSpec("worker-sdk (typescript)", workerSdkCliUrl, [
-    "start",
-    "--gateway-socket",
-    socket,
   ]),
   toProcessSpec("fsmlet", FSMLET_CLI, [
     "-f",

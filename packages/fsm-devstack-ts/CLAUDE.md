@@ -13,35 +13,41 @@ file's: it only documents the currently-publishable library export
 #238). Sequence:
 
 1. `generate-all` (`@pgfsm/compiler`) — one-shot, must succeed first.
-2. `pgcron` registration (`@pgfsm/sync-worker`) — one-shot, idempotent.
-3. Activity Gateway + generated TypeScript worker SDK (`@pgfsm/async-worker`)
-   and `fsmlet` (`@pgfsm/sync-worker`) — spawned and supervised together via
-   `runSupervised`. `Ctrl+C` stops all three; if any one exits on its own the
-   rest are torn down (see failure policy below).
+2. Prints the exact start command for every worker-SDK language `generate-all`
+   actually generated (typescript/python/rust/go — whichever subdirectories
+   exist under `<app-root>/worker-sdk-generated/`). `fsmdev` does **not** launch
+   these itself: they're polyglot, per-project generated code with different
+   toolchains (`deno run`, `python3`, `cargo run`, `go run`), so starting them
+   is left to the user, one terminal each.
+3. `pgcron` registration (`@pgfsm/sync-worker`) — one-shot, idempotent.
+4. Activity Gateway (`@pgfsm/async-worker`) and `fsmlet` (`@pgfsm/sync-worker`)
+   — spawned and supervised together via `runSupervised`. `Ctrl+C` stops both;
+   if either exits on its own the other is torn down (see failure policy below).
 
-Sibling CLIs are located by resolving relative paths from `import.meta.url`
+Sibling CLIs (`@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker`) are
+located by resolving relative paths from `import.meta.url`
 (`packages/fsm-devstack-ts/src/cli/fsmdev.ts` →
 `../../../<package>/src/cli/<file>.ts`) rather than by shelling out through
 `npx`/published bins — this only works because `fsmdev` lives inside the same
-monorepo workspace as the CLIs it orchestrates. The generated worker SDK's path
-is computed at runtime instead (`generate-all` writes it one level above
-`--fsm-folder`, per `fsm-compiler-ts/CLAUDE.md`'s "generate-async-logic" note)
-since it doesn't exist until after step 1 runs. Worker SDK launch is
-TypeScript-only for now — polyglot (python/rust/go) worker processes aren't
-wired up.
+monorepo workspace as the CLIs it orchestrates. The generated worker SDK's
+directory (`<app-root>/worker-sdk-generated/<lang>/`) is similarly computed at
+runtime, but only to print each language's start command
+(`printWorkerSdkStartInstructions`) — `fsmdev` never launches worker-SDK
+processes itself; see the numbered sequence above for why.
 
 None of this repo's other CLIs spawn or supervise child processes, so
 `src/supervisor.ts` (issue #239) is the first such primitive here.
 
-**`fsmdev` itself still isn't `npx`-runnable (tracked separately)**: it locates
-sibling CLIs via `import.meta.url`-relative paths and shells out to them with
+**`fsmdev` itself still isn't `npx`-runnable (tracked in #245)**: it locates
+`@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker`'s CLIs via
+`import.meta.url`-relative paths and shells out to them with
 `Deno.Command(Deno.execPath(), ["run", "--allow-all", <path>, ...])` — that only
-works inside this monorepo's Deno-native dev flow. Making `fsmdev` itself
-portable needs (a) dispatching to the sibling packages' installed npm bins under
-Node instead of `deno run <path>`, and (b) a decision on how the generated
-`worker-sdk-generated/typescript/cli.ts` runs without Deno present (it's
-project-generated TypeScript source, not a published bin) — real product
-decisions, not filed as follow-up work yet.
+works inside this monorepo's Deno-native dev flow. Making `fsmdev` portable
+needs dispatching to those sibling packages' installed npm bins under Node
+instead of `deno run <path>`. The other half of #245's original scope — how the
+generated worker SDK executes without Deno present — is now moot: `fsmdev` never
+launches worker-SDK processes itself (see above), so there's no cross-runtime
+execution question for them at all.
 
 ## Process supervision (`src/supervisor.ts`)
 
