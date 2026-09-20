@@ -63,7 +63,6 @@ export type FsmPluginValidationResult = {
   src: string;
   fsmName: string;
   fsmVersion: string;
-  fsmType: WorkflowType;
   fsmAbsFolderPath: string;
   fsmRelativeFolderPath: string;
   fsmParentDirName: string;

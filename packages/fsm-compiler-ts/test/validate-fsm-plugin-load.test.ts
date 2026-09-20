@@ -61,7 +61,6 @@ Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fail
     "testParent",
     "/tmp/nonexistent",
     "testParent",
-    "fsm",
   );
 
   assertEquals(result.fsmJsonPresent, true);
@@ -72,5 +71,4 @@ Deno.test("validateSyncOperationFromFolder - returns defaults when fsm.json fail
   assertEquals(result.fsmModuleDefinition, undefined);
   assertEquals(result.fsmName, "testFsm");
   assertEquals(result.fsmVersion, "v01");
-  assertEquals(result.fsmType, "fsm");
 });

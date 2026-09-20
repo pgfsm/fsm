@@ -106,7 +106,6 @@ export async function startFsmlet(
     const outputFsm = fsmConfig.fsm
       ? await validateSyncOperationFromFolders(
         fsmConfig.fsm.folderPath,
-        "fsm",
         fsmConfig.fsm.skipDirs ?? [],
       )
       : [];

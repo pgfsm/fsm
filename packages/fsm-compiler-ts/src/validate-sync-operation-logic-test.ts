@@ -12,7 +12,6 @@ await configureCompilerLogger();
 
   const outputFSM = await validateSyncOperationFromFolders(
     fsmfolderPath,
-    "fsm",
     [],
   );
   logger.info("final output: {output}", { output: outputFSM });

@@ -12,7 +12,7 @@ import {
 } from "@pgfsm/db";
 
 import { validateSyncOperationFromFolder } from "@pgfsm/compiler";
-import type { FsmPluginValidationResult, WorkflowType } from "@pgfsm/compiler";
+import type { FsmPluginValidationResult } from "@pgfsm/compiler";
 
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
 import type { FsmQueueMessage } from "../types.ts";
@@ -131,7 +131,6 @@ export async function startFSMWorkerWithDBLock(
           verifiedModule.fsmParentDirName ?? "",
           verifiedModule.fsmParentAbsFolderPath ?? "",
           verifiedModule.fsmParentRelativeFolderPath ?? "",
-          (verifiedModule.fsmType ?? "fsm") as WorkflowType,
         );
         // validateSyncOperationFromFolder types this as Json, but it's always
         // the { actions, guards, delays, actors } module-namespace record.
