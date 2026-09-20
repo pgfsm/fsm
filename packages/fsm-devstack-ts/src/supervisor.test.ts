@@ -1,5 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { type ProcessSpec, runProcessGroup } from "./supervisor.ts";
+import {
+  type ProcessSpec,
+  runProcessGroup,
+  type SupervisorSignal,
+} from "./supervisor.ts";
 
 // Cross-platform test doubles: spawn `deno eval` rather than a shell command
 // so these tests don't assume bash/sh is present.
@@ -23,7 +27,7 @@ function longRunning(name: string): ProcessSpec {
   };
 }
 
-function neverSignals(): Promise<Deno.Signal> {
+function neverSignals(): Promise<SupervisorSignal> {
   return new Promise(() => {});
 }
 
@@ -44,8 +48,8 @@ Deno.test("runProcessGroup treats an unexpected clean exit (code 0) as a failure
 });
 
 Deno.test("runProcessGroup returns 0 and stops all children on requested shutdown", async () => {
-  let resolveShutdown!: (signal: Deno.Signal) => void;
-  const shutdownSignal = new Promise<Deno.Signal>((resolve) => {
+  let resolveShutdown!: (signal: SupervisorSignal) => void;
+  const shutdownSignal = new Promise<SupervisorSignal>((resolve) => {
     resolveShutdown = resolve;
   });
 
