@@ -10,7 +10,8 @@
     "packages/fsm-compiler-ts",
     "packages/fsm-proto-codegen",
     "packages/fsm-proto-codegen/gen/typescript",
-    "packages/database-src"
+    "packages/database-src",
+    "packages/fsm-devstack-ts"
   ],
   "fmt": {
     "exclude": [
