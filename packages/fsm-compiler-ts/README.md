@@ -225,15 +225,15 @@ npx @pgfsm/compiler -c validate-sync-operation -f fsm
 ### `load` — load a compiled `fsm.json` into the database
 
 **Input** — `-f`/`--folder`: plugin-root directory (each version folder's
-`fsm.json` must already exist). `-w`/`--workflow-type`: required.
-`-d`/`--db-url` (or the `DATABASE_URL` env var). `-s`/`--skip-dirs`.
+`fsm.json` must already exist). `-d`/`--db-url` (or the `DATABASE_URL` env var).
+`-s`/`--skip-dirs`.
 
 **Output/side effect** — inserts each FSM's states/transitions into the
 `fsm_core` PostgreSQL schema, resolving `dependent_children` from any invoke
 actors whose `asyncOperationType` is `"fsm"`. No local files are written.
 
 ```bash
-npx @pgfsm/compiler -c load -f fsm -w fsm -d "$DATABASE_URL"
+npx @pgfsm/compiler -c load -f fsm -d "$DATABASE_URL"
 ```
 
 ## Programmatic usage

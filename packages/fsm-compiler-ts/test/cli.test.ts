@@ -67,17 +67,6 @@ Deno.test("cli generate-fsm-json without folder exits 1", async () => {
   assertStringIncludes(stderr, "--folder");
 });
 
-Deno.test("cli validate-sync-operation without --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "validate-sync-operation",
-    "-f",
-    FSM_FOLDER,
-  ]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "--workflow-type");
-});
-
 Deno.test("cli unknown command exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
@@ -90,19 +79,6 @@ Deno.test("cli unknown command exits 1", async () => {
 });
 
 // --- Input validation ---
-
-Deno.test("cli invalid --workflow-type exits 1", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "validate-sync-operation",
-    "-f",
-    FSM_FOLDER,
-    "-w",
-    "foobar",
-  ]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "Invalid --workflow-type");
-});
 
 Deno.test("cli nonexistent --folder exits 1", async () => {
   const { code, stderr } = await runCli([
@@ -609,20 +585,6 @@ Deno.test("cli validate-sync-operation runs successfully on example folder", asy
     "validate-sync-operation",
     "-f",
     FSM_FOLDER,
-    "-w",
-    "fsm",
-  ]);
-  assertEquals(code, 0);
-});
-
-Deno.test("cli validate-sync-operation with -w shorthand exits 0", async () => {
-  const { code } = await runCli([
-    "-c",
-    "validate-sync-operation",
-    "-f",
-    FSM_FOLDER,
-    "-w",
-    "fsm",
   ]);
   assertEquals(code, 0);
 });
@@ -635,8 +597,6 @@ Deno.test("cli validate-sync-operation requires --fsm-name and --fsm-version whe
     "validate-sync-operation",
     "-f",
     SINGLE_FSM_JSON,
-    "-w",
-    "fsm",
   ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--fsm-name");
@@ -649,8 +609,6 @@ Deno.test("cli validate-sync-operation rejects a non-.json --folder file", async
     "validate-sync-operation",
     "-f",
     `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
-    "-w",
-    "fsm",
     "--fsm-name",
     "creditCheck",
     "--fsm-version",
@@ -666,8 +624,6 @@ Deno.test("cli validate-sync-operation --folder fsm.json + --fsm-name/--fsm-vers
     "validate-sync-operation",
     "-f",
     SINGLE_FSM_JSON,
-    "-w",
-    "fsm",
     "--fsm-name",
     "creditCheck",
     "--fsm-version",
@@ -682,8 +638,6 @@ Deno.test("cli validate-sync-operation --folder fsm.json accepts -N/-V shorthand
     "validate-sync-operation",
     "-f",
     SINGLE_FSM_JSON,
-    "-w",
-    "fsm",
     "-N",
     "creditCheck",
     "-V",
@@ -700,8 +654,6 @@ Deno.test("cli validate-async-operation runs on vitalsWorkflow (shared, sharedAs
     "validate-async-operation",
     "-f",
     FSM_FOLDER,
-    "-w",
-    "sharedAsyncOperation",
     "--skip-dirs",
     "carVitals,creditCheck,taskMachineConfig",
   ]);
@@ -712,7 +664,7 @@ Deno.test("cli validate-async-operation runs on vitalsWorkflow (shared, sharedAs
 
 Deno.test("cli load without db connection string exits 1", async () => {
   const { code, stderr } = await runCli(
-    ["-c", "load", "-f", FSM_FOLDER, "-w", "fsm"],
+    ["-c", "load", "-f", FSM_FOLDER],
     { DATABASE_URL: "" },
   );
   assertEquals(code, 1);
@@ -728,8 +680,6 @@ Deno.test("cli --db-url flag is accepted and parsed", async () => {
       "load",
       "-f",
       FSM_FOLDER,
-      "-w",
-      "fsm",
       "--db-url",
       "postgresql://localhost:1/test",
     ],
