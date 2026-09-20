@@ -25,6 +25,7 @@ body:
         - Worker / queue (pgmq, fsmworker)
         - Logging (@pgfsm/logging)
         - Example FSM definitions (apps/fsm-core-example)
+        - Dev tooling / CLI orchestration (packages/fsm-devstack-ts et al.)
         - Documentation
         - Other / unsure
     validations:
