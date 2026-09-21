@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { copy } from "@std/fs/copy";
 import { makeWorkspaceTempDir } from "./test-helpers.ts";
+import { PACKAGE_VERSION } from "../src/cli/version.ts";
 
 // Absolute, not relative to "packages/fsm-compiler-ts/..." — some tests below
 // run the CLI with a different subprocess `cwd` (to exercise --output's
@@ -57,6 +58,20 @@ Deno.test("cli no args exits 0 and prints help", async () => {
 Deno.test("cli -h shorthand exits 0", async () => {
   const { code } = await runCli(["-h"]);
   assertEquals(code, 0);
+});
+
+Deno.test("cli --version exits 0 and prints a bare version string", async () => {
+  const { code, stdout } = await runCli(["--version"]);
+  assertEquals(code, 0);
+  // Bare, undecorated output (no logger timestamp/category prefix) — see
+  // src/cli/index.ts's --version handling.
+  assertEquals(stdout.trim(), PACKAGE_VERSION);
+});
+
+Deno.test("cli -v shorthand exits 0 and prints a bare version string", async () => {
+  const { code, stdout } = await runCli(["-v"]);
+  assertEquals(code, 0);
+  assertEquals(stdout.trim(), PACKAGE_VERSION);
 });
 
 // --- Missing required args ---
@@ -484,7 +499,7 @@ Deno.test("cli generate-all folder mode: one bad FSM's failure doesn't block stu
 
 // --- create-async-logic ---
 
-Deno.test("cli create-async-logic without --version exits 1", async () => {
+Deno.test("cli create-async-logic without --fsm-version exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
     "create-async-logic",
@@ -496,7 +511,7 @@ Deno.test("cli create-async-logic without --version exits 1", async () => {
     "checkCreditScoreCliTest",
   ]);
   assertEquals(code, 1);
-  assertStringIncludes(stderr, "--version");
+  assertStringIncludes(stderr, "--fsm-version");
 });
 
 Deno.test("cli create-async-logic without --name exits 1", async () => {
@@ -507,7 +522,7 @@ Deno.test("cli create-async-logic without --name exits 1", async () => {
     APP_ROOT,
     "--lang",
     "typescript",
-    "--version",
+    "--fsm-version",
     "v01",
   ]);
   assertEquals(code, 1);
@@ -522,7 +537,7 @@ Deno.test("cli create-async-logic rejects an invalid --lang", async () => {
     APP_ROOT,
     "--lang",
     "cobol",
-    "--version",
+    "--fsm-version",
     "v01",
     "--name",
     "checkCreditScoreCliTest",
@@ -539,7 +554,7 @@ Deno.test("cli create-async-logic rejects a comma-separated --lang (exactly one 
     APP_ROOT,
     "--lang",
     "typescript,python",
-    "--version",
+    "--fsm-version",
     "v01",
     "--name",
     "checkCreditScoreCliTest",
@@ -556,7 +571,7 @@ Deno.test("cli create-async-logic writes a single actor file under shared-async-
     APP_ROOT,
     "--lang",
     "typescript",
-    "--version",
+    "--fsm-version",
     "v01",
     "--name",
     "checkCreditScoreCliTest",

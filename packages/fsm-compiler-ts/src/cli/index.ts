@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureCompilerLogger } from "../logger.ts";
 import { CLI_INVOCATION } from "./invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 import {
   createAsyncOperationLogic,
   deleteFsmJSONFromFolders,
@@ -35,13 +36,12 @@ const args = parseArgs(Deno.args, {
     "db-url",
     "lang",
     "worker-sdk-protocol",
-    "version",
     "name",
     "output",
     "fsm-name",
     "fsm-version",
   ],
-  boolean: ["help", "show-recommendation"],
+  boolean: ["help", "version", "show-recommendation"],
   alias: {
     h: "help",
     c: "command",
@@ -51,13 +51,21 @@ const args = parseArgs(Deno.args, {
     d: "db-url",
     l: "lang",
     p: "worker-sdk-protocol",
-    v: "version",
     n: "name",
     o: "output",
     N: "fsm-name",
+    v: "version",
     V: "fsm-version",
   },
 });
+
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) so
+  // `$(fsm-compiler --version)` stays script-friendly, matching every other
+  // CLI's --version convention.
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
 
 function printHelp(): void {
   logger.info(`
@@ -81,15 +89,15 @@ OPTIONS
   -c, --command <command>             Command to run (required)
   -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/validate-sync-operation only, and requires --output for generate-sync-logic/generate-async-logic or --fsm-name/--fsm-version for validate-sync-operation; app root for create-async-logic)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
-  -v, --version <version>             FSM version folder name, e.g. v01 (create-async-logic only, required)
   -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
   -N, --fsm-name <name>                FSM name, e.g. creditCheck (validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
-  -V, --fsm-version <version>          FSM version, e.g. v01 (validate-sync-operation only, required when --folder is a single fsm.json file, same reason as --fsm-name)
+  -V, --fsm-version <version>          FSM version folder name, e.g. v01 (required for create-async-logic; also required for validate-sync-operation when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
   -p, --worker-sdk-protocol <proto>   Sidecar wire protocol for generated worker SDKs: grpc (default) or legacy (generate-async-logic/generate-all only)
+  -v, --version                       Print @pgfsm/compiler's version and exit
   -h, --help                          Show this help message
 
 ENVIRONMENT
@@ -106,7 +114,7 @@ EXAMPLES
   ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
-  ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
+  ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --fsm-version v01 --name checkCreditScore
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
   ${CLI_INVOCATION} -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig
@@ -217,7 +225,7 @@ const missing: string[] = [];
 if (!command) missing.push("--command");
 if (!folder) missing.push("--folder");
 if (command === "create-async-logic") {
-  if (!args["version"]) missing.push("--version");
+  if (!args["fsm-version"]) missing.push("--fsm-version");
   if (!args["name"]) missing.push("--name");
 }
 
@@ -524,7 +532,7 @@ try {
       await createAsyncOperationLogic(
         folder!,
         createAsyncLogicLang!,
-        args["version"]!,
+        args["fsm-version"]!,
         args["name"]!,
       );
       break;
