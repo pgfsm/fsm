@@ -183,7 +183,7 @@ belong to an FSM's `invoke` list, use `generate-async-logic` instead.
 **Input** — `-f`/`--folder`: the **app root** (one level above the FSM
 plugin-root directory — e.g. `apps/fsm-core-example`, not
 `apps/fsm-core-example/fsm`). `-l`/`--lang`: exactly one language, required.
-`-v`/`--version`: version name matching `v\d{2}` (e.g. `v01`), required.
+`-V`/`--fsm-version`: version name matching `v\d{2}` (e.g. `v01`), required.
 `-n`/`--name`: actor function name, required.
 
 **Output**:
@@ -194,7 +194,7 @@ plugin-root directory — e.g. `apps/fsm-core-example`, not
   registry)
 
 ```bash
-npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
+npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typescript --fsm-version v01 --name checkCreditScore
 ```
 
 ### `delete` — remove generated files

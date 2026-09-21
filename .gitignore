@@ -20,6 +20,9 @@ deno_dir/
 # --- Test fixtures (must live inside the workspace tree, see #214) ---
 packages/fsm-compiler-ts/.test-fixtures/
 
+# --- Generated at npm-publish build time, version differs per release, see #258 ---
+packages/fsm-compiler-ts/src/cli/version.node.ts
+
 # --- Python ---
 __pycache__/
 *.py[cod]
