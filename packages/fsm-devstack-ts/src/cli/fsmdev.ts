@@ -15,6 +15,16 @@ import type { ProcessSpec } from "../supervisor.ts";
 
 dotenv.config({ path: ".env" });
 
+// True under real Deno (this monorepo's dev flow); false under the dnt-built
+// Node/npm output. Deliberately NOT `typeof Deno !== "undefined"` — dnt's
+// shim always defines a global `Deno` polyfill, so that check is true under
+// both runtimes. `Deno.execPath()` under that polyfill also resolves to a
+// real system `deno` binary path (not this process's own), so it can't be
+// used to decide how to spawn things either — verified empirically (see
+// packages/fsm-devstack-ts/CLAUDE.md). `process.versions.deno` only exists
+// under real Deno in either case, so it's the reliable signal.
+const isDeno = typeof process !== "undefined" && !!process.versions?.deno;
+
 const LOG_CATEGORY = "@pgfsm/devstack";
 const logger = getLogger([LOG_CATEGORY, "fsmdev", "cli"]);
 await configureLogging({
@@ -25,11 +35,21 @@ await configureLogging({
 // sibling package's library function directly, not that package's own CLI —
 // see run-gateway.ts/run-fsmlet.ts's header comments for why), resolved
 // relative to this file itself so it works whether @pgfsm/devstack lives in
-// this monorepo or is installed via npm. generate-all/pgcron are one-shot,
-// so they're called as plain library functions below instead — no
-// subprocess needed either way.
-const GATEWAY_CLI = new URL("./run-gateway.ts", import.meta.url);
-const FSMLET_CLI = new URL("./run-fsmlet.ts", import.meta.url);
+// this monorepo or is installed via npm. dnt preserves this file's directory
+// layout when it compiles run-gateway.ts/run-fsmlet.ts into dist/{esm,script}
+// (verified empirically), so the same self-relative resolution works against
+// their compiled .js siblings too — just with a different extension and a
+// different command to run them with (see toProcessSpec below).
+// generate-all/pgcron are one-shot, so they're called as plain library
+// functions below instead — no subprocess needed either way.
+const GATEWAY_CLI = new URL(
+  `./run-gateway.${isDeno ? "ts" : "js"}`,
+  import.meta.url,
+);
+const FSMLET_CLI = new URL(
+  `./run-fsmlet.${isDeno ? "ts" : "js"}`,
+  import.meta.url,
+);
 
 const args = parseArgs(Deno.args, {
   string: [
@@ -66,6 +86,7 @@ fsmdev — one-command local FSM dev stack (@pgfsm/devstack)
 
 USAGE
   deno run --allow-all src/cli/fsmdev.ts -f <fsm-folder> [options]
+  npx -p @pgfsm/devstack -- fsmdev -f <fsm-folder> [options]
 
 OPTIONS
   -f, --fsm-folder <path>          FSM plugin-root folder, e.g. apps/fsm-core-example/fsm (required)
@@ -218,10 +239,22 @@ function toProcessSpec(
   scriptUrl: URL,
   scriptArgs: string[],
 ): ProcessSpec {
+  const scriptPath = fromFileUrl(scriptUrl);
+  if (isDeno) {
+    return {
+      name,
+      cmd: Deno.execPath(),
+      args: ["run", "--allow-all", scriptPath, ...scriptArgs],
+    };
+  }
+  // Under the dnt-built Node output, invoke the compiled sibling .js file
+  // directly with this process's own node binary — Deno.execPath() would
+  // resolve to a real system `deno` binary here (see the isDeno comment
+  // above), and there's no "run"/permission-flag step Node needs anyway.
   return {
     name,
-    cmd: Deno.execPath(),
-    args: ["run", "--allow-all", fromFileUrl(scriptUrl), ...scriptArgs],
+    cmd: process.execPath,
+    args: [scriptPath, ...scriptArgs],
   };
 }
 
