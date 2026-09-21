@@ -29,6 +29,10 @@ export interface AsyncOperationWorkerIdentity {
   asyncOperationLanguage: string;
 }
 
+type ClaimPendingAsyncOperationEventsForWorkersRow = {
+  claim_pending_async_operation_events_for_workers_v2: Json;
+};
+
 /**
  * Thin wrapper around `claim_pending_async_operation_events_for_workers_v2()` — takes
  * the caller's currently-registered worker identities (no `handler`) and
@@ -57,10 +61,16 @@ export async function claimPendingAsyncOperationEventsForWorkers(
         })),
       ),
     ];
-    const res = await deps.db.query<{
-      claim_pending_async_operation_events_for_workers_v2: Json;
-    }>(text, values);
-    return res.rows.map((row) =>
+    const res = await deps.db.query<
+      ClaimPendingAsyncOperationEventsForWorkersRow
+    >(text, values);
+    // pg's query<R>() overloads resolve `res.rows` such that a bare
+    // `.map((row) => ...)` callback loses R's type and falls back to
+    // implicit any (TS7006) — every other query in this package only reads
+    // `res.rows[0]`, which doesn't hit this; an explicit parameter
+    // annotation is the fix (verified: the object-literal generic form
+    // reproduces this outside pg too, a named type doesn't avoid it).
+    return res.rows.map((row: ClaimPendingAsyncOperationEventsForWorkersRow) =>
       row.claim_pending_async_operation_events_for_workers_v2
     );
   } catch (err) {
