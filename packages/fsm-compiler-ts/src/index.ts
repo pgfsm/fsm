@@ -15,8 +15,11 @@ export {
   generateSyncOperationLogicFromFolders,
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
+export { generateAll } from "./generate-all.ts";
+export type { GenerateAllOptions } from "./generate-all.ts";
 export {
   isOperationLang,
+  oneLevelUp,
   resolvePluginRootAbsPath,
   SUPPORTED_OPERATION_LANGS,
 } from "./operation-logic-scaffold.ts";
