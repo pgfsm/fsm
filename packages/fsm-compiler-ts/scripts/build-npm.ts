@@ -11,6 +11,16 @@ await build({
   shims: {
     deno: true,
   },
+  // The CLI's help text shows how to invoke it, which differs between this
+  // Deno source (`deno run ...`) and the published npm CLI (`npx ...`).
+  // Runtime detection (Deno.version/mainModule/execPath) doesn't work here —
+  // `shims: { deno: true }` above provides a Deno global under Node too, so
+  // those signals are present (or, for execPath, actively misleading) under
+  // both targets. Swap the whole module instead: see
+  // src/cli/invocation.ts / invocation.node.ts.
+  mappings: {
+    "./src/cli/invocation.ts": "./src/cli/invocation.node.ts",
+  },
   // Publishing doesn't need test/*.test.ts bundled into dist — and dnt tries
   // to build them for the CJS target too, which fails on the top-level
   // await in test/cli.test.ts (CJS/UMD can't support it).
