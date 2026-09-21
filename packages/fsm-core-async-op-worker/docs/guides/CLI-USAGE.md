@@ -79,6 +79,7 @@ deno task gateway [options]
 | `--poll-interval-ms <ms>`    |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                        |
 | `--disable-poll-loop`        |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`) |
 | `--ensure-queue-on-register` |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                          |
+| `--version`                  | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker`'s version and exit                                                     |
 | `--help`                     | `-h`  | —                                                         | —                                          | Print help and exit                                                                                |
 
 > **Poll loop is on by default; `--ensure-queue-on-register` is opt-in.** If
@@ -344,6 +345,7 @@ deno task gateway-ctl <list|invoke> [options]
 | `--instance-id <id>`                | no           | random UUID                             | Correlates the invocation to an FSM instance                  |
 | `--correlation-id <id>`             | no           | random UUID                             | Free-form correlation id                                      |
 | `--timeout-ms <ms>`                 | no           | `5000`                                  | Client-side timeout for this one call                         |
+| `--version`                         | —            | —                                       | Print `@pgfsm/async-worker`'s version and exit                |
 | `--help`                            | —            | —                                       | Print help and exit                                           |
 
 Identity flags match `sidecar/protocol.ts`'s `actorKey()` shape — the exact six

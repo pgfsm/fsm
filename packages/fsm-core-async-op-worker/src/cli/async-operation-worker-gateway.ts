@@ -5,6 +5,8 @@ import { getLogger } from "@logtape/logtape";
 import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
 import type { DBDeps } from "@pgfsm/db";
 import { startActivityGatewayServer } from "../index.ts";
+import { CLI_INVOCATION } from "./gateway-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 dotenv.config({ path: ".env" });
 
@@ -23,9 +25,15 @@ const args = parseArgs(Deno.args, {
     "db-url",
     "poll-interval-ms",
   ],
-  boolean: ["help", "disable-poll-loop", "ensure-queue-on-register"],
+  boolean: [
+    "help",
+    "version",
+    "disable-poll-loop",
+    "ensure-queue-on-register",
+  ],
   alias: {
     h: "help",
+    v: "version",
     b: "bind",
     s: "sidecar-socket",
     t: "invoke-timeout-ms",
@@ -33,13 +41,21 @@ const args = parseArgs(Deno.args, {
   },
 });
 
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) so
+  // `$(async-operation-worker-gateway --version)` stays script-friendly,
+  // matching @pgfsm/compiler's --version convention (#258).
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
+
 function printHelp(): void {
   logger.info(`
 async-operation-worker-gateway — standalone async-op worker: Activity Gateway
 + 30s Postgres poll loop for compiled-language async-operation actors
 
 USAGE
-  deno run --allow-all src/cli/async-operation-worker-gateway.ts [options]
+  ${CLI_INVOCATION} [options]
 
 OPTIONS
   -b, --bind <target>              gRPC bind target (default: unix:/tmp/pgfsm-activity-gateway.sock)
@@ -49,6 +65,7 @@ OPTIONS
   --poll-interval-ms <ms>          Async-op poll loop interval (default: 30000)
   --disable-poll-loop              Don't start the poll loop -- gateway/sidecar only
   --ensure-queue-on-register       Ensure a PGMQ queue exists for every actor a worker registers (default: off)
+  -v, --version                    Print @pgfsm/async-worker's version and exit
   -h, --help                       Show this help message
 
 DESCRIPTION
