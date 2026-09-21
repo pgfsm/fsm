@@ -14,6 +14,8 @@ import {
   stopEventForFsmWorker,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
+import { CLI_INVOCATION } from "./fsmctl-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 const logger = getLogger(["@pgfsm/worker", "fsmctl"]);
 await configureWorkerLogger();
@@ -29,24 +31,32 @@ const args = parseArgs(Deno.args, {
     "event-data",
     "db-url",
   ],
-  boolean: ["help"],
+  boolean: ["help", "version"],
   alias: {
     h: "help",
+    v: "version",
     c: "command",
     q: "queue-name",
     n: "fsm-name",
-    v: "fsm-version",
+    V: "fsm-version",
     e: "event-type",
     d: "db-url",
   },
 });
+
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) — see
+  // fsmlet.ts's identical --version handling.
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
 
 function printHelp(): void {
   logger.info(`
 fsmctl — FSM control CLI (kubectl equivalent)
 
 USAGE
-  deno run --allow-all src/cli/fsmctl.ts -c <command> [options]
+  ${CLI_INVOCATION} -c <command> [options]
 
 COMMANDS
   create   Create a new FSM instance and enqueue it for the fsmscheduler
@@ -58,20 +68,21 @@ OPTIONS
   -c, --command <command>        Command to run (required)
   -q, --queue-name <id>          FSM instance ID (required for resume, send, stop)
   -n, --fsm-name <name>          FSM name (required for create)
-  -v, --fsm-version <version>    FSM version (required for create)
+  -V, --fsm-version <version>    FSM version (required for create)
   -e, --event-type <type>        Event type to send (required for send)
       --context <json>           Initial FSM context as JSON string (optional, create only)
       --event-data <json>        Event payload as JSON string (optional, send only)
   -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
+  -v, --version                  Print @pgfsm/sync-worker's version and exit
   -h, --help                     Show this help message
 
 EXAMPLES
-  deno run --allow-all src/cli/fsmctl.ts -c create -n creditCheck -v 1
-  deno run --allow-all src/cli/fsmctl.ts -c create -n creditCheck -v 1 --context '{"userId":"abc"}'
-  deno run --allow-all src/cli/fsmctl.ts -c resume -q <instance-uuid>
-  deno run --allow-all src/cli/fsmctl.ts -c send -q <instance-uuid> -e APPROVE
-  deno run --allow-all src/cli/fsmctl.ts -c send -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
-  deno run --allow-all src/cli/fsmctl.ts -c stop -q <instance-uuid>
+  ${CLI_INVOCATION} -c create -n creditCheck -V 1
+  ${CLI_INVOCATION} -c create -n creditCheck -V 1 --context '{"userId":"abc"}'
+  ${CLI_INVOCATION} -c resume -q <instance-uuid>
+  ${CLI_INVOCATION} -c send -q <instance-uuid> -e APPROVE
+  ${CLI_INVOCATION} -c send -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
+  ${CLI_INVOCATION} -c stop -q <instance-uuid>
 `);
 }
 

@@ -4,6 +4,8 @@ import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { runFsmlet } from "../fsmlet/fsmlet.ts";
 import type { FsmStartupConfig } from "../fsmlet/type.ts";
+import { CLI_INVOCATION } from "./fsmlet-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 const logger = getLogger(["@pgfsm/fsmlet", "cli"]);
 await configureWorkerLogger();
@@ -17,9 +19,10 @@ const args = parseArgs(Deno.args, {
     "max-concurrency",
     "fsmlet-id",
   ],
-  boolean: ["help"],
+  boolean: ["help", "version"],
   alias: {
     h: "help",
+    v: "version",
     f: "fsm-folder-path",
     N: "fsm-name",
     V: "fsm-version",
@@ -29,13 +32,21 @@ const args = parseArgs(Deno.args, {
   },
 });
 
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) so
+  // `$(fsmlet --version)` stays script-friendly, matching
+  // @pgfsm/compiler's --version convention (#258).
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
+
 function printHelp(): void {
   logger.info(`
 fsmlet — FSM node agent (kubelet equivalent)
 
 USAGE
-  deno run --allow-all src/cli/fsmlet.ts -f <fsm-folder-path> [options]
-  deno run --allow-all src/cli/fsmlet.ts -f <path>/fsm.json --fsm-name <name> --fsm-version <version> [options]
+  ${CLI_INVOCATION} -f <fsm-folder-path> [options]
+  ${CLI_INVOCATION} -f <path>/fsm.json --fsm-name <name> --fsm-version <version> [options]
 
 OPTIONS
   -f, --fsm-folder-path <path>   Absolute path to a FSM plugin-root folder, or to a single
@@ -50,6 +61,7 @@ OPTIONS
   -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
   -m, --max-concurrency <n>      Max FSM instances driven concurrently (default 8)
   -i, --fsmlet-id <id>           Stable fsmlet identity (default: random UUID per startup)
+  -v, --version                  Print @pgfsm/sync-worker's version and exit
   -h, --help                     Show this help message
 
 DESCRIPTION
