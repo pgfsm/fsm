@@ -78,7 +78,7 @@ COMMANDS
   generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--output required for a single fsm.json). The aggregate registry/worker SDK are written one level above --folder (the app root) in folder mode, or to --output in single-fsm.json mode
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--output required)
-  generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder or a single machine.ts file (--output required for a single machine.ts file). In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
+  generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file (--output required for either single-file mode). When --folder is an fsm.json file, generate-fsm-json is skipped (the fsm.json already exists) and only generate-async-logic/generate-sync-logic run against it. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
   create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
   delete                              Delete generated fsm.json / xstate-fsm.json files
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json)
@@ -87,9 +87,9 @@ COMMANDS
 
 OPTIONS
   -c, --command <command>             Command to run (required)
-  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/validate-sync-operation only, and requires --output for generate-sync-logic/generate-async-logic or --fsm-name/--fsm-version for validate-sync-operation; app root for create-async-logic)
+  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/generate-all/validate-sync-operation only, and requires --output for generate-sync-logic/generate-async-logic/generate-all or --fsm-name/--fsm-version for validate-sync-operation; app root for create-async-logic)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
-  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
+  -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-sync-logic/generate-async-logic/generate-all); required in those cases, unused otherwise. Relative (resolved against cwd) or absolute; independent of --folder's location. For generate-async-logic/generate-all single-file mode, this also doubles as the destination for the aggregate registry/worker SDK (worker-sdk-generated/)
   -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
   -N, --fsm-name <name>                FSM name, e.g. creditCheck (validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
   -V, --fsm-version <version>          FSM version folder name, e.g. v01 (required for create-async-logic; also required for validate-sync-operation when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
@@ -114,6 +114,7 @@ EXAMPLES
   ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+  ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
   ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --fsm-version v01 --name checkCreditScore
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
@@ -238,11 +239,15 @@ if (missing.length > 0) {
 }
 
 // Commands that accept --folder pointing at a single fsm.json file
-// (single-file mode) instead of only a plugin-root folder.
+// (single-file mode) instead of only a plugin-root folder. generate-all's
+// fsm.json mode skips generate-fsm-json entirely (the fsm.json already
+// exists) and runs only generate-async-logic + generate-sync-logic against
+// it — see the "generate-all" case below.
 const SINGLE_FSM_JSON_FILE_COMMANDS = [
   "generate-sync-logic",
   "generate-async-logic",
   "validate-sync-operation",
+  "generate-all",
 ];
 
 // Of those, the ones that scaffold output and so require --output for the
@@ -253,6 +258,7 @@ const SINGLE_FSM_JSON_FILE_COMMANDS = [
 const SINGLE_FSM_JSON_FILE_COMMANDS_REQUIRING_OUTPUT = [
   "generate-sync-logic",
   "generate-async-logic",
+  "generate-all",
 ];
 
 // Commands that accept --folder pointing at a single machine.ts file
@@ -272,35 +278,51 @@ let folderIsMachineTsFile = false;
 if (folder) {
   try {
     const stat = await Deno.stat(folder);
+    // generate-all accepts EITHER a .ts or a .json file, so extension is
+    // checked before command-list membership below — otherwise a .ts file
+    // would trip over SINGLE_FSM_JSON_FILE_COMMANDS' own "must be .json"
+    // check before ever reaching the .ts branch.
     if (
       command && SINGLE_FSM_JSON_FILE_COMMANDS.includes(command) &&
-      stat.isFile
+      stat.isFile && folder.endsWith(".json")
     ) {
-      if (!folder.endsWith(".json")) {
+      folderIsFsmJsonFile = true;
+    } else if (
+      command && MACHINE_TS_FILE_COMMANDS.includes(command) && stat.isFile &&
+      folder.endsWith(".ts")
+    ) {
+      folderIsMachineTsFile = true;
+    } else if (
+      command && SINGLE_FSM_JSON_FILE_COMMANDS.includes(command) && stat.isFile
+    ) {
+      if (MACHINE_TS_FILE_COMMANDS.includes(command)) {
+        logger.error(
+          "--folder file must be a .ts or fsm.json file for {command}: {folder}",
+          { command, folder },
+        );
+      } else {
         logger.error(
           "--folder file must be an fsm.json file for {command}: {folder}",
           { command, folder },
         );
-        Deno.exit(1);
       }
-      folderIsFsmJsonFile = true;
+      Deno.exit(1);
     } else if (
       command && MACHINE_TS_FILE_COMMANDS.includes(command) && stat.isFile
     ) {
-      if (!folder.endsWith(".ts")) {
-        logger.error(
-          "--folder is not a recognized type. Use a .ts file or a directory: {folder}",
-          { folder },
-        );
-        Deno.exit(1);
-      }
-      folderIsMachineTsFile = true;
+      logger.error(
+        "--folder is not a recognized type. Use a .ts file or a directory: {folder}",
+        { folder },
+      );
+      Deno.exit(1);
     } else if (
       command && !MACHINE_TS_FILE_COMMANDS.includes(command) &&
+      !SINGLE_FSM_JSON_FILE_COMMANDS.includes(command) &&
       !stat.isDirectory
     ) {
-      // generate-fsm-json/generate-all accept .ts/.json files too; all other
-      // commands require a directory
+      // generate-fsm-json/generate-all/generate-sync-logic/
+      // generate-async-logic/validate-sync-operation accept .ts/.json files
+      // too; all other commands require a directory
       logger.error("--folder is not a directory: {folder}", { folder });
       Deno.exit(1);
     }
@@ -446,7 +468,29 @@ try {
       }
       break;
     case "generate-all": {
-      if (folderIsMachineTsFile) {
+      if (folderIsFsmJsonFile) {
+        // fsm.json already exists (--folder points straight at it) — skip
+        // generateFsmJSONFromMachineFile entirely and run only the
+        // remaining two steps against the provided file, mirroring
+        // generate-async-logic/generate-sync-logic's own single-fsm.json
+        // mode above.
+        const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
+        logger.info(
+          "--folder is an fsm.json file: skipping generate-fsm-json and writing worker-sdk-generated/ to {versionFolderPath}",
+          { versionFolderPath },
+        );
+        await generateAsyncOperationLogicFromFsmJson(
+          folder!,
+          versionFolderPath,
+          workerSdkProtocol,
+          versionFolderPath,
+        );
+        await generateSyncOperationLogicFromFsmJson(
+          folder!,
+          versionFolderPath,
+          langs,
+        );
+      } else if (folderIsMachineTsFile) {
         // Single-file mode: chain all three steps for just this one FSM
         // version, --output serving as the destination for every step alike
         // (fsm.json/xstate-fsm.json, actor stubs + aggregate registry, sync

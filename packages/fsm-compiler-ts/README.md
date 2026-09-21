@@ -149,8 +149,7 @@ npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditC
 
 Runs `generate-fsm-json`, then `generate-async-logic`, then
 `generate-sync-logic` — for a fresh FSM (or a whole plugin-root tree), one
-invocation instead of three. Accepts the same two input shapes as
-`generate-fsm-json`:
+invocation instead of three. Accepts three input shapes:
 
 - **Directory** — runs all three steps across every versioned FSM under the
   folder. A step's own best-effort walk collects failures per FSM without
@@ -165,6 +164,10 @@ invocation instead of three. Accepts the same two input shapes as
   `generate-async-logic`'s own single-file mode, `--output` should sit at the
   conventional `<pluginRoot>/<fsmName>/<version>` depth so the aggregate step
   can find the real plugin root three levels up.
+- **Single `fsm.json` file** — the `fsm.json` already exists, so
+  `generate-fsm-json` is skipped entirely; only `generate-async-logic` and
+  `generate-sync-logic` run against it, same as passing that `fsm.json` to
+  either of those commands individually. Also requires `-o`/`--output`.
 
 `-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
 `-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,
@@ -173,6 +176,7 @@ same as the individual commands.
 ```bash
 npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm
 npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
 ```
 
 ### `create-async-logic` — scaffold one actor outside any FSM's `invoke` list
