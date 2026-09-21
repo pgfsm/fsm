@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "imports": {
-    "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
+    "@logtape/logtape": "npm:@logtape/logtape@^2.2",
     "@logtape/otel": "jsr:@logtape/otel@^2.2"
   }
 }
