@@ -39,6 +39,7 @@ import {
   type SessionRequest,
   SessionResponse,
 } from "@pgfsm/proto-codegen/sidecargateway/v1/pb";
+import { isNotFoundError } from "../util.ts";
 
 const logger = getLogger([
   "@pgfsm/worker",
@@ -606,7 +607,7 @@ export class SidecarGateway {
     try {
       Deno.removeSync(this.socketPath);
     } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) {
+      if (!isNotFoundError(error)) {
         throw error;
       }
     }

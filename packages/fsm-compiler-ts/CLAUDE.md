@@ -103,6 +103,28 @@ stubs — is unavailable in the npm/npx build. See `src/util.ts`'s `DenoCommand`
 export and its callers in `src/validate-async-operation-logic.ts` and
 `src/operation-logic-scaffold.ts`.
 
+### `Deno.remove`/`Deno.removeSync` don't throw `Deno.errors.NotFound` under the npm/npx build (#278)
+
+`@deno/shim-deno`'s `stat`/`lstat`/`statSync`/`readTextFile`/`readDir` all
+correctly map Node's raw `fs` errors into real `Deno.errors.*` instances via an
+internal `errorMap` — but its `remove`/`removeSync` don't: a missing path
+(without `{ recursive: true }`, which Node maps to
+`{ recursive: true, force:
+true }` and so never throws at all) rethrows the raw
+Node `fs.rm`/`fs.rmSync` error unwrapped, a plain `Error` with
+`.code === "ENOENT"`, never an instance of `Deno.errors.NotFound`. Any
+`catch (error) { if (!(error instanceof
+Deno.errors.NotFound)) throw error; }`
+"ignore a missing path" pattern built on a non-recursive
+`Deno.remove`/`Deno.removeSync` therefore silently breaks under Node. Use
+`src/util.ts`'s `isNotFoundError(error)` instead of a bare `instanceof` check
+anywhere this pattern shows up — it recognizes both real Deno's
+`Deno.errors.NotFound` and the shim's unwrapped `ENOENT`.
+`delete-fsm-json-from-folders.ts`'s two non-recursive removes are the current
+consumer; `fsm-core-async-op-worker` has its own copy of the same helper for its
+two socket-cleanup call sites (`gatewayServer.ts`'s `cleanupUnixSocket`,
+`sidecar/gateway.ts`'s `cleanupSocket`) — see that package's own `CLAUDE.md`.
+
 ### Dynamic import of a target FSM file under the npm/npx build (#270)
 
 `generateFsmJSONFromMachineFile` and `validateLanguageModules` dynamically
