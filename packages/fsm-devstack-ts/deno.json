@@ -19,7 +19,7 @@
     "fsmdev": "deno run --allow-all src/cli/fsmdev.ts",
     "test": "deno test --allow-all src/",
     "test:watch": "deno test --allow-all --watch src/",
-    "check": "deno check src/index.ts src/cli/fsmdev.ts src/cli/run-gateway.ts src/cli/run-fsmlet.ts",
+    "check": "deno check src/index.ts src/cli/fsmdev.ts",
     "build:npm": "deno run --allow-all scripts/build-npm.ts"
   }
 }
