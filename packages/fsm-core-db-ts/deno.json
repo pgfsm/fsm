@@ -1,16 +1,18 @@
 {
   "name": "@pgfsm/db",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./database.types": "./src/database.types.ts"
   },
   "tasks": {
-    "dev": "deno run --watch main.ts"
+    "dev": "deno run --watch main.ts",
+    "build:npm": "deno run --allow-all scripts/build-npm.ts"
   },
   "imports": {
-    "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
+    "@deno/dnt": "jsr:@deno/dnt@^0.43.0",
+    "@logtape/logtape": "npm:@logtape/logtape@^2.2",
     "@std/assert": "jsr:@std/assert@1",
     "@types/pg": "npm:@types/pg@^8.18.0",
     "pg": "npm:pg@^8.20.0",
