@@ -17,6 +17,19 @@ await Deno.writeTextFile(
   };\n`,
 );
 
+// @pgfsm/db is published to npm independently (unlike @pgfsm/logging, which
+// isn't in .github/workflows/npm-publish.yml's matrix and stays vendored) —
+// map it to the real npm dependency instead of letting dnt inline its
+// source, so a fix published there reaches this package via semver instead
+// of requiring a republish here too. Version is read from its own deno.json
+// rather than hardcoded, so it can't silently drift from whatever this
+// build actually resolved locally. Same pattern as fsm-sync-worker-ts's
+// build-npm.ts mapping @pgfsm/compiler (#283).
+const dbDenoJson = JSON.parse(
+  await Deno.readTextFile("../fsm-core-db-ts/deno.json"),
+);
+const dbVersionRange = `^${dbDenoJson.version}`;
+
 await build({
   entryPoints: [
     "./src/index.ts",
@@ -46,6 +59,7 @@ await build({
     "./src/cli/gateway-ctl-invocation.ts":
       "./src/cli/gateway-ctl-invocation.node.ts",
     "./src/cli/version.ts": "./src/cli/version.node.ts",
+    "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
   },
   package: {
     name: "@pgfsm/async-worker",

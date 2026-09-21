@@ -30,6 +30,13 @@ const compilerDenoJson = JSON.parse(
 );
 const compilerVersionRange = `^${compilerDenoJson.version}`;
 
+// @pgfsm/db is published to npm independently too (see #286) — same
+// real-dependency treatment as @pgfsm/compiler above.
+const dbDenoJson = JSON.parse(
+  await Deno.readTextFile("../fsm-core-db-ts/deno.json"),
+);
+const dbVersionRange = `^${dbDenoJson.version}`;
+
 await build({
   entryPoints: [
     "./src/index.ts",
@@ -58,6 +65,12 @@ await build({
     "@pgfsm/compiler": {
       name: "@pgfsm/compiler",
       version: compilerVersionRange,
+    },
+    "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
+    "@pgfsm/db/database.types": {
+      name: "@pgfsm/db",
+      version: dbVersionRange,
+      subPath: "database.types",
     },
   },
   package: {
