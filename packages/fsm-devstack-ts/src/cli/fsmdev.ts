@@ -31,21 +31,26 @@ await configureLogging({
   levels: { [LOG_CATEGORY]: isTerminal ? "debug" : "info" },
 });
 
-// Long-running steps get their own self-owned bin (imports the sibling
-// package's library function directly, not that package's own CLI — see
-// run-gateway.ts/run-fsmlet.ts's header comments for why). Under Deno, run
-// the source file directly via `deno run --allow-all`; under the dnt-built
-// Node output, spawn this package's own registered bin by name (see
-// scripts/build-npm.ts) and let PATH resolve it — npm links a package's own
-// bin entries into node_modules/.bin alongside its dependencies', the same
-// mechanism `npx -p @pgfsm/sync-worker -- fsmlet` already relies on for that
-// package's bins, so this works under both a temporary npx install and a
-// global one. generate-all/pgcron are one-shot, so they're called as plain
-// library functions below instead — no subprocess needed either way.
-const GATEWAY_SCRIPT = new URL("./run-gateway.ts", import.meta.url);
-const FSMLET_SCRIPT = new URL("./run-fsmlet.ts", import.meta.url);
-const GATEWAY_BIN = "pgfsm-devstack-run-gateway";
-const FSMLET_BIN = "pgfsm-devstack-run-fsmlet";
+// Long-running steps spawn the sibling packages' own real CLIs directly now
+// (#251) — no more self-owned run-gateway.ts/run-fsmlet.ts wrappers. Under
+// Deno, run each sibling's CLI source file directly via `deno run
+// --allow-all` (path computed relative to this file, since both live in the
+// same workspace checkout); under the dnt-built Node output, spawn each
+// package's own published bin by name and let PATH resolve it — npm links a
+// dependency's bin entries into node_modules/.bin, the same mechanism `npx
+// -p @pgfsm/sync-worker -- fsmlet` already relies on for that package's own
+// bin. generate-all/pgcron are one-shot, so they're called as plain library
+// functions below instead — no subprocess needed either way.
+const GATEWAY_SCRIPT = new URL(
+  "../../../fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts",
+  import.meta.url,
+);
+const FSMLET_SCRIPT = new URL(
+  "../../../fsm-sync-worker-ts/src/cli/fsmlet.ts",
+  import.meta.url,
+);
+const GATEWAY_BIN = "async-operation-worker-gateway";
+const FSMLET_BIN = "fsmlet";
 
 const args = parseArgs(Deno.args, {
   string: [
@@ -98,16 +103,14 @@ OPTIONS
   -h, --help                       Show this help message
 
 DESCRIPTION
-  Brings up a full local FSM dev stack in one command, calling
-  @pgfsm/compiler/@pgfsm/async-worker/@pgfsm/sync-worker's library
-  functions directly rather than shelling out to their CLIs:
+  Brings up a full local FSM dev stack in one command:
     1. generate-all (@pgfsm/compiler)                        — one-shot,
-       in-process
-    2. pgcron registration (@pgfsm/sync-worker)               — one-shot,
+       in-process, calling the library functions directly
+    2. pgcron registration (@pgfsm/db)                        — one-shot,
        idempotent, in-process
-    3. the Activity Gateway (@pgfsm/async-worker) and fsmlet
-       (@pgfsm/sync-worker) — each spawned as its own process (a small
-       self-owned runner that imports the library function directly, see
+    3. the Activity Gateway (@pgfsm/async-worker's
+       async-operation-worker-gateway) and fsmlet (@pgfsm/sync-worker's
+       fsmlet) — each spawned as that package's own real CLI process (see
        packages/fsm-devstack-ts/CLAUDE.md) and supervised together:
        Ctrl+C stops both, and if either exits unexpectedly the other is
        torn down (see that same doc for the failure policy).

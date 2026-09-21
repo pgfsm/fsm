@@ -26,64 +26,62 @@ file's: it only documents the currently-publishable library export
 3. `pgcron` registration — one-shot, idempotent. Calls
    `registerScheduleAllPendingCronJob` from `@pgfsm/db` directly, in-process
    (the same function `@pgfsm/sync-worker`'s `pgcron` CLI calls).
-4. The Activity Gateway and `fsmlet` — each its own subprocess, supervised
-   together via `runSupervised`. `Ctrl+C` stops both; if either exits on its own
-   the other is torn down (see failure policy below).
+4. The Activity Gateway (`@pgfsm/async-worker`'s
+   `async-operation-worker-gateway` bin) and `fsmlet` (`@pgfsm/sync-worker`'s
+   `fsmlet` bin) — each spawned as that sibling package's own real CLI, each its
+   own subprocess, supervised together via `runSupervised`. `Ctrl+C` stops both;
+   if either exits on its own the other is torn down (see failure policy below).
 
-**Library imports over CLI dispatch (#245's original ask), with a twist for
-long-running steps.** generate-all/pgcron are one-shot, so fsmdev just calls
+**Library imports for one-shot steps; real sibling CLIs for long-running ones
+(#251).** generate-all/pgcron are one-shot, so fsmdev just calls
 `@pgfsm/compiler`/`@pgfsm/db`'s functions directly — no subprocess at all. The
 gateway and fsmlet are long-running and need real process isolation (so one
 crashing doesn't take fsmdev down with it, and so `runSupervised`'s fail-fast
-policy has something to supervise), so instead of spawning
-`@pgfsm/async-worker`/`@pgfsm/sync-worker`'s own CLI files, `fsmdev` spawns two
-small **self-owned runner files it ships itself** — `src/cli/run-gateway.ts`
-(imports `startActivityGatewayServer` from `@pgfsm/async-worker`) and
-`src/cli/run-fsmlet.ts` (imports `runFsmlet` from `@pgfsm/sync-worker`), each
-wiring its own `SIGINT`/`SIGTERM` to an `AbortSignal` those functions accept.
-`fsmdev.ts` resolves these via `import.meta.url` relative to _itself_
-(`./run-gateway.ts`, `./run-fsmlet.ts`) — which resolves correctly whether
-`@pgfsm/devstack` lives in this monorepo or is installed via npm, unlike a path
-reaching into a sibling top-level package's own CLI file.
+policy has something to supervise), so `fsmdev` spawns `@pgfsm/async-worker`'s
+and `@pgfsm/sync-worker`'s **own real CLIs** — `async-operation-worker-gateway`
+and `fsmlet` — as separate processes, by name, and lets `PATH` resolve them.
 
-None of this repo's other CLIs spawn or supervise child processes, so
-`src/supervisor.ts` (issue #239) is the first such primitive here.
-
-**`fsmdev` is now cross-runtime end to end (#245), via bin dispatch — not by
-resolving a compiled sibling path.** `fsmdev.ts`, `run-gateway.ts`, and
-`run-fsmlet.ts` are all registered as this package's own `bin` entries in
-`scripts/build-npm.ts` — the same pattern `@pgfsm/sync-worker` uses for
-`fsmlet`/`fsmscheduler`/`fsmctl`/`pgcron` and `@pgfsm/async-worker` uses for
-`async-operation-worker-gateway`/`-ctl`. Under Node, `fsmdev` spawns
-`run-gateway`/`run-fsmlet` **by their registered bin name**
-(`pgfsm-devstack-run-gateway`/`pgfsm-devstack-run-fsmlet`) and relies on `PATH`
-to resolve them:
+An earlier revision (#245) instead shipped two small self-owned wrapper files
+(`src/cli/run-gateway.ts`/`run-fsmlet.ts`) that imported
+`startActivityGatewayServer`/`runFsmlet` directly and re-exposed a scoped-down
+CLI, because `@pgfsm/sync-worker`/`@pgfsm/async-worker` weren't published to npm
+yet — a wrapper bin `fsmdev` registered itself could still land on `PATH`
+regardless of the sibling packages' own publish status. Once both were published
+with correct `dependencies` of their own (#283/#286–#289), #251 removed the
+wrappers: `fsmdev.ts`'s `toProcessSpec` now spawns the sibling packages' own CLI
+**source files** directly under Deno (path computed relative to `fsmdev.ts` via
+`import.meta.url`, reaching into `../fsm-sync-worker-ts/src/cli/fsmlet.ts` /
+`../fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts` — this
+only has to resolve inside this monorepo checkout, since the Deno branch never
+runs from an installed package) or their **real published bin names** under the
+dnt-built Node output:
 
 ```ts
 const isDeno = typeof process !== "undefined" && !!process.versions?.deno;
-// under Deno: cmd = Deno.execPath(), args = ["run", "--allow-all", <path>.ts, ...]
-// under Node: cmd = "pgfsm-devstack-run-gateway" (bare name, resolved via PATH), args = [...]
+// under Deno: cmd = Deno.execPath(), args = ["run", "--allow-all", <sibling CLI path>.ts, ...]
+// under Node: cmd = "fsmlet" / "async-operation-worker-gateway" (bare name, resolved via PATH), args = [...]
 ```
 
-An earlier revision instead resolved `run-gateway.js`/`run-fsmlet.js`'s
-_compiled path_ directly (`isDeno ? "./run-gateway.ts" : "./run-gateway.js"`,
-invoked with `process.execPath`), avoiding extra public bins at the cost of
-coupling `fsmdev` to dnt's exact `dist/` layout. That approach was replaced with
-bin dispatch — more robust (PATH resolution is a stable npm contract; dnt's
-output directory shape isn't) and consistent with every other CLI in this repo —
-after confirming empirically that it actually works: `npm
-install`ing a package
-**as a dependency of another project** (exactly what
-`npx -p @pgfsm/devstack -- fsmdev` does) links _all_ of that package's own
-declared bins into `node_modules/.bin` together, not just the one directly
-invoked — verified by building this package, installing its `dist/` output into
-a scratch project as a dependency, and confirming `fsmdev`,
-`pgfsm-devstack-run-gateway`, and `pgfsm-devstack-run-fsmlet` all appeared in
-`node_modules/.bin` and `node node_modules/.bin/fsmdev --help` ran correctly.
-(Running `npm install` _inside_ a package's own directory — which is what a
-naive local test does — does **not** self-link that package's own bins; only a
-dependency's bins get linked that way. Don't be misled by testing it that way,
-as an earlier pass in this session was.)
+`@pgfsm/sync-worker`/`@pgfsm/async-worker` are declared as real `dependencies`
+in `scripts/build-npm.ts` (see "Real dependencies" below) purely so
+`npm install`ing `@pgfsm/devstack` links their `fsmlet`/
+`async-operation-worker-gateway` bins into `node_modules/.bin` alongside
+`fsmdev`'s own — the same mechanism `npx -p @pgfsm/sync-worker -- fsmlet`
+already relies on for that package's own bin, verified previously (#245) by
+building this package, installing its `dist/` output into a scratch project as a
+dependency, and confirming the wrapper bins of that era all appeared in
+`node_modules/.bin` correctly. (Running `npm install` _inside_ a package's own
+directory does **not** self-link that package's own bins; only a dependency's
+bins get linked that way — don't be misled by testing it that way.) The real
+sibling CLIs' flag surfaces are supersets of what the old wrappers exposed
+(`fsmlet` also supports single-`fsm.json` mode via `--fsm-name`/`--fsm-version`;
+`async-operation-worker-gateway` also supports
+`--disable-poll-loop`/`--invoke-timeout-ms`) — `fsmdev` still only passes the
+subset it always did, so behavior is unchanged even though the full surface is
+now reachable.
+
+None of this repo's other CLIs spawn or supervise child processes, so
+`src/supervisor.ts` (issue #239) is the first such primitive here.
 
 Two things had to be verified empirically before `isDeno`-based dispatch was
 safe to write at all (see git history for the throwaway probes, not kept in the
@@ -102,34 +100,27 @@ tree):
   `node:child_process`/`node:process` genuinely do work identically under both
   runtimes with no branching needed at all).
 
-Every other `Deno.*` call in these three files (`Deno.args`, `Deno.exit`,
+Every other `Deno.*` call in `fsmdev.ts` (`Deno.args`, `Deno.exit`,
 `Deno.env.get`, `Deno.stat`, `Deno.readDirSync`, `Deno.addSignalListener`)
 needed **no changes** — dnt's shim already implements all of them faithfully
 (verified empirically against the actual compiled+`node`-executed output);
 `Deno.Command` remains the one Deno API with no shim at all (per
 `@deno/shim-deno`'s own progress tracking), which is exactly why `supervisor.ts`
 moved off it in #244 and why `fsmdev`'s own spawn calls need the `isDeno` branch
-above instead of a shimmed call. Because all three are `bin` entries (not the
-plain entries an earlier revision used), they keep the same top-level `await`
-style as every other CLI in this repo — no `async function main()` wrapper
-needed; dnt only refuses top-level `await` for a _plain_ entry's CJS/UMD output,
-not a bin's.
+above instead of a shimmed call. `fsmdev` keeps the same top-level `await` style
+as every other CLI in this repo — no `async function main()` wrapper needed; dnt
+only refuses top-level `await` for a _plain_ entry's CJS/UMD output, not a
+bin's, and `fsmdev` is registered as a `bin`.
 
-**The `deno task build:npm` → `npx -p @pgfsm/devstack -- fsmdev` path now
-actually works, end to end, verified — with one real remaining gap (below).** An
-earlier pass in this session believed the build couldn't succeed because
-`@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker` aren't published to
-npm yet — that was wrong, self-inflicted by declaring them as npm `dependencies`
-in `scripts/build-npm.ts` (see "Vendored dependencies" below for why that was
-also incorrect on its own terms). Once those declarations were removed,
-`deno task build:npm` succeeds outright — dnt vendors their source via Deno's
-workspace resolution regardless of npm registry state, so publication status is
-irrelevant to whether this package's _own_ build succeeds. Verified:
-`deno task build:npm` completes,
-`node
-dist/esm/fsm-devstack-ts/src/cli/fsmdev.js --help` runs correctly, and
-installing that `dist/` output as a dependency of a scratch project (the
-`npx`-equivalent scenario above) links all three bins onto `PATH` correctly.
+**The `deno task build:npm` → `npx -p @pgfsm/devstack -- fsmdev` path works end
+to end, verified — with one real remaining gap (below).** `@pgfsm/compiler` and
+`@pgfsm/db` are now real `dependencies` (mapped via `dnt`'s `mappings` option —
+see "Real dependencies" below); `@pgfsm/sync-worker`/ `@pgfsm/async-worker` are
+real `dependencies` too, declared directly since nothing imports their bare
+specifier anymore. Verified: `deno task build:npm` completes,
+`dist/package.json`'s `dependencies` lists all four (not vendored source),
+`node dist/esm/fsm-devstack-ts/src/cli/fsmdev.js --help` runs correctly under
+Node.
 
 **Real remaining gap: `generate-all` doesn't work under Node at all, for a
 reason that has nothing to do with dispatch.** `@pgfsm/compiler`'s
@@ -198,73 +189,65 @@ this note is just about how it surfaced.
   clean-exit-is-still-a-failure, requested-shutdown, and empty-spec-list
   rejection
 - `index.ts` — barrel export
-- `cli/fsmdev.ts` — the orchestrator CLI (see above)
-- `cli/run-gateway.ts` / `cli/run-fsmlet.ts` — self-owned bins `fsmdev` spawns
-  by name for the two long-running steps (see above); intentionally scoped down
-  from the full-featured sibling CLIs they replace (e.g. `run-fsmlet.ts` is
-  folder-mode only, `run-gateway.ts` always runs the poll loop). Plain top-level
-  `await` throughout, same as every other CLI in this repo — no `main()` wrapper
-  needed, since both are `bin` entries (see below).
+- `cli/fsmdev.ts` — the orchestrator CLI, the only `bin` entry (see above)
 
-`scripts/build-npm.ts` builds `index.ts` (library export) and `fsmdev.ts`/
-`run-gateway.ts`/`run-fsmlet.ts` (all three `bin` entries — see above for the
-empirically-verified design this rests on). Declares **no** `dependencies` on
-`@pgfsm/compiler`/`@pgfsm/db`/`@pgfsm/async-worker`/`@pgfsm/sync-worker` — see
-"Vendored dependencies" below for why an earlier revision's explicit
-declarations were both unnecessary and misleading. Sets `test: false` in the dnt
-`build()` options because this package, unlike the sibling dnt-built packages,
-colocates `supervisor.test.ts` under `src/`; without that, dnt also
-transforms/type-checks it as a Node test file and pulls in `@std/assert`, which
-needs a newer `lib` target than this package's `compilerOptions` sets.
-`postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
-passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
-local `deno task build:npm` skips it, same convention as the sibling packages.
+`scripts/build-npm.ts` builds `index.ts` (library export) and `fsmdev.ts` (the
+one `bin` entry — see "What it is" above for why `run-gateway.ts`/
+`run-fsmlet.ts` no longer exist). See "Real dependencies" below for how it
+declares `@pgfsm/compiler`/`@pgfsm/db`/`@pgfsm/sync-worker`/
+`@pgfsm/async-worker`. Sets `test: false` in the dnt `build()` options because
+this package, unlike the sibling dnt-built packages, colocates
+`supervisor.test.ts` under `src/`; without that, dnt also transforms/type-checks
+it as a Node test file and pulls in `@std/assert`, which needs a newer `lib`
+target than this package's `compilerOptions` sets. `postBuild()` only copies
+`README.md` into `dist/` when `--copy-readme` is passed
+(`deno task build:npm <version> --copy-readme`, as CI does) — a plain local
+`deno task build:npm` skips it, same convention as the sibling packages.
 
-## Vendored dependencies
+## Real dependencies
 
-`@pgfsm/compiler`, `@pgfsm/db`, `@pgfsm/async-worker`, and `@pgfsm/sync-worker`
-are Deno workspace-resolved imports here, not `npm:`/`jsr:` specifiers — dnt
-vendors their actual source directly into this package's own `dist/` output
-(verified: `dist/esm/fsm-compiler-ts/`, `dist/esm/fsm-core-async-op-worker/`,
-`dist/esm/fsm-sync-worker-ts/`, `dist/esm/fsm-core-db-ts/` all appear as full
-source trees inside `fsm-devstack-ts`'s own build). This is the exact same
-vendoring PR #248 (closing #247) documents for `@pgfsm/db` inside
-`fsm-sync-worker-ts`'s and `fsm-core-async-op-worker`'s own npm builds —
-confirmed directly by building `@pgfsm/async-worker` locally and finding
-`@pgfsm/db` absent from both its compiled `package.json` `dependencies` and its
-`dist/node_modules`, with `@pgfsm/db`'s source vendored under
-`dist/esm/fsm-core-db-ts/` instead.
+`@pgfsm/compiler`, `@pgfsm/db`, `@pgfsm/sync-worker`, and `@pgfsm/async-worker`
+are all real npm `dependencies` in `scripts/build-npm.ts` now (#251) — but via
+two different mechanisms, because they relate to this package's compiled code in
+two different ways:
 
-Consequences:
+- **`@pgfsm/compiler`/`@pgfsm/db`** are genuinely imported as bare specifiers in
+  `fsmdev.ts`'s own compiled code (`generate-all`/`pgcron` call their library
+  functions directly, in-process). Mapped via `dnt`'s `mappings` option, same
+  pattern as `fsm-sync-worker-ts`'s build (#283/#289) — this redirects the
+  import to the real npm package instead of letting `dnt` vendor the
+  workspace-resolved source, and declares the dependency. Version read from each
+  package's own `deno.json` at build time, not hardcoded.
+- **`@pgfsm/sync-worker`/`@pgfsm/async-worker`** are **not** imported by any
+  compiled code here anymore — `fsmdev` only spawns their `fsmlet`/
+  `async-operation-worker-gateway` bins as separate OS processes (see "What it
+  is" above). There's no bare specifier for `mappings` to redirect, so these are
+  a plain `package.dependencies` entry instead, declared purely so
+  `npm install`ing `@pgfsm/devstack` links those bins into `node_modules/.bin`
+  alongside `fsmdev`'s own.
 
-- **Don't declare these four as npm `dependencies` in `scripts/build-npm.ts`.**
-  Doing so doesn't change what the compiled code imports (it never uses the bare
-  specifier — only the vendored relative path), so it would just install a
-  redundant, never-executed copy, and it misleadingly implies a semver bump to
-  one of those four packages reaches existing `@pgfsm/devstack` installs. It
-  does not: **this package needs to be rebuilt and republished itself** for a
-  fix in any of them to reach consumers. Mirrors PR #248's finding one layer
-  deeper — `fsm-devstack-ts` vendors packages that themselves vendor
-  `@pgfsm/db`, so a `@pgfsm/db` fix has to propagate through _two_ republish
-  steps to reach an `@pgfsm/devstack` install.
-- This also means `deno task build:npm` for this package doesn't need
-  `@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker` to be published
-  to npm at all — dnt's vendoring is driven by Deno's own workspace resolution,
-  not by npm registry availability. An earlier pass in this session incorrectly
-  believed the build was blocked on those three packages' publication status;
-  that was purely a consequence of having declared them as `dependencies` in the
-  first place (which forced a real `npm install` lookup that 404'd). Removing
-  the declarations was the actual fix.
-- If `docs/schema-change-propagation.md` gains a step for this (mirroring PR
-  #248's addition there for `fsm-sync-worker-ts`/ `fsm-core-async-op-worker`),
-  `fsm-devstack-ts` needs the same treatment — not done here to avoid
-  conflicting with that still-open PR.
+`@pgfsm/logging` stays vendored — it isn't in
+`.github/workflows/npm-publish.yml`'s matrix, so there's no real package to map
+it to.
+
+Before #251, none of the four were declared at all: `@pgfsm/sync-worker`/
+`@pgfsm/async-worker` were reached only through the now-removed
+`run-gateway.ts`/`run-fsmlet.ts` wrapper bins (see "What it is" above for why
+those existed and how they were retired), and `@pgfsm/compiler`/`@pgfsm/db` were
+still vendored via `dnt`'s default handling of the Deno workspace-linked import
+— the same shape PR #248 (closing #247) documented for `@pgfsm/db` inside
+`fsm-sync-worker-ts`'s and `fsm-core-async-op-worker`'s own builds, one layer
+deeper (a fix to any of these four needed **two** republish steps to reach a
+`@pgfsm/devstack` install: the vendored package itself, then this package). All
+four are now real npm packages with correct `dependencies` of their own (#283,
+#286–#289), so mapping instead of vendoring is safe here the same way it was for
+them.
 
 ## Commands
 
 ```bash
 deno task fsmdev    # deno run --allow-all src/cli/fsmdev.ts
 deno task test      # deno test --allow-all src/
-deno task check     # deno check src/index.ts src/cli/fsmdev.ts src/cli/run-gateway.ts src/cli/run-fsmlet.ts
+deno task check     # deno check src/index.ts src/cli/fsmdev.ts
 deno task build:npm # scripts/build-npm.ts (dnt npm build — succeeds; generate-all still fails under the built Node output, see above)
 ```
