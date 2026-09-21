@@ -13,7 +13,7 @@ import {
   validateSyncOperationFromFolders,
   validateSyncOperationFromFsmJson,
 } from "@pgfsm/compiler";
-import type { FsmModule } from "@pgfsm/db";
+import type { AsyncActor, FsmModule } from "@pgfsm/db";
 import {
   checkRegistryAndWorkingForAsyncActors,
   checkRegistryForAsyncActors,
@@ -28,6 +28,24 @@ import { claimScheduledForFsmlet, fsmletNotifyChannel } from "@pgfsm/db";
 const logger = getLogger(["@pgfsm/fsmlet"]);
 
 const DEFAULT_MAX_CONCURRENCY = 8;
+
+// check_registry_for_async_actors/check_registry_and_working_for_async_actors...
+// (packages/database-src/supabase/schemas/25_async_operation_worker_v1/) read
+// each actor's own version from a `fsmVersion` JSON key and match it against
+// async_operation_version — despite the name, this is the actor's
+// asyncOperationVersion, not the parent FSM's version (already passed
+// separately as those functions' own fsmVersion argument). ActorReference has
+// no `fsmVersion` field at all, so passing it straight through left that key
+// undefined on every actor, meaning both checks always reported every actor
+// as unregistered (see #169).
+function toAsyncActors(
+  actors: { src: string; asyncOperationVersion?: string }[],
+): AsyncActor[] {
+  return actors.map((actor) => ({
+    src: actor.src,
+    fsmVersion: actor.asyncOperationVersion ?? "",
+  }));
+}
 const DRAIN_POLL_MS = 100;
 const HEARTBEAT_INTERVAL_MS = 5_000;
 // Fallback poll: catches any pg_notify missed after a LISTEN connection drop.
@@ -146,7 +164,9 @@ export async function startFsmlet(
       // step 2. Based on asyncOperationVerificationMode, verifies asyncOperationActors in the FSM modules.
       if (asyncOperationVerificationMode === "checkRegistry") {
         for (const fsmModule of verifiedFsm) {
-          const asyncActors = fsmModule.asyncOperationActors ?? [];
+          const asyncActors = toAsyncActors(
+            fsmModule.asyncOperationActors ?? [],
+          );
           const result = await checkRegistryForAsyncActors(
             deps,
             asyncActors,
@@ -159,7 +179,9 @@ export async function startFsmlet(
         asyncOperationVerificationMode === "checkRegistryAndWorking"
       ) {
         for (const fsmModule of verifiedFsm) {
-          const asyncActors = fsmModule.asyncOperationActors ?? [];
+          const asyncActors = toAsyncActors(
+            fsmModule.asyncOperationActors ?? [],
+          );
           const registryResult = await checkRegistryForAsyncActors(
             deps,
             asyncActors,
