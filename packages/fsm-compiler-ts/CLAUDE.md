@@ -103,6 +103,41 @@ stubs — is unavailable in the npm/npx build. See `src/util.ts`'s `DenoCommand`
 export and its callers in `src/validate-async-operation-logic.ts` and
 `src/operation-logic-scaffold.ts`.
 
+### Dynamic import of a target FSM file under the npm/npx build (#270)
+
+`generateFsmJSONFromMachineFile` and `validateLanguageModules` dynamically
+`import()` a user's own `machine.ts` / per-language
+`actions|guards|delays/index.ts` directly off disk. Those files routinely
+bare-import npm packages (e.g. `xstate`) that resolve only via the target FSM
+tree's own Deno import map (`deno.json`'s `imports`) — under `deno run`, Deno's
+module graph resolution honors that regardless of which file does the importing.
+Under the npm/npx build (plain Node.js), Node resolves bare specifiers by
+walking `node_modules/` upward **from the importing file's own path**, which
+almost never has one near an FSM tree in this repo (they rely on the Deno import
+map instead) — so this used to fail outright with `ERR_MODULE_NOT_FOUND`.
+
+`src/import-resolution.ts` / `import-resolution.node.ts` (swapped via
+`build-npm.ts`'s `mappings`, same pattern as `invocation.ts`/`version.ts`) and
+`src/cli/loader.node.ts` fix this for the npm/npx build only: a Node
+`node:module` `register()` resolve hook that, **only when Node's normal
+resolution has already failed**, reads the failing specifier's nearest
+`deno.json`(`c`) import map (walking up to the workspace root too, if any) and,
+for an exact-key `npm:`-mapped entry, installs that package on demand into a
+persistent per-user cache (`~/.cache/pgfsm-compiler/npm-import-map-deps` or
+platform equivalent — `XDG_CACHE_HOME`/`~/Library/Caches`/`%LOCALAPPDATA%`)
+before re-resolving. Needs network access + `npm` on `PATH` the first time a
+given package is needed; cached thereafter. Deliberately scoped: only exact
+`imports` keys (no `scopes`/trailing-slash prefix entries) and only `npm:`
+values (not `jsr:`) — anything outside that, or any failure in the fallback
+itself, rethrows the _original_ Node resolution error unchanged rather than
+masking it. `loader.node.ts` must be listed explicitly in `build-npm.ts`'s
+`entryPoints` — nothing statically imports it (it's only referenced by the
+runtime string `register()` is called with), so dnt's graph walker won't find it
+otherwise. `findMergedImportMap` (the import-map walk/merge algorithm) is plain
+`node:fs`/`node:path` code with no Deno APIs, so it's directly `deno test`-able
+even though the file only ever runs under Node — see
+`test/import-resolution.test.ts`.
+
 `src/types/index.ts`'s cross-package `import type`/`export type` reaching into
 `../../../database-src/generated/` (see above) is type-only, so it never appears
 in the emitted JS — but dnt's build still resolves and copies the source
