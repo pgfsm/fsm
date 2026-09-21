@@ -497,6 +497,61 @@ Deno.test("cli generate-all folder mode: one bad FSM's failure doesn't block stu
   assertEquals(badFsmJsonExists, false);
 });
 
+Deno.test("cli generate-all requires --output when --folder is a single fsm.json file", async () => {
+  const { code, stderr } = await runCli([
+    "-c",
+    "generate-all",
+    "-f",
+    SINGLE_FSM_JSON,
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "requires --output");
+});
+
+Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes actor + sync stubs and the aggregate registry into --output", async () => {
+  const outDir = `${FIXTURE_ROOT}/generate-all-fsm-json-mode`;
+  const { code, stdout } = await runCli([
+    "-c",
+    "generate-all",
+    "-f",
+    SINGLE_FSM_JSON,
+    "--output",
+    outDir,
+  ]);
+  assertEquals(code, 0);
+  assertStringIncludes(stdout, "skipping generate-fsm-json");
+
+  // No fsm.json/xstate-fsm.json write happens in this mode -- the one at
+  // --folder (SINGLE_FSM_JSON) is used as-is, generateFsmJSONFromMachineFile
+  // never runs.
+  let outputFsmJsonExists = true;
+  try {
+    await Deno.stat(`${outDir}/fsm.json`);
+  } catch {
+    outputFsmJsonExists = false;
+  }
+  assertEquals(outputFsmJsonExists, false);
+
+  const actorStat = await Deno.stat(
+    `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
+  );
+  assert(actorStat.isFile);
+  const syncStat = await Deno.stat(`${outDir}/typescript/actions/index.ts`);
+  assert(syncStat.isFile);
+  const aggregateContent = await Deno.readTextFile(
+    `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+  );
+  assertStringIncludes(aggregateContent, "creditcheck_v01");
+});
+
+Deno.test("cli generate-all rejects a --folder file that's neither .ts nor .json", async () => {
+  const txtPath = `${FIXTURE_ROOT}/generate-all-bad-extension.txt`;
+  await Deno.writeTextFile(txtPath, "not a machine.ts or fsm.json\n");
+  const { code, stderr } = await runCli(["-c", "generate-all", "-f", txtPath]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "must be a .ts or fsm.json file");
+});
+
 // --- create-async-logic ---
 
 Deno.test("cli create-async-logic without --fsm-version exits 1", async () => {
