@@ -28,17 +28,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # dnt: true means this package ships a CLI that must work via `npx`.
-          # `deno pack` only emits a library — it does not synthesize a
-          # package.json `bin` field, so a CLI entry point packed that way is
-          # unreachable from npx (confirmed against the Deno docs' own
-          # "Limitations" section: https://docs.deno.com/runtime/reference/cli/pack/).
-          # These packages instead build through `deno task build:npm`
-          # (packages/fsm-compiler-ts/scripts/build-npm.ts), which uses
-          # @deno/dnt to transpile + Node-shim the Deno source into `dist/`
-          # and registers both the library export and a shebanged `bin`
-          # entry in one pass. Packages without a CLI (or without a dnt
-          # build script yet) stay on `deno pack`.
+          # dnt: true means this package needs @deno/dnt's dependency-mapping
+          # support — either to ship a CLI `bin` (deno pack only emits a
+          # library; it does not synthesize a package.json `bin` field, so a
+          # CLI entry point packed that way is unreachable from npx —
+          # confirmed against the Deno docs' own "Limitations" section:
+          # https://docs.deno.com/runtime/reference/cli/pack/), or to declare
+          # a real npm dependency deno pack can't express (deno pack's
+          # package.json is 100% auto-inferred from the module graph with no
+          # override mechanism — db needs @types/pg as a real dependency
+          # since its own public .d.ts references pg's types, which dnt's
+          # `package.dependencies` option supports and deno pack doesn't;
+          # see #287). These packages build through `deno task build:npm`
+          # (packages/fsm-compiler-ts/scripts/build-npm.ts and friends),
+          # which uses @deno/dnt to transpile + Node-shim the Deno source
+          # into `dist/`. Packages without a CLI or a dependency-mapping
+          # need (or without a dnt build script yet) stay on `deno pack`.
           - id: compiler
             path: packages/fsm-compiler-ts
             tag_prefix: compiler-v
@@ -46,6 +51,7 @@ jobs:
           - id: db
             path: packages/fsm-core-db-ts
             tag_prefix: db-v
+            dnt: true
           - id: sync-worker
             path: packages/fsm-sync-worker-ts
             tag_prefix: sync-worker-v
