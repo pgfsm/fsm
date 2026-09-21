@@ -2,6 +2,7 @@ import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureCompilerLogger } from "../logger.ts";
+import { CLI_INVOCATION } from "./invocation.ts";
 import {
   createAsyncOperationLogic,
   deleteFsmJSONFromFolders,
@@ -63,7 +64,7 @@ function printHelp(): void {
 fsm-compiler — FSM JSON compiler CLI
 
 USAGE
-  deno run --allow-all src/cli/index.ts -c <command> -f <folder> [options]
+  ${CLI_INVOCATION} -c <command> -f <folder> [options]
 
 COMMANDS
   generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
@@ -95,22 +96,22 @@ ENVIRONMENT
   DATABASE_URL    Fallback connection string for load. Ignored if --db-url is provided.
 
 EXAMPLES
-  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
-  deno run --allow-all src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
-  deno run --allow-all src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
-  deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
-  deno run --allow-all src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
-  deno run --allow-all src/cli/index.ts -c generate-all -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
-  deno run --allow-all src/cli/index.ts -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
-  deno run --allow-all src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm
-  deno run --allow-all src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
-  deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig
-  deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig --lang typescript
-  deno run --allow-all src/cli/index.ts -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig --lang typescript,python
+  ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm
+  ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
+  ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+  ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm
+  ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
+  ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
+  ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
+  ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output v01
+  ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm
+  ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+  ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --version v01 --name checkCreditScore
+  ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm
+  ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
+  ${CLI_INVOCATION} -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig
+  ${CLI_INVOCATION} -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig --lang typescript
+  ${CLI_INVOCATION} -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig --lang typescript,python
 `);
 }
 
