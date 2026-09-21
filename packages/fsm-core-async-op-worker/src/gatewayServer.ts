@@ -36,6 +36,7 @@ import {
 } from "./sidecar/gateway.ts";
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
+import { isNotFoundError } from "./util.ts";
 
 const logger = getLogger(["@pgfsm/worker", "async-op-worker-gateway"]);
 
@@ -115,7 +116,7 @@ function cleanupUnixSocket(bindTarget: string): void {
   try {
     Deno.removeSync(path);
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
+    if (!isNotFoundError(error)) {
       throw error;
     }
   }

@@ -53,6 +53,24 @@ build, this one has to carry that dependency graph through dnt's type-check and
 bundling. Verified clean as of #176; if it breaks again, that's the first place
 to look.
 
+**`Deno.remove`/`Deno.removeSync` don't throw `Deno.errors.NotFound` under the
+npm/npx build (#278)**: `@deno/shim-deno`'s `remove`/`removeSync` rethrow a
+missing-path failure as a raw, unwrapped Node `fs.rm`/`fs.rmSync` error
+(`.code === "ENOENT"`) rather than a `Deno.errors.NotFound` instance — unlike
+its `stat`/`lstat`/`readTextFile`/`readDir`, which do map through correctly.
+This broke `gatewayServer.ts`'s `cleanupUnixSocket` and `sidecar/gateway.ts`'s
+`cleanupSocket` (both a best-effort "delete any leftover socket file from a
+previous run" that's supposed to ignore a missing one) — the gateway crashed on
+startup under `npx` even on a completely fresh run with no stale socket. Use
+`src/util.ts`'s `isNotFoundError(error)` instead of a bare
+`error
+instanceof Deno.errors.NotFound` check anywhere this "ignore a missing
+path" pattern is built on a non-recursive `Deno.remove`/`Deno.removeSync` — it
+recognizes both real Deno's `Deno.errors.NotFound` and the shim's unwrapped
+`ENOENT`. `fsm-compiler-ts` has its own copy of the same helper (its own
+`Deno.remove` call sites are a different package, same upstream shim gap) — see
+that package's own `CLAUDE.md`.
+
 **Multi-bin `npx` gotcha**: because this package registers two bins and neither
 is named `async-worker` (the derived executable name from the package name), a
 plain `npx @pgfsm/async-worker async-operation-worker-gateway ...` does **not**

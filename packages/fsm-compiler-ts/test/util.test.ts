@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   extractFsmPluginRefs,
+  isNotFoundError,
   isTimestampFolderName,
   isValidDateFolderName,
   isVersionFolderName,
@@ -96,4 +97,30 @@ Deno.test("isTimestampFolderName - invalid", () => {
   assertEquals(isTimestampFolderName("202401151030001"), false); // too long
   assertEquals(isTimestampFolderName("2024011510300a"), false); // non-digit
   assertEquals(isTimestampFolderName(""), false);
+});
+
+Deno.test("isNotFoundError - matches a real Deno.errors.NotFound instance", () => {
+  assertEquals(isNotFoundError(new Deno.errors.NotFound("nope")), true);
+});
+
+Deno.test("isNotFoundError - matches a raw Node ENOENT-shaped error (the unwrapped @deno/shim-deno remove()/removeSync() shape under the npm/npx build — see #278)", () => {
+  const rawNodeEnoent = Object.assign(new Error("ENOENT: no such file"), {
+    code: "ENOENT",
+  });
+  assertEquals(isNotFoundError(rawNodeEnoent), true);
+});
+
+Deno.test("isNotFoundError - rejects other errors and non-error values", () => {
+  assertEquals(
+    isNotFoundError(new Deno.errors.PermissionDenied("nope")),
+    false,
+  );
+  assertEquals(
+    isNotFoundError(Object.assign(new Error("busy"), { code: "EBUSY" })),
+    false,
+  );
+  assertEquals(isNotFoundError(new Error("plain error, no code")), false);
+  assertEquals(isNotFoundError("not an error"), false);
+  assertEquals(isNotFoundError(null), false);
+  assertEquals(isNotFoundError(undefined), false);
 });

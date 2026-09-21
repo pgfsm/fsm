@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["@pgfsm/compiler", "delete"]);
-import { isVersionFolderName } from "./util.ts";
+import { isNotFoundError, isVersionFolderName } from "./util.ts";
 
 async function deleteFsmJSONFromFolder(
   dirEntryName: string,
@@ -21,7 +21,7 @@ async function deleteFsmJSONFromFolder(
       path: absFolderPath,
     });
   } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
+    if (isNotFoundError(err)) {
       logger.info(
         "fsm.json or xstate-fsm.json is missing in {path}, nothing to delete",
         { path: `${absFolderPath}/${dirEntryName}` },
