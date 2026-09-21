@@ -2,27 +2,48 @@ import { build, emptyDir } from "@deno/dnt";
 
 await emptyDir("./dist");
 
-// fsmdev is registered as this package's public `bin` (its own top-level
-// await is fine there — dnt only refuses top-level await when building a
-// plain entry's CJS/UMD output, not a bin's). run-gateway.ts/run-fsmlet.ts
-// are deliberately plain (non-bin) entries instead: fsmdev resolves and
-// invokes their compiled .js siblings directly (see fsmdev.ts's `isDeno`
-// branch in toProcessSpec) rather than exposing them as their own public
-// commands — see packages/fsm-devstack-ts/CLAUDE.md for the full design and
-// its trade-offs against registering them as bins too.
+// fsmdev, run-gateway.ts, and run-fsmlet.ts are all registered as this
+// package's own bins — the same pattern @pgfsm/sync-worker uses for
+// fsmlet/fsmscheduler/fsmctl/pgcron and @pgfsm/async-worker uses for
+// async-operation-worker-gateway/-ctl. Under Node, fsmdev spawns
+// run-gateway/run-fsmlet by their bin name (see fsmdev.ts's `isDeno` branch
+// in toProcessSpec) and relies on PATH to resolve them — npm links a
+// package's own bin entries into node_modules/.bin alongside its
+// dependencies', so this works whether @pgfsm/devstack ends up in a
+// temporary npx install or a global one, without fsmdev needing to know
+// anything about dnt's dist/ output layout. See
+// packages/fsm-devstack-ts/CLAUDE.md for the full design, including why an
+// earlier revision instead resolved run-gateway/run-fsmlet's compiled path
+// directly (kept there as a documented dead end, not reused).
 //
-// NOTE: @pgfsm/compiler, @pgfsm/async-worker, and @pgfsm/sync-worker are not
-// published to npm yet (only @pgfsm/db is, as of this writing) — this build
-// cannot actually succeed end-to-end (its `npm install` step will 404 on
-// those three) until they are. The entry points/dependency wiring below are
-// written to be correct once that happens, not verified against a real
-// install — see #245.
+// @pgfsm/compiler, @pgfsm/db, @pgfsm/async-worker, and @pgfsm/sync-worker are
+// NOT declared as npm `dependencies` below, deliberately — they're Deno
+// workspace-resolved imports, not npm:/jsr: specifiers, so dnt vendors their
+// actual source directly into this package's own dist output (confirmed
+// empirically: @pgfsm/async-worker's own compiled package.json doesn't list
+// @pgfsm/db as a dependency either, and its dist/ has no node_modules/@pgfsm
+// at all — see PR #248 / #247, which documents the same vendoring for
+// fsm-sync-worker-ts's and fsm-core-async-op-worker's use of @pgfsm/db).
+// Declaring them here wouldn't change that — the compiled code never imports
+// the bare specifier, so it would just install a redundant, never-executed
+// copy — and would misleadingly imply a semver-bumped fix to one of those
+// four packages reaches existing @pgfsm/devstack installs, which it does
+// not: this package would need to be rebuilt and republished itself. See
+// packages/fsm-devstack-ts/CLAUDE.md's "Vendored dependencies" note.
 await build({
   entryPoints: [
     "./src/index.ts",
     { kind: "bin", name: "fsmdev", path: "./src/cli/fsmdev.ts" },
-    "./src/cli/run-gateway.ts",
-    "./src/cli/run-fsmlet.ts",
+    {
+      kind: "bin",
+      name: "pgfsm-devstack-run-gateway",
+      path: "./src/cli/run-gateway.ts",
+    },
+    {
+      kind: "bin",
+      name: "pgfsm-devstack-run-fsmlet",
+      path: "./src/cli/run-fsmlet.ts",
+    },
   ],
   outDir: "./dist",
   shims: {
@@ -39,18 +60,6 @@ await build({
     description:
       "fsmdev: one-command local FSM dev stack launcher, plus the process spawn/signal supervision primitive backing it",
     license: "Apache-2.0",
-    dependencies: {
-      // Workspace-only specifiers, not npm: imports — dnt has no way to
-      // infer these should become real npm dependencies (unlike "pg"
-      // below), so they're declared explicitly, same as the @types/pg
-      // devDependency workaround sibling packages already use for the same
-      // reason. Versions match each package's current deno.json version;
-      // bump alongside them.
-      "@pgfsm/compiler": "^0.1.0-alpha.1",
-      "@pgfsm/db": "^0.2.0",
-      "@pgfsm/async-worker": "^0.1.0",
-      "@pgfsm/sync-worker": "^0.1.0",
-    },
     // pg ships no types of its own; dnt only auto-installs packages that are
     // themselves import specifiers, so without this the type-check pass
     // can't resolve `import ... from "pg"` (fsmdev.ts/run-gateway.ts import

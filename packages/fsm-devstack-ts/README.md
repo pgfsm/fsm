@@ -8,19 +8,22 @@ the local FSM dev-stack launcher in the
 the Activity Gateway + generated worker SDK + `fsmlet`, spawned and supervised
 together).
 
-**No CLI ships in this package yet.** `fsmdev` currently only runs from source
-inside that monorepo
-(`deno run --allow-all
-packages/fsm-devstack-ts/src/cli/fsmdev.ts`) — it locates
-its sibling CLIs via monorepo-relative paths and shells out to `deno run`
-directly, neither of which is meaningful outside that workspace. Making `fsmdev`
-itself installable and runnable via `npx` is tracked upstream; this package only
-publishes the supervision primitive below until that lands.
-
 ## Install
+
+This package ships three CLI bins (`fsmdev`, plus two internal helpers it spawns
+itself), so a plain `npx @pgfsm/devstack` can't tell which one to run — pass
+`-p`/`--package` and name the bin after `--`:
+
+```bash
+npx -p @pgfsm/devstack -- fsmdev --help
+```
+
+or install it as a dependency / global CLI, after which each bin is callable
+directly:
 
 ```bash
 npm install @pgfsm/devstack
+npm install -g @pgfsm/devstack   # for a global `fsmdev` command
 ```
 
 ## Usage

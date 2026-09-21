@@ -31,25 +31,21 @@ await configureLogging({
   levels: { [LOG_CATEGORY]: isTerminal ? "debug" : "info" },
 });
 
-// Long-running steps get their own self-owned runner file (imports the
-// sibling package's library function directly, not that package's own CLI —
-// see run-gateway.ts/run-fsmlet.ts's header comments for why), resolved
-// relative to this file itself so it works whether @pgfsm/devstack lives in
-// this monorepo or is installed via npm. dnt preserves this file's directory
-// layout when it compiles run-gateway.ts/run-fsmlet.ts into dist/{esm,script}
-// (verified empirically), so the same self-relative resolution works against
-// their compiled .js siblings too — just with a different extension and a
-// different command to run them with (see toProcessSpec below).
-// generate-all/pgcron are one-shot, so they're called as plain library
-// functions below instead — no subprocess needed either way.
-const GATEWAY_CLI = new URL(
-  `./run-gateway.${isDeno ? "ts" : "js"}`,
-  import.meta.url,
-);
-const FSMLET_CLI = new URL(
-  `./run-fsmlet.${isDeno ? "ts" : "js"}`,
-  import.meta.url,
-);
+// Long-running steps get their own self-owned bin (imports the sibling
+// package's library function directly, not that package's own CLI — see
+// run-gateway.ts/run-fsmlet.ts's header comments for why). Under Deno, run
+// the source file directly via `deno run --allow-all`; under the dnt-built
+// Node output, spawn this package's own registered bin by name (see
+// scripts/build-npm.ts) and let PATH resolve it — npm links a package's own
+// bin entries into node_modules/.bin alongside its dependencies', the same
+// mechanism `npx -p @pgfsm/sync-worker -- fsmlet` already relies on for that
+// package's bins, so this works under both a temporary npx install and a
+// global one. generate-all/pgcron are one-shot, so they're called as plain
+// library functions below instead — no subprocess needed either way.
+const GATEWAY_SCRIPT = new URL("./run-gateway.ts", import.meta.url);
+const FSMLET_SCRIPT = new URL("./run-fsmlet.ts", import.meta.url);
+const GATEWAY_BIN = "pgfsm-devstack-run-gateway";
+const FSMLET_BIN = "pgfsm-devstack-run-fsmlet";
 
 const args = parseArgs(Deno.args, {
   string: [
@@ -237,24 +233,23 @@ async function runPgcron(): Promise<void> {
 function toProcessSpec(
   name: string,
   scriptUrl: URL,
+  binName: string,
   scriptArgs: string[],
 ): ProcessSpec {
-  const scriptPath = fromFileUrl(scriptUrl);
   if (isDeno) {
     return {
       name,
       cmd: Deno.execPath(),
-      args: ["run", "--allow-all", scriptPath, ...scriptArgs],
+      args: ["run", "--allow-all", fromFileUrl(scriptUrl), ...scriptArgs],
     };
   }
-  // Under the dnt-built Node output, invoke the compiled sibling .js file
-  // directly with this process's own node binary — Deno.execPath() would
-  // resolve to a real system `deno` binary here (see the isDeno comment
-  // above), and there's no "run"/permission-flag step Node needs anyway.
+  // Deno.execPath() would resolve to a real system `deno` binary under the
+  // dnt-built Node output (see the isDeno comment above), so this branch
+  // spawns the bin by name instead and lets PATH resolve it.
   return {
     name,
-    cmd: process.execPath,
-    args: [scriptPath, ...scriptArgs],
+    cmd: binName,
+    args: scriptArgs,
   };
 }
 
@@ -309,7 +304,7 @@ await runPgcron();
 // 3. gateway + fsmlet — supervised together. Worker SDK processes are
 // started separately (see printWorkerSdkStartInstructions above).
 const specs: ProcessSpec[] = [
-  toProcessSpec("gateway", GATEWAY_CLI, [
+  toProcessSpec("gateway", GATEWAY_SCRIPT, GATEWAY_BIN, [
     "-b",
     bind,
     "-s",
@@ -319,7 +314,7 @@ const specs: ProcessSpec[] = [
     ...(ensureQueueOnRegister ? ["--ensure-queue-on-register"] : []),
     ...dbArgs(),
   ]),
-  toProcessSpec("fsmlet", FSMLET_CLI, [
+  toProcessSpec("fsmlet", FSMLET_SCRIPT, FSMLET_BIN, [
     "-f",
     fsmFolder,
     "-m",
