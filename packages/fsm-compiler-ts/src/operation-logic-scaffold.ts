@@ -1182,6 +1182,16 @@ export function resolvePluginRootAbsPath(folderPath: string): string {
 }
 
 /**
+ * The app root — one level above a plugin-root folder, e.g.
+ * `apps/fsm-core-example/fsm` -> `apps/fsm-core-example`. Used by
+ * `generate-async-logic` (and `generate-all`'s own folder-mode call into it)
+ * as the default `worker-sdk-generated/` write destination.
+ */
+export function oneLevelUp(absPath: string): string {
+  return absPath.substring(0, absPath.lastIndexOf("/"));
+}
+
+/**
  * Walks a plugin-root folder, finds every versioned FSM subdirectory (e.g.
  * `creditCheck/v01/`) that contains an `fsm.json`, and invokes `handler` with
  * the absolute version-folder path and the parsed fsm.json.
