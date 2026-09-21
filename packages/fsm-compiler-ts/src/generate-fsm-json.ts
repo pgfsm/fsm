@@ -11,6 +11,7 @@ import {
   isVersionFolderName,
   RAISE_CANCEL,
 } from "./util.ts";
+import { ensureImportMapResolution } from "./import-resolution.ts";
 import type { AnyStateNodeDefinition } from "xstate";
 import type {
   ActionObject,
@@ -345,6 +346,7 @@ export async function generateFsmJSONFromMachineFile(
   // deno-lint-ignore no-explicit-any
   let module: any;
   try {
+    await ensureImportMapResolution();
     module = await import(`file://${machineTsPath}`);
   } catch (err) {
     throw new Error(`Failed to import ${machineTsPath}`, { cause: err });

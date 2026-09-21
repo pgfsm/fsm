@@ -13,6 +13,7 @@ import {
   isVersionFolderName,
   RAISE_CANCEL,
 } from "./util.ts";
+import { ensureImportMapResolution } from "./import-resolution.ts";
 import type { Json } from "@pgfsm/db/database.types";
 import type {
   ActorReference,
@@ -57,6 +58,7 @@ export async function validateLanguageModules(
     const modDir = `${absFolderPath}/${lang}/${modType.type}`;
     const modulePath = `${modDir}/index.ts`;
     try {
+      await ensureImportMapResolution();
       const mod = await import(`file://${modulePath}`);
       modules[modType.type] = mod;
       for (const name of modType.names) {

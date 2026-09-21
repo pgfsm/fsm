@@ -20,6 +20,11 @@ await build({
   entryPoints: [
     "./src/index.ts",
     { kind: "bin", name: "fsm-compiler", path: "./src/cli/index.ts" },
+    // Nothing statically imports this — it's only referenced by the
+    // runtime string module.register() passes in
+    // src/import-resolution.node.ts (see #270) — so it must be listed
+    // explicitly or dnt's graph walker never transpiles/emits it.
+    "./src/cli/loader.node.ts",
   ],
   outDir: "./dist",
   shims: {
@@ -38,6 +43,7 @@ await build({
   mappings: {
     "./src/cli/invocation.ts": "./src/cli/invocation.node.ts",
     "./src/cli/version.ts": "./src/cli/version.node.ts",
+    "./src/import-resolution.ts": "./src/import-resolution.node.ts",
   },
   // Publishing doesn't need test/*.test.ts bundled into dist — and dnt tries
   // to build them for the CJS target too, which fails on the top-level
@@ -54,6 +60,11 @@ await build({
     // "@types/pg" import mapping isn't picked up the same way here).
     devDependencies: {
       "@types/pg": "^8.18.0",
+    },
+    // src/cli/loader.node.ts registers itself via node:module's register(),
+    // which needs Node 20.6+ (see #270).
+    engines: {
+      node: ">=20.6.0",
     },
   },
   compilerOptions: {
