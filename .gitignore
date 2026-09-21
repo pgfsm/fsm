@@ -22,6 +22,7 @@ packages/fsm-compiler-ts/.test-fixtures/
 
 # --- Generated at npm-publish build time, version differs per release, see #258 ---
 packages/fsm-compiler-ts/src/cli/version.node.ts
+packages/fsm-core-async-op-worker/src/cli/version.node.ts
 
 # --- Python ---
 __pycache__/

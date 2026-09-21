@@ -2,6 +2,8 @@ import { parseArgs } from "@std/cli/parse-args";
 import { getLogger } from "@logtape/logtape";
 import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
 import { ActivityGatewayClient } from "../gatewayClient.ts";
+import { CLI_INVOCATION } from "./gateway-ctl-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 const logger = getLogger([
   "@pgfsm/worker",
@@ -20,10 +22,11 @@ function printHelp(): void {
 async-operation-worker-gateway-ctl — CLI client for the Activity Gateway
 
 USAGE
-  deno run --allow-all cli/async-operation-worker-gateway-ctl.ts <list|invoke> [options]
+  ${CLI_INVOCATION} <list|invoke> [options]
 
 OPTIONS
   --target <target>              gRPC target (default: ${DEFAULT_TARGET})
+  -v, --version                  Print @pgfsm/async-worker's version and exit
   -h, --help                     Show this help message
 
 INVOKE OPTIONS
@@ -51,9 +54,9 @@ DESCRIPTION
   parentFsmName@parentFsmVersion@asyncOperationType@asyncOperationName@asyncOperationVersion@asyncOperationLanguage.
 
 EXAMPLE
-  deno run --allow-all cli/async-operation-worker-gateway-ctl.ts list
+  ${CLI_INVOCATION} list
 
-  deno run --allow-all cli/async-operation-worker-gateway-ctl.ts invoke \\
+  ${CLI_INVOCATION} invoke \\
     --parent-fsm-name creditCheck --parent-fsm-version v01 \\
     --async-operation-type internalAsyncOperation --async-operation-name checkBureau --async-operation-version v01 \\
     --async-operation-language rust --input '{{"ssn":"123"}}'
@@ -74,9 +77,16 @@ const args = parseArgs(Deno.args, {
     "correlation-id",
     "timeout-ms",
   ],
-  boolean: ["help"],
-  alias: { h: "help" },
+  boolean: ["help", "version"],
+  alias: { h: "help", v: "version" },
 });
+
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) — see
+  // async-operation-worker-gateway.ts's identical --version handling.
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
 
 if (args.help) {
   printHelp();
