@@ -12,42 +12,71 @@ file's: it only documents the currently-publishable library export
 `fsmdev` (`src/cli/fsmdev.ts`), a one-command local dev-stack launcher (issue
 #238). Sequence:
 
-1. `generate-all` (`@pgfsm/compiler`) — one-shot, must succeed first.
+1. `generate-all` — one-shot, must succeed first. Calls `@pgfsm/compiler`'s
+   `generateFsmJSONFromFolders` / `generateAsyncOperationLogicFromFolders` /
+   `generateSyncOperationLogicFromFolders` directly, in-process, replicating
+   fsm-compiler-ts's own CLI's folder-mode `generate-all` sequence exactly
+   (including its per-step error aggregation).
 2. Prints the exact start command for every worker-SDK language `generate-all`
    actually generated (typescript/python/rust/go — whichever subdirectories
    exist under `<app-root>/worker-sdk-generated/`). `fsmdev` does **not** launch
    these itself: they're polyglot, per-project generated code with different
    toolchains (`deno run`, `python3`, `cargo run`, `go run`), so starting them
    is left to the user, one terminal each.
-3. `pgcron` registration (`@pgfsm/sync-worker`) — one-shot, idempotent.
-4. Activity Gateway (`@pgfsm/async-worker`) and `fsmlet` (`@pgfsm/sync-worker`)
-   — spawned and supervised together via `runSupervised`. `Ctrl+C` stops both;
-   if either exits on its own the other is torn down (see failure policy below).
+3. `pgcron` registration — one-shot, idempotent. Calls
+   `registerScheduleAllPendingCronJob` from `@pgfsm/db` directly, in-process
+   (the same function `@pgfsm/sync-worker`'s `pgcron` CLI calls).
+4. The Activity Gateway and `fsmlet` — each its own subprocess, supervised
+   together via `runSupervised`. `Ctrl+C` stops both; if either exits on its own
+   the other is torn down (see failure policy below).
 
-Sibling CLIs (`@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker`) are
-located by resolving relative paths from `import.meta.url`
-(`packages/fsm-devstack-ts/src/cli/fsmdev.ts` →
-`../../../<package>/src/cli/<file>.ts`) rather than by shelling out through
-`npx`/published bins — this only works because `fsmdev` lives inside the same
-monorepo workspace as the CLIs it orchestrates. The generated worker SDK's
-directory (`<app-root>/worker-sdk-generated/<lang>/`) is similarly computed at
-runtime, but only to print each language's start command
-(`printWorkerSdkStartInstructions`) — `fsmdev` never launches worker-SDK
-processes itself; see the numbered sequence above for why.
+**Library imports over CLI dispatch (#245's original ask), with a twist for
+long-running steps.** generate-all/pgcron are one-shot, so fsmdev just calls
+`@pgfsm/compiler`/`@pgfsm/db`'s functions directly — no subprocess at all. The
+gateway and fsmlet are long-running and need real process isolation (so one
+crashing doesn't take fsmdev down with it, and so `runSupervised`'s fail-fast
+policy has something to supervise), so instead of spawning
+`@pgfsm/async-worker`/`@pgfsm/sync-worker`'s own CLI files, `fsmdev` spawns two
+small **self-owned runner files it ships itself** — `src/cli/run-gateway.ts`
+(imports `startActivityGatewayServer` from `@pgfsm/async-worker`) and
+`src/cli/run-fsmlet.ts` (imports `runFsmlet` from `@pgfsm/sync-worker`), each
+wiring its own `SIGINT`/`SIGTERM` to an `AbortSignal` those functions accept.
+`fsmdev.ts` resolves these via `import.meta.url` relative to _itself_
+(`./run-gateway.ts`, `./run-fsmlet.ts`) — which resolves correctly whether
+`@pgfsm/devstack` lives in this monorepo or is installed via npm, unlike a path
+reaching into a sibling top-level package's own CLI file.
 
 None of this repo's other CLIs spawn or supervise child processes, so
 `src/supervisor.ts` (issue #239) is the first such primitive here.
 
-**`fsmdev` itself still isn't `npx`-runnable (tracked in #245)**: it locates
-`@pgfsm/compiler`/`@pgfsm/async-worker`/`@pgfsm/sync-worker`'s CLIs via
-`import.meta.url`-relative paths and shells out to them with
-`Deno.Command(Deno.execPath(), ["run", "--allow-all", <path>, ...])` — that only
-works inside this monorepo's Deno-native dev flow. Making `fsmdev` portable
-needs dispatching to those sibling packages' installed npm bins under Node
-instead of `deno run <path>`. The other half of #245's original scope — how the
-generated worker SDK executes without Deno present — is now moot: `fsmdev` never
-launches worker-SDK processes itself (see above), so there's no cross-runtime
-execution question for them at all.
+**`fsmdev` itself still isn't `npx`-runnable (tracked in #245, narrowed)**: the
+`Deno.execPath()`/`["run", "--allow-all", <path>, ...]` invocation used to
+launch `run-gateway.ts`/`run-fsmlet.ts` (and, previously, the sibling CLIs
+directly) is still Deno-only — that's the one remaining piece. Under Node/npm,
+`fsmdev` would need `run-gateway.ts`/`run-fsmlet.ts` registered as `bin` entries
+in this package's own dnt build (see below) and invoked by name via `PATH`,
+instead of `deno run <self-relative-path>`. The two harder problems #245
+originally scoped — resolving a _sibling package's_ CLI file/bin, and how the
+generated worker SDK executes without Deno — are both gone: sibling dispatch is
+now a library import (this section), and worker-SDK execution was never fsmdev's
+problem to solve (point 2 above).
+
+**Found and fixed along the way**: wiring `run-fsmlet.ts` to import
+`@pgfsm/sync-worker`'s `runFsmlet` directly (rather than spawning its CLI) made
+`deno check` walk into that package's module graph for the first time from here,
+surfacing pre-existing bug **#169** — `fsmlet.ts`'s
+`asyncOperationVerificationMode: "checkRegistry"`/ `"checkRegistryAndWorking"`
+paths passed `ActorReference[]` (no `fsmVersion` field at all) into
+`checkRegistryForAsyncActors`/ `checkRegistryAndWorkingForAsyncActors`, which
+expect `AsyncActor[]` (`{ src, fsmVersion }`) and read that `fsmVersion` key to
+match against each actor's own `async_operation_version` in Postgres (despite
+the confusing name — the parent FSM's version is already a separate argument to
+both SQL functions). With the field always undefined, both checks always
+reported every actor as unregistered. Fixed in
+`fsm-sync-worker-ts/src/fsmlet/fsmlet.ts` by mapping
+`ActorReference.asyncOperationVersion` → `AsyncActor.fsmVersion` at the two call
+sites (`toAsyncActors` helper) — see that package's own history for the fix,
+this note is just about how it surfaced.
 
 ## Process supervision (`src/supervisor.ts`)
 
@@ -83,6 +112,10 @@ execution question for them at all.
   rejection
 - `index.ts` — barrel export
 - `cli/fsmdev.ts` — the orchestrator CLI (see above)
+- `cli/run-gateway.ts` / `cli/run-fsmlet.ts` — self-owned runners `fsmdev`
+  spawns for the two long-running steps (see above); intentionally scoped down
+  from the full-featured sibling CLIs they replace (e.g. `run-fsmlet.ts` is
+  folder-mode only, `run-gateway.ts` always runs the poll loop)
 
 `scripts/build-npm.ts` builds only the `index.ts` library export via `@deno/dnt`
 — no `bin` entry for `fsmdev` yet, since it isn't portable (see above). Sets

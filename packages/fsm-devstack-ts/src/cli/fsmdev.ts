@@ -1,8 +1,15 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
 import dotenv from "dotenv";
+import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { configureLogging, isTerminal } from "@pgfsm/logging";
+import {
+  generateAsyncOperationLogicFromFolders,
+  generateFsmJSONFromFolders,
+  generateSyncOperationLogicFromFolders,
+} from "@pgfsm/compiler";
+import { registerScheduleAllPendingCronJob } from "@pgfsm/db";
 import { runSupervised } from "../supervisor.ts";
 import type { ProcessSpec } from "../supervisor.ts";
 
@@ -14,24 +21,15 @@ await configureLogging({
   levels: { [LOG_CATEGORY]: isTerminal ? "debug" : "info" },
 });
 
-// Sibling CLIs this orchestrates, resolved relative to this package's
-// location in the monorepo workspace (packages/fsm-devstack-ts/src/cli/).
-const COMPILER_CLI = new URL(
-  "../../../fsm-compiler-ts/src/cli/index.ts",
-  import.meta.url,
-);
-const GATEWAY_CLI = new URL(
-  "../../../fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts",
-  import.meta.url,
-);
-const FSMLET_CLI = new URL(
-  "../../../fsm-sync-worker-ts/src/cli/fsmlet.ts",
-  import.meta.url,
-);
-const PGCRON_CLI = new URL(
-  "../../../fsm-sync-worker-ts/src/cli/pgcron.ts",
-  import.meta.url,
-);
+// Long-running steps get their own self-owned runner file (imports the
+// sibling package's library function directly, not that package's own CLI —
+// see run-gateway.ts/run-fsmlet.ts's header comments for why), resolved
+// relative to this file itself so it works whether @pgfsm/devstack lives in
+// this monorepo or is installed via npm. generate-all/pgcron are one-shot,
+// so they're called as plain library functions below instead — no
+// subprocess needed either way.
+const GATEWAY_CLI = new URL("./run-gateway.ts", import.meta.url);
+const FSMLET_CLI = new URL("./run-fsmlet.ts", import.meta.url);
 
 const args = parseArgs(Deno.args, {
   string: [
@@ -83,15 +81,19 @@ OPTIONS
   -h, --help                       Show this help message
 
 DESCRIPTION
-  Brings up a full local FSM dev stack in one command:
-    1. generate-all (@pgfsm/compiler)                        — one-shot
+  Brings up a full local FSM dev stack in one command, calling
+  @pgfsm/compiler/@pgfsm/async-worker/@pgfsm/sync-worker's library
+  functions directly rather than shelling out to their CLIs:
+    1. generate-all (@pgfsm/compiler)                        — one-shot,
+       in-process
     2. pgcron registration (@pgfsm/sync-worker)               — one-shot,
-       idempotent
-    3. async-operation-worker-gateway (@pgfsm/async-worker) and fsmlet
-       (@pgfsm/sync-worker)                                   — supervised
-       together: Ctrl+C stops both, and if either exits
-       unexpectedly the other is torn down (see
-       packages/fsm-devstack-ts/CLAUDE.md for the failure policy).
+       idempotent, in-process
+    3. the Activity Gateway (@pgfsm/async-worker) and fsmlet
+       (@pgfsm/sync-worker) — each spawned as its own process (a small
+       self-owned runner that imports the library function directly, see
+       packages/fsm-devstack-ts/CLAUDE.md) and supervised together:
+       Ctrl+C stops both, and if either exits unexpectedly the other is
+       torn down (see that same doc for the failure policy).
 
   Worker SDK processes (one per language actually generated —
   typescript/python/rust/go) are NOT started by fsmdev: they're
@@ -145,27 +147,70 @@ function dbArgs(): string[] {
   return dbUrl ? ["-d", dbUrl] : [];
 }
 
-async function runOnce(
-  name: string,
-  scriptUrl: URL,
-  scriptArgs: string[],
-): Promise<void> {
-  logger.info("Running {name}...", { name });
-  const child = new Deno.Command(Deno.execPath(), {
-    args: ["run", "--allow-all", fromFileUrl(scriptUrl), ...scriptArgs],
-    stdout: "inherit",
-    stderr: "inherit",
-    stdin: "null",
-  }).spawn();
-  const status = await child.status;
-  if (!status.success) {
-    logger.error("{name} failed (exit code {code})", {
-      name,
-      code: status.code,
-    });
-    Deno.exit(status.code === 0 ? 1 : status.code);
+// generate-all, folder mode — the exact sequence fsm-compiler-ts's own CLI
+// runs for `-c generate-all`. One step's partial failure across some FSMs
+// doesn't block the next step from running for the rest (see that CLI's
+// "generate-all" case for why each is caught independently).
+async function runGenerateAll(): Promise<string> {
+  logger.info("Running generate-all...");
+  const writeRootAbsPath = dirname(fsmFolder);
+  const stepErrors: Error[] = [];
+
+  try {
+    await generateFsmJSONFromFolders(fsmFolder, [], false);
+  } catch (err) {
+    stepErrors.push(err instanceof Error ? err : new Error(String(err)));
   }
-  logger.info("{name} completed.", { name });
+  try {
+    await generateAsyncOperationLogicFromFolders(
+      fsmFolder,
+      [],
+      "grpc",
+      writeRootAbsPath,
+    );
+  } catch (err) {
+    stepErrors.push(err instanceof Error ? err : new Error(String(err)));
+  }
+  try {
+    await generateSyncOperationLogicFromFolders(fsmFolder, ["typescript"], []);
+  } catch (err) {
+    stepErrors.push(err instanceof Error ? err : new Error(String(err)));
+  }
+
+  if (stepErrors.length > 0) {
+    for (const err of stepErrors) {
+      logger.error("generate-all step failed: {error}", { error: err });
+    }
+    Deno.exit(1);
+  }
+  logger.info("generate-all completed.");
+  return writeRootAbsPath;
+}
+
+// pgcron registration — one-shot, idempotent, matching @pgfsm/sync-worker's
+// pgcron CLI (src/cli/pgcron.ts) exactly, minus its own argv/pool plumbing.
+async function runPgcron(): Promise<void> {
+  const resolvedDbUrl = dbUrl ?? Deno.env.get("DATABASE_URL") ?? "";
+  if (!resolvedDbUrl) {
+    logger.error(
+      "DATABASE_URL is required for pgcron registration (set in .env or pass --db-url)",
+    );
+    Deno.exit(1);
+  }
+  logger.info("Running pgcron registration...");
+  const pool = new Pool({ connectionString: resolvedDbUrl, max: 1 });
+  try {
+    await registerScheduleAllPendingCronJob(
+      { db: pool, useSupabase: false },
+      pgcronSchedule,
+    );
+    logger.info("pgcron registration completed.");
+  } catch (err) {
+    logger.error("pgcron registration failed: {error}", { error: err });
+    Deno.exit(1);
+  } finally {
+    await pool.end();
+  }
 }
 
 function toProcessSpec(
@@ -219,21 +264,14 @@ function printWorkerSdkStartInstructions(appRoot: string): void {
   }
 }
 
-// 1. generate-all — one-shot, must succeed before anything starts.
-await runOnce("generate-all", COMPILER_CLI, [
-  "-c",
-  "generate-all",
-  "-f",
-  fsmFolder,
-]);
-
-// generate-all writes the aggregate worker SDK one level above --folder (the
-// app root) — see fsm-compiler-ts/CLAUDE.md's "generate-async-logic" note.
-const appRoot = dirname(fsmFolder);
+// 1. generate-all — one-shot, must succeed before anything starts. Writes
+// the aggregate worker SDK one level above --fsm-folder (the app root) — see
+// fsm-compiler-ts/CLAUDE.md's "generate-async-logic" note.
+const appRoot = await runGenerateAll();
 printWorkerSdkStartInstructions(appRoot);
 
 // 2. pgcron registration — one-shot, idempotent.
-await runOnce("pgcron", PGCRON_CLI, ["-s", pgcronSchedule, ...dbArgs()]);
+await runPgcron();
 
 // 3. gateway + fsmlet — supervised together. Worker SDK processes are
 // started separately (see printWorkerSdkStartInstructions above).
