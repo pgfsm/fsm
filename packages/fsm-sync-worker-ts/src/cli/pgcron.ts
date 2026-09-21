@@ -4,19 +4,29 @@ import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { registerScheduleAllPendingCronJob } from "@pgfsm/db";
+import { CLI_INVOCATION } from "./pgcron-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 const logger = getLogger(["@pgfsm/scheduler", "cli", "pgcron"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["db-url", "schedule"],
-  boolean: ["help"],
+  boolean: ["help", "version"],
   alias: {
     h: "help",
+    v: "version",
     d: "db-url",
     s: "schedule",
   },
 });
+
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) — see
+  // fsmlet.ts's identical --version handling.
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
 
 const ALTERNATIVE_TO_FSMSCHEDULER_NOTICE = `
 ╔══════════════════════════════════════════════════════════════════════════╗
@@ -33,11 +43,12 @@ function printHelp(): void {
 pgcron — one-shot (re)registration of the fsm_schedule_all_pending pg_cron job
 ${ALTERNATIVE_TO_FSMSCHEDULER_NOTICE}
 USAGE
-  deno run --allow-all src/cli/pgcron.ts [options]
+  ${CLI_INVOCATION} [options]
 
 OPTIONS
   -d, --db-url <url>     Database connection URL (overrides DATABASE_URL from .env)
   -s, --schedule <cron>  pg_cron schedule expression (default: "5 seconds")
+  -v, --version          Print @pgfsm/sync-worker's version and exit
   -h, --help             Show this help message
 
 DESCRIPTION

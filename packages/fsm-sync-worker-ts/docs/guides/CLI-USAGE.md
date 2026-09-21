@@ -53,6 +53,7 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
 | `--db-url <url>`           | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string                                                |
 | `--max-concurrency <n>`    | `-m`  | no       | `8`                        | Max FSM instances driven concurrently on this node                          |
 | `--fsmlet-id <id>`         | `-i`  | no       | random UUID                | Stable identity across restarts — also read from `FSMLET_ID` env var        |
+| `--version`                | `-v`  | —        | —                          | Print `@pgfsm/sync-worker`'s version and exit                               |
 | `--help`                   | `-h`  | —        | —                          | Print help and exit                                                         |
 
 ### Example
@@ -125,6 +126,7 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmscheduler.ts [option
 | `--db-url <url>`        | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string (required — exits if unset)       |
 | `--poll-interval <ms>`  | `-p`  | no       | `30000`                    | Fallback poll interval in milliseconds                         |
 | `--stale-threshold <s>` | `-s`  | no       | `30`                       | Seconds before a `fsmlet` with no heartbeat is treated as dead |
+| `--version`             | `-v`  | —        | —                          | Print `@pgfsm/sync-worker`'s version and exit                  |
 | `--help`                | `-h`  | —        | —                          | Print help and exit                                            |
 
 ### Example
@@ -184,7 +186,7 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c <command> 
 
 | Command  | Required flags                         | Description                                                                               |
 | -------- | -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `create` | `-n, --fsm-name`, `-v, --fsm-version`  | Create a new FSM instance and enqueue it to `fsm_dispatch_queue` for the `fsmscheduler`   |
+| `create` | `-n, --fsm-name`, `-V, --fsm-version`  | Create a new FSM instance and enqueue it to `fsm_dispatch_queue` for the `fsmscheduler`   |
 | `resume` | `-q, --queue-name`                     | Enqueue an existing FSM instance to `fsm_dispatch_queue` for resumption                   |
 | `send`   | `-q, --queue-name`, `-e, --event-type` | Send an event to a running FSM instance                                                   |
 | `stop`   | `-q, --queue-name`                     | Send a stop signal to whichever `fsmlet` worker is running that instance, via `pg_notify` |
@@ -198,12 +200,13 @@ the flag name is a holdover from the pre-scheduler model.
 | --------------------- | ----- | -------------------------------------------------------------------------------- |
 | `--command <command>` | `-c`  | Command to run — `create` / `resume` / `send` / `stop` (required)                |
 | `--fsm-name <name>`   | `-n`  | FSM definition name (required for `create`)                                      |
-| `--fsm-version <ver>` | `-v`  | FSM version (required for `create`)                                              |
+| `--fsm-version <ver>` | `-V`  | FSM version (required for `create`)                                              |
 | `--context <json>`    |       | Initial FSM context as a JSON string (optional, `create` only; defaults to `{}`) |
 | `--queue-name <id>`   | `-q`  | FSM instance ID (required for `resume`, `send`, `stop`)                          |
 | `--event-type <type>` | `-e`  | Event type to send (required for `send`)                                         |
 | `--event-data <json>` |       | Event payload as a JSON string (optional, `send` only)                           |
 | `--db-url <url>`      | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`)              |
+| `--version`           | `-v`  | Print `@pgfsm/sync-worker`'s version and exit                                    |
 | `--help`              | `-h`  | Print help and exit                                                              |
 
 ### Examples
@@ -211,11 +214,11 @@ the flag name is a holdover from the pre-scheduler model.
 ```bash
 # Create a new FSM instance (prints the instance UUID to stdout)
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts \
-  -c create -n creditCheck -v 1
+  -c create -n creditCheck -V 1
 
 # ...with initial context
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts \
-  -c create -n creditCheck -v 1 --context '{"userId":"abc"}'
+  -c create -n creditCheck -V 1 --context '{"userId":"abc"}'
 
 # Resume an existing instance
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts \
@@ -267,6 +270,7 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/pgcron.ts [options]
 | ------------------- | ----- | ------------------------------------------------------------------- |
 | `--db-url <url>`    | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`) |
 | `--schedule <cron>` | `-s`  | `pg_cron` schedule expression (default: `"5 seconds"`)              |
+| `--version`         | `-v`  | Print `@pgfsm/sync-worker`'s version and exit                       |
 | `--help`            | `-h`  | Print help and exit                                                 |
 
 ### Example
@@ -296,12 +300,13 @@ register or update the job.
 | --------------- | ----- | ------------------------ | -------------------------------------------------------------- |
 | `--command`     | `-c`  | all                      | Command to run — `create` / `resume` / `send` / `stop`         |
 | `--fsm-name`    | `-n`  | `create`                 | FSM definition name                                            |
-| `--fsm-version` | `-v`  | `create`                 | FSM version number                                             |
+| `--fsm-version` | `-V`  | `create`                 | FSM version number                                             |
 | `--context`     |       | optional (`create`)      | Initial FSM context, JSON string                               |
 | `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (UUID)                                         |
 | `--event-type`  | `-e`  | `send`                   | Event type to send                                             |
 | `--event-data`  |       | optional (`send`)        | Event payload, JSON string                                     |
 | `--db-url`      | `-d`  | optional                 | Database connection URL (overrides `DATABASE_URL` from `.env`) |
+| `--version`     | `-v`  |                          | Print `@pgfsm/sync-worker`'s version and exit                  |
 | `--help`        | `-h`  |                          | Print help and exit                                            |
 
 ---
@@ -324,7 +329,7 @@ register or update the job.
 Run from `packages/fsm-sync-worker-ts/`, each task takes the CLI's own flags
 after the task name, e.g. `deno task fsmlet -f <path>` or
 `deno task cli -c create
--n creditCheck -v 1`. Equivalent direct invocations
+-n creditCheck -V 1`. Equivalent direct invocations
 from the repo root:
 
 ```bash

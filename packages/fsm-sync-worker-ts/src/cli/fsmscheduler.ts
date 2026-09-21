@@ -4,32 +4,43 @@ import { getLogger } from "@logtape/logtape";
 import { configureWorkerLogger } from "../logger.ts";
 import { runFsmScheduler } from "../fsmscheduler/fsmscheduler.ts";
 import type { FsmSchedulerOptions } from "../fsmscheduler/fsmscheduler.ts";
+import { CLI_INVOCATION } from "./fsmscheduler-invocation.ts";
+import { PACKAGE_VERSION } from "./version.ts";
 
 const logger = getLogger(["@pgfsm/scheduler", "cli"]);
 await configureWorkerLogger();
 
 const args = parseArgs(Deno.args, {
   string: ["db-url", "poll-interval", "stale-threshold"],
-  boolean: ["help"],
+  boolean: ["help", "version"],
   alias: {
     h: "help",
+    v: "version",
     d: "db-url",
     p: "poll-interval",
     s: "stale-threshold",
   },
 });
 
+if (args.version) {
+  // Bare, undecorated output (no logger timestamp/category prefix) — see
+  // fsmlet.ts's identical --version handling.
+  console.log(PACKAGE_VERSION);
+  Deno.exit(0);
+}
+
 function printHelp(): void {
   logger.info(`
 fsmscheduler — FSM dispatch scheduler (kube-scheduler equivalent)
 
 USAGE
-  deno run --allow-all src/cli/fsmscheduler.ts [options]
+  ${CLI_INVOCATION} [options]
 
 OPTIONS
   -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
   -p, --poll-interval <ms>       Fallback poll interval in milliseconds (default: 30000)
   -s, --stale-threshold <secs>   Seconds before a fsmlet is considered dead (default: 30)
+  -v, --version                  Print @pgfsm/sync-worker's version and exit
   -h, --help                     Show this help message
 
 DESCRIPTION

@@ -62,14 +62,13 @@ to run`
 bin is callable directly) — see `README.md`'s Install section, which documents
 this.
 
-**Known issue**: as of the last check, `deno task build:npm` fails its
+**Previously known issue, now resolved**: `deno task build:npm` used to fail its
 type-check pass with `TS2345` errors in `src/fsmlet/fsmlet.ts` around
-`asyncActors` — `ActorReference[]` (from `@pgfsm/compiler`) isn't assignable to
-the `AsyncActor[]` dnt's bundled compiler expects, because
-`ActorReference.asyncOperationVersion` is `string | undefined` while
-`AsyncActor` presumably wants `string`. Not caused by anything in this doc pass;
-reproduce with `deno task build:npm 0.0.0 --copy-readme` before assuming a
-docs/README change broke it.
+`asyncActors` (`ActorReference[]` vs. dnt's bundled `AsyncActor[]`,
+`asyncOperationVersion` being `string | undefined` vs. `string`). Verified clean
+as of #266 — the mismatch is gone, likely fixed incidentally by #234/#235's
+async-operation identity param rename. If it resurfaces, that TS2345 shape is
+where to look first.
 
 ## Structure (`src/`)
 

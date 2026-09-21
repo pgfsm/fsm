@@ -80,7 +80,7 @@ fsmscheduler --poll-interval 10000 --stale-threshold 15
 **Input** — `-c`/`--command <command>`, required: `create`, `resume`, `send`, or
 `stop`.
 
-- `create` — requires `-n`/`--fsm-name`, `-v`/`--fsm-version`; optional
+- `create` — requires `-n`/`--fsm-name`, `-V`/`--fsm-version`; optional
   `--context <json>` (initial FSM context, default `{}`)
 - `resume` / `stop` — require `-q`/`--queue-name <instance-id>`
 - `send` — requires `-q`/`--queue-name` and `-e`/`--event-type`; optional
@@ -97,8 +97,8 @@ fsmscheduler --poll-interval 10000 --stale-threshold 15
 - `stop`: sends a stop signal to the instance's worker via `pg_notify`
 
 ```bash
-fsmctl -c create -n creditCheck -v 1
-fsmctl -c create -n creditCheck -v 1 --context '{"userId":"abc"}'
+fsmctl -c create -n creditCheck -V 1
+fsmctl -c create -n creditCheck -V 1 --context '{"userId":"abc"}'
 fsmctl -c resume -q <instance-uuid>
 fsmctl -c send -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
 fsmctl -c stop -q <instance-uuid>
