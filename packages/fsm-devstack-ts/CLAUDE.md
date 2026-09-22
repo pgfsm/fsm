@@ -206,18 +206,20 @@ target than this package's `compilerOptions` sets. `postBuild()` only copies
 
 ## Real dependencies
 
-`@pgfsm/compiler`, `@pgfsm/db`, `@pgfsm/sync-worker`, and `@pgfsm/async-worker`
-are all real npm `dependencies` in `scripts/build-npm.ts` now (#251) — but via
-two different mechanisms, because they relate to this package's compiled code in
-two different ways:
+`@pgfsm/compiler`, `@pgfsm/db`, `@pgfsm/logging`, `@pgfsm/sync-worker`, and
+`@pgfsm/async-worker` are all real npm `dependencies` in `scripts/build-npm.ts`
+now (#251, #294) — but via two different mechanisms, because they relate to this
+package's compiled code in two different ways:
 
-- **`@pgfsm/compiler`/`@pgfsm/db`** are genuinely imported as bare specifiers in
-  `fsmdev.ts`'s own compiled code (`generate-all`/`pgcron` call their library
-  functions directly, in-process). Mapped via `dnt`'s `mappings` option, same
-  pattern as `fsm-sync-worker-ts`'s build (#283/#289) — this redirects the
-  import to the real npm package instead of letting `dnt` vendor the
-  workspace-resolved source, and declares the dependency. Version read from each
-  package's own `deno.json` at build time, not hardcoded.
+- **`@pgfsm/compiler`/`@pgfsm/db`/`@pgfsm/logging`** are genuinely imported as
+  bare specifiers in `fsmdev.ts`'s own compiled code (`generate-all`/`pgcron`
+  call `@pgfsm/compiler`/`@pgfsm/db`'s library functions directly, in-process;
+  `configureLogging`/`isTerminal` come from `@pgfsm/logging`). Mapped via
+  `dnt`'s `mappings` option, same pattern as `fsm-sync-worker-ts`'s build
+  (#283/#289/#294) — this redirects the import to the real npm package instead
+  of letting `dnt` vendor the workspace-resolved source, and declares the
+  dependency. Version read from each package's own `deno.json` at build time,
+  not hardcoded.
 - **`@pgfsm/sync-worker`/`@pgfsm/async-worker`** are **not** imported by any
   compiled code here anymore — `fsmdev` only spawns their `fsmlet`/
   `async-operation-worker-gateway` bins as separate OS processes (see "What it
@@ -226,22 +228,19 @@ two different ways:
   `npm install`ing `@pgfsm/devstack` links those bins into `node_modules/.bin`
   alongside `fsmdev`'s own.
 
-`@pgfsm/logging` stays vendored — it isn't in
-`.github/workflows/npm-publish.yml`'s matrix, so there's no real package to map
-it to.
-
-Before #251, none of the four were declared at all: `@pgfsm/sync-worker`/
+Before #251, none of the five were declared at all: `@pgfsm/sync-worker`/
 `@pgfsm/async-worker` were reached only through the now-removed
 `run-gateway.ts`/`run-fsmlet.ts` wrapper bins (see "What it is" above for why
-those existed and how they were retired), and `@pgfsm/compiler`/`@pgfsm/db` were
-still vendored via `dnt`'s default handling of the Deno workspace-linked import
-— the same shape PR #248 (closing #247) documented for `@pgfsm/db` inside
-`fsm-sync-worker-ts`'s and `fsm-core-async-op-worker`'s own builds, one layer
-deeper (a fix to any of these four needed **two** republish steps to reach a
-`@pgfsm/devstack` install: the vendored package itself, then this package). All
-four are now real npm packages with correct `dependencies` of their own (#283,
-#286–#289), so mapping instead of vendoring is safe here the same way it was for
-them.
+those existed and how they were retired), and `@pgfsm/compiler`/`@pgfsm/db`/
+`@pgfsm/logging` were still vendored via `dnt`'s default handling of the Deno
+workspace-linked import — the same shape PR #248 (closing #247) documented for
+`@pgfsm/db` inside `fsm-sync-worker-ts`'s and `fsm-core-async-op-worker`'s own
+builds, one layer deeper (a fix to any of these five needed **two** republish
+steps to reach a `@pgfsm/devstack` install: the vendored package itself, then
+this package). `@pgfsm/logging` stayed vendored the longest, since it wasn't
+published to npm at all until #293. All five are now real npm packages with
+correct `dependencies` of their own (#283, #286–#289, #293), so mapping instead
+of vendoring is safe here the same way it was for the first two.
 
 ## Commands
 
