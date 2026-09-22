@@ -5,8 +5,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "tasks": {
+    "build:npm": "deno run --allow-all scripts/build-npm.ts"
+  },
   "imports": {
+    "@deno/dnt": "jsr:@deno/dnt@^0.43.0",
     "@logtape/logtape": "npm:@logtape/logtape@^2.2",
-    "@logtape/otel": "jsr:@logtape/otel@^2.2"
+    "@logtape/otel": "npm:@logtape/otel@^2.2"
   }
 }
