@@ -16,18 +16,22 @@ await Deno.writeTextFile(
   };\n`,
 );
 
-// @pgfsm/db is published to npm independently (unlike @pgfsm/logging, which
-// isn't in .github/workflows/npm-publish.yml's matrix and stays vendored) —
-// map it to the real npm dependency instead of letting dnt inline its
-// source, so a fix published there reaches this package via semver instead
-// of requiring a republish here too. Version is read from its own deno.json
-// rather than hardcoded, so it can't silently drift from whatever this
-// build actually resolved locally. Same pattern as fsm-sync-worker-ts's
-// build-npm.ts mapping @pgfsm/compiler (#283).
+// @pgfsm/db and @pgfsm/logging are both published to npm independently —
+// map them to their real npm dependencies instead of letting dnt inline
+// their source, so a fix published there reaches this package via semver
+// instead of requiring a republish here too. Version is read from each
+// one's own deno.json rather than hardcoded, so it can't silently drift
+// from whatever this build actually resolved locally. Same pattern as
+// fsm-sync-worker-ts's build-npm.ts mapping @pgfsm/compiler (#283).
 const dbDenoJson = JSON.parse(
   await Deno.readTextFile("../fsm-core-db-ts/deno.json"),
 );
 const dbVersionRange = `^${dbDenoJson.version}`;
+
+const loggingDenoJson = JSON.parse(
+  await Deno.readTextFile("../fsm-logging-ts/deno.json"),
+);
+const loggingVersionRange = `^${loggingDenoJson.version}`;
 
 await build({
   entryPoints: [
@@ -63,6 +67,7 @@ await build({
       version: dbVersionRange,
       subPath: "database.types",
     },
+    "@pgfsm/logging": { name: "@pgfsm/logging", version: loggingVersionRange },
   },
   // Publishing doesn't need test/*.test.ts bundled into dist — and dnt tries
   // to build them for the CJS target too, which fails on the top-level

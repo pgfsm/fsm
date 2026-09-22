@@ -21,6 +21,15 @@ const dbDenoJson = JSON.parse(
 );
 const dbVersionRange = `^${dbDenoJson.version}`;
 
+// @pgfsm/logging is published to npm independently too (#293) and is also
+// genuinely imported as a bare specifier in fsmdev.ts's own compiled code
+// (configureLogging/isTerminal) — same real-dependency treatment as
+// @pgfsm/compiler/@pgfsm/db above.
+const loggingDenoJson = JSON.parse(
+  await Deno.readTextFile("../fsm-logging-ts/deno.json"),
+);
+const loggingVersionRange = `^${loggingDenoJson.version}`;
+
 // @pgfsm/sync-worker and @pgfsm/async-worker are a different case (#251):
 // fsmdev.ts no longer imports either as a JS module at all — the
 // self-owned run-gateway.ts/run-fsmlet.ts wrapper bins that used to do that
@@ -55,6 +64,7 @@ await build({
       version: compilerVersionRange,
     },
     "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
+    "@pgfsm/logging": { name: "@pgfsm/logging", version: loggingVersionRange },
   },
   // This package colocates supervisor.test.ts under src/ (the other dnt-built
   // packages' test files live outside src/) — without this, dnt also
