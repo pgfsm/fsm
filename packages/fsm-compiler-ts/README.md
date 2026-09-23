@@ -223,18 +223,22 @@ belong to an FSM's `invoke` list, use `generate-async-logic` instead.
 **Input** — `-f`/`--folder`: the **app root** (one level above the FSM
 plugin-root directory — e.g. `apps/fsm-core-example`, not
 `apps/fsm-core-example/fsm`). `-l`/`--lang`: exactly one language, required.
-`-V`/`--fsm-version`: version name matching `v\d{2}` (e.g. `v01`), required.
-`-n`/`--name`: actor function name, required.
+`-n`/`--function-name`: function name, required. `-F`/`--function-version`:
+version name matching `v\d{2}` (e.g. `v01`), required. Unrelated to
+`-N`/`--fsm-name`/`-V`/`--fsm-version` — these actors have no owning FSM.
 
 **Output**:
 
-- `<appRoot>/shared-async-op/<version>/<lang>/actors/<name>/<name>.<ext>`
-- That language's registry file, rewritten from every actor currently on disk
-  under that folder (`typescript`/`python`/`rust` only — Go has no shared
-  registry)
+- `<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
+- That language's single **global** registry file at
+  `<appRoot>/async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
+  rewritten from every shared-async-op actor currently on disk for that language
+  across every `functionVersion` (`typescript`/`python`/`rust` only — Go has no
+  shared registry). Never touches the FSM-scoped aggregate
+  (`<lang>-actors-registry.generated.ts`) — this pool is fully separate.
 
 ```bash
-npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typescript --fsm-version v01 --name checkCreditScore
+npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typescript --function-name checkCreditScore --function-version v01
 ```
 
 ### `delete` — remove generated files

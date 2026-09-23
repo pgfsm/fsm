@@ -28,10 +28,11 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | `--skip-dirs <dirs>`      | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `--lang <langs>`          | `-l`  | Comma-separated language(s): `typescript`, `python`, `rust`, `go`. For `generate-sync-logic`/`generate-all` defaults to `typescript`; for `validate-async-operation` defaults to all languages (omit to check all); for `create-async-logic` exactly one language is required                                                                                                                                                                                                                                                                     |
 | `--fsm-name <name>`       | `-N`  | FSM name, e.g. `creditCheck` (`generate-sync-logic`/`generate-async-logic`/`validate-sync-operation` only, required when `-f`/`--folder` is a single `fsm.json` file — there's no `<fsmName>/<fsmVersion>/fsm.json` folder structure to infer it from)                                                                                                                                                                                                                                                                                            |
-| `--fsm-version <version>` | `-V`  | FSM version folder name, e.g. `v01` (required for `create-async-logic`; also required for `generate-sync-logic`/`generate-async-logic`/`validate-sync-operation` when `-f`/`--folder` is a single `fsm.json` file, alongside `-N`/`--fsm-name`)                                                                                                                                                                                                                                                                                                   |
+| `--fsm-version <version>` | `-V`  | FSM version folder name, e.g. `v01` (`generate-sync-logic`/`generate-async-logic`/`validate-sync-operation` only, required when `-f`/`--folder` is a single `fsm.json` file, alongside `-N`/`--fsm-name`)                                                                                                                                                                                                                                                                                                                                         |
+| `--function-name <name>`  | `-n`  | Function name, e.g. `checkCreditScore` (`create-async-logic` only, required — unrelated to `--fsm-name`, these actors have no owning FSM)                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `--function-version <v>`  | `-F`  | Function version folder name, e.g. `v01` (`create-async-logic` only, required — unrelated to `--fsm-version`)                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `--version`               | `-v`  | Print `@pgfsm/compiler`'s own version and exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `--output <folder>`       | `-o`  | Version folder to write generated output into, required when `-f`/`--folder` is a single `machine.ts` file (`generate-fsm-json`/`generate-all`) or, for `generate-all` only, a single `fsm.json` file. **Not** used by the standalone `generate-sync-logic`/`generate-async-logic` (those always write to `Deno.cwd()` — see their sections below; use `-N`/`--fsm-name` + `-V`/`--fsm-version` instead for single-`fsm.json` mode). Relative (resolved against the current working directory) or absolute — independent of `--folder`'s location |
-| `--name <name>`           | `-n`  | Actor function name, used for `<name>/<name>.ext` (`create-async-logic` only, required)                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `--show-recommendation`   | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate-fsm-json`/`generate-all` only)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `--help`                  | `-h`  | Show help message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
@@ -225,36 +226,50 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 Scaffold a **single** actor stub in the shared, non-FSM-scoped async-operation
 pool — for actors that aren't driven by any one FSM's `invoke` list. Writes one
-file at `<folder>/shared-async-op/<version>/<lang>/actors/<name>/<name>.<ext>`,
+file at
+`<folder>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
 via the same `writeActorFile` helper `generate-async-logic` uses per invoke
 object, so stub content/formatting matches the rest of the pipeline.
 
 Unlike `generate-async-logic` (which walks an FSM folder and bulk-scaffolds from
 `fsm.json`), `--folder` here is the **app root** (e.g. `apps/fsm-core-example`),
-not an FSM/plugin-root folder.
+not an FSM/plugin-root folder — and unlike `generate-sync-logic`/
+`generate-async-logic`, output is anchored at `--folder`, not `Deno.cwd()`.
 
-For `typescript`/`python`/`rust`, also rewrites that language's
-`<lang>/actors/generated-registry.*` from every actor currently on disk under
-`<version>/<lang>/actors/` (this run's actor included) — so repeated
-`create-async-logic` calls accumulate registry entries instead of each one
-clobbering the last. Every entry's identity is fixed: `parentFsmName` and
-`asyncOperationType` are always `"sharedAsyncOp"` (these actors have no owning
-FSM), `asyncOperationName` is the actor name, and
-`parentFsmVersion`/`asyncOperationVersion` are both `--fsm-version`. Go has no
-per-version registry — each Go actor is already its own Go module (see its own
-`go.mod`), so only the actor file is written for `go`.
+Takes `-n`/`--function-name` and `-F`/`--function-version` — deliberately
+separate flags from `-N`/`--fsm-name`/`-V`/`--fsm-version`, since these actors
+have no owning FSM at all.
+
+For `typescript`/`python`/`rust`, also rewrites that language's single
+**global** registry at
+`<folder>/async-worker/<lang>/shared-async-op/generated-registry.<ext>` from
+every shared-async-op actor currently on disk for that language, across every
+`functionVersion` (this run's actor included) — so repeated `create-async-logic`
+calls accumulate into one file instead of each one clobbering the last. Unlike
+the FSM-scoped registries `generate-async-logic` writes (one per
+`<fsmName>/<fsmVersion>`), this is deliberately flat, not partitioned by version
+— and it never touches the FSM-scoped aggregate
+(`<lang>-actors-registry.generated.ts`), which stays fully separate. Every
+entry's identity is fixed: `parentFsmName` and `asyncOperationType` are always
+`"sharedAsyncOperation"` (these actors have no owning FSM), `asyncOperationName`
+is the function name, and `parentFsmVersion`/`asyncOperationVersion` are both
+`--function-version`. Since the same function name can recur across different
+`functionVersion`s, each import in the registry is aliased
+(`<functionName>_<functionVersion>`) to avoid collisions. Go has no shared
+registry — each Go actor is already its own Go module (see its own `go.mod`), so
+only the actor file is written for `go`.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c create-async-logic \
   -f apps/fsm-core-example \
   --lang typescript \
-  --fsm-version v01 \
-  --name checkCreditScore
+  --function-name checkCreditScore \
+  --function-version v01
 ```
 
-**Required:** `-l/--lang` (exactly one language), `-V/--fsm-version`,
-`-n/--name`
+**Required:** `-l/--lang` (exactly one language), `-n/--function-name`,
+`-F/--function-version`
 
 ---
 
