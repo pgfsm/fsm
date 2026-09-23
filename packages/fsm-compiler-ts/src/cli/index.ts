@@ -37,10 +37,11 @@ const args = parseArgs(Deno.args, {
     "db-url",
     "lang",
     "worker-sdk-protocol",
-    "name",
     "output",
     "fsm-name",
     "fsm-version",
+    "function-name",
+    "function-version",
   ],
   boolean: ["help", "version", "show-recommendation"],
   alias: {
@@ -52,11 +53,12 @@ const args = parseArgs(Deno.args, {
     d: "db-url",
     l: "lang",
     p: "worker-sdk-protocol",
-    n: "name",
     o: "output",
     N: "fsm-name",
     v: "version",
     V: "fsm-version",
+    n: "function-name",
+    F: "function-version",
   },
 });
 
@@ -80,7 +82,7 @@ COMMANDS
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. The aggregate registry/worker SDK (cli.ts, sdk.ts, <lang>-actors-registry.generated.ts, etc.) are written to {cwd}/async-worker/<lang>/
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used
   generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file (--output required for either single-file mode). When --folder is an fsm.json file, generate-fsm-json is skipped (the fsm.json already exists) and only generate-async-logic/generate-sync-logic run against it. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
-  create-async-logic                  Scaffold a single actor stub in the shared-async-op pool
+  create-async-logic                  Scaffold a single actor stub in the shared, non-FSM-scoped async-op pool (--function-name/--function-version required). Always written to {cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.ext. Also rewrites that language's single global registry at {cwd}/async-worker/<lang>/shared-async-op/generated-registry.ext (accumulating every function-version's actors) — never the FSM-scoped aggregate
   delete                              Delete generated fsm.json / xstate-fsm.json files
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json)
   validate-async-operation            [DEPRECATED] Validate async operation logic (actors) for a sharedAsyncOperation folder — unsupported under the npm/npx build, requires the Deno-native CLI
@@ -91,9 +93,10 @@ OPTIONS
   -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/generate-all/validate-sync-operation only, and requires --output for generate-all or --fsm-name/--fsm-version for generate-sync-logic/generate-async-logic/validate-sync-operation; app root for create-async-logic)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
   -o, --output <folder>                Version folder to write generated output into, when --folder is a single machine.ts file (generate-fsm-json/generate-all) or a single fsm.json file (generate-all); required in those cases, unused otherwise (including for generate-sync-logic/generate-async-logic, which always write to {cwd}/<sync|async>-worker/<lang>/<fsmName>/<fsmVersion>/ instead). Relative (resolved against cwd) or absolute; independent of --folder's location
-  -n, --name <name>                   Actor function name, used for <name>/<name>.ext (create-async-logic only, required)
+  -n, --function-name <name>           Function name, e.g. checkCreditScore (create-async-logic only, required — these actors have no owning FSM, so this is unrelated to --fsm-name)
+  -F, --function-version <version>     Function version folder name, e.g. v01 (create-async-logic only, required — unrelated to --fsm-version)
   -N, --fsm-name <name>                FSM name, e.g. creditCheck (generate-sync-logic/generate-async-logic/validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
-  -V, --fsm-version <version>          FSM version folder name, e.g. v01 (required for create-async-logic; also required for generate-sync-logic/generate-async-logic/validate-sync-operation when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
+  -V, --fsm-version <version>          FSM version folder name, e.g. v01 (generate-sync-logic/generate-async-logic/validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
@@ -116,7 +119,7 @@ EXAMPLES
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
   ${CLI_INVOCATION} -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
-  ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --fsm-version v01 --name checkCreditScore
+  ${CLI_INVOCATION} -c create-async-logic -f apps/fsm-core-example --lang typescript --function-name checkCreditScore --function-version v01
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c validate-sync-operation -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
   ${CLI_INVOCATION} -c validate-async-operation -f apps/fsm-core-example/fsm --skip-dirs carVitals,creditCheck,taskMachineConfig
@@ -227,8 +230,8 @@ const missing: string[] = [];
 if (!command) missing.push("--command");
 if (!folder) missing.push("--folder");
 if (command === "create-async-logic") {
-  if (!args["fsm-version"]) missing.push("--fsm-version");
-  if (!args["name"]) missing.push("--name");
+  if (!args["function-version"]) missing.push("--function-version");
+  if (!args["function-name"]) missing.push("--function-name");
 }
 
 if (missing.length > 0) {
@@ -456,8 +459,8 @@ try {
       await createAsyncOperationLogic(
         folder!,
         createAsyncLogicLang!,
-        args["fsm-version"]!,
-        args["name"]!,
+        args["function-version"]!,
+        args["function-name"]!,
       );
       break;
     case "delete":

@@ -1,26 +1,27 @@
 import { getLogger } from "@logtape/logtape";
-import { isVersionFolderName } from "./util.ts";
+import { isNotFoundError, isVersionFolderName } from "./util.ts";
 import {
+  ASYNC_WORKER_DIR_NAME,
   formatRustFilesBestEffort,
   formatTsFilesBestEffort,
   resolvePluginRootAbsPath,
-  toWrittenActor,
   writeActorFile,
-  writeActorsRegistry,
 } from "./operation-logic-scaffold.ts";
+import { render as renderTsSharedAsyncOpRegistry } from "./scaffold-templates/eta/typescript/shared-async-op-registry.generated.ts";
+import { render as renderPySharedAsyncOpRegistry } from "./scaffold-templates/eta/python/shared-async-op-registry.generated.ts";
+import { render as renderRustSharedAsyncOpRegistry } from "./scaffold-templates/eta/rust/shared-async-op-registry.generated.ts";
 import type {
   ActorReference,
   ActorsBarrelLang,
   OperationLang,
-  RegisteredActor,
 } from "./types/index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "create-async-logic"]);
 
 /**
- * Directory name (relative to the app root) holding actors that aren't
- * scoped to any one FSM's `invoke` list — hand-created via this command
- * rather than scaffolded in bulk from `fsm.json` by
+ * Directory name (relative to `<appRoot>/async-worker/<lang>/`) holding
+ * actors that aren't scoped to any one FSM's `invoke` list — hand-created via
+ * this command rather than scaffolded in bulk from `fsm.json` by
  * {@linkcode generateAsyncOperationLogicFromFolders}.
  */
 const SHARED_ASYNC_OP_DIR_NAME = "shared-async-op";
@@ -37,118 +38,212 @@ const SHARED_ASYNC_OP_DIR_NAME = "shared-async-op";
 const SHARED_ASYNC_OP_FSM_TYPE = "sharedAsyncOperation" as const;
 const SHARED_ASYNC_OP_PARENT_FSM_NAME = "sharedAsyncOperation";
 
-/** Languages `create-async-logic` can also emit a `generated-registry.*` for — Go has no per-version registry (see {@linkcode ActorsBarrelLang}'s doc comment). */
+/** Languages `create-async-logic` can also emit a `generated-registry.*` for — Go has no registry (each Go actor is already its own Go module, see its own `go.mod`). */
 const REGISTRY_LANGS: ActorsBarrelLang[] = ["typescript", "python", "rust"];
 
 function isRegistryLang(lang: OperationLang): lang is ActorsBarrelLang {
   return (REGISTRY_LANGS as OperationLang[]).includes(lang);
 }
 
-/** Builds the {@linkcode RegisteredActor} identity for one shared-async-op actor. */
-function toSharedAsyncOpRegisteredActor(
+/**
+ * One shared-async-op actor's entry in the global registry — everything the
+ * per-language Eta template (`shared-async-op-registry.eta`) needs to import
+ * the actor (aliased, since the same function name can recur across
+ * different `functionVersion`s and would otherwise collide) and register it.
+ */
+type SharedAsyncOpRegistryEntry = {
+  src: string;
+  alias: string;
+  /**
+   * The import target, already formatted for the target language:
+   * a relative `./`-prefixed module specifier for TypeScript, a dotted
+   * absolute-from-`shared-async-op/` module path for Python, or a bare
+   * relative file path (no leading `./`) for Rust's `#[path]`.
+   */
+  importPath: string;
+  parentFsmName: string;
+  parentFsmVersion: string;
+  asyncOperationType: typeof SHARED_ASYNC_OP_FSM_TYPE;
+  asyncOperationName: string;
+  asyncOperationVersion: string;
+  asyncOperationLanguage: OperationLang;
+};
+
+/** Sanitizes `<name>_<version>` into a safe TS/Python/Rust identifier — used as the import alias so two function-versions of the same function name never collide in the same registry file. */
+function toRegistryAlias(fileBaseName: string, version: string): string {
+  return `${fileBaseName}_${version}`.replace(/[^A-Za-z0-9]+/g, "_");
+}
+
+/**
+ * Lists every `{ name, version }` pair already scaffolded under
+ * `<asyncWorkerRoot>/<lang>/shared-async-op/<version>/actors/<name>/`, by
+ * reading directories rather than a manifest, so the registry it feeds
+ * always matches what's actually on disk even if a file was hand-removed.
+ * `version` comes from the outer version folder (the actor's own inner
+ * `<version>/<name>.<ext>` nesting always uses the same value, since both are
+ * written from the same {@linkcode createAsyncOperationLogic} call).
+ */
+async function listExistingSharedAsyncOpActors(
+  asyncWorkerRoot: string,
+  lang: OperationLang,
+): Promise<{ name: string; version: string }[]> {
+  const sharedAsyncOpDir =
+    `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}`;
+  const result: { name: string; version: string }[] = [];
+  let versionEntries: Deno.DirEntry[];
+  try {
+    versionEntries = await Array.fromAsync(Deno.readDir(sharedAsyncOpDir));
+  } catch (err) {
+    if (isNotFoundError(err)) return result;
+    throw err;
+  }
+  for (const versionEntry of versionEntries) {
+    if (!versionEntry.isDirectory || !isVersionFolderName(versionEntry.name)) {
+      continue;
+    }
+    const actorsDir = `${sharedAsyncOpDir}/${versionEntry.name}/actors`;
+    try {
+      for await (const nameEntry of Deno.readDir(actorsDir)) {
+        if (nameEntry.isDirectory) {
+          result.push({ name: nameEntry.name, version: versionEntry.name });
+        }
+      }
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
+    }
+  }
+  return result.sort((a, b) =>
+    a.name === b.name
+      ? a.version.localeCompare(b.version)
+      : a.name.localeCompare(b.name)
+  );
+}
+
+/** Builds one actor's {@linkcode SharedAsyncOpRegistryEntry}, with the import path formatted for `lang`. */
+function toSharedAsyncOpRegistryEntry(
   lang: ActorsBarrelLang,
+  name: string,
   version: string,
-  src: string,
-): RegisteredActor {
+): SharedAsyncOpRegistryEntry {
+  const alias = toRegistryAlias(name, version);
+  const ext = lang === "typescript" ? "ts" : lang === "rust" ? "rs" : "py";
+  // <version>/actors/<name>/<version>/<name>.<ext>, relative to
+  // shared-async-op/ (the global registry's own directory).
+  const relParts = [version, "actors", name, version, name];
+  const importPath = lang === "typescript"
+    ? `./${relParts.join("/")}.${ext}`
+    : lang === "rust"
+    ? `${relParts.join("/")}.${ext}`
+    : relParts.join(".");
   return {
-    ...toWrittenActor(lang, { src }),
+    src: name,
+    alias,
+    importPath,
     parentFsmName: SHARED_ASYNC_OP_PARENT_FSM_NAME,
     parentFsmVersion: version,
     asyncOperationType: SHARED_ASYNC_OP_FSM_TYPE,
-    asyncOperationName: src,
+    asyncOperationName: name,
     asyncOperationVersion: version,
+    asyncOperationLanguage: lang,
   };
 }
 
-/**
- * Lists every actor already scaffolded under `<absFolderPath>/<lang>/actors/`
- * (one subdirectory per actor — see {@linkcode writeActorFile}), by reading
- * the directory rather than a manifest, so the registry it feeds always
- * matches what's actually on disk even if a file was hand-removed. Excludes
- * the registry file itself (a sibling file, not a directory).
- */
-async function listExistingActorSrcNames(
-  absFolderPath: string,
-  lang: OperationLang,
-): Promise<string[]> {
-  const actorsDir = `${absFolderPath}/${lang}/actors`;
-  const names: string[] = [];
-  try {
-    for await (const entry of Deno.readDir(actorsDir)) {
-      if (entry.isDirectory) names.push(entry.name);
-    }
-  } catch (err) {
-    if (!(err instanceof Deno.errors.NotFound)) throw err;
+/** Renders the global registry's content for one language via its Eta template. */
+function buildSharedAsyncOpRegistryContent(
+  entries: SharedAsyncOpRegistryEntry[],
+  lang: ActorsBarrelLang,
+): string {
+  switch (lang) {
+    case "typescript":
+      return renderTsSharedAsyncOpRegistry({ actors: entries });
+    case "python":
+      return renderPySharedAsyncOpRegistry({ actors: entries });
+    case "rust":
+      return renderRustSharedAsyncOpRegistry({ actors: entries });
   }
-  return names.sort();
 }
 
 /**
- * Rewrites `<absFolderPath>/<lang>/actors/<registry filename>` from every
- * actor currently on disk for `lang` (the one just written by
- * {@linkcode createAsyncOperationLogic} included) — so repeated
- * `create-async-logic` calls accumulate registry entries instead of each one
- * clobbering the last.
+ * Rewrites `<asyncWorkerRoot>/<lang>/shared-async-op/generated-registry.<ext>`
+ * from every shared-async-op actor currently on disk for `lang` (the one
+ * just written by {@linkcode createAsyncOperationLogic} included) — so
+ * repeated `create-async-logic` calls accumulate into one global registry
+ * across every `functionVersion`, instead of each call clobbering the last.
+ * Unlike the FSM-scoped registries `generate-async-logic` writes (one per
+ * `<fsmName>/<fsmVersion>`), this is deliberately a single flat file — these
+ * actors have no owning FSM/version to partition by.
  */
 async function rewriteSharedAsyncOpRegistry(
-  absFolderPath: string,
+  asyncWorkerRoot: string,
   lang: OperationLang,
-  version: string,
 ): Promise<string | undefined> {
   if (!isRegistryLang(lang)) return undefined;
-  const srcNames = await listExistingActorSrcNames(absFolderPath, lang);
-  const actors = srcNames.map((src) =>
-    toSharedAsyncOpRegisteredActor(lang, version, src)
+  const existing = await listExistingSharedAsyncOpActors(asyncWorkerRoot, lang);
+  const entries = existing.map(({ name, version }) =>
+    toSharedAsyncOpRegistryEntry(lang, name, version)
   );
-  return await writeActorsRegistry(absFolderPath, actors, lang);
+  const dir = `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}`;
+  await Deno.mkdir(dir, { recursive: true });
+  const file = `${dir}/generated-registry.${
+    lang === "typescript" ? "ts" : lang === "rust" ? "rs" : "py"
+  }`;
+  await Deno.writeTextFile(
+    file,
+    buildSharedAsyncOpRegistryContent(entries, lang),
+  );
+  return file;
 }
 
 /**
  * Scaffolds a single new actor stub in the shared, non-FSM-scoped async
- * operation pool at `<appRootFolder>/shared-async-op/<version>/<lang>/actors/<name>/<name>.<ext>`,
+ * operation pool at
+ * `<appRootFolder>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
  * via the same {@linkcode writeActorFile} helper
  * `generateAsyncOperationLogicFromFolders` uses per invoke object — so stub
  * content/formatting matches the rest of the actor-scaffolding pipeline. For
  * `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}), also
- * rewrites that language's `generated-registry.*` from every actor currently
- * on disk (see {@linkcode rewriteSharedAsyncOpRegistry}), each entry's
- * identity fixed to `parentFsmName`/`asyncOperationType` `"sharedAsyncOperation"` since
- * these actors have no owning FSM. Returns the actor file's absolute path.
+ * rewrites that language's single **global** `generated-registry.*` at
+ * `<appRootFolder>/async-worker/<lang>/shared-async-op/generated-registry.*`
+ * from every shared-async-op actor currently on disk (see
+ * {@linkcode rewriteSharedAsyncOpRegistry}) — never the FSM-scoped aggregate
+ * (`<lang>-actors-registry.generated.ts`), which stays untouched; this pool
+ * is fully separate from it. Each registry entry's identity is fixed to
+ * `parentFsmName`/`asyncOperationType` `"sharedAsyncOperation"` since these
+ * actors have no owning FSM. Returns the actor file's absolute path.
  */
 export async function createAsyncOperationLogic(
   appRootFolder: string,
   lang: OperationLang,
-  version: string,
-  name: string,
+  functionVersion: string,
+  functionName: string,
 ): Promise<string> {
-  if (!isVersionFolderName(version)) {
+  if (!isVersionFolderName(functionVersion)) {
     throw new Error(
-      `Invalid version: ${version}. Must match the "v\\d{2}" folder-name convention (e.g. "v01").`,
+      `Invalid version: ${functionVersion}. Must match the "v\\d{2}" folder-name convention (e.g. "v01").`,
     );
   }
 
   const absAppRootPath = resolvePluginRootAbsPath(appRootFolder);
-  const absFolderPath =
-    `${absAppRootPath}/${SHARED_ASYNC_OP_DIR_NAME}/${version}`;
-  const actor: ActorReference = { src: name, asyncOperationLanguage: lang };
+  const asyncWorkerRoot = `${absAppRootPath}/${ASYNC_WORKER_DIR_NAME}`;
+  const actor: ActorReference = {
+    src: functionName,
+    asyncOperationLanguage: lang,
+  };
 
-  // shared-async-op has no plugin-root layer between the app root and the
-  // version folder (unlike fsm/), so writeActorFile's default path-offset
-  // appRoot derivation for Go's go.mod would resolve one level too shallow —
-  // pass the app root's own directory name explicitly.
   const appRootDirName = absAppRootPath.split("/").at(-1)!;
   const file = await writeActorFile(
-    absFolderPath,
+    asyncWorkerRoot,
     lang,
     actor,
     appRootDirName,
+    `${SHARED_ASYNC_OP_DIR_NAME}/${functionVersion}`,
+    functionVersion,
   );
   logger.info("Wrote actor file {file}", { file });
 
   const registryFile = await rewriteSharedAsyncOpRegistry(
-    absFolderPath,
+    asyncWorkerRoot,
     lang,
-    version,
   );
   if (registryFile) {
     logger.info("Wrote actors registry {file}", { file: registryFile });

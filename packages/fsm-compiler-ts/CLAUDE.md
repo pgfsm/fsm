@@ -99,9 +99,10 @@ The gotchas below are for whoever next touches
   #305) — inserted between `<lang>` and `actors/`, so
   `generate-async-operation-logic.ts` passes `<fsmName>/<fsmVersion>` there to
   avoid multiple FSMs/versions writing under the same `<lang>` root colliding.
-  `create-async-logic.ts`'s shared-async-op pool doesn't pass it (unaffected,
-  still writes flat under its own `shared-async-op/<version>/` root — no per-FSM
-  nesting needed there since those actors have no owning FSM).
+  `create-async-logic.ts`'s shared-async-op pool passes
+  `shared-async-op/<functionVersion>` there too (as of #309, mirroring
+  `<fsmName>/<fsmVersion>`) — see "`create-async-logic` writes under
+  `async-worker/`" below for its own extra nesting need.
 - **`actors-manifest.json` is now per-language, not one combined manifest.**
   Written once per `<fsmName>/<fsmVersion>` **per language actually used** (not
   every `SUPPORTED_OPERATION_LANGS` member) at
@@ -124,6 +125,40 @@ The gotchas below are for whoever next touches
   `operation-logic-scaffold.ts`, since `writeSyncOperationRegistry` receives the
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
+
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309)
+
+Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
+and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
+`--fsm-version`/`--name` were retired for this command) replace the old
+`--name`/`--fsm-version`, and output moved from
+`<appRoot>/shared-async-op/<version>/<lang>/actors/<name>/<name>.<ext>` to
+`<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
+— note `<functionVersion>` appears **twice**: once as the top-level partition
+(passed as `writeActorFile`'s `subPath`, `shared-async-op/<functionVersion>`,
+mirroring `<fsmName>/<fsmVersion>`) and once more nested under the actor's own
+name folder (passed as `writeActorFile`'s new `fileSubPath` param — see its own
+doc comment). This second nesting level has no FSM-scoped equivalent; it exists
+only because the user who requested #309 asked for it explicitly.
+
+Registry-wise, this command deliberately does **not** mirror
+`generate-async-logic`'s per-`<fsmName>/<fsmVersion>` registries — since
+shared-async-op actors have no owning FSM/version to partition by, there's a
+single **global** file per language,
+`<appRoot>/async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
+accumulating every `functionVersion`'s actors across repeated
+`create-async-logic` calls (rebuilt from a fresh directory walk each time, same
+idempotent-rebuild approach as before #309). This needed its own
+`shared-async-op-registry.eta` template per language (typescript/python/rust) —
+none of the existing registry templates fit, since they all assume the actor
+being registered is a direct sibling of (or reachable through an already-written
+per-group registry near) the file being written, and this one reaches into
+multiple `<functionVersion>/actors/<functionName>/<functionVersion>/` subtrees
+from one fixed location. Every import is aliased
+(`<functionName>_<functionVersion>`) since the same function name can
+legitimately recur across different `functionVersion`s. Deliberately never
+touches the FSM-scoped aggregate (`<lang>-actors-registry.generated.ts`) — this
+pool stays fully separate from it, same as before #309.
 
 ## npm publish (`deno task build:npm`)
 

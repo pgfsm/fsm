@@ -620,7 +620,7 @@ Deno.test("cli generate-all rejects a --folder file that's neither .ts nor .json
 
 // --- create-async-logic ---
 
-Deno.test("cli create-async-logic without --fsm-version exits 1", async () => {
+Deno.test("cli create-async-logic without --function-version exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
     "create-async-logic",
@@ -628,14 +628,14 @@ Deno.test("cli create-async-logic without --fsm-version exits 1", async () => {
     APP_ROOT,
     "--lang",
     "typescript",
-    "--name",
+    "--function-name",
     "checkCreditScoreCliTest",
   ]);
   assertEquals(code, 1);
-  assertStringIncludes(stderr, "--fsm-version");
+  assertStringIncludes(stderr, "--function-version");
 });
 
-Deno.test("cli create-async-logic without --name exits 1", async () => {
+Deno.test("cli create-async-logic without --function-name exits 1", async () => {
   const { code, stderr } = await runCli([
     "-c",
     "create-async-logic",
@@ -643,11 +643,11 @@ Deno.test("cli create-async-logic without --name exits 1", async () => {
     APP_ROOT,
     "--lang",
     "typescript",
-    "--fsm-version",
+    "--function-version",
     "v01",
   ]);
   assertEquals(code, 1);
-  assertStringIncludes(stderr, "--name");
+  assertStringIncludes(stderr, "--function-name");
 });
 
 Deno.test("cli create-async-logic rejects an invalid --lang", async () => {
@@ -658,9 +658,9 @@ Deno.test("cli create-async-logic rejects an invalid --lang", async () => {
     APP_ROOT,
     "--lang",
     "cobol",
-    "--fsm-version",
+    "--function-version",
     "v01",
-    "--name",
+    "--function-name",
     "checkCreditScoreCliTest",
   ]);
   assertEquals(code, 1);
@@ -675,16 +675,16 @@ Deno.test("cli create-async-logic rejects a comma-separated --lang (exactly one 
     APP_ROOT,
     "--lang",
     "typescript,python",
-    "--fsm-version",
+    "--function-version",
     "v01",
-    "--name",
+    "--function-name",
     "checkCreditScoreCliTest",
   ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--lang");
 });
 
-Deno.test("cli create-async-logic writes a single actor file under shared-async-op", async () => {
+Deno.test("cli create-async-logic writes a single actor file under async-worker/shared-async-op", async () => {
   const { code } = await runCli([
     "-c",
     "create-async-logic",
@@ -692,14 +692,14 @@ Deno.test("cli create-async-logic writes a single actor file under shared-async-
     APP_ROOT,
     "--lang",
     "typescript",
-    "--fsm-version",
+    "--function-version",
     "v01",
-    "--name",
+    "--function-name",
     "checkCreditScoreCliTest",
   ]);
   assertEquals(code, 0);
   const stat = await Deno.stat(
-    `${APP_ROOT}/shared-async-op/v01/typescript/actors/checkCreditScoreCliTest/checkCreditScoreCliTest.ts`,
+    `${APP_ROOT}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScoreCliTest/v01/checkCreditScoreCliTest.ts`,
   );
   assertEquals(stat.isFile, true);
 });
