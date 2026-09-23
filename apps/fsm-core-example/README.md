@@ -27,17 +27,30 @@ fsm/<asyncOperationName>/
     fsm.json              ← FSM definition (input to compiler)
     xstate-fsm.json       ← XState 5-compatible rendering
     typescript/
-      actions/index.ts    ← action implementations
-      guards/index.ts     ← guard implementations
-      delays/index.ts     ← delay implementations
       actors/index.ts     ← actor implementations
   v02/                    ← new version; v01 is untouched
     ...
+sync-worker/
+  typescript/
+    <asyncOperationName>/
+      v01/
+        actions/index.ts                     ← action implementations
+        guards/index.ts                      ← guard implementations
+        delays/index.ts                      ← delay implementations
+        generated-sync-operation-registry.ts ← combined registry (generate-sync-logic output)
+        fsm.json                             ← copy of that version's fsm.json
+      v02/
+        ...
 ```
 
 Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to
 create a new version; existing FSM instances keep running against their original
 version.
+
+Sync operation logic (actions/guards/delays) is not colocated with its FSM's own
+version folder — `generate-sync-logic` always writes to `Deno.cwd()`, so
+`sync-worker/` sits at this app's own root (a sibling of `fsm/`, run from here),
+not nested inside each `fsm/<asyncOperationName>/<version>/` folder.
 
 ## How to run the example server
 
@@ -73,6 +86,8 @@ from DB calls and fail on unrelated-looking assertions.
    ```bash
    cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts
    ```
-3. Implement the generated stubs in `sync-worker/typescript/actions/`,
-   `guards/`, `delays/`, and `typescript/actors/`
+3. Implement the generated stubs in
+   `sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
+   `delays/` (run `generate-sync-logic` from this directory so it lands here),
+   and `fsm/<yourAsyncOperationName>/v01/typescript/actors/`
 4. Restart the server — it picks up the new FSM at startup

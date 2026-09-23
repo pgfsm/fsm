@@ -31,7 +31,8 @@ export const hasArity = (n: number) => (fn: unknown): boolean =>
   isFunction(fn) && fn.length === n;
 
 export async function validateLanguageModules(
-  absFolderPath: string,
+  fsmName: string,
+  fsmVersion: string,
   lang: string,
   actions: string[],
   guards: string[],
@@ -54,8 +55,12 @@ export async function validateLanguageModules(
     actors: null,
   };
 
+  // generate-sync-logic always writes to {cwd}/sync-worker/<lang>/<fsmName>/
+  // <fsmVersion>/, independent of the source FSM tree's own location -- see
+  // generate-sync-operation-logic.ts.
   for (const modType of moduleTypes) {
-    const modDir = `${absFolderPath}/sync-worker/${lang}/${modType.type}`;
+    const modDir =
+      `${Deno.cwd()}/sync-worker/${lang}/${fsmName}/${fsmVersion}/${modType.type}`;
     const modulePath = `${modDir}/index.ts`;
     try {
       await ensureImportMapResolution();
@@ -156,7 +161,8 @@ export async function validateSyncOperationFromFolder(
   asyncOperationActors = result.actors;
 
   const outputValidateLanguageModules = await validateLanguageModules(
-    absPath,
+    dirName,
+    versionName,
     "typescript",
     actions,
     guards,
@@ -193,8 +199,9 @@ export async function validateSyncOperationFromFolder(
  * versioned FSM under it. Unlike folder mode, there's no
  * `<fsmName>/<fsmVersion>/fsm.json` directory structure to infer identity
  * from, so `fsmName`/`fsmVersion` are caller-supplied. Action/guard/delay
- * modules are still expected alongside fsm.json (`sync-worker/typescript/actions/`,
- * etc. under fsm.json's own containing directory).
+ * modules are expected at `{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/actions/`,
+ * etc. — independent of fsm.json's own location, matching where
+ * `generate-sync-logic` writes them (see `generate-sync-operation-logic.ts`).
  */
 export async function validateSyncOperationFromFsmJson(
   fsmJsonPath: string,

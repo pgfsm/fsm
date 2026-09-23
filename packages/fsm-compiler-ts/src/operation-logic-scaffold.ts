@@ -138,15 +138,22 @@ export function renderOperationModule(
 }
 
 /**
- * Writes one operation-logic index module to `<absFolderPath>/<lang>/<kind>/`.
+ * Writes one operation-logic index module to
+ * `<absFolderPath>/<lang>/<kind>/`, or `<absFolderPath>/<lang>/<subPath>/<kind>/`
+ * when `subPath` is given — `generate-sync-logic`'s own caller uses this to
+ * insert `<fsmName>/<fsmVersion>` between the language and the kind, so
+ * multiple FSMs/versions writing under the same `<lang>` root don't collide.
  */
 export async function writeOperationModule(
   absFolderPath: string,
   lang: OperationLang,
   kind: OperationKind,
   names: string[],
+  subPath?: string,
 ): Promise<void> {
-  const dir = `${absFolderPath}/${lang}/${kind}`;
+  const dir = subPath
+    ? `${absFolderPath}/${lang}/${subPath}/${kind}`
+    : `${absFolderPath}/${lang}/${kind}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${operationModuleFileName(lang)}`;
   await Deno.writeTextFile(file, renderOperationModule(lang, kind, names));

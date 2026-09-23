@@ -126,7 +126,7 @@ parent notification if a parent queue is present.
 
 Actions are referenced by name in `entry`, `exit`, and transition `actions`
 arrays. The compiler resolves each name against
-`sync-worker/typescript/actions/index.ts`.
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/actions/index.ts`.
 
 ```json
 { "type": "myActionName" }
@@ -144,12 +144,13 @@ Special built-in actions (not resolved against user code):
 ```
 
 Referenced in `cond` on transitions. Resolved against
-`sync-worker/typescript/guards/index.ts`.
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/guards/index.ts`.
 
 ## Delays
 
 Delays schedule an event after a duration. Reference them by name; the compiler
-generates a delay function in `sync-worker/typescript/delays/index.ts`.
+generates a delay function in
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/delays/index.ts`.
 
 ```json
 { "type": "delayMyDelay" }

@@ -12,6 +12,7 @@ import {
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
 import {
+  fsmIdentityFromVersionFolderPath,
   oneLevelUp,
   resolvePluginRootAbsPath,
 } from "./operation-logic-scaffold.ts";
@@ -124,9 +125,24 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
       workerSdkProtocol,
       versionFolderPath,
     );
+    // fsm.json is expected at the conventional <pluginRoot>/<fsmName>/<version>
+    // depth (same assumption generateAsyncOperationLogicFromFsmJson's own
+    // realPluginRootAbsPath derivation makes above) -- generate-sync-logic's
+    // single-file mode needs fsmName/fsmVersion explicitly, unlike --output,
+    // which can point anywhere.
+    const absFsmJsonPath = folder.startsWith("/")
+      ? folder
+      : `${Deno.cwd()}/${folder}`;
+    const absFsmJsonDir = absFsmJsonPath.substring(
+      0,
+      absFsmJsonPath.lastIndexOf("/"),
+    );
+    const fsmIdentity = fsmIdentityFromVersionFolderPath(absFsmJsonDir);
     await generateSyncOperationLogicFromFsmJson(
       folder,
       versionFolderPath,
+      fsmIdentity.fsmName,
+      fsmIdentity.fsmVersion,
       langs,
     );
     return;
@@ -140,12 +156,12 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     // nothing left for a later step to still succeed on).
     const absPath = folder.startsWith("/") ? folder : `${Deno.cwd()}/${folder}`;
     const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
-    const version = absDir.split("/").at(-1) ?? "v01";
+    const fsmIdentity = fsmIdentityFromVersionFolderPath(absDir);
     const versionFolderPath = resolvePluginRootAbsPath(output!);
 
     await generateFsmJSONFromMachineFile(
       absDir,
-      version,
+      fsmIdentity.fsmVersion,
       showRecommendation,
       versionFolderPath,
     );
@@ -159,6 +175,8 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     await generateSyncOperationLogicFromFsmJson(
       fsmJsonPath,
       versionFolderPath,
+      fsmIdentity.fsmName,
+      fsmIdentity.fsmVersion,
       langs,
     );
     return;
@@ -169,6 +187,12 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
   // than left to propagate immediately.
   const stepErrors: Error[] = [];
 
+  // Shared by the async- and sync-logic steps below: one level above --folder
+  // (the app root), matching the on-disk layout apps/fsm-core-example/ uses
+  // -- worker-sdk-generated/ and sync-worker/ both sit beside the fsm/
+  // plugin-root folder, not inside it.
+  const writeRootAbsPath = oneLevelUp(resolvePluginRootAbsPath(folder));
+
   try {
     await generateFsmJSONFromFolders(folder, skipDirs, showRecommendation);
   } catch (err) {
@@ -176,7 +200,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
   }
 
   try {
-    const writeRootAbsPath = oneLevelUp(resolvePluginRootAbsPath(folder));
     await generateAsyncOperationLogicFromFolders(
       folder,
       skipDirs,
@@ -188,7 +211,12 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
   }
 
   try {
-    await generateSyncOperationLogicFromFolders(folder, langs, skipDirs);
+    await generateSyncOperationLogicFromFolders(
+      folder,
+      langs,
+      skipDirs,
+      writeRootAbsPath,
+    );
   } catch (err) {
     stepErrors.push(err instanceof Error ? err : new Error(String(err)));
   }

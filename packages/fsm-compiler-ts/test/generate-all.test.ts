@@ -22,12 +22,15 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
     `${FSM_FOLDER}/creditCheck/v01/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
+  // sync-worker/ lands at the app root (one level above FSM_FOLDER), not
+  // inside FSM_FOLDER/creditCheck/v01 itself -- see generate-all's own
+  // writeRootAbsPath comment.
   const syncStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/actions/index.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
   assert(syncStat.isFile);
   const registryStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/generated-sync-operation-registry.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts`,
   );
   assert(registryStat.isFile);
   const aggregateContent = await Deno.readTextFile(

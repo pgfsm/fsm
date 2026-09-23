@@ -25,14 +25,14 @@ import {
   saveReportGavperian,
   saveReportGavUnion,
   // assignCreditScoreError,
-} from "./sync-worker/typescript/actions/index.ts";
+} from "../../../sync-worker/typescript/creditCheck/v01/actions/index.ts";
 
 import {
   allSucceeded,
   equiGavinReportFound,
   gavperianReportFound,
   gavUnionReportFound,
-} from "./sync-worker/typescript/guards/index.ts";
+} from "../../../sync-worker/typescript/creditCheck/v01/guards/index.ts";
 import { machine } from "./machine.ts";
 export const machineWithProvider = machine.provide({
   // types: {
