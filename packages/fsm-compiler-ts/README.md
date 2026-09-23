@@ -23,9 +23,9 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
 below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate-fsm-json`/`generate-async-logic`/`generate-all` — applies the same
-rule to that path: it must **not** start with `.` (use a bare relative path like
-`fsm`, or an absolute path — not `./fsm`) and must **not** end with `/`.
+`generate-fsm-json`/`generate-all` — applies the same rule to that path: it must
+**not** start with `.` (use a bare relative path like `fsm`, or an absolute path
+— not `./fsm`) and must **not** end with `/`.
 
 ### `generate-fsm-json` — compile `fsm.json` from a state machine definition
 
@@ -123,45 +123,53 @@ npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --fsm
 ### `generate-async-logic` — scaffold actor stubs
 
 Reads a version folder's `fsm.json` (every `invoke` object), so
-`generate-fsm-json` must have already run.
+`generate-fsm-json` must have already run. Like `generate-sync-logic`, output is
+never written relative to `--folder` or `--output` — it's always anchored at
+`Deno.cwd()` (wherever the CLI is invoked from), so `cd` into the directory you
+want `async-worker/` to land in before running it.
 
 **Input** — `-f`/`--folder` accepts either:
 
 - A **plugin-root directory** — every version folder under it is scaffolded.
 - A **single `fsm.json` file path** — only that one version's actor
-  files/manifest/barrel/registry are scaffolded. Requires `-o`/`--output`, the
-  version folder to write into: a relative (resolved against the current working
-  directory) or absolute path, unrelated to `--folder`'s own location.
+  files/manifest/barrel/registry are scaffolded. Requires `-N`/`--fsm-name` and
+  `-V`/`--fsm-version` (there's no `--output`, so there's no
+  `<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from
+  either; mirrors `generate-sync-logic`/`validate-sync-operation`'s own
+  single-file-mode flags).
 
 `-p`/`--worker-sdk-protocol`: `grpc` (default) or `legacy` — directory mode
 only. `-s`/`--skip-dirs`: directory mode only.
 
-**Output** — per version folder (or, in single-file mode, into `--output`):
+**Output** — always under the reserved `async-worker/` subfolder at the current
+working directory. Per `<lang>/<fsmName>/<fsmVersion>/` (folder mode derives
+`<fsmName>/<fsmVersion>` per FSM while walking; single-file mode uses
+`--fsm-name`/`--fsm-version` directly):
 
-- One file per distinct actor: `<lang>/actors/<name>/<name>.<ext>`, where
+- One file per distinct actor:
+  `async-worker/<lang>/<fsmName>/<fsmVersion>/actors/<name>/<name>.<ext>`, where
   `<lang>` is that invoke object's own `asyncOperationLanguage` (default
   `typescript`)
-- `actors-manifest.json` — every actor across all languages
-- A per-language barrel re-exporting each actor: `typescript/actors/index.ts`,
-  `python/actors/__init__.py`, `rust/actors/mod.rs` (Go has no barrel)
-- A per-language `generated-registry.*`, written only when that language has at
-  least one actor
+- `actors-manifest.json` — that language's actors, written only for languages
+  this version actually used
+- A barrel re-exporting each actor: `actors/index.ts` (TS), `actors/__init__.py`
+  (Python), `actors/mod.rs` (Rust) — Go has no barrel
+- A `generated-registry.*` (TS/Python/Rust), written only when that language has
+  at least one actor
 
 Both modes also refresh the aggregate registry plus worker SDK — one per
 language, combining every FSM version's actors — since a worker process serves
-its language's actors across every FSM, not just one. There's no separate flag
-for where that aggregate lands: in directory mode it's written one level above
-`--folder` (the app root — matching the layout `apps/fsm-core-example/` uses,
-where `worker-sdk-generated/` sits beside `fsm/`, not inside it); in single-file
-mode it's written to `--output/worker-sdk-generated/<lang>/`. The actor set
-aggregated always comes from the real FSM tree, regardless: `--folder`'s own
-walk in directory mode, or the target `fsm.json`'s own location (found by
-walking three directories up) in single-file mode.
+its language's actors across every FSM, not just one, at `async-worker/<lang>/`
+directly (`cli.ts`, `sdk.ts`, `typescript-actors-registry.generated.ts`, etc. —
+alongside every `<fsmName>/<fsmVersion>/` this run wrote for that language). The
+actor set aggregated always comes from the real FSM tree, regardless:
+`--folder`'s own walk in directory mode, or the target `fsm.json`'s own location
+(found by walking three directories up) in single-file mode.
 
 ```bash
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
-npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
+npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
 ```
 
 ### `generate-all` — run all three generate steps in sequence
@@ -175,25 +183,27 @@ invocation instead of three. Accepts three input shapes:
   stopping (same as running the three commands separately would); one FSM's
   failure in an earlier step doesn't block the next step from still running for
   whichever FSMs did succeed. The command still exits non-zero if anything
-  failed anywhere. Unlike the standalone `generate-sync-logic` command (always
-  `Deno.cwd()`), `generate-all`'s own sync-logic step writes to
-  `<appRoot>/sync-worker/typescript/<fsmName>/<fsmVersion>/` — the same app root
-  `worker-sdk-generated/` uses, one level above `--folder`.
+  failed anywhere. Unlike the standalone `generate-sync-logic`/
+  `generate-async-logic` commands (always `Deno.cwd()`), `generate-all`'s own
+  async-/sync-logic steps write to
+  `<appRoot>/async-worker/typescript/<fsmName>/<fsmVersion>/`/
+  `<appRoot>/sync-worker/typescript/<fsmName>/<fsmVersion>/` — the app root, one
+  level above `--folder`.
 - **Single `.ts` file** — chains all three steps for just that one FSM version.
-  Requires `-o`/`--output`, which serves `fsm.json`/`xstate-fsm.json` and the
-  actor stubs + aggregate registry; the sync-logic step also writes under
-  `--output`, but nested `sync-worker/typescript/<fsmName>/<fsmVersion>/` deep
-  rather than directly into it (`<fsmName>`/`<fsmVersion>` derived from
-  `--output`'s own path, same convention `generate-async-logic`'s aggregate step
-  already relies on). As with `generate-async-logic`'s own single-file mode,
-  `--output` should sit at the conventional `<pluginRoot>/<fsmName>/<version>`
-  depth so both the aggregate step and this identity derivation work.
+  Requires `-o`/`--output`, which serves `fsm.json`/`xstate-fsm.json`; the actor
+  stubs + aggregate registry and the sync stubs also write under `--output`, but
+  nested `async-worker/typescript/<fsmName>/<fsmVersion>/`/
+  `sync-worker/typescript/<fsmName>/<fsmVersion>/` deep rather than directly
+  into it (`<fsmName>`/`<fsmVersion>` derived from `--output`'s own path). As
+  with `generate-async-logic`'s own aggregate step, `--output` should sit at the
+  conventional `<pluginRoot>/<fsmName>/<version>` depth so both that step and
+  this identity derivation work.
 - **Single `fsm.json` file** — the `fsm.json` already exists, so
   `generate-fsm-json` is skipped entirely; only `generate-async-logic` and
   `generate-sync-logic` run against it, same as passing that `fsm.json` to
   either of those commands individually (`fsm.json`'s own location must sit at
-  the same conventional depth for `generate-sync-logic`'s identity derivation to
-  work). Also requires `-o`/`--output`.
+  the same conventional depth for both commands' identity derivation to work).
+  Also requires `-o`/`--output`.
 
 `-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
 `-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,

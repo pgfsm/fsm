@@ -192,7 +192,12 @@ async function runGenerateAll(): Promise<string> {
     stepErrors.push(err instanceof Error ? err : new Error(String(err)));
   }
   try {
-    await generateSyncOperationLogicFromFolders(fsmFolder, ["typescript"], []);
+    await generateSyncOperationLogicFromFolders(
+      fsmFolder,
+      ["typescript"],
+      [],
+      writeRootAbsPath,
+    );
   } catch (err) {
     stepErrors.push(err instanceof Error ? err : new Error(String(err)));
   }
@@ -271,7 +276,7 @@ const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
 };
 
 function printWorkerSdkStartInstructions(appRoot: string): void {
-  const workerSdkRoot = join(appRoot, "worker-sdk-generated");
+  const workerSdkRoot = join(appRoot, "async-worker");
   let entries: Deno.DirEntry[];
   try {
     entries = Array.from(Deno.readDirSync(workerSdkRoot));

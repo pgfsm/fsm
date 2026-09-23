@@ -18,13 +18,13 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
 
   const fsmJsonStat = await Deno.stat(`${FSM_FOLDER}/creditCheck/v01/fsm.json`);
   assert(fsmJsonStat.isFile);
+  // async-worker/ and sync-worker/ both land at the app root (one level
+  // above FSM_FOLDER), not inside FSM_FOLDER/creditCheck/v01 itself -- see
+  // generate-all's own writeRootAbsPath comment.
   const actorStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/typescript/actors/verifyCredentials/verifyCredentials.ts`,
+    `${APP_ROOT}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
-  // sync-worker/ lands at the app root (one level above FSM_FOLDER), not
-  // inside FSM_FOLDER/creditCheck/v01 itself -- see generate-all's own
-  // writeRootAbsPath comment.
   const syncStat = await Deno.stat(
     `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
@@ -34,7 +34,7 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   );
   assert(registryStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${APP_ROOT}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+    `${APP_ROOT}/async-worker/typescript/typescript-actors-registry.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });
@@ -56,12 +56,13 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json, actor stub
 
   const fsmJsonStat = await Deno.stat(`${outDir}/fsm.json`);
   assert(fsmJsonStat.isFile);
+  // fsmName/fsmVersion derived from --output's own path (creditCheck/v01).
   const actorStat = await Deno.stat(
-    `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
+    `${outDir}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
   const aggregateStat = await Deno.stat(
-    `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+    `${outDir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
   );
   assert(aggregateStat.isFile);
 });
@@ -86,12 +87,13 @@ Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and w
   }
   assertEquals(outputFsmJsonExists, false);
 
+  // fsmName/fsmVersion derived from SINGLE_FSM_JSON's own path (creditCheck/v01).
   const actorStat = await Deno.stat(
-    `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
+    `${outDir}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
+    `${outDir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });

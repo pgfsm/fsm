@@ -1,0 +1,28 @@
+{
+  "actors": [
+    {
+      "src": "checkTirePressure",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkTirePressure/checkTirePressure.ts",
+      "exportedName": "checkTirePressure"
+    },
+    {
+      "src": "checkOilPressure",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkOilPressure/checkOilPressure.ts",
+      "exportedName": "checkOilPressure"
+    },
+    {
+      "src": "checkCoolantLevel",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkCoolantLevel/checkCoolantLevel.ts",
+      "exportedName": "checkCoolantLevel"
+    },
+    {
+      "src": "checkBattery",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkBattery/checkBattery.ts",
+      "exportedName": "checkBattery"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "actors": [
+    {
+      "src": "checkBureauRust",
+      "asyncOperationLanguage": "rust",
+      "filePath": "actors/checkBureauRust/checkBureauRust.rs",
+      "exportedName": "checkBureauRust"
+    }
+  ]
+}

@@ -26,8 +26,6 @@ fsm/<asyncOperationName>/
   v01/
     fsm.json              ← FSM definition (input to compiler)
     xstate-fsm.json       ← XState 5-compatible rendering
-    typescript/
-      actors/index.ts     ← actor implementations
   v02/                    ← new version; v01 is untouched
     ...
 sync-worker/
@@ -41,15 +39,25 @@ sync-worker/
         fsm.json                             ← copy of that version's fsm.json
       v02/
         ...
+async-worker/
+  <lang>/                 ← one subtree per language actually used (typescript/python/rust/go)
+    cli.ts, sdk.ts, <lang>-actors-registry.generated.ts, ...  ← aggregate worker SDK
+    <asyncOperationName>/
+      v01/
+        actors/index.ts   ← actor implementations
+        actors-manifest.json
+      v02/
+        ...
 ```
 
 Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to
 create a new version; existing FSM instances keep running against their original
 version.
 
-Sync operation logic (actions/guards/delays) is not colocated with its FSM's own
-version folder — `generate-sync-logic` always writes to `Deno.cwd()`, so
-`sync-worker/` sits at this app's own root (a sibling of `fsm/`, run from here),
+Neither sync operation logic (actions/guards/delays) nor actor implementations
+are colocated with their FSM's own version folder — `generate-sync-logic` and
+`generate-async-logic` both always write to `Deno.cwd()`, so `sync-worker/` and
+`async-worker/` sit at this app's own root (a sibling of `fsm/`, run from here),
 not nested inside each `fsm/<asyncOperationName>/<version>/` folder.
 
 ## How to run the example server
@@ -88,6 +96,7 @@ from DB calls and fail on unrelated-looking assertions.
    ```
 3. Implement the generated stubs in
    `sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
-   `delays/` (run `generate-sync-logic` from this directory so it lands here),
-   and `fsm/<yourAsyncOperationName>/v01/typescript/actors/`
+   `delays/` and `async-worker/typescript/<yourAsyncOperationName>/v01/actors/`
+   (run `generate-sync-logic`/`generate-async-logic` from this directory so they
+   land here)
 4. Restart the server — it picks up the new FSM at startup

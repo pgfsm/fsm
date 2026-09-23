@@ -95,7 +95,7 @@ async-operation-worker-gateway-ctl invoke \
 - **At least one worker-sdk process** connected to the sidecar socket, to
   register actors and actually serve invocations — generate one from an FSM's
   compiled actors (see `@pgfsm/compiler`'s `generate-async-logic`), or see
-  `apps/fsm-core-example/worker-sdk-generated/<lang>/` in the
+  `apps/fsm-core-example/async-worker/<lang>/` in the
   [repo](https://github.com/pgfsm/fsm) for a worked example
 
 ## Programmatic usage

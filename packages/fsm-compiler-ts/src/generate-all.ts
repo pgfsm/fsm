@@ -64,11 +64,15 @@ export interface GenerateAllOptions {
  *   Every collected step failure is re-thrown together as a single
  *   `AggregateError` once the run finishes.
  * - **Single machine.ts file mode** (`folder` is a `.ts` file; `output`
- *   required): chains all three steps for just this one FSM version,
- *   `output` serving as the destination for every step alike (fsm.json/
- *   xstate-fsm.json, actor stubs + aggregate registry, sync stubs) — a step's
- *   failure here simply aborts, since there's only one FSM and nothing left
- *   for a later step to still succeed on.
+ *   required): chains all three steps for just this one FSM version. `output`
+ *   is the destination for `fsm.json`/`xstate-fsm.json`; the actor stubs +
+ *   aggregate registry and the sync stubs also write under `output`, but
+ *   nested `async-worker/<lang>/<fsmName>/<fsmVersion>/` /
+ *   `sync-worker/<lang>/<fsmName>/<fsmVersion>/` deep rather than directly
+ *   into it (`fsmName`/`fsmVersion` derived from `output`'s own path, same
+ *   convention the aggregate step already relies on) — a step's failure here
+ *   simply aborts, since there's only one FSM and nothing left for a later
+ *   step to still succeed on.
  * - **Single fsm.json file mode** (`folder` is a `.json` file; `output`
  *   required): the fsm.json already exists, so generate-fsm-json is skipped
  *   entirely and only generate-async-logic/generate-sync-logic run against
@@ -115,21 +119,11 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     // steps against the provided file, mirroring generate-async-logic/
     // generate-sync-logic's own single-fsm.json mode.
     const versionFolderPath = resolvePluginRootAbsPath(output!);
-    logger.info(
-      "--folder is an fsm.json file: skipping generate-fsm-json and writing worker-sdk-generated/ to {versionFolderPath}",
-      { versionFolderPath },
-    );
-    await generateAsyncOperationLogicFromFsmJson(
-      folder,
-      versionFolderPath,
-      workerSdkProtocol,
-      versionFolderPath,
-    );
     // fsm.json is expected at the conventional <pluginRoot>/<fsmName>/<version>
     // depth (same assumption generateAsyncOperationLogicFromFsmJson's own
-    // realPluginRootAbsPath derivation makes above) -- generate-sync-logic's
-    // single-file mode needs fsmName/fsmVersion explicitly, unlike --output,
-    // which can point anywhere.
+    // realPluginRootAbsPath derivation makes) -- both generate-async-logic's
+    // and generate-sync-logic's single-file modes need fsmName/fsmVersion
+    // explicitly now, unlike --output, which can point anywhere.
     const absFsmJsonPath = folder.startsWith("/")
       ? folder
       : `${Deno.cwd()}/${folder}`;
@@ -138,6 +132,17 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
       absFsmJsonPath.lastIndexOf("/"),
     );
     const fsmIdentity = fsmIdentityFromVersionFolderPath(absFsmJsonDir);
+    logger.info(
+      "--folder is an fsm.json file: skipping generate-fsm-json and writing async-worker/ + sync-worker/ under {versionFolderPath}",
+      { versionFolderPath },
+    );
+    await generateAsyncOperationLogicFromFsmJson(
+      folder,
+      versionFolderPath,
+      fsmIdentity.fsmName,
+      fsmIdentity.fsmVersion,
+      workerSdkProtocol,
+    );
     await generateSyncOperationLogicFromFsmJson(
       folder,
       versionFolderPath,
@@ -169,8 +174,9 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     await generateAsyncOperationLogicFromFsmJson(
       fsmJsonPath,
       versionFolderPath,
+      fsmIdentity.fsmName,
+      fsmIdentity.fsmVersion,
       workerSdkProtocol,
-      versionFolderPath,
     );
     await generateSyncOperationLogicFromFsmJson(
       fsmJsonPath,
@@ -189,8 +195,8 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
 
   // Shared by the async- and sync-logic steps below: one level above --folder
   // (the app root), matching the on-disk layout apps/fsm-core-example/ uses
-  // -- worker-sdk-generated/ and sync-worker/ both sit beside the fsm/
-  // plugin-root folder, not inside it.
+  // -- async-worker/ and sync-worker/ both sit beside the fsm/ plugin-root
+  // folder, not inside it.
   const writeRootAbsPath = oneLevelUp(resolvePluginRootAbsPath(folder));
 
   try {
