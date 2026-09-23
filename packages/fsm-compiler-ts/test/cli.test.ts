@@ -221,6 +221,11 @@ Deno.test("cli generate-sync-logic runs successfully on example folder", async (
     "typescript",
   ]);
   assertEquals(code, 0);
+  const registryContent = await Deno.readTextFile(
+    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/generated-sync-operation-registry.ts`,
+  );
+  assertStringIncludes(registryContent, 'fsmName: "creditCheck"');
+  assertStringIncludes(registryContent, 'fsmVersion: "v01"');
 });
 
 Deno.test("cli generate-sync-logic rejects an invalid --lang", async () => {
@@ -290,6 +295,10 @@ Deno.test("cli generate-sync-logic --folder fsm.json + --output (absolute) write
     );
     assert(stat.isFile);
   }
+  const registryStat = await Deno.stat(
+    `${outDir}/sync-worker/typescript/generated-sync-operation-registry.ts`,
+  );
+  assert(registryStat.isFile);
 });
 
 Deno.test("cli generate-sync-logic --output accepts a relative path, resolved against the CLI's cwd", async () => {

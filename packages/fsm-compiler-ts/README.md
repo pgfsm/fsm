@@ -97,6 +97,15 @@ nested under the reserved `sync-worker/` subfolder, per requested language:
 
 Every stub has a `// TODO: implement` body.
 
+For `typescript` (the only language this is currently written for), also:
+
+- `sync-worker/typescript/generated-sync-operation-registry.ts` — imports every
+  action/guard/delay stub written for that version and combines them into one
+  `SyncOperationRegistration[]` (`fsmName`, `fsmVersion`, `syncOperationType` —
+  `"action"`/`"guard"`/`"delay"`, `syncOperationName`, `syncOperationLanguage`,
+  `handler`), so a worker can register/dispatch without importing each kind's
+  module separately.
+
 ```bash
 npx @pgfsm/compiler -c generate-sync-logic -f fsm --lang typescript,python
 npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --output fsm/creditCheck/v01

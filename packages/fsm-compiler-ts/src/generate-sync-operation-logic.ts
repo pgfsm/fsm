@@ -2,7 +2,10 @@ import { getLogger } from "@logtape/logtape";
 import { extractFsmPluginRefs, RAISE_CANCEL } from "./util.ts";
 import {
   eachVersionedFsmFolder,
+  formatTsFilesBestEffort,
+  fsmIdentityFromVersionFolderPath,
   writeOperationModule,
+  writeSyncOperationRegistry,
 } from "./operation-logic-scaffold.ts";
 import type {
   FsmMachineJson,
@@ -25,15 +28,22 @@ const SYNC_WORKER_DIR_NAME = "sync-worker";
 
 /**
  * Writes action/guard/delay stubs for one already-parsed fsm.json into
- * `<absVersionFolderPath>/sync-worker/`, in each of `langs`. Shared by
- * {@linkcode generateSyncOperationLogicFromFolders} (one call per versioned
- * FSM folder it walks) and {@linkcode generateSyncOperationLogicFromFsmJson}
- * (a single call for one fsm.json).
+ * `<absVersionFolderPath>/sync-worker/`, in each of `langs` — plus, for
+ * `typescript`, that version's `generated-sync-operation-registry.ts`
+ * combining all three into one self-describing
+ * `SyncOperationRegistration[]` (see {@linkcode writeSyncOperationRegistry};
+ * TypeScript only, matching `generate-sync-logic`'s own current scope).
+ * Shared by {@linkcode generateSyncOperationLogicFromFolders} (one call per
+ * versioned FSM folder it walks) and
+ * {@linkcode generateSyncOperationLogicFromFsmJson} (a single call for one
+ * fsm.json). Mutates `tsFiles` in place so callers can batch-format
+ * everything written across a whole run (see {@linkcode formatTsFilesBestEffort}).
  */
 async function scaffoldSyncLogicForVersion(
   absVersionFolderPath: string,
   fsmData: FsmMachineJson,
   langs: OperationLang[],
+  tsFiles: string[],
 ): Promise<void> {
   const { actions, guards, delays } = extractFsmPluginRefs(fsmData);
   // xstate.raise / xstate.cancel are built-ins, not user code.
@@ -64,6 +74,25 @@ async function scaffoldSyncLogicForVersion(
       lang,
       path: absSyncWorkerFolderPath,
     });
+
+    if (lang === "typescript") {
+      const { fsmName, fsmVersion } = fsmIdentityFromVersionFolderPath(
+        absVersionFolderPath,
+      );
+      const registryFile = await writeSyncOperationRegistry(
+        `${absSyncWorkerFolderPath}/${lang}`,
+        fsmName,
+        fsmVersion,
+        lang,
+        filteredActions,
+        guards,
+        delays,
+      );
+      tsFiles.push(registryFile);
+      logger.info("Wrote sync operation registry {file}", {
+        file: registryFile,
+      });
+    }
   }
 }
 
@@ -86,13 +115,16 @@ export async function generateSyncOperationLogicFromFolders(
     path: folderPath,
   });
 
+  const tsFiles: string[] = [];
   await eachVersionedFsmFolder(
     folderPath,
     skipDirs,
     async (absFolderPath, fsmData) => {
-      await scaffoldSyncLogicForVersion(absFolderPath, fsmData, langs);
+      await scaffoldSyncLogicForVersion(absFolderPath, fsmData, langs, tsFiles);
     },
   );
+
+  await formatTsFilesBestEffort(tsFiles);
 }
 
 /**
@@ -121,5 +153,12 @@ export async function generateSyncOperationLogicFromFsmJson(
   const fsmData: FsmMachineJson = JSON.parse(
     await Deno.readTextFile(fsmJsonPath),
   );
-  await scaffoldSyncLogicForVersion(absVersionFolderPath, fsmData, langs);
+  const tsFiles: string[] = [];
+  await scaffoldSyncLogicForVersion(
+    absVersionFolderPath,
+    fsmData,
+    langs,
+    tsFiles,
+  );
+  await formatTsFilesBestEffort(tsFiles);
 }
