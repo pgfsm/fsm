@@ -86,13 +86,14 @@ run.
 `-l`/`--lang`: comma-separated `typescript,python,rust,go` (default
 `typescript`). `-s`/`--skip-dirs`: directory mode only.
 
-**Output** — per version folder (or, in single-file mode, into `--output`), per
-requested language:
+**Output** — per version folder (or, in single-file mode, into `--output`),
+nested under the reserved `sync-worker/` subfolder, per requested language:
 
-- `<lang>/actions/index.{ts,py}` / `mod.rs` / `index.go` — one exported stub per
-  action name in `fsm.json` (built-in `xstate.raise`/`xstate.cancel` excluded)
-- `<lang>/guards/...` — one stub per guard
-- `<lang>/delays/...` — one stub per delay
+- `sync-worker/<lang>/actions/index.{ts,py}` / `mod.rs` / `index.go` — one
+  exported stub per action name in `fsm.json` (built-in
+  `xstate.raise`/`xstate.cancel` excluded)
+- `sync-worker/<lang>/guards/...` — one stub per guard
+- `sync-worker/<lang>/delays/...` — one stub per delay
 
 Every stub has a `// TODO: implement` body.
 
@@ -206,9 +207,9 @@ npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typesc
 **Input** — `-f`/`--folder`: plugin-root directory. `-s`/`--skip-dirs`.
 
 **Output/side effect** — per version folder, removes `fsm.json`,
-`xstate-fsm.json`, and the `typescript/` and `python/` subdirectories if present
-(`rust/`/`go/` are left alone). Missing files are skipped silently, not an
-error.
+`xstate-fsm.json`, the `typescript/` and `python/` subdirectories, and the
+`sync-worker/` subdirectory, if present (`rust/`/`go/` are left alone). Missing
+files are skipped silently, not an error.
 
 ```bash
 npx @pgfsm/compiler -c delete -f fsm
@@ -219,8 +220,9 @@ npx @pgfsm/compiler -c delete -f fsm
 **Input** — `-f`/`--folder`: plugin-root directory. `-s`/`--skip-dirs`.
 
 **Output** — writes nothing; validates that every action/guard/delay in
-`fsm.json` has a matching export in `<lang>/actions|guards|delays/index.*` and
-logs a pass/fail result per method.
+`fsm.json` has a matching export in
+`sync-worker/<lang>/actions|guards|delays/index.*` and logs a pass/fail result
+per method.
 
 ```bash
 npx @pgfsm/compiler -c validate-sync-operation -f fsm

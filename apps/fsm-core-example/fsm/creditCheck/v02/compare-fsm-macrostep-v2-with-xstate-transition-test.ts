@@ -29,9 +29,18 @@ async function loadModule(path: string, label: string): Promise<any> {
 }
 
 const fsmModuleDefinition = {
-  actions: await loadModule(`./typescript/actions/index.ts`, "actions"),
-  guards: await loadModule(`./typescript/guards/index.ts`, "guards"),
-  delays: await loadModule(`./typescript/delays/index.ts`, "delays"),
+  actions: await loadModule(
+    `./sync-worker/typescript/actions/index.ts`,
+    "actions",
+  ),
+  guards: await loadModule(
+    `./sync-worker/typescript/guards/index.ts`,
+    "guards",
+  ),
+  delays: await loadModule(
+    `./sync-worker/typescript/delays/index.ts`,
+    "delays",
+  ),
   actors: await loadModule(`./typescript/actors/index.ts`, "actors"),
 };
 

@@ -23,7 +23,7 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   );
   assert(actorStat.isFile);
   const syncStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/typescript/actions/index.ts`,
+    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/actions/index.ts`,
   );
   assert(syncStat.isFile);
   const aggregateContent = await Deno.readTextFile(

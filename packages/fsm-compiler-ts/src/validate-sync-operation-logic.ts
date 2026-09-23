@@ -55,7 +55,7 @@ export async function validateLanguageModules(
   };
 
   for (const modType of moduleTypes) {
-    const modDir = `${absFolderPath}/${lang}/${modType.type}`;
+    const modDir = `${absFolderPath}/sync-worker/${lang}/${modType.type}`;
     const modulePath = `${modDir}/index.ts`;
     try {
       await ensureImportMapResolution();
@@ -193,8 +193,8 @@ export async function validateSyncOperationFromFolder(
  * versioned FSM under it. Unlike folder mode, there's no
  * `<fsmName>/<fsmVersion>/fsm.json` directory structure to infer identity
  * from, so `fsmName`/`fsmVersion` are caller-supplied. Action/guard/delay
- * modules are still expected alongside fsm.json (`typescript/actions/`, etc.
- * under fsm.json's own containing directory).
+ * modules are still expected alongside fsm.json (`sync-worker/typescript/actions/`,
+ * etc. under fsm.json's own containing directory).
  */
 export async function validateSyncOperationFromFsmJson(
   fsmJsonPath: string,

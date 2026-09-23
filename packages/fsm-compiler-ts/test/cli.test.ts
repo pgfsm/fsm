@@ -285,7 +285,9 @@ Deno.test("cli generate-sync-logic --folder fsm.json + --output (absolute) write
   ]);
   assertEquals(code, 0);
   for (const kind of ["actions", "guards", "delays"]) {
-    const stat = await Deno.stat(`${outDir}/typescript/${kind}/index.ts`);
+    const stat = await Deno.stat(
+      `${outDir}/sync-worker/typescript/${kind}/index.ts`,
+    );
     assert(stat.isFile);
   }
 });
@@ -299,7 +301,9 @@ Deno.test("cli generate-sync-logic --output accepts a relative path, resolved ag
     cwd,
   );
   assertEquals(code, 0);
-  const stat = await Deno.stat(`${cwd}/rel-out/typescript/actions/index.ts`);
+  const stat = await Deno.stat(
+    `${cwd}/rel-out/sync-worker/typescript/actions/index.ts`,
+  );
   assert(stat.isFile);
 });
 
@@ -322,7 +326,9 @@ Deno.test("cli generate-sync-logic --output writes to any target folder, unrelat
     outDir,
   ]);
   assertEquals(code, 0);
-  const stat = await Deno.stat(`${outDir}/typescript/actions/index.ts`);
+  const stat = await Deno.stat(
+    `${outDir}/sync-worker/typescript/actions/index.ts`,
+  );
   assert(stat.isFile);
 });
 
@@ -413,7 +419,7 @@ Deno.test("cli generate-all folder mode runs generate-fsm-json, generate-async-l
   );
   assert(actorStat.isFile);
   const syncStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/typescript/actions/index.ts`,
+    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/actions/index.ts`,
   );
   assert(syncStat.isFile);
   // Aggregate written one level above the plugin-root folder, matching
@@ -457,7 +463,9 @@ Deno.test("cli generate-all single-file mode writes fsm.json, actor stubs, sync 
     `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
-  const syncStat = await Deno.stat(`${outDir}/typescript/actions/index.ts`);
+  const syncStat = await Deno.stat(
+    `${outDir}/sync-worker/typescript/actions/index.ts`,
+  );
   assert(syncStat.isFile);
   const aggregateStat = await Deno.stat(
     `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,
@@ -536,7 +544,9 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
     `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
-  const syncStat = await Deno.stat(`${outDir}/typescript/actions/index.ts`);
+  const syncStat = await Deno.stat(
+    `${outDir}/sync-worker/typescript/actions/index.ts`,
+  );
   assert(syncStat.isFile);
   const aggregateContent = await Deno.readTextFile(
     `${outDir}/worker-sdk-generated/typescript/typescript-actors-registry.generated.ts`,

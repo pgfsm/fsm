@@ -73,6 +73,6 @@ from DB calls and fail on unrelated-looking assertions.
    ```bash
    cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts
    ```
-3. Implement the generated stubs in `typescript/actions/`, `guards/`, `delays/`,
-   `actors/`
+3. Implement the generated stubs in `sync-worker/typescript/actions/`,
+   `guards/`, `delays/`, and `typescript/actors/`
 4. Restart the server — it picks up the new FSM at startup
