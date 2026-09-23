@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { relative } from "@std/path/posix";
 import {
+  DELAY_ACTION_NAME_PREFIX,
   DenoCommand,
   isValidPythonIdentifier,
   isVersionFolderName,
@@ -13,6 +14,7 @@ import type {
   OperationKind,
   OperationLang,
   RegisteredActor,
+  SyncOperationType,
   WorkerSdkProtocol,
   WriteWorkerSdkOptions,
   WrittenActor,
@@ -20,6 +22,7 @@ import type {
 import { deriveTemplateInput } from "./scaffold-templates/derive-template-input.ts";
 import { getPreamble, getTemplate } from "./scaffold-templates/registry.ts";
 import { render as renderTsActorsRegistry } from "./scaffold-templates/eta/typescript/actors-registry.generated.ts";
+import { render as renderTsSyncOperationRegistry } from "./scaffold-templates/eta/typescript/sync-operation-registry.generated.ts";
 import { render as renderTsActorsRegistryAggregate } from "./scaffold-templates/eta/typescript/actors-registry-aggregate.generated.ts";
 import { render as renderPyActorsRegistry } from "./scaffold-templates/eta/python/actors-registry.generated.ts";
 import { render as renderPyActorsRegistryAggregate } from "./scaffold-templates/eta/python/actors-registry-aggregate.generated.ts";
@@ -149,6 +152,80 @@ export async function writeOperationModule(
   await Deno.writeTextFile(file, renderOperationModule(lang, kind, names));
 }
 
+const SYNC_OPERATION_REGISTRY_FILE_NAME =
+  "generated-sync-operation-registry.ts";
+
+/** One `SyncOperationRegistration` entry's import-vs-registered-name pair. */
+type SyncOperationEntry = { name: string; importName: string };
+
+/**
+ * One `writeOperationModule` kind's contribution to the registry: its
+ * singular {@linkcode SyncOperationType} (what a registration entry's
+ * `syncOperationType` is), its on-disk module folder (what the `import`
+ * statement points at), and the names to register from it. Delay handlers are
+ * exported under a `${DELAY_ACTION_NAME_PREFIX}`-prefixed name (see
+ * `derive-template-input.ts`) — `importName` carries that prefix,
+ * `name`/`syncOperationName` stays the original `fsm.json` reference.
+ */
+type SyncOperationGroup = {
+  kind: SyncOperationType;
+  moduleFile: Extract<OperationKind, "actions" | "guards" | "delays">;
+  entries: SyncOperationEntry[];
+};
+
+/**
+ * Writes one version's `generated-sync-operation-registry.ts` — the
+ * sync-logic counterpart of {@linkcode writeActorsRegistry}, combining that
+ * version's action/guard/delay stubs (already written to
+ * `<absSyncWorkerLangFolderPath>/{actions,guards,delays}/index.ts` by
+ * {@linkcode writeOperationModule}) into one self-describing
+ * `SyncOperationRegistration[]` a worker can iterate without importing each
+ * kind's module separately. Written as a sibling of those three kind folders
+ * — i.e. into `absSyncWorkerLangFolderPath` itself, not a `<kind>/` beneath
+ * it — since it imports from all three. TypeScript only for now, matching
+ * `generate-sync-logic`'s own current scope (the CLI rejects every other
+ * `OperationLang` for this command).
+ */
+export async function writeSyncOperationRegistry(
+  absSyncWorkerLangFolderPath: string,
+  fsmName: string,
+  fsmVersion: string,
+  lang: OperationLang,
+  actions: string[],
+  guards: string[],
+  delays: string[],
+): Promise<string> {
+  const groups: SyncOperationGroup[] = [
+    {
+      kind: "action",
+      moduleFile: "actions",
+      entries: actions.map((name) => ({ name, importName: name })),
+    },
+    {
+      kind: "guard",
+      moduleFile: "guards",
+      entries: guards.map((name) => ({ name, importName: name })),
+    },
+    {
+      kind: "delay",
+      moduleFile: "delays",
+      entries: delays.map((name) => ({
+        name,
+        importName: `${DELAY_ACTION_NAME_PREFIX}${name}`,
+      })),
+    },
+  ];
+
+  await Deno.mkdir(absSyncWorkerLangFolderPath, { recursive: true });
+  const file =
+    `${absSyncWorkerLangFolderPath}/${SYNC_OPERATION_REGISTRY_FILE_NAME}`;
+  await Deno.writeTextFile(
+    file,
+    renderTsSyncOperationRegistry({ fsmName, fsmVersion, lang, groups }),
+  );
+  return file;
+}
+
 /**
  * Base filename (without extension) for a per-actor file: the sanitized `src`.
  */
@@ -190,9 +267,14 @@ function goActorModulePath(
  * (e.g. `.../apps/fsm-core-example/fsm/creditCheck/v01` ->
  * `{ fsmName: "creditCheck", fsmVersion: "v01" }`), matching the
  * `<pluginRoot>/<fsmName>/<version>` convention {@linkcode eachVersionedFsmFolder}
- * walks.
+ * walks. Exported for {@linkcode writeSyncOperationRegistry}'s caller
+ * (`generate-sync-operation-logic.ts`), which needs the same identity for its
+ * registry entries and has the same single-file-`--output`-mode caveat
+ * `toRegisteredActor`'s own callers already accept (see #218) — an `--output`
+ * that doesn't sit at this depth produces a wrong-but-harmless
+ * `fsmName`/`fsmVersion` in the registry, not a crash.
  */
-function fsmIdentityFromVersionFolderPath(
+export function fsmIdentityFromVersionFolderPath(
   absFolderPath: string,
 ): { fsmName: string; fsmVersion: string } {
   const parts = absFolderPath.split("/");

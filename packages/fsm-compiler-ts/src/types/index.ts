@@ -167,6 +167,29 @@ export type RegisteredActor = WrittenActor & {
 };
 
 /**
+ * A registered sync operation's kind — singular, unlike {@linkcode OperationKind}
+ * (whose plural values name the on-disk directories: `actions`/`guards`/
+ * `delays`/`actors`).
+ */
+export type SyncOperationType = "action" | "guard" | "delay";
+
+/**
+ * One entry {@linkcode writeSyncOperationRegistry} (`operation-logic-scaffold.ts`)
+ * emits into a version's `generated-sync-operation-registry.ts` — the
+ * sync-logic counterpart of {@linkcode RegisteredActor}, self-describing
+ * enough for a worker to register + invoke a stub without a separate
+ * name -> callable lookup of its own.
+ */
+export type SyncOperationRegistration = {
+  fsmName: string;
+  fsmVersion: string;
+  syncOperationType: SyncOperationType;
+  syncOperationName: string;
+  syncOperationLanguage: OperationLang;
+  handler: (...args: unknown[]) => unknown;
+};
+
+/**
  * Languages with a natural single-file "re-export everything" idiom directly
  * inside a version folder (`<lang>/actors/<barrel/registry filename>`). Go is
  * deliberately excluded here: each actor already lives in its own
