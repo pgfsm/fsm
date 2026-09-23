@@ -31,8 +31,16 @@ const SYNC_WORKER_DIR_NAME = "sync-worker";
  * `<absVersionFolderPath>/sync-worker/`, in each of `langs` — plus, for
  * `typescript`, that version's `generated-sync-operation-registry.ts`
  * combining all three into one self-describing
- * `SyncOperationRegistration[]` (see {@linkcode writeSyncOperationRegistry};
- * TypeScript only, matching `generate-sync-logic`'s own current scope).
+ * `SyncOperationRegistration[]` (see {@linkcode writeSyncOperationRegistry})
+ * and a copy of `fsm.json` itself, so `sync-worker/typescript/` is
+ * self-contained rather than requiring a caller to also reach back up to the
+ * version folder root for the FSM definition it's registering against
+ * (TypeScript only, matching `generate-sync-logic`'s own current scope).
+ * Re-serialized from the already-parsed `fsmData` — same
+ * `JSON.stringify(fsmData, null, 2) + "\n"` convention
+ * `generate-fsm-json.ts` writes the original with — rather than copying
+ * bytes from a source path, since single-file `--output` mode has no fixed
+ * source `fsm.json` location relative to `absVersionFolderPath` to copy from.
  * Shared by {@linkcode generateSyncOperationLogicFromFolders} (one call per
  * versioned FSM folder it walks) and
  * {@linkcode generateSyncOperationLogicFromFsmJson} (a single call for one
@@ -92,6 +100,13 @@ async function scaffoldSyncLogicForVersion(
       logger.info("Wrote sync operation registry {file}", {
         file: registryFile,
       });
+
+      const fsmJsonCopyFile = `${absSyncWorkerFolderPath}/${lang}/fsm.json`;
+      await Deno.writeTextFile(
+        fsmJsonCopyFile,
+        JSON.stringify(fsmData, null, 2) + "\n",
+      );
+      logger.info("Wrote fsm.json copy {file}", { file: fsmJsonCopyFile });
     }
   }
 }
