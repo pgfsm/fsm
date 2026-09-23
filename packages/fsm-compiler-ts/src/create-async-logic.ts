@@ -4,7 +4,6 @@ import {
   ASYNC_WORKER_DIR_NAME,
   formatRustFilesBestEffort,
   formatTsFilesBestEffort,
-  resolvePluginRootAbsPath,
   writeActorFile,
 } from "./operation-logic-scaffold.ts";
 import { render as renderTsSharedAsyncOpRegistry } from "./scaffold-templates/eta/typescript/shared-async-op-registry.generated.ts";
@@ -197,14 +196,18 @@ async function rewriteSharedAsyncOpRegistry(
 /**
  * Scaffolds a single new actor stub in the shared, non-FSM-scoped async
  * operation pool at
- * `<appRootFolder>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
+ * `{cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
  * via the same {@linkcode writeActorFile} helper
  * `generateAsyncOperationLogicFromFolders` uses per invoke object — so stub
- * content/formatting matches the rest of the actor-scaffolding pipeline. For
- * `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}), also
- * rewrites that language's single **global** `generated-registry.*` at
- * `<appRootFolder>/async-worker/<lang>/shared-async-op/generated-registry.*`
- * from every shared-async-op actor currently on disk (see
+ * content/formatting matches the rest of the actor-scaffolding pipeline.
+ * Always anchored at `writeRootAbsPath` (the CLI passes `Deno.cwd()`), like
+ * `generate-sync-logic`/`generate-async-logic` (#305/#307) — there's no
+ * `--folder` input at all, since these actors have no owning FSM tree to walk
+ * in the first place. For `typescript`/`python`/`rust` (see
+ * {@linkcode ActorsBarrelLang}), also rewrites that language's single
+ * **global** `generated-registry.*` at
+ * `{cwd}/async-worker/<lang>/shared-async-op/generated-registry.*` from every
+ * shared-async-op actor currently on disk (see
  * {@linkcode rewriteSharedAsyncOpRegistry}) — never the FSM-scoped aggregate
  * (`<lang>-actors-registry.generated.ts`), which stays untouched; this pool
  * is fully separate from it. Each registry entry's identity is fixed to
@@ -212,7 +215,7 @@ async function rewriteSharedAsyncOpRegistry(
  * actors have no owning FSM. Returns the actor file's absolute path.
  */
 export async function createAsyncOperationLogic(
-  appRootFolder: string,
+  writeRootAbsPath: string,
   lang: OperationLang,
   functionVersion: string,
   functionName: string,
@@ -223,14 +226,13 @@ export async function createAsyncOperationLogic(
     );
   }
 
-  const absAppRootPath = resolvePluginRootAbsPath(appRootFolder);
-  const asyncWorkerRoot = `${absAppRootPath}/${ASYNC_WORKER_DIR_NAME}`;
+  const asyncWorkerRoot = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}`;
   const actor: ActorReference = {
     src: functionName,
     asyncOperationLanguage: lang,
   };
 
-  const appRootDirName = absAppRootPath.split("/").at(-1)!;
+  const appRootDirName = writeRootAbsPath.split("/").at(-1)!;
   const file = await writeActorFile(
     asyncWorkerRoot,
     lang,

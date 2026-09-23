@@ -220,25 +220,30 @@ npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01
 For actors in the shared, non-FSM-scoped async-operation pool. For actors that
 belong to an FSM's `invoke` list, use `generate-async-logic` instead.
 
-**Input** — `-f`/`--folder`: the **app root** (one level above the FSM
-plugin-root directory — e.g. `apps/fsm-core-example`, not
-`apps/fsm-core-example/fsm`). `-l`/`--lang`: exactly one language, required.
+Unlike every other command here, this one takes **no `-f`/`--folder`** at all —
+output is always anchored at `Deno.cwd()` (wherever the CLI is invoked from), so
+`cd` into the app root you want `async-worker/` to land in before running it
+(e.g. `apps/fsm-core-example`).
+
+**Input** — `-l`/`--lang`: exactly one language, required.
 `-n`/`--function-name`: function name, required. `-F`/`--function-version`:
 version name matching `v\d{2}` (e.g. `v01`), required. Unrelated to
 `-N`/`--fsm-name`/`-V`/`--fsm-version` — these actors have no owning FSM.
 
-**Output**:
+**Output** — always under the reserved `async-worker/` subfolder at the current
+working directory:
 
-- `<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
+- `async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
 - That language's single **global** registry file at
-  `<appRoot>/async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
-  rewritten from every shared-async-op actor currently on disk for that language
-  across every `functionVersion` (`typescript`/`python`/`rust` only — Go has no
-  shared registry). Never touches the FSM-scoped aggregate
+  `async-worker/<lang>/shared-async-op/generated-registry.<ext>`, rewritten from
+  every shared-async-op actor currently on disk for that language across every
+  `functionVersion` (`typescript`/`python`/`rust` only — Go has no shared
+  registry). Never touches the FSM-scoped aggregate
   (`<lang>-actors-registry.generated.ts`) — this pool is fully separate.
 
 ```bash
-npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typescript --function-name checkCreditScore --function-version v01
+cd apps/fsm-core-example
+npx @pgfsm/compiler -c create-async-logic --lang typescript --function-name checkCreditScore --function-version v01
 ```
 
 ### `delete` — remove generated files

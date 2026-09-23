@@ -126,7 +126,7 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
-## `create-async-logic` writes under `async-worker/`, with its own global registry (#309)
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
 and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
@@ -140,6 +140,18 @@ mirroring `<fsmName>/<fsmVersion>`) and once more nested under the actor's own
 name folder (passed as `writeActorFile`'s new `fileSubPath` param — see its own
 doc comment). This second nesting level has no FSM-scoped equivalent; it exists
 only because the user who requested #309 asked for it explicitly.
+
+#311 went one step further: `<appRoot>` above is no longer a passed-in
+`--folder` at all — the command drops `--folder` entirely, following
+`generate-sync-logic`/`generate-async-logic`'s own #305/#307 precedent.
+`createAsyncOperationLogic` still takes a `writeRootAbsPath` parameter (kept for
+testability, same reasoning as `generateSyncOperationLogicFromFolders`/
+`generateAsyncOperationLogicFromFolders` — `Deno.cwd()` is called exactly once,
+in `cli/index.ts`, and passed down; the library function itself never calls
+`Deno.cwd()`), but the CLI now always passes `Deno.cwd()` for it, and no longer
+requires or reads `--folder` for this command at all (excluded from both the
+`missing`-args check and the generic `--folder` existence/type validation in
+`cli/index.ts`).
 
 Registry-wise, this command deliberately does **not** mirror
 `generate-async-logic`'s per-`<fsmName>/<fsmVersion>` registries — since
