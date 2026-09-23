@@ -621,82 +621,92 @@ Deno.test("cli generate-all rejects a --folder file that's neither .ts nor .json
 // --- create-async-logic ---
 
 Deno.test("cli create-async-logic without --function-version exits 1", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "create-async-logic",
-    "-f",
+  const { code, stderr } = await runCli(
+    [
+      "-c",
+      "create-async-logic",
+      "--lang",
+      "typescript",
+      "--function-name",
+      "checkCreditScoreCliTest",
+    ],
+    undefined,
     APP_ROOT,
-    "--lang",
-    "typescript",
-    "--function-name",
-    "checkCreditScoreCliTest",
-  ]);
+  );
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--function-version");
 });
 
 Deno.test("cli create-async-logic without --function-name exits 1", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "create-async-logic",
-    "-f",
+  const { code, stderr } = await runCli(
+    [
+      "-c",
+      "create-async-logic",
+      "--lang",
+      "typescript",
+      "--function-version",
+      "v01",
+    ],
+    undefined,
     APP_ROOT,
-    "--lang",
-    "typescript",
-    "--function-version",
-    "v01",
-  ]);
+  );
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--function-name");
 });
 
 Deno.test("cli create-async-logic rejects an invalid --lang", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "create-async-logic",
-    "-f",
+  const { code, stderr } = await runCli(
+    [
+      "-c",
+      "create-async-logic",
+      "--lang",
+      "cobol",
+      "--function-version",
+      "v01",
+      "--function-name",
+      "checkCreditScoreCliTest",
+    ],
+    undefined,
     APP_ROOT,
-    "--lang",
-    "cobol",
-    "--function-version",
-    "v01",
-    "--function-name",
-    "checkCreditScoreCliTest",
-  ]);
+  );
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--lang");
 });
 
 Deno.test("cli create-async-logic rejects a comma-separated --lang (exactly one language required)", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "create-async-logic",
-    "-f",
+  const { code, stderr } = await runCli(
+    [
+      "-c",
+      "create-async-logic",
+      "--lang",
+      "typescript,python",
+      "--function-version",
+      "v01",
+      "--function-name",
+      "checkCreditScoreCliTest",
+    ],
+    undefined,
     APP_ROOT,
-    "--lang",
-    "typescript,python",
-    "--function-version",
-    "v01",
-    "--function-name",
-    "checkCreditScoreCliTest",
-  ]);
+  );
   assertEquals(code, 1);
   assertStringIncludes(stderr, "--lang");
 });
 
-Deno.test("cli create-async-logic writes a single actor file under async-worker/shared-async-op", async () => {
-  const { code } = await runCli([
-    "-c",
-    "create-async-logic",
-    "-f",
+Deno.test("cli create-async-logic writes a single actor file under cwd's async-worker/shared-async-op, independent of --folder (there is none)", async () => {
+  const { code } = await runCli(
+    [
+      "-c",
+      "create-async-logic",
+      "--lang",
+      "typescript",
+      "--function-version",
+      "v01",
+      "--function-name",
+      "checkCreditScoreCliTest",
+    ],
+    undefined,
     APP_ROOT,
-    "--lang",
-    "typescript",
-    "--function-version",
-    "v01",
-    "--function-name",
-    "checkCreditScoreCliTest",
-  ]);
+  );
   assertEquals(code, 0);
   const stat = await Deno.stat(
     `${APP_ROOT}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScoreCliTest/v01/checkCreditScoreCliTest.ts`,

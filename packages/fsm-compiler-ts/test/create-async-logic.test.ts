@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { createAsyncOperationLogic } from "../src/create-async-logic.ts";
 
-Deno.test("createAsyncOperationLogic - writes a single actor under <appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>", async () => {
+Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const file = await createAsyncOperationLogic(

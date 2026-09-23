@@ -23,7 +23,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | Flag                      | Alias | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--command <command>`     | `-c`  | Command to run (required)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `--folder <folder>`       | `-f`  | Path to FSM folder, `.ts` file, or `fsm.json` file (required; a single `.ts` file is accepted for `generate-fsm-json`/`generate-all` only, and requires `--output`; a single `fsm.json` file is accepted for `generate-sync-logic`/`generate-async-logic`/`generate-all`/`validate-sync-operation` — `generate-all` requires `--output`, the other three require `-N`/`--fsm-name` + `-V`/`--fsm-version`)                                                                                                                                        |
+| `--folder <folder>`       | `-f`  | Path to FSM folder, `.ts` file, or `fsm.json` file (required for every command except `create-async-logic`, which takes no `--folder` at all — see its own section; a single `.ts` file is accepted for `generate-fsm-json`/`generate-all` only, and requires `--output`; a single `fsm.json` file is accepted for `generate-sync-logic`/`generate-async-logic`/`generate-all`/`validate-sync-operation` — `generate-all` requires `--output`, the other three require `-N`/`--fsm-name` + `-V`/`--fsm-version`)                                  |
 | `--db-url <url>`          | `-d`  | PostgreSQL connection string — overrides `DATABASE_URL` env var                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--skip-dirs <dirs>`      | `-s`  | Comma-separated subdirectory names to skip when walking `<folder>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `--lang <langs>`          | `-l`  | Comma-separated language(s): `typescript`, `python`, `rust`, `go`. For `generate-sync-logic`/`generate-all` defaults to `typescript`; for `validate-async-operation` defaults to all languages (omit to check all); for `create-async-logic` exactly one language is required                                                                                                                                                                                                                                                                     |
@@ -227,14 +227,15 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 Scaffold a **single** actor stub in the shared, non-FSM-scoped async-operation
 pool — for actors that aren't driven by any one FSM's `invoke` list. Writes one
 file at
-`<folder>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
+`{cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
 via the same `writeActorFile` helper `generate-async-logic` uses per invoke
 object, so stub content/formatting matches the rest of the pipeline.
 
-Unlike `generate-async-logic` (which walks an FSM folder and bulk-scaffolds from
-`fsm.json`), `--folder` here is the **app root** (e.g. `apps/fsm-core-example`),
-not an FSM/plugin-root folder — and unlike `generate-sync-logic`/
-`generate-async-logic`, output is anchored at `--folder`, not `Deno.cwd()`.
+Unlike every other command here, this one takes **no `-f`/`--folder`** at all —
+output is always anchored at `Deno.cwd()` (wherever the CLI is invoked from),
+same as `generate-sync-logic`/`generate-async-logic` (#305/#307). `cd` into the
+app root you want `async-worker/` to land in (e.g. `apps/fsm-core-example`)
+before running it.
 
 Takes `-n`/`--function-name` and `-F`/`--function-version` — deliberately
 separate flags from `-N`/`--fsm-name`/`-V`/`--fsm-version`, since these actors
@@ -242,8 +243,8 @@ have no owning FSM at all.
 
 For `typescript`/`python`/`rust`, also rewrites that language's single
 **global** registry at
-`<folder>/async-worker/<lang>/shared-async-op/generated-registry.<ext>` from
-every shared-async-op actor currently on disk for that language, across every
+`{cwd}/async-worker/<lang>/shared-async-op/generated-registry.<ext>` from every
+shared-async-op actor currently on disk for that language, across every
 `functionVersion` (this run's actor included) — so repeated `create-async-logic`
 calls accumulate into one file instead of each one clobbering the last. Unlike
 the FSM-scoped registries `generate-async-logic` writes (one per
@@ -260,9 +261,9 @@ registry — each Go actor is already its own Go module (see its own `go.mod`), 
 only the actor file is written for `go`.
 
 ```bash
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+cd apps/fsm-core-example
+deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
   -c create-async-logic \
-  -f apps/fsm-core-example \
   --lang typescript \
   --function-name checkCreditScore \
   --function-version v01
