@@ -1,0 +1,16 @@
+{
+  "actors": [
+    {
+      "src": "fetchTasks",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/fetchTasks/fetchTasks.ts",
+      "exportedName": "fetchTasks"
+    },
+    {
+      "src": "updateTask",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/updateTask/updateTask.ts",
+      "exportedName": "updateTask"
+    }
+  ]
+}

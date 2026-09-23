@@ -4,4 +4,4 @@ go 1.19
 
 require fsm-core-example/creditcheck/v01/go/actors/checkreportstable v0.0.0
 
-replace fsm-core-example/creditcheck/v01/go/actors/checkreportstable => ../../../fsm/creditCheck/v01/go/actors/CheckReportsTable
+replace fsm-core-example/creditcheck/v01/go/actors/checkreportstable => ../creditCheck/v01/actors/CheckReportsTable

@@ -1,0 +1,46 @@
+{
+  "actors": [
+    {
+      "src": "fetchInterestRateOptions",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/fetchInterestRateOptions/fetchInterestRateOptions.ts",
+      "exportedName": "fetchInterestRateOptions"
+    },
+    {
+      "src": "verifyCredentials",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/verifyCredentials/verifyCredentials.ts",
+      "exportedName": "verifyCredentials"
+    },
+    {
+      "src": "CheckingCreditScores3parallel",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/CheckingCreditScores3parallel/CheckingCreditScores3parallel.ts",
+      "exportedName": "CheckingCreditScores3parallel"
+    },
+    {
+      "src": "checkReportsTable",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkReportsTable/checkReportsTable.ts",
+      "exportedName": "checkReportsTable"
+    },
+    {
+      "src": "checkBureau",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkBureau/checkBureau.ts",
+      "exportedName": "checkBureau"
+    },
+    {
+      "src": "determineMiddleScore",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/determineMiddleScore/determineMiddleScore.ts",
+      "exportedName": "determineMiddleScore"
+    },
+    {
+      "src": "generateInterestRates",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/generateInterestRates/generateInterestRates.ts",
+      "exportedName": "generateInterestRates"
+    }
+  ]
+}

@@ -19,10 +19,11 @@ file's: it only documents the currently-publishable library export
    (including its per-step error aggregation).
 2. Prints the exact start command for every worker-SDK language `generate-all`
    actually generated (typescript/python/rust/go — whichever subdirectories
-   exist under `<app-root>/worker-sdk-generated/`). `fsmdev` does **not** launch
-   these itself: they're polyglot, per-project generated code with different
-   toolchains (`deno run`, `python3`, `cargo run`, `go run`), so starting them
-   is left to the user, one terminal each.
+   exist under `<app-root>/async-worker/`, `fsm-compiler-ts`'s reserved async-op
+   output folder as of #307, formerly `worker-sdk-generated/`). `fsmdev` does
+   **not** launch these itself: they're polyglot, per-project generated code
+   with different toolchains (`deno run`, `python3`, `cargo run`, `go run`), so
+   starting them is left to the user, one terminal each.
 3. `pgcron` registration — one-shot, idempotent. Calls
    `registerScheduleAllPendingCronJob` from `@pgfsm/db` directly, in-process
    (the same function `@pgfsm/sync-worker`'s `pgcron` CLI calls).

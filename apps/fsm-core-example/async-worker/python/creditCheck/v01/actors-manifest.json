@@ -1,0 +1,10 @@
+{
+  "actors": [
+    {
+      "src": "checkBureau",
+      "asyncOperationLanguage": "python",
+      "filePath": "actors/checkBureau/checkBureau.py",
+      "exportedName": "checkBureau"
+    }
+  ]
+}

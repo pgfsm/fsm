@@ -41,7 +41,10 @@ const fsmModuleDefinition = {
     `../../../sync-worker/typescript/creditCheck/v01/delays/index.ts`,
     "delays",
   ),
-  actors: await loadModule(`./typescript/actors/index.ts`, "actors"),
+  actors: await loadModule(
+    `../../../async-worker/typescript/creditCheck/v01/actors/index.ts`,
+    "actors",
+  ),
 };
 
 // Journey 1: initialTransition_event — FSM starts, no prior state

@@ -6,17 +6,17 @@
 # is added to sys.path so each FSM-name folder resolves as a namespace
 # package -- Python has no relative-path import syntax like TS's
 # `"../../x/y.ts"` or Rust's `#[path]`, so this is the static-import
-# equivalent for a sibling directory two levels up.
+# equivalent for a sibling directory.
 import os
 import sys
 
 _PLUGIN_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../fsm")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".")
 )
 if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
-from creditCheck.v01.python.actors.generated_registry import ACTOR_REGISTRATIONS as creditcheck_v01
+from creditCheck.v01.actors.generated_registry import ACTOR_REGISTRATIONS as creditcheck_v01
 
 ACTOR_REGISTRATIONS = [
     *creditcheck_v01,

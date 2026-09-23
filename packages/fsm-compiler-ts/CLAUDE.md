@@ -39,45 +39,91 @@ format this compiler consumes. `README.md` is the npm/npx-consumer-facing
 document (published to `dist/` — see below); keep source-only detail here
 instead of there.
 
-## `generate-async-logic` — the aggregate write destination has no dedicated flag
+## `generate-sync-logic`/`generate-async-logic` write to `Deno.cwd()`, not `--folder`/`--output` (#305, #307)
 
-There is no separate CLI input for where `worker-sdk-generated/` gets written
-(`<writeRootAbsPath>/worker-sdk-generated/<lang>/`) — the CLI derives it: in
-directory mode it's one level above `--folder` (the app root — matching the
-`apps/fsm-core-example/` convention, where `worker-sdk-generated/` sits beside
-`fsm/`, not inside it); in single-`fsm.json` mode it's `--output`. It is never
-re-walked to find actors and doesn't need to contain any FSM itself. (An earlier
-revision exposed this as its own required `-g`/`--plugin-root` flag, decoupled
-from `--folder`/`--output` entirely — that flag was removed as an unnecessary
-extra input once every caller had a good default; the internal
-`writeRootAbsPath` parameter documented below still exists and library callers
-can still point it anywhere.) See `README.md`/`docs/guides/cli-usage.md` for the
-user-facing explanation; the gotchas below are for whoever next touches
+Both commands are anchored entirely at wherever the CLI is invoked from,
+independent of `--folder`'s own location: `generate-sync-logic` at
+`{cwd}/sync-worker/<lang>/<fsmName>/<fsmVersion>/`, `generate-async-logic` at
+`{cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/actors/...` (plus the
+aggregate registry/worker SDK at `{cwd}/async-worker/<lang>/` directly). Neither
+command accepts `--output` any more — single-fsm.json mode instead requires
+`-N`/`--fsm-name` and `-V`/`--fsm-version` explicitly (mirroring
+`validate-sync-operation`'s own single-file-mode flags), since there's no
+`<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from and no
+version folder to accept as `--output` in the first place. Folder mode derives
+`<fsmName>/<fsmVersion>` per FSM while walking the plugin-root tree, same as
+before.
+
+`generate-all` is the one exception: its own async-/sync-logic steps still write
+under its existing `writeRootAbsPath` convention (the app root — one level above
+`--folder` — in folder mode; `--output`'s own value in either single-file mode),
+nested `<sync|async>-worker/<lang>/<fsmName>/<fsmVersion>/` deep rather than
+directly into it. `fsmName`/`fsmVersion` are derived from `--output`'s own path
+the same way `generateAsyncOperationLogicFromFsmJson`'s `realPluginRootAbsPath`
+derivation already did — see `generate-all.ts`.
+
+The gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:
 
-- **Three distinct roots, don't conflate them**: `writeRootAbsPath` (where files
-  land — arbitrary), `realPluginRootAbsPath` (the actual FSM tree — `--folder`
-  itself in directory mode, or derived from the target `fsm.json`'s own location
-  three levels up in single-file mode), and `goModuleAppRoot` (the real app-root
-  directory name, e.g. `"fsm-core-example"`, that each individual Go actor's own
-  `go.mod` already names itself under — see `goActorModulePath`). Only
-  `realPluginRootAbsPath` is walked for actors; only `goModuleAppRoot` feeds Go
-  module names. Passing `writeRootAbsPath` where one of the other two belongs
-  breaks either the aggregate (wrong/empty actor set) or Go module resolution
-  silently.
-- **Every cross-directory reference is a real computed `relative()`** (from
-  `@std/path/posix`, via `operation-logic-scaffold.ts`'s `relativeImportDir`
-  helper) between the write location and `realPluginRootAbsPath` — TS/Rust
-  imports, Python's `sys.path` bootstrap, both Go `replace` targets, and the
-  `gatewaySidecarProtoGen*`/`gatewaySidecarProtocolImportPath` helpers (proto-
-  codegen paths, which still assume `realPluginRootAbsPath` sits at the
-  conventional `<repo-root>/apps/<appName>/<pluginRootDirName>` depth — true for
-  `apps/fsm-core-example/fsm`, this codegen's only consumer so far; a
-  `realPluginRootAbsPath` elsewhere needs those recomputed). None of this is a
-  fixed `../../` string anymore — if you're debugging a wrong import path in
-  generated output, check `relativeImportDir`'s two arguments first.
-- **`deno.json` gained `@std/path`** for the above; nothing else in this package
-  needed it before.
+- **`writeRootAbsPath` is now also the actor write root, not just the
+  aggregate's.** Before #307, actor files lived inside each FSM's own version
+  folder (colocated with `fsm.json`) and only the aggregate registry/worker SDK
+  had a separate `writeRootAbsPath`. Now both live under the same
+  `<writeRootAbsPath>/async-worker/<lang>/` tree — per-version actors nested
+  `<fsmName>/<fsmVersion>/` deep, the aggregate directly in `<lang>/`. This is
+  what made the aggregate's own relative-import computation trivial (see below).
+- **`realPluginRootAbsPath` narrowed to one job: deriving `goModuleAppRoot` and
+  `writeWorkerSdk`'s `repoRootAbsPath`.** It's the real FSM source tree —
+  `--folder` itself in directory mode, or derived from the target `fsm.json`'s
+  own location three levels up in single-file mode — used only for (a) the real
+  app-root directory name (`"fsm-core-example"`) each Go actor's own `go.mod`
+  names itself under, and (b) `writeWorkerSdk`'s
+  `gatewaySidecarProtoGen*`/`gatewaySidecarProtocolImportPath` targets, which
+  point at sibling monorepo packages relative to where the _source_ tree sits, a
+  relationship independent of where output gets written. It is **not** used
+  anymore to locate per-version actor files or registries — those are always
+  reachable from `writeRootAbsPath` alone now.
+- **The aggregate's relative-import computation is trivial by construction
+  now.** `writeAggregateActorsRegistry`/`buildAggregateRegistryContent` no
+  longer take a `realPluginRootAbsPath` param at all — since every
+  `<fsmName>/<fsmVersion>/` group this run wrote lives directly inside the
+  aggregate's own directory (`<writeRootAbsPath>/async-worker/<lang>/`), the
+  relative import is always `./<fsmName>/<fsmVersion>` (TS/Rust) or `.`
+  (Python's `sys.path` bootstrap) — no longer a real cross-tree `relative()`
+  computation via `relativeImportDir`. Same for `writeAggregateGoRegistry`'s Go
+  actor `replace` targets, computed from `writeRootAbsPath` instead of
+  `realPluginRootAbsPath` — each actor's own `go.mod` now physically lives at
+  `<writeRootAbsPath>/async-worker/go/<fsmName>/<fsmVersion>/actors/<fileBaseName>/`.
+- **`writeActorFile`/`writeActorsBarrel`/`writeActorsRegistry` gained an
+  optional `subPath` param** (mirroring `writeOperationModule`'s own, added in
+  #305) — inserted between `<lang>` and `actors/`, so
+  `generate-async-operation-logic.ts` passes `<fsmName>/<fsmVersion>` there to
+  avoid multiple FSMs/versions writing under the same `<lang>` root colliding.
+  `create-async-logic.ts`'s shared-async-op pool doesn't pass it (unaffected,
+  still writes flat under its own `shared-async-op/<version>/` root — no per-FSM
+  nesting needed there since those actors have no owning FSM).
+- **`actors-manifest.json` is now per-language, not one combined manifest.**
+  Written once per `<fsmName>/<fsmVersion>` **per language actually used** (not
+  every `SUPPORTED_OPERATION_LANGS` member) at
+  `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>/actors-manifest.json`
+  — an empty manifest for a language a given FSM doesn't use would just be
+  directory clutter now that it's no longer colocated with every other
+  language's own output.
+- **`WrittenActor.filePath` dropped its `<lang>/` prefix** (now
+  `actors/<fileBaseName>/<fileBaseName>.<ext>`, not
+  `<lang>/actors/<fileBaseName>/<fileBaseName>.<ext>`) — it's informational
+  manifest/log content only (never used to construct an actual import path;
+  barrels/registries use `fileBaseName` directly with their own relative `./`
+  prefix), and since the manifest is now itself already lang-scoped, the prefix
+  was redundant.
+- **`ASYNC_WORKER_DIR_NAME`** (`operation-logic-scaffold.ts`, exported) is
+  `"async-worker"` — renamed and repurposed from the pre-#307
+  `WORKER_SDK_DIR_NAME` (`"worker-sdk-generated"`), which sat one level above
+  `--folder` and held only the aggregate. `generate-sync-operation-logic.ts` has
+  its own equivalent `SYNC_WORKER_DIR_NAME` = `"sync-worker"` (not exported from
+  `operation-logic-scaffold.ts`, since `writeSyncOperationRegistry` receives the
+  full path already-composed by its caller rather than composing it itself the
+  way the async aggregate writers do).
 
 ## npm publish (`deno task build:npm`)
 

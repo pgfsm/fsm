@@ -20,8 +20,8 @@ const logger = getLogger(["@pgfsm/compiler", "sync-logic"]);
  * `<writeRootAbsPath>/sync-worker/<lang>/<fsmName>/<fsmVersion>/...`, always
  * anchored at `writeRootAbsPath` (the CLI passes `Deno.cwd()`), never at the
  * source FSM tree's own location. Parity with how `generate-async-logic`
- * reserves `worker-sdk-generated/` for its own output (see
- * `operation-logic-scaffold.ts`'s `WORKER_SDK_DIR_NAME`).
+ * reserves `async-worker/` for its own output (see
+ * `operation-logic-scaffold.ts`'s `ASYNC_WORKER_DIR_NAME`).
  */
 const SYNC_WORKER_DIR_NAME = "sync-worker";
 

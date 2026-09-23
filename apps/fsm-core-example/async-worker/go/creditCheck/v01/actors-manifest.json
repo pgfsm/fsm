@@ -1,0 +1,10 @@
+{
+  "actors": [
+    {
+      "src": "CheckReportsTable",
+      "asyncOperationLanguage": "go",
+      "filePath": "actors/CheckReportsTable/CheckReportsTable.go",
+      "exportedName": "CheckReportsTable"
+    }
+  ]
+}

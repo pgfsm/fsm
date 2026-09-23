@@ -3,10 +3,12 @@ import { table } from "@pgfsm/logging";
 import { extractFsmPluginRefs } from "./util.ts";
 import {
   actorFileBaseName,
+  ASYNC_WORKER_DIR_NAME,
   eachVersionedFsmFolder,
   formatGoFilesBestEffort,
   formatRustFilesBestEffort,
   formatTsFilesBestEffort,
+  fsmIdentityFromVersionFolderPath,
   goModTidyManyBestEffort,
   isOperationLang,
   resolvePluginRootAbsPath,
@@ -84,7 +86,10 @@ function selectRegisterableActors(
  * would resolve to, without writing anything — used to rebuild the
  * aggregate registry/worker SDK from every version under a plugin root (see
  * {@linkcode generateAsyncOperationLogicFromFsmJson}) without re-scaffolding
- * versions the caller isn't currently targeting.
+ * versions the caller isn't currently targeting. `absVersionFolderPath` is
+ * the *source* FSM tree's own version-folder path (identity derivation only
+ * — unrelated to where actor files actually get written now, see
+ * {@linkcode scaffoldAsyncLogicForVersion}).
  */
 function deriveRegisteredActorsForVersion(
   absVersionFolderPath: string,
@@ -96,43 +101,87 @@ function deriveRegisteredActorsForVersion(
 }
 
 /**
- * Writes actor files, the per-version `actors-manifest.json`, and each
- * language's per-version barrel/registry for one already-parsed fsm.json,
- * into `absVersionFolderPath`. Shared by
- * {@linkcode generateAsyncOperationLogicFromFolders} (one call per versioned
- * FSM folder it walks) and {@linkcode generateAsyncOperationLogicFromFsmJson}
- * (a single call for one fsm.json). Mutates `tsFiles`/`rustFiles` in place so
- * callers can batch-format everything written across a whole run.
+ * Writes actor files, each language's `actors-manifest.json`, and each
+ * language's barrel/registry for one already-parsed fsm.json, into
+ * `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>/` — always
+ * anchored at `writeRootAbsPath` (the CLI passes `Deno.cwd()` for the
+ * standalone command, or its own `writeRootAbsPath` convention when called
+ * from `generate-all`), never at the source FSM tree's own location. Shared
+ * by {@linkcode generateAsyncOperationLogicFromFolders} (one call per
+ * versioned FSM folder it walks, `fsmName`/`fsmVersion` derived from that
+ * folder's own path) and {@linkcode generateAsyncOperationLogicFromFsmJson}
+ * (a single call for one fsm.json, `fsmName`/`fsmVersion` caller-supplied
+ * since single-file mode has no `<fsmName>/<fsmVersion>/fsm.json` folder
+ * structure to infer them from). `goModuleAppRoot` is passed through to
+ * {@linkcode writeActorFile} as its Go `appRootOverride`, since the write
+ * location no longer sits at the conventional
+ * `<appRoot>/<pluginRoot>/<fsmName>/<version>` depth
+ * {@linkcode goActorModulePath}'s own default derivation assumes. Mutates
+ * `tsFiles`/`rustFiles` in place so callers can batch-format everything
+ * written across a whole run.
  */
 async function scaffoldAsyncLogicForVersion(
-  absVersionFolderPath: string,
+  writeRootAbsPath: string,
+  fsmName: string,
+  fsmVersion: string,
+  goModuleAppRoot: string,
   fsmData: FsmMachineJson,
   tsFiles: string[],
   rustFiles: string[],
 ): Promise<RegisteredActor[]> {
   const selected = selectRegisterableActors(fsmData);
+  const asyncWorkerRoot = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}`;
+  const subPath = `${fsmName}/${fsmVersion}`;
+  const perVersionLangDir = (lang: OperationLang) =>
+    `${asyncWorkerRoot}/${lang}/${subPath}`;
 
   const writtenActors: RegisteredActor[] = [];
   for (const { actor, lang } of selected) {
-    const file = await writeActorFile(absVersionFolderPath, lang, actor);
+    const file = await writeActorFile(
+      asyncWorkerRoot,
+      lang,
+      actor,
+      goModuleAppRoot,
+      subPath,
+    );
     if (lang === "typescript") tsFiles.push(file);
-    writtenActors.push(toRegisteredActor(absVersionFolderPath, lang, actor));
+    writtenActors.push(
+      toRegisteredActor(perVersionLangDir(lang), lang, actor),
+    );
   }
 
   // table() drives the TTY console.table; one row per actor beats a
   // "Wrote actor file X" line per iteration once there's more than a
   // handful.
-  logger.info("Wrote {count} actor file(s) in {path}:", {
+  logger.info("Wrote {count} actor file(s) for {fsmName}/{fsmVersion}:", {
     count: writtenActors.length,
-    path: absVersionFolderPath,
+    fsmName,
+    fsmVersion,
     ...table(writtenActors, ["src", "asyncOperationLanguage", "filePath"]),
   });
 
-  const manifestFile = await writeActorsManifest(
-    absVersionFolderPath,
-    writtenActors,
-  );
-  logger.info("Wrote actors manifest {file}", { file: manifestFile });
+  // One actors-manifest.json per language actually used this version (not
+  // every SUPPORTED_OPERATION_LANGS member) -- unlike the old single
+  // combined manifest, an empty per-language manifest for a language this
+  // FSM doesn't use would just be directory clutter.
+  const langsUsed = [...new Set(selected.map((s) => s.lang))];
+  const manifestRows: { lang: OperationLang; file: string }[] = [];
+  for (const lang of langsUsed) {
+    const langActors = writtenActors.filter((a) =>
+      a.asyncOperationLanguage === lang
+    );
+    const manifestFile = await writeActorsManifest(
+      perVersionLangDir(lang),
+      langActors,
+    );
+    manifestRows.push({ lang, file: manifestFile });
+  }
+  if (manifestRows.length > 0) {
+    logger.info("Wrote {count} actors manifest(s):", {
+      count: manifestRows.length,
+      ...table(manifestRows, ["lang", "file"]),
+    });
+  }
 
   const barrelRows: {
     lang: ActorsBarrelLang;
@@ -141,16 +190,18 @@ async function scaffoldAsyncLogicForVersion(
   }[] = [];
   for (const lang of BARREL_LANGS) {
     const barrelFile = await writeActorsBarrel(
-      absVersionFolderPath,
+      asyncWorkerRoot,
       writtenActors,
       lang,
+      subPath,
     );
     if (barrelFile && lang === "typescript") tsFiles.push(barrelFile);
 
     const registryFile = await writeActorsRegistry(
-      absVersionFolderPath,
+      asyncWorkerRoot,
       writtenActors,
       lang,
+      subPath,
     );
     if (registryFile) {
       if (lang === "typescript") tsFiles.push(registryFile);
@@ -163,10 +214,11 @@ async function scaffoldAsyncLogicForVersion(
   }
   if (barrelRows.length > 0) {
     logger.info(
-      "Wrote {count} per-language barrel/registry file(s) in {path}:",
+      "Wrote {count} per-language barrel/registry file(s) for {fsmName}/{fsmVersion}:",
       {
         count: barrelRows.length,
-        path: absVersionFolderPath,
+        fsmName,
+        fsmVersion,
         ...table(barrelRows, ["lang", "barrelFile", "registryFile"]),
       },
     );
@@ -180,17 +232,14 @@ async function scaffoldAsyncLogicForVersion(
  * worker SDK, from `allRegisteredActors` — the complete set of actors across
  * every version folder in the real FSM tree, not just whichever version(s)
  * the caller scaffolded this run. Everything gets written directly under
- * `writeRootAbsPath` (`<writeRootAbsPath>/worker-sdk-generated/...`), which
- * is a pure write destination — it does not need to itself be, or contain,
- * any FSM (the CLI derives it from one level above `--folder` in folder mode,
- * or from `--output` in single-fsm.json mode, rather than exposing it as its
- * own argument, but callers are still responsible for deriving
- * `allRegisteredActors`/`goModuleAppRoot`/`realPluginRootAbsPath` from the
- * *real* tree, not from `writeRootAbsPath`). `realPluginRootAbsPath` is that
- * real tree — used to compute a genuine relative path from wherever each
- * file actually lands back to the real FSM version folders it needs to
- * reference, since `writeRootAbsPath` and the real tree can now be
- * arbitrarily far apart. Shared by
+ * `writeRootAbsPath` (`<writeRootAbsPath>/async-worker/...`), alongside every
+ * `<fsmName>/<fsmVersion>/` {@linkcode scaffoldAsyncLogicForVersion} wrote —
+ * both live under the same `async-worker/<lang>/` tree by construction now
+ * (see {@linkcode writeAggregateActorsRegistry}'s own doc comment).
+ * `realPluginRootAbsPath` (the real FSM source tree) is only still needed for
+ * {@linkcode writeWorkerSdk}'s `gatewaySidecarProtoGen*` targets, which point
+ * at sibling monorepo packages relative to where the source tree sits, not to
+ * `writeRootAbsPath`. Shared by
  * {@linkcode generateAsyncOperationLogicFromFolders} and
  * {@linkcode generateAsyncOperationLogicFromFsmJson}. Mutates
  * `tsFiles`/`rustFiles`/`goFiles`/`goModDirs` in place so callers can
@@ -212,7 +261,6 @@ async function writeAggregateArtifacts(
   for (const lang of BARREL_LANGS) {
     const aggregateFile = await writeAggregateActorsRegistry(
       writeRootAbsPath,
-      realPluginRootAbsPath,
       allRegisteredActors,
       lang,
     );
@@ -226,7 +274,6 @@ async function writeAggregateArtifacts(
   const goRegistryFile = await writeAggregateGoRegistry(
     writeRootAbsPath,
     goModuleAppRoot,
-    realPluginRootAbsPath,
     allRegisteredActors,
   );
   if (goRegistryFile) {
@@ -253,7 +300,7 @@ async function writeAggregateArtifacts(
   rustFiles.push(...wrote.rustFiles);
   goFiles.push(...wrote.goFiles);
   if (wrote.goModDir) goModDirs.push(wrote.goModDir);
-  logger.info("Wrote worker-sdk-generated/ into {path}:", {
+  logger.info("Wrote async-worker/ into {path}:", {
     path: writeRootAbsPath,
     ...table({
       typescript: wrote.typescript,
@@ -266,10 +313,15 @@ async function writeAggregateArtifacts(
 
 /**
  * Scaffolds async operation logic (actors / invoke objects) for every versioned
- * FSM under `folderPath`.
+ * FSM under `folderPath`, writing into
+ * `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>/` for each
+ * one (the CLI passes `Deno.cwd()` for `writeRootAbsPath` — output is
+ * anchored at wherever the command is invoked from, not at `folderPath`'s own
+ * location). `fsmName`/`fsmVersion` are derived from each versioned FSM
+ * folder's own path as {@linkcode eachVersionedFsmFolder} walks it.
  *
  * Each invoke object gets its **own file** at
- * `<lang>/actors/<asyncOperationType>_<asyncOperationVersion>_<src>.<ext>`,
+ * `async-worker/<lang>/<fsmName>/<fsmVersion>/actors/<asyncOperationType>_<asyncOperationVersion>_<src>.<ext>`,
  * where `<lang>` is the actor's `asyncOperationLanguage` (defaulting to
  * typescript). The file exports one function named after the actor `src`
  * (Go: exported/capitalized, plus its own `go.mod` — see
@@ -277,16 +329,17 @@ async function writeAggregateArtifacts(
  * `<asyncOperationType>_<asyncOperationVersion>_<src>` within a language are
  * written once.
  *
- * Per version folder: `actors-manifest.json` (every actor across all
- * languages — `{ src, asyncOperationLanguage, filePath, exportedName }`), a per-language
- * barrel (`typescript/actors/index.ts`, `python/actors/__init__.py`,
- * `rust/actors/mod.rs`) re-exporting each actor by name, and a per-language
- * generated registry (`generated-registry.ts`/`generated_registry.py`/
- * `generated_registry.rs`) carrying each actor's full activity-registration
- * identity + handler — written only when at least one actor exists for that
- * language. Go has neither — see {@linkcode ActorsBarrelLang}'s doc comment.
+ * Per `<lang>/<fsmName>/<fsmVersion>/`: `actors-manifest.json` (that
+ * language's actors — `{ src, asyncOperationLanguage, filePath, exportedName }`,
+ * written only for languages this version actually used), a barrel
+ * (`index.ts`/`__init__.py`/`mod.rs`, TS/Python/Rust only) re-exporting each
+ * actor by name, and a generated registry (`generated-registry.ts`/
+ * `generated_registry.py`/`generated_registry.rs`) carrying each actor's full
+ * activity-registration identity + handler — written only when at least one
+ * actor exists for that language. Go has neither barrel nor registry — see
+ * {@linkcode ActorsBarrelLang}'s doc comment.
  *
- * Once, at `<appRoot>/worker-sdk-generated/<lang>/` (alongside that
+ * Once, at `<writeRootAbsPath>/async-worker/<lang>/` (alongside that
  * language's compiler-generated worker SDK — see {@linkcode writeWorkerSdk}):
  * a per-language **aggregate** registry
  * (`typescript-actors-registry.generated.ts`/
@@ -306,17 +359,6 @@ async function writeAggregateArtifacts(
  * formatted once at the very end (one `deno fmt`, one `rustfmt`, one
  * `gofmt`, one `go mod tidy` per Go module) — see
  * {@linkcode formatTsFilesBestEffort} and friends.
- *
- * `writeRootAbsPath` is purely where `worker-sdk-generated/` gets written —
- * required, not defaulted by this function itself (the CLI now always passes
- * one level above `--folder`'s own value here in folder mode — the app root,
- * matching the on-disk convention `apps/fsm-core-example/` uses — rather than
- * exposing a separate flag for it). It can point anywhere, including a
- * directory with no FSMs in it at all — it has no bearing on which actors get
- * aggregated: that set always comes from `folderPath`'s own walk above (the
- * real FSM tree — `--folder` names it directly in this mode, unlike
- * {@linkcode generateAsyncOperationLogicFromFsmJson}'s single-file mode,
- * which has to re-derive it), same as it always has.
  */
 export async function generateAsyncOperationLogicFromFolders(
   folderPath: string,
@@ -328,6 +370,13 @@ export async function generateAsyncOperationLogicFromFolders(
     path: folderPath,
   });
 
+  const realPluginRootAbsPath = resolvePluginRootAbsPath(folderPath);
+  // The *real* app-root directory name (e.g. "fsm-core-example") each
+  // individual Go actor's own go.mod already names itself under (see
+  // operation-logic-scaffold.ts's goActorModulePath) -- derived from
+  // folderPath (the real FSM tree), independent of writeRootAbsPath.
+  const goModuleAppRoot = realPluginRootAbsPath.split("/").at(-2)!;
+
   const allRegisteredActors: RegisteredActor[] = [];
   const tsFiles: string[] = [];
   const rustFiles: string[] = [];
@@ -338,8 +387,14 @@ export async function generateAsyncOperationLogicFromFolders(
     folderPath,
     skipDirs,
     async (absFolderPath, fsmData) => {
-      const writtenActors = await scaffoldAsyncLogicForVersion(
+      const { fsmName, fsmVersion } = fsmIdentityFromVersionFolderPath(
         absFolderPath,
+      );
+      const writtenActors = await scaffoldAsyncLogicForVersion(
+        writeRootAbsPath,
+        fsmName,
+        fsmVersion,
+        goModuleAppRoot,
         fsmData,
         tsFiles,
         rustFiles,
@@ -347,13 +402,6 @@ export async function generateAsyncOperationLogicFromFolders(
       allRegisteredActors.push(...writtenActors);
     },
   );
-
-  const realPluginRootAbsPath = resolvePluginRootAbsPath(folderPath);
-  // The *real* app-root directory name (e.g. "fsm-core-example") each
-  // individual Go actor's own go.mod already names itself under (see
-  // operation-logic-scaffold.ts's goActorModulePath) -- derived from
-  // folderPath (the real FSM tree), independent of writeRootAbsPath.
-  const goModuleAppRoot = realPluginRootAbsPath.split("/").at(-2)!;
 
   logger.info("Resolved paths for {path}:", {
     path: folderPath,
@@ -382,11 +430,15 @@ export async function generateAsyncOperationLogicFromFolders(
  * Scaffolds async operation logic for a single fsm.json file, for the CLI's
  * single-file `--folder` mode — used when the caller wants to target one
  * fsm.json directly instead of walking a plugin-root folder for every
- * versioned FSM under it. Writes actor files, the per-version
- * `actors-manifest.json`, and each language's per-version barrel/registry
- * into `absVersionFolderPath` (the CLI resolves it from `--output`,
- * independently of `fsmJsonPath`'s own location; it does not have to be
- * `fsmJsonPath`'s own containing directory).
+ * versioned FSM under it. Unlike folder mode, there's no
+ * `<fsmName>/<fsmVersion>/fsm.json` directory structure to infer identity
+ * from, so `fsmName`/`fsmVersion` are caller-supplied (the CLI requires
+ * `--fsm-name`/`--fsm-version` for this mode, mirroring
+ * `generate-sync-logic`/`validate-sync-operation`'s own single-file-mode
+ * flags). Writes into
+ * `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>/` (the CLI
+ * passes `Deno.cwd()` for `writeRootAbsPath`), independent of both
+ * `fsmJsonPath`'s own location and `fsmName`/`fsmVersion`'s.
  *
  * Also refreshes the aggregate registry and worker SDK (see
  * {@linkcode writeAggregateArtifacts}), same as
@@ -400,32 +452,22 @@ export async function generateAsyncOperationLogicFromFolders(
  * those other version folders is rewritten) to reassemble the complete set
  * the aggregate step needs.
  *
- * The real plugin root is derived from `fsmJsonPath`'s own location — not
- * from `absVersionFolderPath`/`--output` (which can point anywhere, e.g. a
- * scratch directory outside the real FSM tree) and not from
- * `writeRootAbsPath` (a pure write destination — see
- * {@linkcode writeAggregateArtifacts}; the CLI now always passes `--output`'s
- * own value here rather than exposing a separate flag for it). `fsmJsonPath`
- * is expected to sit at the conventional
- * `<realPluginRoot>/<fsmName>/<version>/fsm.json` depth (the same layout
- * {@linkcode eachVersionedFsmFolder} walks); passing one that doesn't means
- * the aggregate step walks the wrong tree (or nothing).
- *
- * `writeRootAbsPath` defaults to the real plugin root when omitted (writing
- * `worker-sdk-generated/` inside it, matching
- * {@linkcode generateAsyncOperationLogicFromFolders}'s own default) — kept for
- * direct library callers, though the CLI itself always passes `--output`
- * explicitly instead of relying on this default.
+ * The real plugin root is derived from `fsmJsonPath`'s own location, expected
+ * to sit at the conventional `<realPluginRoot>/<fsmName>/<version>/fsm.json`
+ * depth (the same layout {@linkcode eachVersionedFsmFolder} walks); passing
+ * one that doesn't means the aggregate step walks the wrong tree (or
+ * nothing).
  */
 export async function generateAsyncOperationLogicFromFsmJson(
   fsmJsonPath: string,
-  absVersionFolderPath: string,
+  writeRootAbsPath: string,
+  fsmName: string,
+  fsmVersion: string,
   workerSdkProtocol: WorkerSdkProtocol = "grpc",
-  writeRootAbsPath?: string,
 ): Promise<void> {
   logger.info(
-    "Scaffolding async operation logic from {path} into {versionFolder}",
-    { path: fsmJsonPath, versionFolder: absVersionFolderPath },
+    "Scaffolding async operation logic from {path} into {writeRootAbsPath}",
+    { path: fsmJsonPath, writeRootAbsPath },
   );
 
   const fsmData: FsmMachineJson = JSON.parse(
@@ -436,21 +478,6 @@ export async function generateAsyncOperationLogicFromFsmJson(
   const goFiles: string[] = [];
   const goModDirs: string[] = [];
 
-  await scaffoldAsyncLogicForVersion(
-    absVersionFolderPath,
-    fsmData,
-    tsFiles,
-    rustFiles,
-  );
-
-  logger.info(
-    "Scaffolded async operation logic for {fsmName} {version} in {versionFolder}",
-    {
-      fsmName: fsmData.key,
-      version: fsmData.version ?? "<no version>",
-      versionFolder: absVersionFolderPath,
-    },
-  );
   // <realPluginRoot>/<fsmName>/<version>/fsm.json -> <realPluginRoot> is
   // three levels up from the file itself.
   const absFsmJsonPath = fsmJsonPath.startsWith("/")
@@ -459,6 +486,21 @@ export async function generateAsyncOperationLogicFromFsmJson(
   const realPluginRootAbsPath = absFsmJsonPath.split("/").slice(0, -3)
     .join("/");
   const goModuleAppRoot = realPluginRootAbsPath.split("/").at(-2)!;
+
+  await scaffoldAsyncLogicForVersion(
+    writeRootAbsPath,
+    fsmName,
+    fsmVersion,
+    goModuleAppRoot,
+    fsmData,
+    tsFiles,
+    rustFiles,
+  );
+
+  logger.info(
+    "Scaffolded async operation logic for {fsmName}/{fsmVersion}",
+    { fsmName, fsmVersion },
+  );
 
   const allRegisteredActors: RegisteredActor[] = [];
   await eachVersionedFsmFolder(
@@ -491,7 +533,7 @@ export async function generateAsyncOperationLogicFromFsmJson(
   });
 
   await writeAggregateArtifacts(
-    writeRootAbsPath ?? realPluginRootAbsPath,
+    writeRootAbsPath,
     goModuleAppRoot,
     realPluginRootAbsPath,
     allRegisteredActors,
