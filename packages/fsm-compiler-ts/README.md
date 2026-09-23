@@ -23,10 +23,9 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
 below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate-fsm-json`/`generate-sync-logic`/`generate-async-logic`/`generate-all`
-— applies the same rule to that path: it must **not** start with `.` (use a bare
-relative path like `fsm`, or an absolute path — not `./fsm`) and must **not**
-end with `/`.
+`generate-fsm-json`/`generate-async-logic`/`generate-all` — applies the same
+rule to that path: it must **not** start with `.` (use a bare relative path like
+`fsm`, or an absolute path — not `./fsm`) and must **not** end with `/`.
 
 ### `generate-fsm-json` — compile `fsm.json` from a state machine definition
 
@@ -72,46 +71,53 @@ is documented in
 ### `generate-sync-logic` — scaffold action/guard/delay stubs
 
 Reads a version folder's `fsm.json`, so `generate-fsm-json` must have already
-run.
+run. Unlike every other command here, output is never written relative to
+`--folder` or `--output` — it's always anchored at `Deno.cwd()` (wherever the
+CLI is invoked from), so `cd` into the directory you want `sync-worker/` to land
+in before running it.
 
 **Input** — `-f`/`--folder` accepts either:
 
 - A **plugin-root directory** — every version folder under it is scaffolded.
 - A **single `fsm.json` file path** — only that one version's stubs are
-  scaffolded. Requires `-o`/`--output`, the version folder to write stubs into:
-  a relative (resolved against the current working directory) or absolute path,
-  unrelated to `--folder`'s own location — it does not need to be, and is not
-  derived from, the fsm.json's containing directory.
+  scaffolded. Requires `-N`/`--fsm-name` and `-V`/`--fsm-version` (there's no
+  `--output`, so — unlike `generate-async-logic`'s single-file mode — there's no
+  `<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from
+  either; mirrors `validate-sync-operation`'s own single-file-mode flags).
 
 `-l`/`--lang`: comma-separated `typescript,python,rust,go` (default
 `typescript`). `-s`/`--skip-dirs`: directory mode only.
 
-**Output** — per version folder (or, in single-file mode, into `--output`),
-nested under the reserved `sync-worker/` subfolder, per requested language:
+**Output** — always under the reserved `sync-worker/` subfolder at the current
+working directory, nested `<lang>/<fsmName>/<fsmVersion>/` deep (folder mode
+derives `<fsmName>/<fsmVersion>` per FSM while walking; single-file mode uses
+`--fsm-name`/`--fsm-version` directly) — so multiple FSMs/versions scaffolded
+from the same working directory don't collide:
 
-- `sync-worker/<lang>/actions/index.{ts,py}` / `mod.rs` / `index.go` — one
-  exported stub per action name in `fsm.json` (built-in
+- `sync-worker/<lang>/<fsmName>/<fsmVersion>/actions/index.{ts,py}` / `mod.rs` /
+  `index.go` — one exported stub per action name in `fsm.json` (built-in
   `xstate.raise`/`xstate.cancel` excluded)
-- `sync-worker/<lang>/guards/...` — one stub per guard
-- `sync-worker/<lang>/delays/...` — one stub per delay
+- `sync-worker/<lang>/<fsmName>/<fsmVersion>/guards/...` — one stub per guard
+- `sync-worker/<lang>/<fsmName>/<fsmVersion>/delays/...` — one stub per delay
 
 Every stub has a `// TODO: implement` body.
 
-For `typescript` (the only language this is currently written for), also:
+For `typescript` (the only language this is currently written for), also, at
+that same `<fsmName>/<fsmVersion>` level:
 
-- `sync-worker/typescript/generated-sync-operation-registry.ts` — imports every
-  action/guard/delay stub written for that version and combines them into one
+- `generated-sync-operation-registry.ts` — imports every action/guard/delay stub
+  written for that version and combines them into one
   `SyncOperationRegistration[]` (`fsmName`, `fsmVersion`, `syncOperationType` —
   `"action"`/`"guard"`/`"delay"`, `syncOperationName`, `syncOperationLanguage`,
   `handler`), so a worker can register/dispatch without importing each kind's
   module separately.
-- `sync-worker/typescript/fsm.json` — a copy of that version's `fsm.json`, so
-  `sync-worker/typescript/` is self-contained rather than requiring a reader to
-  also reach back up to the version folder root for the FSM definition.
+- `fsm.json` — a copy of that version's `fsm.json`, so this directory is
+  self-contained rather than requiring a reader to also reach back to the source
+  FSM tree for the FSM definition.
 
 ```bash
 npx @pgfsm/compiler -c generate-sync-logic -f fsm --lang typescript,python
-npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --output fsm/creditCheck/v01
+npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
 ```
 
 ### `generate-async-logic` — scaffold actor stubs
@@ -169,18 +175,25 @@ invocation instead of three. Accepts three input shapes:
   stopping (same as running the three commands separately would); one FSM's
   failure in an earlier step doesn't block the next step from still running for
   whichever FSMs did succeed. The command still exits non-zero if anything
-  failed anywhere.
+  failed anywhere. Unlike the standalone `generate-sync-logic` command (always
+  `Deno.cwd()`), `generate-all`'s own sync-logic step writes to
+  `<appRoot>/sync-worker/typescript/<fsmName>/<fsmVersion>/` — the same app root
+  `worker-sdk-generated/` uses, one level above `--folder`.
 - **Single `.ts` file** — chains all three steps for just that one FSM version.
-  Requires `-o`/`--output`, which serves every step alike: the destination for
-  `fsm.json`/`xstate-fsm.json`, the actor stubs + aggregate registry, and the
-  sync stubs, all written into the same version folder. As with
-  `generate-async-logic`'s own single-file mode, `--output` should sit at the
-  conventional `<pluginRoot>/<fsmName>/<version>` depth so the aggregate step
-  can find the real plugin root three levels up.
+  Requires `-o`/`--output`, which serves `fsm.json`/`xstate-fsm.json` and the
+  actor stubs + aggregate registry; the sync-logic step also writes under
+  `--output`, but nested `sync-worker/typescript/<fsmName>/<fsmVersion>/` deep
+  rather than directly into it (`<fsmName>`/`<fsmVersion>` derived from
+  `--output`'s own path, same convention `generate-async-logic`'s aggregate step
+  already relies on). As with `generate-async-logic`'s own single-file mode,
+  `--output` should sit at the conventional `<pluginRoot>/<fsmName>/<version>`
+  depth so both the aggregate step and this identity derivation work.
 - **Single `fsm.json` file** — the `fsm.json` already exists, so
   `generate-fsm-json` is skipped entirely; only `generate-async-logic` and
   `generate-sync-logic` run against it, same as passing that `fsm.json` to
-  either of those commands individually. Also requires `-o`/`--output`.
+  either of those commands individually (`fsm.json`'s own location must sit at
+  the same conventional depth for `generate-sync-logic`'s identity derivation to
+  work). Also requires `-o`/`--output`.
 
 `-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
 `-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,
@@ -219,9 +232,11 @@ npx @pgfsm/compiler -c create-async-logic -f apps/fsm-core-example --lang typesc
 **Input** — `-f`/`--folder`: plugin-root directory. `-s`/`--skip-dirs`.
 
 **Output/side effect** — per version folder, removes `fsm.json`,
-`xstate-fsm.json`, the `typescript/` and `python/` subdirectories, and the
-`sync-worker/` subdirectory, if present (`rust/`/`go/` are left alone). Missing
-files are skipped silently, not an error.
+`xstate-fsm.json` and the `typescript/`/`python/` subdirectories, if present
+(`rust/`/`go/` are left alone); also removes that FSM/version's
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/` (`generate-sync-logic`'s
+own output location — see above — not a subdirectory of the version folder
+itself). Missing files are skipped silently, not an error.
 
 ```bash
 npx @pgfsm/compiler -c delete -f fsm
@@ -233,7 +248,8 @@ npx @pgfsm/compiler -c delete -f fsm
 
 **Output** — writes nothing; validates that every action/guard/delay in
 `fsm.json` has a matching export in
-`sync-worker/<lang>/actions|guards|delays/index.*` and logs a pass/fail result
+`{cwd}/sync-worker/<lang>/<fsmName>/<fsmVersion>/actions|guards|delays/index.*`
+(the same location `generate-sync-logic` writes to) and logs a pass/fail result
 per method.
 
 ```bash

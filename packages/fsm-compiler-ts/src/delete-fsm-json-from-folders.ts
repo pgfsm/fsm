@@ -5,7 +5,7 @@ import { isNotFoundError, isVersionFolderName } from "./util.ts";
 
 async function deleteFsmJSONFromFolder(
   dirEntryName: string,
-  _dirEntryNameVersion: string,
+  dirEntryNameVersion: string,
   _folderPath: string,
   absFolderPath: string,
   _parentSource: string,
@@ -18,7 +18,12 @@ async function deleteFsmJSONFromFolder(
     // remove folder python if it exists
     await Deno.remove(`${absFolderPath}/python`, { recursive: true });
     // remove generate-sync-logic's reserved sync-worker/ output if it exists
-    await Deno.remove(`${absFolderPath}/sync-worker`, { recursive: true });
+    // -- always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/,
+    // independent of absFolderPath (see generate-sync-operation-logic.ts).
+    await Deno.remove(
+      `${Deno.cwd()}/sync-worker/typescript/${dirEntryName}/${dirEntryNameVersion}`,
+      { recursive: true },
+    );
     logger.info("Deleted xstate-fsm.json and fsm.json from {path}", {
       path: absFolderPath,
     });

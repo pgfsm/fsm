@@ -211,18 +211,18 @@ Deno.test("cli generate-async-logic folder mode writes the aggregate registry on
   assertStringIncludes(aggregateContent, "creditcheck_v01");
 });
 
-Deno.test("cli generate-sync-logic runs successfully on example folder", async () => {
-  const { code } = await runCli([
-    "-c",
-    "generate-sync-logic",
-    "-f",
-    FSM_FOLDER,
-    "--lang",
-    "typescript",
-  ]);
+Deno.test("cli generate-sync-logic runs successfully on example folder, output anchored at cwd (not --folder)", async () => {
+  const cwd = `${FIXTURE_ROOT}/folder-mode-cwd`;
+  await Deno.mkdir(cwd, { recursive: true });
+  const { code } = await runCli(
+    ["-c", "generate-sync-logic", "-f", FSM_FOLDER, "--lang", "typescript"],
+    undefined,
+    cwd,
+  );
   assertEquals(code, 0);
+  // sync-worker/ is a direct child of cwd, never inside FSM_FOLDER/--folder.
   const registryContent = await Deno.readTextFile(
-    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/generated-sync-operation-registry.ts`,
+    `${cwd}/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts`,
   );
   assertStringIncludes(registryContent, 'fsmName: "creditCheck"');
   assertStringIncludes(registryContent, 'fsmVersion: "v01"');
@@ -231,9 +231,17 @@ Deno.test("cli generate-sync-logic runs successfully on example folder", async (
     `${FSM_FOLDER}/creditCheck/v01/fsm.json`,
   );
   const copiedFsmJson = await Deno.readTextFile(
-    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/fsm.json`,
+    `${cwd}/sync-worker/typescript/creditCheck/v01/fsm.json`,
   );
   assertEquals(copiedFsmJson, originalFsmJson);
+
+  let existsUnderFolder = true;
+  try {
+    await Deno.stat(`${FSM_FOLDER}/creditCheck/v01/sync-worker`);
+  } catch {
+    existsUnderFolder = false;
+  }
+  assertEquals(existsUnderFolder, false);
 });
 
 Deno.test("cli generate-sync-logic rejects an invalid --lang", async () => {
@@ -260,9 +268,9 @@ Deno.test("cli generate-sync-logic rejects a valid OperationLang other than type
   assertEquals(code, 1);
 });
 
-// --- generate-sync-logic single-fsm.json (--output) mode ---
+// --- generate-sync-logic single-fsm.json (--fsm-name/--fsm-version) mode ---
 
-Deno.test("cli generate-sync-logic requires --output when --folder is a single fsm.json file", async () => {
+Deno.test("cli generate-sync-logic requires --fsm-name and --fsm-version when --folder is a single fsm.json file", async () => {
   const { code, stderr } = await runCli([
     "-c",
     "generate-sync-logic",
@@ -270,7 +278,7 @@ Deno.test("cli generate-sync-logic requires --output when --folder is a single f
     SINGLE_FSM_JSON,
   ]);
   assertEquals(code, 1);
-  assertStringIncludes(stderr, "requires --output");
+  assertStringIncludes(stderr, "requires --fsm-name and --fsm-version");
 });
 
 Deno.test("cli generate-sync-logic rejects a non-.json --folder file", async () => {
@@ -279,76 +287,74 @@ Deno.test("cli generate-sync-logic rejects a non-.json --folder file", async () 
     "generate-sync-logic",
     "-f",
     `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
-    "--output",
-    `${FIXTURE_ROOT}/single-file-non-json-output`,
+    "--fsm-name",
+    "creditCheck",
+    "--fsm-version",
+    "v01",
   ]);
   assertEquals(code, 1);
   assertStringIncludes(stderr, "must be an fsm.json file");
 });
 
-Deno.test("cli generate-sync-logic --folder fsm.json + --output (absolute) writes stubs into --output, independent of --folder's location", async () => {
-  const outDir = `${FIXTURE_ROOT}/single-file-abs-output`;
-  const { code } = await runCli([
-    "-c",
-    "generate-sync-logic",
-    "-f",
-    SINGLE_FSM_JSON,
-    "--output",
-    outDir,
-  ]);
-  assertEquals(code, 0);
-  for (const kind of ["actions", "guards", "delays"]) {
-    const stat = await Deno.stat(
-      `${outDir}/sync-worker/typescript/${kind}/index.ts`,
-    );
-    assert(stat.isFile);
-  }
-  const registryStat = await Deno.stat(
-    `${outDir}/sync-worker/typescript/generated-sync-operation-registry.ts`,
-  );
-  assert(registryStat.isFile);
-  const fsmJsonCopyStat = await Deno.stat(
-    `${outDir}/sync-worker/typescript/fsm.json`,
-  );
-  assert(fsmJsonCopyStat.isFile);
-});
-
-Deno.test("cli generate-sync-logic --output accepts a relative path, resolved against the CLI's cwd", async () => {
-  const cwd = `${FIXTURE_ROOT}/single-file-relative-cwd`;
+Deno.test("cli generate-sync-logic --folder fsm.json + --fsm-name/--fsm-version writes stubs under cwd's sync-worker/, independent of --folder's location", async () => {
+  const cwd = `${FIXTURE_ROOT}/single-file-cwd`;
   await Deno.mkdir(cwd, { recursive: true });
   const { code } = await runCli(
-    ["-c", "generate-sync-logic", "-f", SINGLE_FSM_JSON, "--output", "rel-out"],
+    [
+      "-c",
+      "generate-sync-logic",
+      "-f",
+      SINGLE_FSM_JSON,
+      "--fsm-name",
+      "creditCheck",
+      "--fsm-version",
+      "v01",
+    ],
     undefined,
     cwd,
   );
   assertEquals(code, 0);
-  const stat = await Deno.stat(
-    `${cwd}/rel-out/sync-worker/typescript/actions/index.ts`,
+  const outDir = `${cwd}/sync-worker/typescript/creditCheck/v01`;
+  for (const kind of ["actions", "guards", "delays"]) {
+    const stat = await Deno.stat(`${outDir}/${kind}/index.ts`);
+    assert(stat.isFile);
+  }
+  const registryStat = await Deno.stat(
+    `${outDir}/generated-sync-operation-registry.ts`,
   );
-  assert(stat.isFile);
+  assert(registryStat.isFile);
+  const fsmJsonCopyStat = await Deno.stat(`${outDir}/fsm.json`);
+  assert(fsmJsonCopyStat.isFile);
 });
 
-Deno.test("cli generate-sync-logic --output writes to any target folder, unrelated to --folder's own directory name", async () => {
+Deno.test("cli generate-sync-logic single-file mode: output moves with cwd, not with --folder's own directory name", async () => {
   // Copy fsm.json out to a location that looks nothing like a
-  // <fsmName>/<version> folder, to prove --output is the only thing that
-  // determines where stubs land.
+  // <fsmName>/<version> folder, to prove --folder's own location has no
+  // bearing on where stubs land -- only cwd + --fsm-name/--fsm-version do.
   const draftDir = `${FIXTURE_ROOT}/scratch-draft`;
   await Deno.mkdir(draftDir, { recursive: true });
   const draftJson = `${draftDir}/fsm.json`;
   await Deno.copyFile(SINGLE_FSM_JSON, draftJson);
 
-  const outDir = `${FIXTURE_ROOT}/single-file-unrelated-output`;
-  const { code } = await runCli([
-    "-c",
-    "generate-sync-logic",
-    "-f",
-    draftJson,
-    "--output",
-    outDir,
-  ]);
+  const cwd = `${FIXTURE_ROOT}/single-file-unrelated-cwd`;
+  await Deno.mkdir(cwd, { recursive: true });
+  const { code } = await runCli(
+    [
+      "-c",
+      "generate-sync-logic",
+      "-f",
+      draftJson,
+      "--fsm-name",
+      "creditCheck",
+      "--fsm-version",
+      "v01",
+    ],
+    undefined,
+    cwd,
+  );
   assertEquals(code, 0);
   const stat = await Deno.stat(
-    `${outDir}/sync-worker/typescript/actions/index.ts`,
+    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
   assert(stat.isFile);
 });
@@ -439,8 +445,11 @@ Deno.test("cli generate-all folder mode runs generate-fsm-json, generate-async-l
     `${FSM_FOLDER}/creditCheck/v01/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
+  // sync-worker/ lands one level above the plugin-root folder (the app
+  // root), same as generate-all's async-logic step -- unlike the standalone
+  // generate-sync-logic command, which always anchors at Deno.cwd() instead.
   const syncStat = await Deno.stat(
-    `${FSM_FOLDER}/creditCheck/v01/sync-worker/typescript/actions/index.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
   assert(syncStat.isFile);
   // Aggregate written one level above the plugin-root folder, matching
@@ -484,8 +493,9 @@ Deno.test("cli generate-all single-file mode writes fsm.json, actor stubs, sync 
     `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
+  // fsmName/fsmVersion derived from --output's own path (creditCheck/v01).
   const syncStat = await Deno.stat(
-    `${outDir}/sync-worker/typescript/actions/index.ts`,
+    `${outDir}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
   assert(syncStat.isFile);
   const aggregateStat = await Deno.stat(
@@ -565,8 +575,9 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
     `${outDir}/typescript/actors/verifyCredentials/verifyCredentials.ts`,
   );
   assert(actorStat.isFile);
+  // fsmName/fsmVersion derived from SINGLE_FSM_JSON's own path (creditCheck/v01).
   const syncStat = await Deno.stat(
-    `${outDir}/sync-worker/typescript/actions/index.ts`,
+    `${outDir}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
   );
   assert(syncStat.isFile);
   const aggregateContent = await Deno.readTextFile(

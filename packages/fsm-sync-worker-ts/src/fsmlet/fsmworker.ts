@@ -141,11 +141,13 @@ export async function startFSMWorkerWithDBLock(
           { fsmName: fsm_name, fsmVersion: fsm_version },
         );
       } else {
-        // Action/guard/delay stubs live under the reserved `sync-worker/`
-        // subfolder (generate-sync-logic's output); actors are generate-async-
-        // logic's output and stay directly under the version folder.
+        // generate-sync-logic always writes to {cwd}/sync-worker/typescript/
+        // <fsmName>/<fsmVersion>/, independent of the source FSM tree's own
+        // location (see fsm-compiler-ts's generate-sync-operation-logic.ts);
+        // actors are generate-async-logic's output and stay directly under
+        // the version folder.
         const syncWorkerBase =
-          `${verifiedModule.fsmAbsFolderPath}/sync-worker/typescript`;
+          `${Deno.cwd()}/sync-worker/typescript/${fsm_name}/${fsm_version}`;
         const actorsBase = `${verifiedModule.fsmAbsFolderPath}/typescript`;
         const [actions, guards, delays, actors] = await Promise.allSettled([
           import(`${syncWorkerBase}/actions/index.ts`),
