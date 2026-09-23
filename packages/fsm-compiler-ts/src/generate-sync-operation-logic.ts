@@ -13,8 +13,19 @@ import type {
 const logger = getLogger(["@pgfsm/compiler", "sync-logic"]);
 
 /**
+ * Reserved subfolder name every `generate-sync-logic` output nests under,
+ * inside the version folder — `<versionFolder>/sync-worker/<lang>/...` rather
+ * than `<versionFolder>/<lang>/...` directly. Parity with how
+ * `generate-async-logic` reserves `worker-sdk-generated/` for its own output
+ * (see `operation-logic-scaffold.ts`'s `WORKER_SDK_DIR_NAME`), giving sync
+ * logic its own namespaced subtree instead of dumping per-language folders
+ * straight into the version root.
+ */
+const SYNC_WORKER_DIR_NAME = "sync-worker";
+
+/**
  * Writes action/guard/delay stubs for one already-parsed fsm.json into
- * `absVersionFolderPath`, in each of `langs`. Shared by
+ * `<absVersionFolderPath>/sync-worker/`, in each of `langs`. Shared by
  * {@linkcode generateSyncOperationLogicFromFolders} (one call per versioned
  * FSM folder it walks) and {@linkcode generateSyncOperationLogicFromFsmJson}
  * (a single call for one fsm.json).
@@ -27,19 +38,31 @@ async function scaffoldSyncLogicForVersion(
   const { actions, guards, delays } = extractFsmPluginRefs(fsmData);
   // xstate.raise / xstate.cancel are built-ins, not user code.
   const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
+  const absSyncWorkerFolderPath =
+    `${absVersionFolderPath}/${SYNC_WORKER_DIR_NAME}`;
 
   for (const lang of langs) {
     await writeOperationModule(
-      absVersionFolderPath,
+      absSyncWorkerFolderPath,
       lang,
       "actions",
       filteredActions,
     );
-    await writeOperationModule(absVersionFolderPath, lang, "guards", guards);
-    await writeOperationModule(absVersionFolderPath, lang, "delays", delays);
+    await writeOperationModule(
+      absSyncWorkerFolderPath,
+      lang,
+      "guards",
+      guards,
+    );
+    await writeOperationModule(
+      absSyncWorkerFolderPath,
+      lang,
+      "delays",
+      delays,
+    );
     logger.info("Wrote {lang} action/guard/delay stubs in {path}", {
       lang,
-      path: absVersionFolderPath,
+      path: absSyncWorkerFolderPath,
     });
   }
 }

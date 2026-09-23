@@ -17,6 +17,8 @@ async function deleteFsmJSONFromFolder(
     await Deno.remove(`${absFolderPath}/typescript`, { recursive: true });
     // remove folder python if it exists
     await Deno.remove(`${absFolderPath}/python`, { recursive: true });
+    // remove generate-sync-logic's reserved sync-worker/ output if it exists
+    await Deno.remove(`${absFolderPath}/sync-worker`, { recursive: true });
     logger.info("Deleted xstate-fsm.json and fsm.json from {path}", {
       path: absFolderPath,
     });

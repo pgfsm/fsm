@@ -141,12 +141,17 @@ export async function startFSMWorkerWithDBLock(
           { fsmName: fsm_name, fsmVersion: fsm_version },
         );
       } else {
-        const base = `${verifiedModule.fsmAbsFolderPath}/typescript`;
+        // Action/guard/delay stubs live under the reserved `sync-worker/`
+        // subfolder (generate-sync-logic's output); actors are generate-async-
+        // logic's output and stay directly under the version folder.
+        const syncWorkerBase =
+          `${verifiedModule.fsmAbsFolderPath}/sync-worker/typescript`;
+        const actorsBase = `${verifiedModule.fsmAbsFolderPath}/typescript`;
         const [actions, guards, delays, actors] = await Promise.allSettled([
-          import(`${base}/actions/index.ts`),
-          import(`${base}/guards/index.ts`),
-          import(`${base}/delays/index.ts`),
-          import(`${base}/actors/index.ts`),
+          import(`${syncWorkerBase}/actions/index.ts`),
+          import(`${syncWorkerBase}/guards/index.ts`),
+          import(`${syncWorkerBase}/delays/index.ts`),
+          import(`${actorsBase}/actors/index.ts`),
         ]);
         fsmModuleDefinition = {
           actions: actions.status === "fulfilled" ? actions.value : null,
