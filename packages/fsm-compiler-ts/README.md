@@ -105,6 +105,9 @@ For `typescript` (the only language this is currently written for), also:
   `"action"`/`"guard"`/`"delay"`, `syncOperationName`, `syncOperationLanguage`,
   `handler`), so a worker can register/dispatch without importing each kind's
   module separately.
+- `sync-worker/typescript/fsm.json` — a copy of that version's `fsm.json`, so
+  `sync-worker/typescript/` is self-contained rather than requiring a reader to
+  also reach back up to the version folder root for the FSM definition.
 
 ```bash
 npx @pgfsm/compiler -c generate-sync-logic -f fsm --lang typescript,python
