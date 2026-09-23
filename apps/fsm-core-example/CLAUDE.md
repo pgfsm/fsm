@@ -21,8 +21,10 @@ same layout. Definitions target **XState 5** semantics and are consumed by
 Neither sync operation logic (actions/guards/delays) nor actor implementations
 are colocated with their FSM's own version folder — `generate-sync-logic` and
 `generate-async-logic` both always write to `Deno.cwd()`, independent of
-`--folder`'s own location (#305/#307). Running either from this app's own root
-(`apps/fsm-core-example/`) lands output at, respectively:
+`--folder`'s own location (#305/#307). As of #313, both are run from the
+**monorepo root** (not `cd`'d into this app first), so their output lands at the
+monorepo root too — `sync-worker/`/`async-worker/` are siblings of `apps/`, not
+of this app's own `fsm/`:
 
 - `sync-worker/typescript/<fsmName>/<fsmVersion>/{actions,guards,delays}/` —
   plus `generated-sync-operation-registry.ts` and a copy of that version's
@@ -33,5 +35,10 @@ are colocated with their FSM's own version folder — `generate-sync-logic` and
   `sdk.ts`, `<lang>-actors-registry.generated.ts`, etc.) at
   `async-worker/<lang>/`
 
-Both are siblings of `fsm/` at this app's own root, not nested inside each
-`fsm/<asyncOperationName>/<version>/` folder.
+`create-async-logic`'s `shared-async-op/` pool (#309/#311) is the same story —
+no `--folder` at all, always anchored at `Deno.cwd()`, run from the monorepo
+root. This also matches what actually resolves at runtime: `fsmlet`
+(`packages/fsm-sync-worker-ts/src/fsmlet/fsmworker.ts`) reads
+`${Deno.cwd()}/sync-worker/...`/`${Deno.cwd()}/async-worker/...` when it starts,
+so the worker process itself needs the same monorepo-root cwd for these paths to
+resolve — see the root `DEVELOPER.md` for the actual startup commands.

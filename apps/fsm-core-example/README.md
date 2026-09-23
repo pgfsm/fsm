@@ -22,12 +22,14 @@ top-level FSMs under `fsm/`.
 Each FSM follows this layout:
 
 ```
-fsm/<asyncOperationName>/
+apps/fsm-core-example/fsm/<asyncOperationName>/
   v01/
     fsm.json              ← FSM definition (input to compiler)
     xstate-fsm.json       ← XState 5-compatible rendering
   v02/                    ← new version; v01 is untouched
     ...
+
+# At the monorepo root (siblings of apps/, not of this app's own fsm/ — see below):
 sync-worker/
   typescript/
     <asyncOperationName>/
@@ -56,9 +58,11 @@ version.
 
 Neither sync operation logic (actions/guards/delays) nor actor implementations
 are colocated with their FSM's own version folder — `generate-sync-logic` and
-`generate-async-logic` both always write to `Deno.cwd()`, so `sync-worker/` and
-`async-worker/` sit at this app's own root (a sibling of `fsm/`, run from here),
-not nested inside each `fsm/<asyncOperationName>/<version>/` folder.
+`generate-async-logic` both always write to `Deno.cwd()`. As of #313, run both
+from the **monorepo root** (not this app's own directory) — `sync-worker/` and
+`async-worker/` land there, siblings of `apps/`, not of this app's own `fsm/`.
+This also matches what `fsmlet` resolves at runtime — see the root
+`DEVELOPER.md`.
 
 ## How to run the example server
 
@@ -97,6 +101,6 @@ from DB calls and fail on unrelated-looking assertions.
 3. Implement the generated stubs in
    `sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
    `delays/` and `async-worker/typescript/<yourAsyncOperationName>/v01/actors/`
-   (run `generate-sync-logic`/`generate-async-logic` from this directory so they
-   land here)
+   (run `generate-sync-logic`/`generate-async-logic` from the monorepo root so
+   they land there)
 4. Restart the server — it picks up the new FSM at startup

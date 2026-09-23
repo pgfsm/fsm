@@ -35,13 +35,13 @@ codegen pipeline works and produces correct, runnable output.
   different plugin sources: see [Regenerating](#regenerating) for which to use.
   `inputs:` lists one entry per service directory above.
 - `gen/{typescript,python,rust,go}/` — generated output, committed (same
-  convention as `apps/fsm-core-example/async-worker/`) so consumers don't need
-  Buf installed just to build against it. Each carries its own hand-written
-  package manifest giving the generated stubs a real package identity for that
-  language's toolchain — `gen/typescript/deno.json` (`exports` map + the
-  `imports` map generated code needs to resolve `@bufbuild/protobuf` at
-  runtime), `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`, `gen/go/go.mod`
-  — same convention across all four, see #106.
+  convention as this monorepo's own `async-worker/`, see #313) so consumers
+  don't need Buf installed just to build against it. Each carries its own
+  hand-written package manifest giving the generated stubs a real package
+  identity for that language's toolchain — `gen/typescript/deno.json` (`exports`
+  map + the `imports` map generated code needs to resolve `@bufbuild/protobuf`
+  at runtime), `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`,
+  `gen/go/go.mod` — same convention across all four, see #106.
 - `package.json` / `node_modules/` (package root) — **not** app dependencies,
   and **not** where consumers import from. The npm-managed half of the
   toolchain: the `buf` CLI itself plus the two `protoc-gen-*` binaries needed on
