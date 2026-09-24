@@ -709,7 +709,7 @@ Deno.test("cli create-async-logic writes a single actor file under cwd's async-w
   );
   assertEquals(code, 0);
   const stat = await Deno.stat(
-    `${APP_ROOT}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScoreCliTest/v01/checkCreditScoreCliTest.ts`,
+    `${APP_ROOT}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScoreCliTest/checkCreditScoreCliTest.ts`,
   );
   assertEquals(stat.isFile, true);
 });

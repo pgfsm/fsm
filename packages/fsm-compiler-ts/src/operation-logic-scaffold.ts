@@ -298,7 +298,6 @@ async function writeGoActorModule(
   actorDirName: string,
   appRootOverride?: string,
   subPath?: string,
-  fileSubPath?: string,
 ): Promise<void> {
   const modulePath = goActorModulePath(
     absFolderPath,
@@ -306,10 +305,9 @@ async function writeGoActorModule(
     appRootOverride,
     subPath,
   );
-  const actorDir = subPath
+  const dir = subPath
     ? `${absFolderPath}/go/${subPath}/actors/${actorDirName}`
     : `${absFolderPath}/go/actors/${actorDirName}`;
-  const dir = fileSubPath ? `${actorDir}/${fileSubPath}` : actorDir;
   await Deno.writeTextFile(
     `${dir}/go.mod`,
     renderGoModActor({ modulePath }),
@@ -323,11 +321,9 @@ async function writeGoActorModule(
  * is given — `generate-async-logic`'s own caller uses this to insert
  * `<fsmName>/<fsmVersion>` between the language and `actors/`, so multiple
  * FSMs/versions writing under the same `<lang>` root don't collide (mirrors
- * {@linkcode writeOperationModule}'s `subPath`). `fileSubPath`, when given,
- * inserts one more directory between `<src>/` and the file itself (still
- * named `<src>.<ext>`) — `create-async-logic.ts`'s shared-async-op pool uses
- * this to nest `<functionVersion>` a second time under the actor's own name
- * folder (see that file's own doc comment for why).
+ * {@linkcode writeOperationModule}'s `subPath`); `create-async-logic.ts`'s
+ * shared-async-op pool passes `shared-async-op/<functionVersion>` there too
+ * (see that file's own doc comment).
  * The file exports one function named after the actor `src` — except Go,
  * whose function is exported (capitalized) instead, and which also gets its
  * own `go.mod` (see {@linkcode writeGoActorModule}), since Go enforces
@@ -343,13 +339,11 @@ export async function writeActorFile(
   actor: ActorReference,
   appRootOverride?: string,
   subPath?: string,
-  fileSubPath?: string,
 ): Promise<string> {
   const name = actorFileBaseName(actor);
-  const actorDir = subPath
+  const dir = subPath
     ? `${absFolderPath}/${lang}/${subPath}/actors/${name}`
     : `${absFolderPath}/${lang}/actors/${name}`;
-  const dir = fileSubPath ? `${actorDir}/${fileSubPath}` : actorDir;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${name}.${operationFileExtension(lang)}`;
   const header = getPreamble(lang, "actors");
@@ -363,7 +357,6 @@ export async function writeActorFile(
       name,
       appRootOverride,
       subPath,
-      fileSubPath,
     );
   }
   return file;
