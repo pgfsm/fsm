@@ -1,0 +1,26 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "byeFromPgfsm",
+      "asyncOperationName": "byeFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "rust",
+      "filePath": "actors/byeFromPgfsm/byeFromPgfsm.rs",
+      "exportedAsyncOperationName": "byeFromPgfsm"
+    },
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "helloFromPgfsm",
+      "asyncOperationName": "helloFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "rust",
+      "filePath": "actors/helloFromPgfsm/helloFromPgfsm.rs",
+      "exportedAsyncOperationName": "helloFromPgfsm"
+    }
+  ]
+}
