@@ -3,6 +3,7 @@ import { relative } from "@std/path/posix";
 import {
   DELAY_ACTION_NAME_PREFIX,
   DenoCommand,
+  isNotFoundError,
   isValidPythonIdentifier,
   isVersionFolderName,
   toGoExportedName,
@@ -1415,4 +1416,106 @@ export async function eachVersionedFsmFolder(
       }
     }
   }
+}
+
+/** The shape {@linkcode writeActorsManifest} serializes — read back by {@linkcode collectRegisteredActorsFromAsyncWorkerDir}. */
+type ActorManifestEntry = {
+  parentFsmName: string;
+  parentFsmVersion: string;
+  src: string;
+  asyncOperationName: string;
+  asyncOperationType: RegisteredActor["asyncOperationType"];
+  asyncOperationVersion: string;
+  asyncOperationLanguage: OperationLang;
+  filePath: string;
+  exportedAsyncOperationName: string;
+};
+
+/**
+ * Rebuilds the complete set of {@linkcode RegisteredActor}s actually on disk
+ * by walking `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>/actors-manifest.json`
+ * and reading each one back (#320 gave the manifest every field needed to do
+ * this without re-parsing any `fsm.json`) — the source of truth for
+ * {@linkcode writeAggregateArtifacts}'s own aggregate registry/worker-SDK
+ * writes, replacing the old approach of re-deriving actors by re-walking the
+ * *source* FSM tree (`eachVersionedFsmFolder` over `realPluginRootAbsPath`).
+ * That re-derivation silently dropped any actor scaffolded under a
+ * caller-supplied identity that doesn't match its source `fsm.json`'s own
+ * folder path — `generate-async-logic -f <path>/fsm.json --fsm-name
+ * <override> --fsm-version <override>` (single-file mode) writes actor files
+ * under `<override>/<override>/`, but nothing on the source tree lives at
+ * that path, so the re-derivation walk could never rediscover it and the
+ * aggregate registry silently never got it. Reading back what was actually
+ * written under `async-worker/` instead is correct regardless of any
+ * `--fsm-name`/`--fsm-version` override, and also means folder mode's
+ * `writeAggregateArtifacts` call no longer needs its caller to have
+ * accumulated every `scaffoldAsyncLogicForVersion` return value by hand.
+ *
+ * Returns `[]` (not an error) when `async-worker/` doesn't exist yet — a
+ * fresh `writeRootAbsPath` with nothing written to it yet is a valid state,
+ * not a failure, for both callers ({@linkcode
+ * generateAsyncOperationLogicFromFolders}/{@linkcode
+ * generateAsyncOperationLogicFromFsmJson} in
+ * `generate-async-operation-logic.ts`) since this always runs immediately
+ * after that same run's own `scaffoldAsyncLogicForVersion` call(s) have
+ * already written the directory.
+ */
+export async function collectRegisteredActorsFromAsyncWorkerDir(
+  writeRootAbsPath: string,
+): Promise<RegisteredActor[]> {
+  const asyncWorkerRoot = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}`;
+  const collected: RegisteredActor[] = [];
+
+  let langEntries: Deno.DirEntry[];
+  try {
+    langEntries = await Array.fromAsync(Deno.readDir(asyncWorkerRoot));
+  } catch (err) {
+    if (isNotFoundError(err)) return collected;
+    throw err;
+  }
+
+  for (const langEntry of langEntries) {
+    if (!langEntry.isDirectory) continue;
+    const langDir = `${asyncWorkerRoot}/${langEntry.name}`;
+    for await (const groupEntry of Deno.readDir(langDir)) {
+      // Skips non-directory siblings the aggregate step itself writes into
+      // this same `<lang>/` dir (cli.ts, sdk.ts, deno.json,
+      // typescript-actors-registry.generated.ts, ...) -- only
+      // `<fsmName>/`/`shared-async-op/`-style subdirectories are walked.
+      if (!groupEntry.isDirectory) continue;
+      const groupDir = `${langDir}/${groupEntry.name}`;
+      for await (const versionEntry of Deno.readDir(groupDir)) {
+        if (!versionEntry.isDirectory) continue;
+        const manifestPath =
+          `${groupDir}/${versionEntry.name}/actors-manifest.json`;
+        let manifest: { actors: ActorManifestEntry[] };
+        try {
+          manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+        } catch (err) {
+          // create-async-logic's shared-async-op/<functionVersion>/ pool has
+          // no actors-manifest.json of its own (see that command's own
+          // global-registry model) -- skip it, same as any other
+          // manifest-less directory this walk happens across.
+          if (isNotFoundError(err)) continue;
+          throw err;
+        }
+        for (const entry of manifest.actors) {
+          collected.push({
+            parentFsmName: entry.parentFsmName,
+            parentFsmVersion: entry.parentFsmVersion,
+            src: entry.src,
+            fileBaseName: actorFileBaseName({ src: entry.src }),
+            asyncOperationLanguage: entry.asyncOperationLanguage,
+            filePath: entry.filePath,
+            exportedName: entry.exportedAsyncOperationName,
+            asyncOperationType: entry.asyncOperationType,
+            asyncOperationName: entry.asyncOperationName,
+            asyncOperationVersion: entry.asyncOperationVersion,
+          });
+        }
+      }
+    }
+  }
+
+  return collected;
 }
