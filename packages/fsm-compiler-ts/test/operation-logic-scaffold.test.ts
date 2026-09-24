@@ -957,6 +957,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+protocol+manifest per language, 
     });
     assertExists(await Deno.stat(`${base}/typescript/cli.ts`));
     assertExists(await Deno.stat(`${base}/typescript/sdk.ts`));
+    assertExists(await Deno.stat(`${base}/typescript/deno.json`));
     assertExists(await Deno.stat(`${base}/python/cli.py`));
     assertExists(await Deno.stat(`${base}/python/sdk.py`));
     assertExists(await Deno.stat(`${base}/python/requirements.txt`));
@@ -989,6 +990,18 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+protocol+manifest per language, 
         'from "@pgfsm/proto-codegen/sidecargateway/v1/pb";',
       ),
       true,
+    );
+
+    const tsDenoJson = JSON.parse(
+      await Deno.readTextFile(`${base}/typescript/deno.json`),
+    );
+    assertEquals(
+      tsDenoJson.imports["@connectrpc/connect"],
+      "npm:@connectrpc/connect@^1.7.0",
+    );
+    assertEquals(
+      tsDenoJson.imports["@connectrpc/connect-node"],
+      "npm:@connectrpc/connect-node@^1.7.0",
     );
 
     const pyCli = await Deno.readTextFile(`${base}/python/cli.py`);
@@ -1079,6 +1092,15 @@ Deno.test('writeWorkerSdk - protocol: "legacy" restores protocol.{py,rs,go} and 
     assertExists(await Deno.stat(`${base}/rust/src/protocol.rs`));
     assertExists(await Deno.stat(`${base}/go/protocol.go`));
 
+    const tsDenoJson = JSON.parse(
+      await Deno.readTextFile(`${base}/typescript/deno.json`),
+    );
+    assertEquals(
+      "@connectrpc/connect" in tsDenoJson.imports,
+      false,
+      "legacy deno.json should not import connectrpc -- sdk.ts's legacy variant doesn't use it",
+    );
+
     const tsSdk = await Deno.readTextFile(`${base}/typescript/sdk.ts`);
     assertEquals(
       tsSdk.includes(
@@ -1134,6 +1156,7 @@ Deno.test("writeWorkerSdk - writes nothing for a language with no actors", async
       goFiles: [],
       goModDir: undefined,
     });
+    assertExists(await Deno.stat(`${base}/typescript/deno.json`));
 
     let existsErr: unknown;
     try {

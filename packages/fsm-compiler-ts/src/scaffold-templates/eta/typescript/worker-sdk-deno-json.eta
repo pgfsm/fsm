@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@std/cli": "jsr:@std/cli@1",
+    "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
+    "@connectrpc/connect": "npm:@connectrpc/connect@^1.7.0",
+    "@connectrpc/connect-node": "npm:@connectrpc/connect-node@^1.7.0"
+  }
+}
