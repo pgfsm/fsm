@@ -1,0 +1,26 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "byeFromPgfsm",
+      "asyncOperationName": "byeFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "python",
+      "filePath": "actors/byeFromPgfsm/byeFromPgfsm.py",
+      "exportedAsyncOperationName": "byeFromPgfsm"
+    },
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "helloFromPgfsm",
+      "asyncOperationName": "helloFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "python",
+      "filePath": "actors/helloFromPgfsm/helloFromPgfsm.py",
+      "exportedAsyncOperationName": "helloFromPgfsm"
+    }
+  ]
+}

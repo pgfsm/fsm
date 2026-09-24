@@ -1,0 +1,26 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "byeFromPgfsm",
+      "asyncOperationName": "byeFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/byeFromPgfsm/byeFromPgfsm.ts",
+      "exportedAsyncOperationName": "byeFromPgfsm"
+    },
+    {
+      "parentFsmName": "sharedAsyncOperation",
+      "parentFsmVersion": "v01",
+      "src": "helloFromPgfsm",
+      "asyncOperationName": "helloFromPgfsm",
+      "asyncOperationType": "sharedAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/helloFromPgfsm/helloFromPgfsm.ts",
+      "exportedAsyncOperationName": "helloFromPgfsm"
+    }
+  ]
+}
