@@ -708,7 +708,7 @@ function assertPythonAggregateImportPathsAreValid(
  * explicit prefix; Rust's `#[path]` and Python's `sys.path` entry don't
  * strictly need it but accept it fine.
  */
-function relativeImportDir(fromDir: string, toDir: string): string {
+export function relativeImportDir(fromDir: string, toDir: string): string {
   const rel = relative(fromDir, toDir);
   return rel.startsWith(".") ? rel : `./${rel}`;
 }

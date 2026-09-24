@@ -237,12 +237,17 @@ working directory:
 - `async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`,
   rewritten from every shared-async-op actor currently on disk for that language
   _at that one `functionVersion`_ (every language, including Go).
-- That language's single **global** registry file at
-  `async-worker/<lang>/shared-async-op/generated-registry.<ext>`, rewritten from
-  every shared-async-op actor currently on disk for that language across every
-  `functionVersion` (`typescript`/`python`/`rust` only — Go has no shared
-  registry). Never touches the FSM-scoped aggregate
-  (`<lang>-actors-registry.generated.ts`) — this pool is fully separate.
+- For `typescript`/`python`/`rust`, that language's single **global** registry
+  file at `async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
+  rewritten from every shared-async-op actor currently on disk for that language
+  across every `functionVersion`.
+- For `go`, its own aggregate at
+  `async-worker/go/shared-async-op/go-actors-registry-generated/` (`go.mod` +
+  `registry.go`, one `require`+`replace` per actor's own standalone Go module —
+  Go actors can't share a flat registry file the way TS/Python/Rust do).
+
+Neither ever touches the FSM-scoped aggregate
+(`<lang>-actors-registry.generated.ts`) — this pool is fully separate.
 
 ```bash
 cd apps/fsm-core-example
