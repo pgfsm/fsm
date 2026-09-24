@@ -149,7 +149,7 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
-## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322)
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
 and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
@@ -209,6 +209,34 @@ same function name can legitimately recur across different `functionVersion`s.
 Deliberately never touches the FSM-scoped aggregate
 (`<lang>-actors-registry.generated.ts`) — this pool stays fully separate from
 it, same as before #309.
+
+`listExistingSharedAsyncOpActors` (the shared "rebuild from what's on disk" walk
+both the registry and the manifest use) verifies each actor's own stub file
+actually exists (`${versionDir}/${toWrittenActor(lang, {src:
+name}).filePath}`)
+before including its `<name>/` directory — not just that the directory exists
+(#324). Without this, hand-removing an actor's file + `actors-manifest.json` but
+leaving the now-empty `<name>/` directory behind left a stale entry that the
+_next_ `create-async-logic` call (for any `functionVersion`, not just the stale
+one) would still pick up, rebuilding a registry that imports a handler from a
+file that no longer exists.
+
+#324 also added Go's own aggregate,
+`<appRoot>/async-worker/go/shared-async-op/go-actors-registry-generated/`
+(`go.mod` + `registry.go`) — before this, `--lang go` wrote the actor file and
+its own standalone `go.mod` but nothing stitched Go shared-async-op actors
+together the way TS/Python/Rust's `generated-registry.*` does, so they had no
+generated way to be imported/dispatched as a group.
+`rewriteSharedAsyncOpGoRegistry` (create-async-logic.ts) mirrors
+`writeAggregateGoRegistry`'s FSM-scoped approach (one `require`+`replace` per
+actor's own module) but is a **separate function**, not a call into
+`writeAggregateGoRegistry` — that function derives each actor's on-disk `go.mod`
+directory from `<parentFsmName>/<parentFsmVersion>` directly, correct for the
+FSM-scoped pool where `parentFsmName` _is_ the real directory name, but
+shared-async-op actors' `parentFsmName` is the fixed identity string
+`"sharedAsyncOperation"` while their real on-disk directory is `shared-async-op`
+(hyphenated) — reusing it verbatim would compute a `replace` target pointing at
+a directory that doesn't exist.
 
 ## npm publish (`deno task build:npm`)
 

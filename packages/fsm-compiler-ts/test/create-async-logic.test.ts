@@ -290,6 +290,108 @@ Deno.test("createAsyncOperationLogic - go actor gets a go.mod rooted at the app 
   }
 });
 
+Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-removed, empty dir left behind) is excluded from a later rebuild (#324)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "python",
+      "v08",
+      "checkCreditScoreNirajx",
+    );
+    // Hand-remove the actor's own file + manifest, but leave the now-empty
+    // <name>/ directory behind -- the exact scenario #324 reported.
+    await Deno.remove(
+      `${dir}/async-worker/python/shared-async-op/v08/actors/checkCreditScoreNirajx/checkCreditScoreNirajx.py`,
+    );
+    await Deno.remove(
+      `${dir}/async-worker/python/shared-async-op/v08/actors-manifest.json`,
+    );
+
+    await createAsyncOperationLogic(
+      dir,
+      "python",
+      "v09",
+      "checkCreditScoreNirajx",
+    );
+
+    const registryContent = await Deno.readTextFile(
+      `${dir}/async-worker/python/shared-async-op/generated-registry.py`,
+    );
+    assertEquals(registryContent.includes("v08"), false);
+    assertStringIncludes(registryContent, "checkCreditScoreNirajx_v09");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - go writes its own aggregate at shared-async-op/go-actors-registry-generated/ (#324)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const absAppRoot = `${dir}/fsm-core-example`;
+    await Deno.mkdir(absAppRoot, { recursive: true });
+    await createAsyncOperationLogic(
+      absAppRoot,
+      "go",
+      "v08",
+      "checkCreditScoreNirajx",
+    );
+
+    const goModContent = await Deno.readTextFile(
+      `${absAppRoot}/async-worker/go/shared-async-op/go-actors-registry-generated/go.mod`,
+    );
+    assertEquals(
+      goModContent,
+      "module fsm-core-example/shared-async-op/go-actors-registry-generated\n\ngo 1.19\n\n" +
+        "require fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx v0.0.0\n\n" +
+        "replace fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx => ../v08/actors/checkCreditScoreNirajx\n",
+    );
+
+    const registryContent = await Deno.readTextFile(
+      `${absAppRoot}/async-worker/go/shared-async-op/go-actors-registry-generated/registry.go`,
+    );
+    assertStringIncludes(
+      registryContent,
+      'checkCreditScoreNirajx_v08 "fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx"',
+    );
+    assertStringIncludes(
+      registryContent,
+      'ParentFsmName:          "sharedAsyncOperation",',
+    );
+    assertStringIncludes(
+      registryContent,
+      'AsyncOperationType:     "sharedAsyncOperation",',
+    );
+    assertStringIncludes(
+      registryContent,
+      "Handler:                checkCreditScoreNirajx_v08.CheckCreditScoreNirajx,",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - go aggregate accumulates across repeated calls, same as the TS/Python/Rust global registry", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
+    await createAsyncOperationLogic(dir, "go", "v01", "verifyIdentity");
+    const registryContent = await Deno.readTextFile(
+      `${dir}/async-worker/go/shared-async-op/go-actors-registry-generated/registry.go`,
+    );
+    assertStringIncludes(
+      registryContent,
+      "Handler:                checkCreditScore_v01.CheckCreditScore,",
+    );
+    assertStringIncludes(
+      registryContent,
+      "Handler:                verifyIdentity_v01.VerifyIdentity,",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("createAsyncOperationLogic - rejects a version that doesn't match the vNN convention", async () => {
   const dir = await Deno.makeTempDir();
   try {
