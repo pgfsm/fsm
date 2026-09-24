@@ -110,6 +110,16 @@ The gotchas below are for whoever next touches
   — an empty manifest for a language a given FSM doesn't use would just be
   directory clutter now that it's no longer colocated with every other
   language's own output.
+- **`actors-manifest.json` carries the full activity-registration identity, not
+  just the write-time subset** (#320) — `writeActorsManifest` takes
+  `RegisteredActor[]`, not `WrittenActor[]`, and serializes every field
+  (`parentFsmName`/`parentFsmVersion`/`src`/`asyncOperationName`/
+  `asyncOperationType`/`asyncOperationVersion`/`asyncOperationLanguage`/
+  `filePath`), the same identity the aggregate registries already emit, so a
+  consumer doesn't need to cross-reference the parent `fsm.json`.
+  `RegisteredActor.exportedName` is serialized under the manifest's own
+  `exportedAsyncOperationName` key — the in-memory field name is unchanged, this
+  is a manifest-output-only rename.
 - **`writeWorkerSdk` writes a TypeScript-only `deno.json` alongside `cli.ts`/
   `sdk.ts`** (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) —
   scoped to that one language subdirectory, matching Python's

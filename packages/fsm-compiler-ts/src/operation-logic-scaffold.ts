@@ -417,20 +417,46 @@ export function toRegisteredActor(
  * `<fsmName>/<fsmVersion>` directory) rather than one combined manifest
  * across every language, since actor output is no longer colocated under one
  * shared version-folder root — see {@linkcode writeActorFile}'s `subPath`.
+ *
+ * Takes {@linkcode RegisteredActor}, not just {@linkcode WrittenActor} — the
+ * manifest carries the full activity-registration identity (parent FSM
+ * name/version, `asyncOperationType`/`Name`/`Version`), the same fields the
+ * aggregate registries already emit, not just the file-write-time subset
+ * (`src`/`asyncOperationLanguage`/`filePath`/`exportedName`) — a consumer
+ * shouldn't have to cross-reference the parent `fsm.json` to know which
+ * FSM/version/invoke an entry belongs to (#320). `exportedName` is
+ * serialized as `exportedAsyncOperationName` in the manifest's own JSON key
+ * (the in-memory `RegisteredActor.exportedName` field name is unaffected —
+ * this is a manifest-output-only rename).
  */
 export async function writeActorsManifest(
   absFolderPath: string,
-  actors: WrittenActor[],
+  actors: RegisteredActor[],
 ): Promise<string> {
   const file = `${absFolderPath}/actors-manifest.json`;
   const manifest = {
     actors: actors.map((
-      { src, asyncOperationLanguage, filePath, exportedName },
+      {
+        parentFsmName,
+        parentFsmVersion,
+        src,
+        asyncOperationName,
+        asyncOperationType,
+        asyncOperationVersion,
+        asyncOperationLanguage,
+        filePath,
+        exportedName,
+      },
     ) => ({
+      parentFsmName,
+      parentFsmVersion,
       src,
+      asyncOperationName,
+      asyncOperationType,
+      asyncOperationVersion,
       asyncOperationLanguage,
       filePath,
-      exportedName,
+      exportedAsyncOperationName: exportedName,
     })),
   };
   await Deno.writeTextFile(file, JSON.stringify(manifest, null, 2) + "\n");

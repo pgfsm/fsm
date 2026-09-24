@@ -1,46 +1,81 @@
 {
   "actors": [
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "fetchInterestRateOptions",
+      "asyncOperationName": "fetchInterestRateOptions",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/fetchInterestRateOptions/fetchInterestRateOptions.ts",
-      "exportedName": "fetchInterestRateOptions"
+      "exportedAsyncOperationName": "fetchInterestRateOptions"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "verifyCredentials",
+      "asyncOperationName": "verifyCredentials",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/verifyCredentials/verifyCredentials.ts",
-      "exportedName": "verifyCredentials"
+      "exportedAsyncOperationName": "verifyCredentials"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "CheckingCreditScores3parallel",
+      "asyncOperationName": "CheckingCreditScores3parallel",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/CheckingCreditScores3parallel/CheckingCreditScores3parallel.ts",
-      "exportedName": "CheckingCreditScores3parallel"
+      "exportedAsyncOperationName": "CheckingCreditScores3parallel"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "checkReportsTable",
+      "asyncOperationName": "checkReportsTable",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkReportsTable/checkReportsTable.ts",
-      "exportedName": "checkReportsTable"
+      "exportedAsyncOperationName": "checkReportsTable"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "checkBureau",
+      "asyncOperationName": "checkBureau",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkBureau/checkBureau.ts",
-      "exportedName": "checkBureau"
+      "exportedAsyncOperationName": "checkBureau"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "determineMiddleScore",
+      "asyncOperationName": "determineMiddleScore",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/determineMiddleScore/determineMiddleScore.ts",
-      "exportedName": "determineMiddleScore"
+      "exportedAsyncOperationName": "determineMiddleScore"
     },
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v02",
       "src": "generateInterestRates",
+      "asyncOperationName": "generateInterestRates",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/generateInterestRates/generateInterestRates.ts",
-      "exportedName": "generateInterestRates"
+      "exportedAsyncOperationName": "generateInterestRates"
     }
   ]
 }
