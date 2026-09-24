@@ -22,13 +22,15 @@ top-level FSMs under `fsm/`.
 Each FSM follows this layout:
 
 ```
-fsm/<asyncOperationName>/
+apps/fsm-core-example/fsm/<asyncOperationName>/
   v01/
     fsm.json              ← FSM definition (input to compiler)
     xstate-fsm.json       ← XState 5-compatible rendering
   v02/                    ← new version; v01 is untouched
     ...
-sync-worker/
+
+# At the apps/ level (siblings of fsm-core-example/, not of this app's own fsm/ — see below):
+apps/sync-worker/
   typescript/
     <asyncOperationName>/
       v01/
@@ -39,7 +41,8 @@ sync-worker/
         fsm.json                             ← copy of that version's fsm.json
       v02/
         ...
-async-worker/
+apps/async-worker/
+  deno.json               ← scoped import map (workspace member) — see CLAUDE.md
   <lang>/                 ← one subtree per language actually used (typescript/python/rust/go)
     cli.ts, sdk.ts, <lang>-actors-registry.generated.ts, ...  ← aggregate worker SDK
     <asyncOperationName>/
@@ -56,9 +59,11 @@ version.
 
 Neither sync operation logic (actions/guards/delays) nor actor implementations
 are colocated with their FSM's own version folder — `generate-sync-logic` and
-`generate-async-logic` both always write to `Deno.cwd()`, so `sync-worker/` and
-`async-worker/` sit at this app's own root (a sibling of `fsm/`, run from here),
-not nested inside each `fsm/<asyncOperationName>/<version>/` folder.
+`generate-async-logic` both always write to `Deno.cwd()`. As of #316, run both
+from **`apps/`** (not this app's own directory) — `sync-worker/` and
+`async-worker/` land there, siblings of `apps/fsm-core-example/`, not of this
+app's own `fsm/`. This also matches what `fsmlet` resolves at runtime — see the
+root `DEVELOPER.md`.
 
 ## How to run the example server
 
@@ -95,8 +100,9 @@ from DB calls and fail on unrelated-looking assertions.
    cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts
    ```
 3. Implement the generated stubs in
-   `sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
-   `delays/` and `async-worker/typescript/<yourAsyncOperationName>/v01/actors/`
-   (run `generate-sync-logic`/`generate-async-logic` from this directory so they
-   land here)
+   `../sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
+   `delays/` and
+   `../async-worker/typescript/<yourAsyncOperationName>/v01/actors/` (run
+   `generate-sync-logic`/`generate-async-logic` from `apps/`, not this
+   directory, so they land there)
 4. Restart the server — it picks up the new FSM at startup

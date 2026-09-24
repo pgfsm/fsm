@@ -23,4 +23,4 @@ prost = "0.14"
 # The generated pgfsm.{activitygateway,sidecargateway}.v1 message/client
 # types themselves, via a real crate boundary instead of a #[path]-included
 # file -- see #106.
-pgfsm-proto-codegen = { path = "../../../../packages/fsm-proto-codegen/gen/rust" }
+pgfsm-proto-codegen = { path = "../../../packages/fsm-proto-codegen/gen/rust" }

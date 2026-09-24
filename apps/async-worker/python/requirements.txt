@@ -3,4 +3,4 @@
 # (packages/fsm-proto-codegen/gen/python/) sdk.py imports, installed
 # editable rather than reached via a sys.path.insert relative path — see
 # #100, #106. grpcio/protobuf come along as its own dependencies.
--e ../../../../packages/fsm-proto-codegen/gen/python
+-e ../../../packages/fsm-proto-codegen/gen/python
