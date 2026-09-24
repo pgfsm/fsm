@@ -34,6 +34,8 @@ import { render as renderGoModAggregate } from "./scaffold-templates/eta/go/go-m
 import { render as renderTsWorkerSdkCli } from "./scaffold-templates/eta/typescript/worker-sdk-cli.generated.ts";
 import { render as renderTsWorkerSdkSdk } from "./scaffold-templates/eta/typescript/worker-sdk-sdk.generated.ts";
 import { render as renderTsWorkerSdkSdkLegacy } from "./scaffold-templates/eta/typescript/worker-sdk-sdk-legacy.generated.ts";
+import { render as renderTsWorkerSdkDenoJson } from "./scaffold-templates/eta/typescript/worker-sdk-deno-json.generated.ts";
+import { render as renderTsWorkerSdkDenoJsonLegacy } from "./scaffold-templates/eta/typescript/worker-sdk-deno-json-legacy.generated.ts";
 import { render as renderPyWorkerSdkCli } from "./scaffold-templates/eta/python/worker-sdk-cli.generated.ts";
 import { render as renderPyWorkerSdkSdk } from "./scaffold-templates/eta/python/worker-sdk-sdk.generated.ts";
 import { render as renderPyWorkerSdkSdkLegacy } from "./scaffold-templates/eta/python/worker-sdk-sdk-legacy.generated.ts";
@@ -1125,6 +1127,18 @@ export async function writeWorkerSdk(
         }),
     );
     tsFiles.push(cliFile, sdkFile);
+
+    // Scoped to this one language subdirectory, matching go.mod/Cargo.toml/
+    // requirements.txt's own per-language placement below -- without it,
+    // cli.ts/sdk.ts's bare npm/jsr imports don't resolve at all once
+    // async-worker/typescript/ sits outside the caller's own workspace
+    // member import map (see #316, #318).
+    await Deno.writeTextFile(
+      `${dir}/deno.json`,
+      protocol === "legacy"
+        ? renderTsWorkerSdkDenoJsonLegacy({})
+        : renderTsWorkerSdkDenoJson({}),
+    );
   }
 
   const wrotePython = hasLang("python");

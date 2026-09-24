@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@std/cli": "jsr:@std/cli@1",
+    "@logtape/logtape": "jsr:@logtape/logtape@^2.2"
+  }
+}

@@ -42,9 +42,9 @@ apps/sync-worker/
       v02/
         ...
 apps/async-worker/
-  deno.json               ← scoped import map (workspace member) — see CLAUDE.md
   <lang>/                 ← one subtree per language actually used (typescript/python/rust/go)
     cli.ts, sdk.ts, <lang>-actors-registry.generated.ts, ...  ← aggregate worker SDK
+    deno.json              ← (typescript only) scoped import map (workspace member) — see CLAUDE.md
     <asyncOperationName>/
       v01/
         actors/index.ts   ← actor implementations

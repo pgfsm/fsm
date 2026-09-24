@@ -110,6 +110,19 @@ The gotchas below are for whoever next touches
   — an empty manifest for a language a given FSM doesn't use would just be
   directory clutter now that it's no longer colocated with every other
   language's own output.
+- **`writeWorkerSdk` writes a TypeScript-only `deno.json` alongside `cli.ts`/
+  `sdk.ts`** (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) —
+  scoped to that one language subdirectory, matching Python's
+  `requirements.txt`/Rust's `Cargo.toml`/Go's `go.mod`, all written by this same
+  function for their own language. Two Eta variants
+  (`worker-sdk-deno-json.eta`/`worker-sdk-deno-json-legacy.eta`), selected by
+  `options.protocol` same as every other protocol-conditional pair here —
+  `legacy` drops `@connectrpc/connect`/`@connectrpc/connect-node` since
+  `sdk-legacy.eta` doesn't import them. Runs for both {@linkcode
+  generateAsyncOperationLogicFromFolders} and {@linkcode
+  generateAsyncOperationLogicFromFsmJson} (both share `writeAggregateArtifacts`
+  → `writeWorkerSdk`), so it's kept in sync on every regeneration regardless of
+  which CLI mode wrote it.
 - **`WrittenActor.filePath` dropped its `<lang>/` prefix** (now
   `actors/<fileBaseName>/<fileBaseName>.<ext>`, not
   `<lang>/actors/<fileBaseName>/<fileBaseName>.<ext>`) — it's informational
