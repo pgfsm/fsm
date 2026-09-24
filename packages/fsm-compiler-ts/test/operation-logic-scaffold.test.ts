@@ -300,13 +300,17 @@ Deno.test("toWrittenActor - go capitalizes exportedName for cross-package export
   });
 });
 
-Deno.test("writeActorsManifest - writes all actors across all languages", async () => {
+Deno.test("writeActorsManifest - writes all actors across all languages, carrying the full activity-registration identity", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    const actors: WrittenActor[] = [
-      toWrittenActor("typescript", { src: "checkBureau" }),
-      toWrittenActor("python", { src: "checkBureauPython" }),
-      toWrittenActor("go", { src: "checkBureauGo" }),
+    const actors: RegisteredActor[] = [
+      toRegisteredActor(CREDIT_CHECK_V01, "typescript", {
+        src: "checkBureau",
+      }),
+      toRegisteredActor(CREDIT_CHECK_V01, "python", {
+        src: "checkBureauPython",
+      }),
+      toRegisteredActor(CREDIT_CHECK_V01, "go", { src: "checkBureauGo" }),
     ];
     const file = await writeActorsManifest(dir, actors);
     assertEquals(file, `${dir}/actors-manifest.json`);
@@ -314,22 +318,37 @@ Deno.test("writeActorsManifest - writes all actors across all languages", async 
     assertEquals(manifest, {
       actors: [
         {
+          parentFsmName: "creditCheck",
+          parentFsmVersion: "v01",
           src: "checkBureau",
+          asyncOperationName: "checkBureau",
+          asyncOperationType: "internalAsyncOperation",
+          asyncOperationVersion: "v01",
           asyncOperationLanguage: "typescript",
           filePath: "actors/checkBureau/checkBureau.ts",
-          exportedName: "checkBureau",
+          exportedAsyncOperationName: "checkBureau",
         },
         {
+          parentFsmName: "creditCheck",
+          parentFsmVersion: "v01",
           src: "checkBureauPython",
+          asyncOperationName: "checkBureauPython",
+          asyncOperationType: "internalAsyncOperation",
+          asyncOperationVersion: "v01",
           asyncOperationLanguage: "python",
           filePath: "actors/checkBureauPython/checkBureauPython.py",
-          exportedName: "checkBureauPython",
+          exportedAsyncOperationName: "checkBureauPython",
         },
         {
+          parentFsmName: "creditCheck",
+          parentFsmVersion: "v01",
           src: "checkBureauGo",
+          asyncOperationName: "checkBureauGo",
+          asyncOperationType: "internalAsyncOperation",
+          asyncOperationVersion: "v01",
           asyncOperationLanguage: "go",
           filePath: "actors/checkBureauGo/checkBureauGo.go",
-          exportedName: "CheckBureauGo",
+          exportedAsyncOperationName: "CheckBureauGo",
         },
       ],
     });

@@ -1,10 +1,15 @@
 {
   "actors": [
     {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v01",
       "src": "checkBureauRust",
+      "asyncOperationName": "checkBureauRust",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "rust",
       "filePath": "actors/checkBureauRust/checkBureauRust.rs",
-      "exportedName": "checkBureauRust"
+      "exportedAsyncOperationName": "checkBureauRust"
     }
   ]
 }

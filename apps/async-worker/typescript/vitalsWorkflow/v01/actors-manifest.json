@@ -1,28 +1,48 @@
 {
   "actors": [
     {
+      "parentFsmName": "vitalsWorkflow",
+      "parentFsmVersion": "v01",
       "src": "checkTirePressure",
+      "asyncOperationName": "checkTirePressure",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkTirePressure/checkTirePressure.ts",
-      "exportedName": "checkTirePressure"
+      "exportedAsyncOperationName": "checkTirePressure"
     },
     {
+      "parentFsmName": "vitalsWorkflow",
+      "parentFsmVersion": "v01",
       "src": "checkOilPressure",
+      "asyncOperationName": "checkOilPressure",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkOilPressure/checkOilPressure.ts",
-      "exportedName": "checkOilPressure"
+      "exportedAsyncOperationName": "checkOilPressure"
     },
     {
+      "parentFsmName": "vitalsWorkflow",
+      "parentFsmVersion": "v01",
       "src": "checkCoolantLevel",
+      "asyncOperationName": "checkCoolantLevel",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkCoolantLevel/checkCoolantLevel.ts",
-      "exportedName": "checkCoolantLevel"
+      "exportedAsyncOperationName": "checkCoolantLevel"
     },
     {
+      "parentFsmName": "vitalsWorkflow",
+      "parentFsmVersion": "v01",
       "src": "checkBattery",
+      "asyncOperationName": "checkBattery",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/checkBattery/checkBattery.ts",
-      "exportedName": "checkBattery"
+      "exportedAsyncOperationName": "checkBattery"
     }
   ]
 }

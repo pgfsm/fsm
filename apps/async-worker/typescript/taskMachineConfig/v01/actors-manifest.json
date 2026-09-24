@@ -1,16 +1,26 @@
 {
   "actors": [
     {
+      "parentFsmName": "taskMachineConfig",
+      "parentFsmVersion": "v01",
       "src": "fetchTasks",
+      "asyncOperationName": "fetchTasks",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/fetchTasks/fetchTasks.ts",
-      "exportedName": "fetchTasks"
+      "exportedAsyncOperationName": "fetchTasks"
     },
     {
+      "parentFsmName": "taskMachineConfig",
+      "parentFsmVersion": "v01",
       "src": "updateTask",
+      "asyncOperationName": "updateTask",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
       "asyncOperationLanguage": "typescript",
       "filePath": "actors/updateTask/updateTask.ts",
-      "exportedName": "updateTask"
+      "exportedAsyncOperationName": "updateTask"
     }
   ]
 }
