@@ -1,6 +1,7 @@
 {
   "workspace": [
     "apps/fsm-core-example",
+    "apps/async-worker",
     "packages/fsm-logging-ts",
     "packages/fsm-core-db-ts",
     "packages/fsm-core-async-op-worker",

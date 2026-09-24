@@ -23,4 +23,4 @@ replace fsm-core-example/go-actors-registry-generated => ./go-actors-registry-ge
 
 replace fsm-core-example/creditcheck/v01/go/actors/checkreportstable => ./creditCheck/v01/actors/CheckReportsTable
 
-replace github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go => ../../../../packages/fsm-proto-codegen/gen/go
+replace github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go => ../../../packages/fsm-proto-codegen/gen/go

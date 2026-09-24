@@ -717,8 +717,18 @@ Deno.test("cli create-async-logic writes a single actor file under cwd's async-w
 // --- delete ---
 
 Deno.test("cli delete runs successfully on example folder", async () => {
+  // delete's own sync-worker/async-worker cleanup is Deno.cwd()-anchored
+  // (matches whatever fsmName/fsmVersion it finds walking --folder) --
+  // isolate it here, same as every generate-sync-logic/generate-async-logic
+  // test below, so it can never reach outside this fixture.
+  const cwd = `${FIXTURE_ROOT}/delete-cwd`;
+  await Deno.mkdir(cwd, { recursive: true });
   await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]);
-  const { code } = await runCli(["-c", "delete", "-f", FSM_FOLDER]);
+  const { code } = await runCli(
+    ["-c", "delete", "-f", FSM_FOLDER],
+    undefined,
+    cwd,
+  );
   assertEquals(code, 0);
   await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]); // restore generated files
 });

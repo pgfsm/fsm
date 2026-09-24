@@ -47,8 +47,8 @@ This package provides two CLIs:
    - `--db-url` / `-d` flag passed directly (takes precedence over `.env`)
 3. **At least one worker-sdk process** to register actors and actually serve
    invocations — see `packages/fsm-proto-codegen/`'s generated stubs, or
-   `apps/fsm-core-example/async-worker/<lang>/` if `fsm-compiler-ts`'s
-   `generate-async-logic` has been run.
+   `apps/async-worker/<lang>/` (a sibling of `apps/fsm-core-example/` — see
+   #316) if `fsm-compiler-ts`'s `generate-async-logic` has been run.
 
 ---
 

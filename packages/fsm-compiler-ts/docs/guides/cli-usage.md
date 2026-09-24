@@ -8,7 +8,9 @@
 - **PostgreSQL connection string** — required for `load`. Provide via
   `--db-url <url>` or set `DATABASE_URL` in a `.env` file (CLI arg takes
   precedence)
-- Run all commands from the **repo root**
+- Run most commands from the **repo root** — `generate-sync-logic`,
+  `generate-async-logic`, and `create-async-logic` are the exception: run those
+  from **`apps/`** instead (see their own sections below for why)
 
 ## Invocation
 
@@ -84,9 +86,9 @@ generated in the language declared by its invoke object's
 Useful for bootstrapping a new FSM — run `generate-fsm-json` first, then
 `generate-async-logic`. Like `generate-sync-logic`, output is never written
 relative to `--folder` or `--output` — it's always anchored at `Deno.cwd()`
-(wherever the CLI is invoked from), so `cd` into the directory you want
-`async-worker/` to land in before running it. Accepts two input types detected
-from the `-f` path:
+(wherever the CLI is invoked from). Run it from **`apps/`** — `async-worker/`
+lands there, a sibling of `apps/fsm-core-example/` (not nested inside it — see
+#316). Accepts two input types detected from the `-f` path:
 
 - **Directory** — walks the tree, scaffolds actor files, manifest, barrel, and
   registry for every versioned subdirectory's `fsm.json`.
@@ -106,17 +108,18 @@ language at `async-worker/<lang>/`, refreshed on every run from the real FSM
 tree's own walk, not re-walked from the output itself).
 
 ```bash
-# Directory mode — every versioned FSM under fsm/, plus the aggregate registry/worker SDK
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
+# Directory mode (from apps/) — every versioned FSM under fsm-core-example/fsm/,
+# plus the aggregate registry/worker SDK, landing at ./async-worker/
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-async-logic \
-  -f fsm
+  -f fsm-core-example/fsm
 
 # Single fsm.json mode
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-async-logic \
-  -f fsm/creditCheck/v01/fsm.json \
+  -f fsm-core-example/fsm/creditCheck/v01/fsm.json \
   --fsm-name creditCheck --fsm-version v01
 ```
 
@@ -127,9 +130,10 @@ deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
 Scaffold **action / guard / delay** stubs for each language passed via `--lang`
 (comma-separated; `typescript`, `python`, `rust`, `go`; default `typescript`).
 Output is never written relative to `--folder` or `--output` — it's always
-anchored at `Deno.cwd()` (wherever the CLI is invoked from), so `cd` into the
-directory you want `sync-worker/` to land in before running it. Accepts two
-input types detected from the `-f` path:
+anchored at `Deno.cwd()` (wherever the CLI is invoked from). Run it from
+**`apps/`** — `sync-worker/` lands there, a sibling of `apps/fsm-core-example/`
+(not nested inside it — see #316). Accepts two input types detected from the
+`-f` path:
 
 - **Directory** — walks the tree, scaffolds stubs for every versioned
   subdirectory's `fsm.json`
@@ -148,18 +152,18 @@ into one array) and a copy of that version's `fsm.json`, both at the same
 `<fsmName>/<fsmVersion>` level.
 
 ```bash
-# Directory mode — every versioned FSM under fsm/
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
+# Directory mode (from apps/) — every versioned FSM under fsm-core-example/fsm/
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-sync-logic \
-  -f fsm \
+  -f fsm-core-example/fsm \
   --lang typescript,python
 
 # Single fsm.json mode
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
   -c generate-sync-logic \
-  -f fsm/creditCheck/v01/fsm.json \
+  -f fsm-core-example/fsm/creditCheck/v01/fsm.json \
   --fsm-name creditCheck --fsm-version v01
 ```
 
@@ -233,9 +237,8 @@ object, so stub content/formatting matches the rest of the pipeline.
 
 Unlike every other command here, this one takes **no `-f`/`--folder`** at all —
 output is always anchored at `Deno.cwd()` (wherever the CLI is invoked from),
-same as `generate-sync-logic`/`generate-async-logic` (#305/#307). `cd` into the
-app root you want `async-worker/` to land in (e.g. `apps/fsm-core-example`)
-before running it.
+same as `generate-sync-logic`/`generate-async-logic` (#305/#307). Run it from
+**`apps/`**, same as those two.
 
 Takes `-n`/`--function-name` and `-F`/`--function-version` — deliberately
 separate flags from `-N`/`--fsm-name`/`-V`/`--fsm-version`, since these actors
@@ -261,8 +264,8 @@ registry — each Go actor is already its own Go module (see its own `go.mod`), 
 only the actor file is written for `go`.
 
 ```bash
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
   -c create-async-logic \
   --lang typescript \
   --function-name checkCreditScore \
@@ -393,23 +396,25 @@ separate step.
 ## Typical Workflow
 
 `generate-sync-logic`/`generate-async-logic` write to `Deno.cwd()` (see their
-sections above), so steps 2-3 below `cd` into `apps/fsm-core-example` first —
-that's where `sync-worker/`/`async-worker/` should land, as a sibling of `fsm/`.
-`generate-fsm-json`/`load` don't have this constraint and can run from the repo
-root.
+sections above), so steps 2-3 below `cd` into `apps/` first — that's where
+`sync-worker/`/`async-worker/` should land, as a sibling of
+`apps/fsm-core-example/` (see #316). `generate-fsm-json`/`load` don't have this
+constraint and can run from the repo root.
 
 ```bash
 # 1. Generate fsm.json from machine.ts (run from repo root)
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm
 
 # 2. Generate stubs (if starting fresh): actors, then actions/guards/delays
-cd apps/fsm-core-example
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f fsm
-deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f fsm --lang typescript
-cd ../..
+cd apps
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f fsm-core-example/fsm
+deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f fsm-core-example/fsm --lang typescript
+cd ..
 
 # Steps 1-2 combined, in one command (generate-all writes to <appRoot>/async-worker/
-# and <appRoot>/sync-worker/ regardless of cwd, so no cd needed):
+# and <appRoot>/sync-worker/ instead -- nested inside apps/fsm-core-example/,
+# NOT the apps/-level location above -- the one exception to this convention,
+# see its own section above):
 # deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-all -f apps/fsm-core-example/fsm --lang typescript
 
 # 3. Validate plugin exports without DB

@@ -97,7 +97,7 @@ routing, and where the resulting code runs.
 | PRD                 | [PRD-002](./packages/fsm-compiler-ts/docs/prd/prd-002-scaffold-async-operation-logic.md)                                                                                        | [PRD-003](./packages/fsm-compiler-ts/docs/prd/prd-003-scaffold-sync-operation-logic.md)                                                                                  |
 | Execution model     | Long-running; each runs in its own queue and process, driven by the `asyncOperationWorkerlet`; reports back via `xstate.done.actor.<id>` / `xstate.error.actor.<id>` events     | Pure/inline; runs inside a single macrostep of the `fsmlet` — no separate process                                                                                        |
 | CLI command         | `generate-async-logic`                                                                                                                                                          | `generate-sync-logic`                                                                                                                                                    |
-| Command             | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f apps/fsm-core-example/fsm`                                                           | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f apps/fsm-core-example/fsm`                                                     |
+| Command             | (from `apps/`) `deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts -c generate-async-logic -f fsm-core-example/fsm`                                              | (from `apps/`) `deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts -c generate-sync-logic -f fsm-core-example/fsm`                                        |
 | Language selection  | Per-invoke, from that invoke object's `fsmLanguage` field — a single machine can spread its actors across runtimes                                                              | Via `--lang` flag, applied uniformly to the whole generation run; default (and currently only accepted value) `typescript`                                               |
 | Languages generated | It will generate code for all 4 languages, one invoke at a time, according to each invoke's `fsmLanguage`                                                                       | It will generate TS stubs only — `--lang` with any value other than `typescript` is rejected                                                                             |
 | Supported languages | `typescript`, `python`, `rust`, `go` — unsupported `fsmLanguage` values are skipped with a warning                                                                              | `typescript` only (`python`/`rust`/`go` are members of `OperationLang` but not yet maintained/tested for this command, so the CLI rejects them)                          |
@@ -109,20 +109,20 @@ See the compiler [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md) for both
 planned-gap items.
 
 Both `generate-sync-logic` and `generate-async-logic` always write to
-`Deno.cwd()`, never relative to `-f`/`--folder` or `-o`/`--output` — `cd` into
-the directory you want `sync-worker/`/`async-worker/` to land in before running
-either (`apps/fsm-core-example/` for the example app, so both sit beside
-`fsm/`). Their `-f`/`--folder` also accepts a single `fsm.json` file (instead of
-only a plugin-root directory), in which case `-N`/`--fsm-name` and
-`-V`/`--fsm-version` are required — there's no `<fsmName>/<fsmVersion>/fsm.json`
-folder structure to infer identity from otherwise. `generate-async-logic`
-additionally refreshes the aggregate registry/worker SDK
-(`async-worker/<lang>/`, see the table above) in both `-f`/`--folder` shapes,
-written once per language at `async-worker/<lang>/`, refreshed from the real FSM
-tree's own walk. `generate-all` runs `generate-fsm-json`, then
-`generate-async-logic`, then `generate-sync-logic` in one invocation instead of
-three — it's the one exception that still uses `-o`/`--output` (single-file
-modes only) rather than `Deno.cwd()`. See
+`Deno.cwd()`, never relative to `-f`/`--folder` or `-o`/`--output` — run both
+from **`apps/`** (see the table's own `Command` row above), so
+`sync-worker/`/`async-worker/` land there, siblings of `apps/fsm-core-example/`.
+Their `-f`/`--folder` also accepts a single `fsm.json` file (instead of only a
+plugin-root directory), in which case `-N`/`--fsm-name` and `-V`/`--fsm-version`
+are required — there's no `<fsmName>/<fsmVersion>/fsm.json` folder structure to
+infer identity from otherwise. `generate-async-logic` additionally refreshes the
+aggregate registry/worker SDK (`async-worker/<lang>/`, see the table above) in
+both `-f`/`--folder` shapes, written once per language at
+`async-worker/<lang>/`, refreshed from the real FSM tree's own walk.
+`generate-all` runs `generate-fsm-json`, then `generate-async-logic`, then
+`generate-sync-logic` in one invocation instead of three — it's the one
+exception that still uses `-o`/`--output` (single-file modes only) rather than
+`Deno.cwd()`. See
 [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md) for
 details and examples.
 
@@ -226,23 +226,23 @@ for the full flag reference, startup sequence, and PGMQ message payload shape.
 ### Start the worker SDK itself
 
 One process per language that has actors, generated by `fsm-compiler-ts`'s
-`generate-async-logic` command into `apps/fsm-core-example/async-worker/<lang>/`
-(run that command first if the directory doesn't exist yet — from inside
-`apps/fsm-core-example/`, `-f fsm` is enough; the command always writes to
-`Deno.cwd()`, i.e. wherever you ran it from — see above). Each connects to the
-gateway's `--sidecar-socket` above and serves invocations for every actor
-compiled into its registry until stopped.
+`generate-async-logic` command into `apps/async-worker/<lang>/` (run that
+command first if the directory doesn't exist yet — from `apps/`,
+`-f fsm-core-example/fsm` is enough; the command always writes to `Deno.cwd()`,
+i.e. wherever you ran it from — see above). Each connects to the gateway's
+`--sidecar-socket` above and serves invocations for every actor compiled into
+its registry until stopped.
 
 Each of these is a **long-running foreground process** (it serves invocations
-until stopped) — run one at a time, each in its own fresh terminal at the repo
-root. Don't paste multiple blocks into the same shell session: several of them
-`cd` and rely on starting from the repo root, so a leftover `cd` from a previous
+until stopped) — run one at a time, each in its own fresh terminal at
+**`apps/`**. Don't paste multiple blocks into the same shell session: several of
+them `cd` and rely on starting from `apps/`, so a leftover `cd` from a previous
 block breaks the next one's relative paths.
 
 ```bash
-# TypeScript — runs from the repo root as-is (Deno resolves imports against
-# the module's own path, not cwd)
-deno run --allow-all apps/fsm-core-example/async-worker/typescript/cli.ts start \
+# TypeScript — runs from apps/ as-is (Deno resolves imports against the
+# module's own path, not cwd)
+deno run --allow-all apps/async-worker/typescript/cli.ts start \
   --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
@@ -257,7 +257,7 @@ deno run --allow-all apps/fsm-core-example/async-worker/typescript/cli.ts start 
 # `python3` below, so the install lands somewhere `python3 cli.py` never
 # looks (surfaces as `ModuleNotFoundError: No module named 'pgfsm'`).
 # `python3 -m pip` always installs into the same interpreter running it.
-cd apps/fsm-core-example/async-worker/python
+cd apps/async-worker/python
 python3 -m pip install -r requirements.txt
 python3 cli.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
@@ -266,14 +266,14 @@ python3 cli.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 # Go — must run from inside its own directory (go.mod's replace directives
 # are relative to it; `go run <path>` from elsewhere doesn't resolve them).
 # No list/start subcommand — it always prints its registry, then connects.
-cd apps/fsm-core-example/async-worker/go
+cd apps/async-worker/go
 go run . --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash
 # Rust — same directory requirement as Go (Cargo resolves against the
 # nearest Cargo.toml). No subcommand either.
-cd apps/fsm-core-example/async-worker/rust
+cd apps/async-worker/rust
 cargo run --release -- --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
@@ -283,9 +283,14 @@ registry before wiring up the real socket.
 
 ### Start the FSM worker
 
+Also run this from **`apps/`** — at instance-start time `fsmlet` resolves each
+FSM's sync/async operation modules via `Deno.cwd()` (`sync-worker/`/
+`async-worker/`, whichever directory it's actually started from), independent of
+`-f` below (which is only for `fsmlet`'s own startup validation).
+
 ```bash
 # Node agent — validates, loads fsm.json, registers, then waits for work
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
+deno run --allow-all ../packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
   -f /abs/path/to/apps/fsm-core-example/fsm \
   -m 8                     # max FSM instances driven concurrently (default 8)
   # -i <fsmlet-id>         # stable identity (default: random UUID per startup)
