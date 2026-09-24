@@ -43,11 +43,15 @@ also matches what actually resolves at runtime: `fsmlet`
 so the worker process itself needs the same `apps/`-level cwd for these paths to
 resolve — see the root `DEVELOPER.md` for the actual startup commands.
 
-`apps/async-worker/` has its own `deno.json` (a declared workspace member — see
-the root `deno.json`) scoped to the npm/jsr packages its generated TypeScript
-worker-SDK code (`cli.ts`, `sdk.ts`) actually bare-imports (`@std/cli`,
-`@logtape/logtape`, `@connectrpc/connect`, `@connectrpc/connect-node`) — without
-it, those imports don't resolve at all once `async-worker/` sits outside
-`apps/fsm-core-example/`'s own workspace- member import map (verified:
-`deno run` failed outright before this was added). `apps/sync-worker/`'s own
-generated content has no external imports today, so it doesn't need one yet.
+`apps/async-worker/typescript/` has its own `deno.json` (a declared workspace
+member — see the root `deno.json`), scoped to that one language subdirectory to
+match the per-language manifest convention already used by `go.mod`
+(`async-worker/go/`), `Cargo.toml` (`async-worker/rust/`), and
+`requirements.txt` (`async-worker/python/`) — see #318. It's scoped to the
+npm/jsr packages its generated TypeScript worker-SDK code (`cli.ts`, `sdk.ts`)
+actually bare-imports (`@std/cli`, `@logtape/logtape`, `@connectrpc/connect`,
+`@connectrpc/connect-node`) — without it, those imports don't resolve at all
+once `async-worker/` sits outside `apps/fsm-core-example/`'s own workspace-
+member import map (verified: `deno run` failed outright before this was added).
+`apps/sync-worker/`'s own generated content has no external imports today, so it
+doesn't need one yet.
