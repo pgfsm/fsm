@@ -149,7 +149,7 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
-## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311)
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
 and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
@@ -157,12 +157,27 @@ and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
 `--name`/`--fsm-version`, and output moved from
 `<appRoot>/shared-async-op/<version>/<lang>/actors/<name>/<name>.<ext>` to
 `<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
-— note `<functionVersion>` appears **twice**: once as the top-level partition
-(passed as `writeActorFile`'s `subPath`, `shared-async-op/<functionVersion>`,
-mirroring `<fsmName>/<fsmVersion>`) and once more nested under the actor's own
-name folder (passed as `writeActorFile`'s new `fileSubPath` param — see its own
-doc comment). This second nesting level has no FSM-scoped equivalent; it exists
-only because the user who requested #309 asked for it explicitly.
+— `<functionVersion>` appeared **twice**: once as the top-level partition
+(`writeActorFile`'s `subPath`, `shared-async-op/<functionVersion>`, mirroring
+`<fsmName>/<fsmVersion>`) and once more nested under the actor's own name folder
+(`writeActorFile`'s now-removed `fileSubPath` param). #322 dropped that second
+nesting level — it had no FSM-scoped equivalent and existed only because the
+user who requested #309 asked for it explicitly; a later request (#322) asked
+for it removed. Current layout:
+`<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
+— `writeActorFile`/`writeGoActorModule` no longer take a `fileSubPath` param at
+all (nothing else in the codebase ever passed one).
+
+#322 also added
+`<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`
+— written/rewritten on every `create-async-logic` call via
+`rewriteSharedAsyncOpManifest`, same "rebuild from whatever's actually on disk"
+approach as `rewriteSharedAsyncOpRegistry` below, but scoped to actors at _that
+one_ `functionVersion` (unlike the registry's single global file across every
+version), since the manifest lives inside the version folder itself — mirrors
+`generate-async-logic`'s own per-`<fsmName>/<fsmVersion>` manifest (#320),
+written for every language including Go (Go has no registry, but still gets a
+manifest, same as `generate-async-logic`'s own per-language manifests).
 
 #311 went one step further: `<appRoot>` above is no longer a passed-in
 `--folder` at all — the command drops `--folder` entirely, following
@@ -188,12 +203,12 @@ idempotent-rebuild approach as before #309). This needed its own
 none of the existing registry templates fit, since they all assume the actor
 being registered is a direct sibling of (or reachable through an already-written
 per-group registry near) the file being written, and this one reaches into
-multiple `<functionVersion>/actors/<functionName>/<functionVersion>/` subtrees
-from one fixed location. Every import is aliased
-(`<functionName>_<functionVersion>`) since the same function name can
-legitimately recur across different `functionVersion`s. Deliberately never
-touches the FSM-scoped aggregate (`<lang>-actors-registry.generated.ts`) — this
-pool stays fully separate from it, same as before #309.
+multiple `<functionVersion>/actors/<functionName>/` subtrees from one fixed
+location. Every import is aliased (`<functionName>_<functionVersion>`) since the
+same function name can legitimately recur across different `functionVersion`s.
+Deliberately never touches the FSM-scoped aggregate
+(`<lang>-actors-registry.generated.ts`) — this pool stays fully separate from
+it, same as before #309.
 
 ## npm publish (`deno task build:npm`)
 

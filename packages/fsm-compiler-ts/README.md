@@ -233,7 +233,10 @@ version name matching `v\d{2}` (e.g. `v01`), required. Unrelated to
 **Output** — always under the reserved `async-worker/` subfolder at the current
 working directory:
 
-- `async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`
+- `async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
+- `async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`,
+  rewritten from every shared-async-op actor currently on disk for that language
+  _at that one `functionVersion`_ (every language, including Go).
 - That language's single **global** registry file at
   `async-worker/<lang>/shared-async-op/generated-registry.<ext>`, rewritten from
   every shared-async-op actor currently on disk for that language across every

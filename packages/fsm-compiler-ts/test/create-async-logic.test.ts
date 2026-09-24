@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { createAsyncOperationLogic } from "../src/create-async-logic.ts";
 
-Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>", async () => {
+Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const file = await createAsyncOperationLogic(
@@ -12,13 +12,132 @@ Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbs
     );
     assertEquals(
       file,
-      `${dir}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScore/v01/checkCreditScore.ts`,
+      `${dir}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScore/checkCreditScore.ts`,
     );
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
       '// Actor: checkCreditScore\nexport function checkCreditScore(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "checkCreditScore actor invoked by typescript" };\n}\n',
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - writes actors-manifest.json under shared-async-op/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+      ),
+    );
+    assertEquals(manifest, {
+      actors: [
+        {
+          parentFsmName: "sharedAsyncOperation",
+          parentFsmVersion: "v01",
+          src: "checkCreditScore",
+          asyncOperationName: "checkCreditScore",
+          asyncOperationType: "sharedAsyncOperation",
+          asyncOperationVersion: "v01",
+          asyncOperationLanguage: "typescript",
+          filePath: "actors/checkCreditScore/checkCreditScore.ts",
+          exportedAsyncOperationName: "checkCreditScore",
+        },
+      ],
+    });
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - actors-manifest.json accumulates every function at that same functionVersion, not just the one just written", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+      ),
+    );
+    const srcs = manifest.actors.map((a: { src: string }) => a.src).sort();
+    assertEquals(srcs, ["checkCreditScore", "verifyIdentity"]);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - actors-manifest.json is scoped to its own functionVersion, not shared across versions", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v02",
+      "checkCreditScore",
+    );
+    const v01Manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+      ),
+    );
+    const v02Manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/async-worker/typescript/shared-async-op/v02/actors-manifest.json`,
+      ),
+    );
+    assertEquals(v01Manifest.actors.length, 1);
+    assertEquals(v01Manifest.actors[0].parentFsmVersion, "v01");
+    assertEquals(v02Manifest.actors.length, 1);
+    assertEquals(v02Manifest.actors[0].parentFsmVersion, "v02");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - go also gets actors-manifest.json, with its exportedAsyncOperationName capitalized", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${dir}/async-worker/go/shared-async-op/v01/actors-manifest.json`,
+      ),
+    );
+    assertEquals(manifest, {
+      actors: [
+        {
+          parentFsmName: "sharedAsyncOperation",
+          parentFsmVersion: "v01",
+          src: "checkCreditScore",
+          asyncOperationName: "checkCreditScore",
+          asyncOperationType: "sharedAsyncOperation",
+          asyncOperationVersion: "v01",
+          asyncOperationLanguage: "go",
+          filePath: "actors/checkCreditScore/checkCreditScore.go",
+          exportedAsyncOperationName: "CheckCreditScore",
+        },
+      ],
+    });
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -38,7 +157,7 @@ Deno.test("createAsyncOperationLogic - writes a global generated-registry.ts ent
     );
     assertStringIncludes(
       registryContent,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/v01/checkCreditScore.ts";',
+      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/checkCreditScore.ts";',
     );
     assertStringIncludes(
       registryContent,
@@ -104,11 +223,11 @@ Deno.test("createAsyncOperationLogic - a second call with a different function-v
     );
     assertStringIncludes(
       registryContent,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/v01/checkCreditScore.ts";',
+      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/checkCreditScore.ts";',
     );
     assertStringIncludes(
       registryContent,
-      'import { checkCreditScore as checkCreditScore_v02 } from "./v02/actors/checkCreditScore/v02/checkCreditScore.ts";',
+      'import { checkCreditScore as checkCreditScore_v02 } from "./v02/actors/checkCreditScore/checkCreditScore.ts";',
     );
     assertStringIncludes(registryContent, "handler: checkCreditScore_v01,");
     assertStringIncludes(registryContent, "handler: checkCreditScore_v02,");
@@ -160,7 +279,7 @@ Deno.test("createAsyncOperationLogic - go actor gets a go.mod rooted at the app 
       "checkCreditScore",
     );
     const goModContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/shared-async-op/v01/actors/checkCreditScore/v01/go.mod`,
+      `${absAppRoot}/async-worker/go/shared-async-op/v01/actors/checkCreditScore/go.mod`,
     );
     assertEquals(
       goModContent,
