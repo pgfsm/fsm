@@ -17,7 +17,7 @@ if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
 <% for (const g of it.groups) { -%>
-from <%~ g.key.split("/").join(".") %>.actors.generated_registry import ACTOR_REGISTRATIONS as <%~ g.alias %>
+from <%~ g.key.split("/").join(".") %>.generated_registry import ACTOR_REGISTRATIONS as <%~ g.alias %>
 <% } -%>
 
 ACTOR_REGISTRATIONS = [

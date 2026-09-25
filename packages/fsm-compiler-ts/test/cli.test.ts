@@ -417,7 +417,7 @@ Deno.test("cli generate-async-logic --folder fsm.json + --fsm-name/--fsm-version
   );
   await Deno.stat(`${outDir}/actors/index.ts`);
   const registryStat = await Deno.stat(
-    `${outDir}/actors/generated-registry.ts`,
+    `${outDir}/generated-registry.ts`,
   );
   assert(registryStat.isFile);
 });
@@ -451,7 +451,7 @@ Deno.test("cli generate-async-logic single-fsm.json mode refreshes the aggregate
   // cwd-anchored tree, not back-referenced into FSM_FOLDER's own location.
   assertStringIncludes(
     aggregateContent,
-    "./creditCheck/v01/actors/generated-registry.ts",
+    "./creditCheck/v01/generated-registry.ts",
   );
 });
 

@@ -96,13 +96,17 @@ The gotchas below are for whoever next touches
   `<writeRootAbsPath>/async-worker/go/<fsmName>/<fsmVersion>/actors/<fileBaseName>/`.
 - **`writeActorFile`/`writeActorsBarrel`/`writeActorsRegistry` gained an
   optional `subPath` param** (mirroring `writeOperationModule`'s own, added in
-  #305) — inserted between `<lang>` and `actors/`, so
-  `generate-async-operation-logic.ts` passes `<fsmName>/<fsmVersion>` there to
-  avoid multiple FSMs/versions writing under the same `<lang>` root colliding.
-  `create-async-logic.ts`'s shared-async-op pool passes
+  #305) — `generate-async-operation-logic.ts` passes `<fsmName>/<fsmVersion>`
+  there to avoid multiple FSMs/versions writing under the same `<lang>` root
+  colliding. `create-async-logic.ts`'s shared-async-op pool passes
   `sharedAsyncOperation/<functionVersion>` there too (as of #309, mirroring
   `<fsmName>/<fsmVersion>`) — see "`create-async-logic` writes under
   `async-worker/`" below for its own extra nesting need.
+  `writeActorFile`/`writeActorsBarrel` insert `subPath` between `<lang>` and
+  `actors/`; `writeActorsRegistry` inserts it between `<lang>` and the registry
+  file itself, one level _above_ `actors/` (#328 — see its own doc comment for
+  why it moved out of `actors/`, where it originally lived colocated with the
+  barrel).
 - **`actors-manifest.json` is now per-language, not one combined manifest.**
   Written once per `<fsmName>/<fsmVersion>` **per language actually used** (not
   every `SUPPORTED_OPERATION_LANGS` member) at

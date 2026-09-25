@@ -154,8 +154,9 @@ working directory. Per `<lang>/<fsmName>/<fsmVersion>/` (folder mode derives
   this version actually used
 - A barrel re-exporting each actor: `actors/index.ts` (TS), `actors/__init__.py`
   (Python), `actors/mod.rs` (Rust) — Go has no barrel
-- A `generated-registry.*` (TS/Python/Rust), written only when that language has
-  at least one actor
+- `async-worker/<lang>/<fsmName>/<fsmVersion>/generated-registry.*` (TS/Python/
+  Rust) — one level above `actors/`, not inside it — written only when that
+  language has at least one actor
 
 Both modes also refresh the aggregate registry plus worker SDK — one per
 language, combining every FSM version's actors — since a worker process serves

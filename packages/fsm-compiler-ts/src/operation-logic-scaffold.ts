@@ -518,12 +518,14 @@ const ACTORS_REGISTRY_FILE_NAME: Record<ActorsBarrelLang, string> = {
 
 /**
  * Renders one FSM-version's registry file content via the language's Eta
- * template (`scaffold-templates/eta/<lang>/actors-registry.eta`): actors
- * here are always siblings of the file being written (same `<lang>/actors/`
- * directory), so imports/`#[path]`s never need to reach outside it. Used by
- * {@linkcode writeActorsRegistry} only — the aggregate
- * ({@linkcode writeAggregateActorsRegistry}) re-uses these per-version files
- * rather than re-deriving entries itself (see its own doc comment for why).
+ * template (`scaffold-templates/eta/<lang>/actors-registry.eta`). The
+ * registry file itself lives one level above `actors/` (see
+ * {@linkcode writeActorsRegistry}'s own doc comment, #328), so every
+ * import/`#[path]` here is prefixed `actors/` to reach an actor file or the
+ * barrel from there. Used by {@linkcode writeActorsRegistry} only — the
+ * aggregate ({@linkcode writeAggregateActorsRegistry}) re-uses these
+ * per-version files rather than re-deriving entries itself (see its own doc
+ * comment for why).
  */
 function buildActorsRegistryContent(
   langActors: RegisteredActor[],
@@ -541,13 +543,18 @@ function buildActorsRegistryContent(
 
 /**
  * Writes a registration registry re-exporting every actor for one language,
- * at `<absFolderPath>/<lang>/actors/<registry filename>`, or
- * `<absFolderPath>/<lang>/<subPath>/actors/<registry filename>` when
- * `subPath` is given (see {@linkcode writeActorFile}'s own `subPath`).
- * Unlike {@linkcode writeActorsBarrel} (named exports, for consumers who know
- * the actor name at compile time), this is for runtime dispatch — what a
- * worker SDK needs to register with the Activity Gateway and route an
- * invocation to the right function, without a folder scan or dynamic
+ * at `<absFolderPath>/<lang>/<registry filename>`, or
+ * `<absFolderPath>/<lang>/<subPath>/<registry filename>` when `subPath` is
+ * given (see {@linkcode writeActorFile}'s own `subPath`) — one level above
+ * `actors/`, unlike {@linkcode writeActorFile}/{@linkcode writeActorsBarrel}
+ * (#328: previously colocated inside `actors/` alongside the barrel; moved
+ * out so the registry sits at the same `<fsmName>/<fsmVersion>` level the
+ * aggregate's own per-group import expects, see
+ * {@linkcode writeAggregateActorsRegistry}). Unlike
+ * {@linkcode writeActorsBarrel} (named exports, for consumers who know the
+ * actor name at compile time), this is for runtime dispatch — what a worker
+ * SDK needs to register with the Activity Gateway and route an invocation to
+ * the right function, without a folder scan or dynamic
  * `import()`/`importlib`. Returns `undefined` (writes nothing) when there are
  * no actors for that language.
  */
@@ -561,8 +568,8 @@ export async function writeActorsRegistry(
   if (langActors.length === 0) return undefined;
 
   const dir = subPath
-    ? `${absFolderPath}/${lang}/${subPath}/actors`
-    : `${absFolderPath}/${lang}/actors`;
+    ? `${absFolderPath}/${lang}/${subPath}`
+    : `${absFolderPath}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${ACTORS_REGISTRY_FILE_NAME[lang]}`;
   await Deno.writeTextFile(file, buildActorsRegistryContent(langActors, lang));
