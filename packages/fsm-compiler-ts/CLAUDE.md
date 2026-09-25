@@ -153,6 +153,35 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
+## `generate-sync-logic` writes an aggregate sync-operation registry too (#338)
+
+Mirrors `generate-async-logic`'s own aggregate step (see {@linkcode
+writeAggregateActorsRegistry} above), but simpler: sync-operation registrations
+already carry their own `fsmName`/`fsmVersion` per entry (unlike actors, which
+needed grouping+aliasing derived from a `RegisteredActor[]`), so there was no
+manifest to add — `writeAggregateSyncOperationRegistry`
+(`operation-logic-scaffold.ts`) just walks
+`<writeRootAbsPath>/sync-worker/typescript/` for every `<fsmName>/<fsmVersion>`
+directory that already has its own `generated-sync-operation-registry.ts` (see
+{@linkcode writeSyncOperationRegistry}), and writes
+`aggregate-generated-sync-operation-registry.ts` as its sibling, combining every
+group's `SYNC_OPERATION_REGISTRATIONS` into one array — the same "one fixed file
+a worker build imports" shape the async aggregate gives actors.
+
+TypeScript only (matching `generate-sync-logic`'s own current scope — sync logic
+templates aren't maintained for python/rust/go). Rebuilt from whatever's
+actually on disk, not just the group(s) a given run touched — same rationale as
+`collectRegisteredActorsFromAsyncWorkerDir`'s own disk-rebuild — so it stays
+complete across repeated single-file `--fsm-json` invocations, not just folder
+mode. Groups are sorted by `fsmName` then `fsmVersion` before rendering, since
+`Deno.readDir`'s iteration order isn't a stable contract and an unsorted
+aggregate would produce diff noise across otherwise-identical regenerations.
+Both `generateSyncOperationLogicFromFolders` and
+`generateSyncOperationLogicFromFsmJson` (`generate-sync-operation-logic.ts`)
+call this via a shared `writeSyncAggregateArtifacts` helper, after their own
+`scaffoldSyncLogicForVersion` call(s), same call order the async side's
+`writeAggregateArtifacts` uses.
+
 ## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330, #332, #334)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`

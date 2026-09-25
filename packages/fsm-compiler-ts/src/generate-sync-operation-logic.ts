@@ -4,6 +4,7 @@ import {
   eachVersionedFsmFolder,
   formatTsFilesBestEffort,
   fsmIdentityFromVersionFolderPath,
+  writeAggregateSyncOperationRegistry,
   writeOperationModule,
   writeSyncOperationRegistry,
 } from "./operation-logic-scaffold.ts";
@@ -114,6 +115,41 @@ async function scaffoldSyncLogicForVersion(
 }
 
 /**
+ * Refreshes the aggregate sync-operation registry
+ * (`aggregate-generated-sync-operation-registry.ts`) at
+ * `<writeRootAbsPath>/sync-worker/typescript/`, alongside every
+ * `<fsmName>/<fsmVersion>/` {@linkcode scaffoldSyncLogicForVersion} wrote —
+ * the sync-logic counterpart of `generate-async-operation-logic.ts`'s own
+ * `writeAggregateArtifacts`. Shared by
+ * {@linkcode generateSyncOperationLogicFromFolders} and
+ * {@linkcode generateSyncOperationLogicFromFsmJson}, both of which call this
+ * *after* their own `scaffoldSyncLogicForVersion` call(s) have already
+ * written this run's per-version registries, and rebuilt from whatever's
+ * actually on disk (see
+ * {@linkcode writeAggregateSyncOperationRegistry}) rather than only the
+ * group(s) this particular run touched. No-op when `typescript` isn't among
+ * the requested `langs` (there's then nothing under
+ * `sync-worker/typescript/` to aggregate). Mutates `tsFiles` in place, same
+ * as {@linkcode scaffoldSyncLogicForVersion}.
+ */
+async function writeSyncAggregateArtifacts(
+  writeRootAbsPath: string,
+  tsFiles: string[],
+): Promise<void> {
+  const absSyncWorkerTypescriptDir =
+    `${writeRootAbsPath}/${SYNC_WORKER_DIR_NAME}/typescript`;
+  const aggregateFile = await writeAggregateSyncOperationRegistry(
+    absSyncWorkerTypescriptDir,
+  );
+  if (aggregateFile) {
+    tsFiles.push(aggregateFile);
+    logger.info("Wrote aggregate sync operation registry {file}", {
+      file: aggregateFile,
+    });
+  }
+}
+
+/**
  * Scaffolds sync operation logic (actions / guards / delays) for every versioned
  * FSM under `folderPath`, in each of the requested `langs`, writing into
  * `<writeRootAbsPath>/sync-worker/<lang>/<fsmName>/<fsmVersion>/` for each one
@@ -126,6 +162,12 @@ async function scaffoldSyncLogicForVersion(
  * logic is generated in whatever language(s) the caller asks for — a machine's
  * actions/guards/delays can be implemented in `typescript`, `python`, `rust`, or
  * `go`.
+ *
+ * Once, at `<writeRootAbsPath>/sync-worker/typescript/`: refreshes the
+ * aggregate sync-operation registry (see
+ * {@linkcode writeSyncAggregateArtifacts}) combining every
+ * `<fsmName>/<fsmVersion>`'s own registry into one
+ * `SYNC_OPERATION_REGISTRATIONS` array a sync worker build imports.
  */
 export async function generateSyncOperationLogicFromFolders(
   folderPath: string,
@@ -157,6 +199,8 @@ export async function generateSyncOperationLogicFromFolders(
     },
   );
 
+  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles);
+
   await formatTsFilesBestEffort(tsFiles);
 }
 
@@ -172,6 +216,12 @@ export async function generateSyncOperationLogicFromFolders(
  * `<writeRootAbsPath>/sync-worker/<lang>/<fsmName>/<fsmVersion>/` (the CLI
  * passes `Deno.cwd()` for `writeRootAbsPath`), independent of both
  * `fsmJsonPath`'s own location and `fsmName`/`fsmVersion`'s.
+ *
+ * Also refreshes the aggregate sync-operation registry (see
+ * {@linkcode writeSyncAggregateArtifacts}), same as
+ * {@linkcode generateSyncOperationLogicFromFolders} — rebuilt from whatever's
+ * actually on disk under `sync-worker/typescript/`, so this run only needs to
+ * have already scaffolded *this* fsm.json's own registry (above) first.
  */
 export async function generateSyncOperationLogicFromFsmJson(
   fsmJsonPath: string,
@@ -201,5 +251,8 @@ export async function generateSyncOperationLogicFromFsmJson(
     langs,
     tsFiles,
   );
+
+  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles);
+
   await formatTsFilesBestEffort(tsFiles);
 }
