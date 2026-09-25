@@ -34,6 +34,7 @@ body:
         - DB client helpers — Python (apps/fsm-core-db-py)
         - Worker / queue (pgmq, fsmworker)
         - Logging (@pgfsm/logging)
+        - Proto contracts / multi-language codegen (packages/fsm-proto-codegen)
         - Example FSM definitions (apps/fsm-core-example)
         - Dev tooling / CLI orchestration (packages/fsm-devstack-ts et al.)
         - Documentation
