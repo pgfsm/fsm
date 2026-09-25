@@ -153,7 +153,7 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
-## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330)
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330, #332, #334)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
 and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
@@ -326,16 +326,55 @@ exactly) — TypeScript and Rust keep their existing hyphenated names
 per-version registry file at all — it `#[path]`-includes the barrel directly —
 so nothing depends on Rust's file name here).
 
-**`rust` is not actually unblocked**, even after both fixes above: its own
-per-version `generated-registry.rs` (create-async-logic's own, which
-`#[path]`-includes each actor file directly) compiles fine standalone, but
-`generate-async-logic`'s FSM-scoped aggregate instead expects a **barrel** at
+**`rust` was not actually unblocked** by either fix above: its own per-version
+`generated-registry.rs` (create-async-logic's own, which `#[path]`-includes each
+actor file directly) compiled fine standalone, but `generate-async-logic`'s
+FSM-scoped aggregate instead expects a **barrel** at
 `<parentFsmName>/<parentFsmVersion>/actors/mod.rs` — `createAsyncOperationLogic`
-has never called `writeActorsBarrel` for shared-async-op actors, so that file
-has never existed (confirmed: `cargo check` on the FSM-scoped aggregate fails
-with `couldn't read .../sharedAsyncOperation/v01/actors/mod.rs`). This predates
-both #330 and #332 — it's a third, deeper gap requiring `create-async-logic` to
-write a barrel too, out of scope for either issue.
+had never called `writeActorsBarrel` for shared-async-op actors, so that file
+never existed (confirmed: `cargo check` on the FSM-scoped aggregate failed with
+`couldn't read .../sharedAsyncOperation/v01/actors/mod.rs`). This predated both
+#330 and #332 — a third, deeper gap requiring `create-async-logic` to write a
+barrel too, closed by #334 below.
+
+### #334: `create-async-logic` writes an actors barrel too (`index.ts`/`__init__.py`/`mod.rs`)
+
+Closes the Rust barrel gap surfaced while verifying #332 (previous section).
+Added `rewriteSharedAsyncOpBarrel`, called from `createAsyncOperationLogic`
+between the manifest and registry writes, same "rebuild from whatever's on disk
+at _this_ `functionVersion`" shape as `rewriteSharedAsyncOpManifest`/
+`rewriteSharedAsyncOpRegistry` — it delegates to `operation-logic-scaffold.ts`'s
+existing `writeActorsBarrel` (already used by `generate-async-logic`'s own
+`scaffoldAsyncLogicForVersion`), passing it
+`sharedAsyncOperation/<functionVersion>` as the `subPath`, so the output lands
+at
+`<appRoot>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<barrel filename>`.
+Gated by `isRegistryLang` (`REGISTRY_LANGS` = `typescript`/`python`/`rust`), so
+`go` gets no barrel — matches the existing registry gating, and Go's own
+aggregate never reads a barrel either.
+
+Scoped uniformly across all three `REGISTRY_LANGS`, not just Rust: TS/Python's
+own FSM-scoped aggregates never read the barrel (their generated aggregate
+imports each version's `ACTOR_REGISTRATIONS` export directly), so this was a
+structural gap relative to `generate-async-logic`'s unconditional
+per-`ActorsBarrelLang` barrel write, not a functional requirement for them —
+still closed identically for consistency with that existing pattern rather than
+special-casing Rust alone.
+
+Verified end-to-end: regenerated the committed example shared-async-op actors
+(`helloFromPgfsm`/`byeFromPgfsm`) via `create-async-logic` for
+typescript/python/rust, confirmed
+`sharedAsyncOperation/v01/actors/{index.ts,__init__.py,mod.rs}` now exist with
+the expected re-export content, then ran `generate-async-logic` against
+`fsm-core-example/fsm` to regenerate the FSM-scoped aggregate (which still
+sweeps shared-async-op actors into it via the separate, still-open
+collector-exclusion issue) and confirmed `cargo check` on
+`apps/async-worker/rust/` now **succeeds** (previously failed with the
+missing-barrel error above). TS's own worker-SDK CLI `list` command and Python's
+`importlib` load of the aggregate module both still resolve correctly,
+unaffected by this change. The FSM-scoped aggregate's own demonstration files
+were reverted back to their previously-committed state after verification — only
+the shared-async-op pool's own new barrel files ship with this change.
 
 ## npm publish (`deno task build:npm`)
 

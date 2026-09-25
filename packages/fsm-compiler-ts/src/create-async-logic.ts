@@ -9,6 +9,7 @@ import {
   relativeImportDir,
   toWrittenActor,
   writeActorFile,
+  writeActorsBarrel,
   writeActorsManifest,
 } from "./operation-logic-scaffold.ts";
 import { render as renderTsSharedAsyncOpRegistry } from "./scaffold-templates/eta/typescript/shared-async-op-registry.generated.ts";
@@ -346,6 +347,56 @@ async function rewriteSharedAsyncOpManifest(
 }
 
 /**
+ * Rewrites `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/<functionVersion>/actors/<barrel filename>`
+ * (`index.ts`/`__init__.py`/`mod.rs`) from every shared-async-op actor
+ * currently on disk for `lang` *at that one `functionVersion`* — same
+ * "rebuild from whatever's on disk" + per-version scoping as
+ * {@linkcode rewriteSharedAsyncOpManifest}/{@linkcode rewriteSharedAsyncOpRegistry}.
+ * `create-async-logic` never wrote this before #334 — `generate-async-logic`
+ * always has (its own `scaffoldAsyncLogicForVersion` calls
+ * {@linkcode writeActorsBarrel} for every {@linkcode ActorsBarrelLang}
+ * unconditionally, regardless of whether that language's own FSM-scoped
+ * aggregate happens to consume the barrel), so this closes a structural gap
+ * relative to that, not just a Rust-specific one.
+ *
+ * The concrete breakage this fixes: `generate-async-logic`'s FSM-scoped
+ * Rust aggregate reaches every group's actors through its barrel
+ * specifically (`#[path = "<parentFsmName>/<parentFsmVersion>/actors/mod.rs"]`
+ * — Rust can't concatenate incompatible generated `ActorRegistration` types
+ * across per-version registry files the way TS/Python's aggregates can, see
+ * {@linkcode writeAggregateActorsRegistry}'s own doc comment). A
+ * shared-async-op actor swept into that aggregate (the still-open,
+ * separate collector-exclusion issue) had no barrel to `#[path]`-include —
+ * even after #330/#332 closed the directory/file-name/nesting mismatches
+ * for the *registry* file, Rust's aggregate was still broken (confirmed via
+ * `cargo check`: `couldn't read .../sharedAsyncOperation/<version>/actors/mod.rs`).
+ * `create-async-logic`'s own Rust registry (`shared-async-op-registry.eta`)
+ * doesn't read this barrel at all — it `#[path]`-includes each actor file
+ * directly — so this was never needed for `create-async-logic`'s own output
+ * to work; only for a shared-async-op actor to be reachable from the
+ * *other* (FSM-scoped) aggregate.
+ */
+async function rewriteSharedAsyncOpBarrel(
+  asyncWorkerRoot: string,
+  lang: OperationLang,
+  functionVersion: string,
+): Promise<string | undefined> {
+  if (!isRegistryLang(lang)) return undefined;
+  const existing = await listExistingSharedAsyncOpActors(asyncWorkerRoot, lang);
+  const actors = existing
+    .filter(({ version }) => version === functionVersion)
+    .map(({ name, version }) =>
+      toSharedAsyncOpRegisteredActor(lang, name, version)
+    );
+  return await writeActorsBarrel(
+    asyncWorkerRoot,
+    actors,
+    lang,
+    `${SHARED_ASYNC_OP_DIR_NAME}/${functionVersion}`,
+  );
+}
+
+/**
  * Go's own aggregate for the shared-async-op pool, at
  * `<asyncWorkerRoot>/go/sharedAsyncOperation/go-actors-registry-generated/`
  * (`go.mod` + `registry.go`) — mirrors `writeAggregateGoRegistry`'s
@@ -447,6 +498,14 @@ async function rewriteSharedAsyncOpGoRegistry(
  * - `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`
  *   — every actor at *this* `functionVersion`, for every language (see
  *   {@linkcode rewriteSharedAsyncOpManifest}).
+ * - For `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}), that
+ *   language's actors barrel (`index.ts`/`__init__.py`/`mod.rs`) at *this*
+ *   `functionVersion`'s own directory,
+ *   `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<barrel file>`
+ *   (#334 — `generate-async-logic` has always written this for every FSM-scoped
+ *   actor group; this pool never did, which left its Rust actors unreachable
+ *   from the FSM-scoped aggregate's barrel-based `#[path]` include once swept
+ *   into it — see {@linkcode rewriteSharedAsyncOpBarrel}).
  * - For `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}),
  *   that language's `generated-registry.*` at *this*
  *   `functionVersion`'s own directory,
@@ -500,6 +559,15 @@ export async function createAsyncOperationLogic(
   );
   logger.info("Wrote actors manifest {file}", { file: manifestFile });
 
+  const barrelFile = await rewriteSharedAsyncOpBarrel(
+    asyncWorkerRoot,
+    lang,
+    functionVersion,
+  );
+  if (barrelFile) {
+    logger.info("Wrote actors barrel {file}", { file: barrelFile });
+  }
+
   const registryFile = await rewriteSharedAsyncOpRegistry(
     asyncWorkerRoot,
     lang,
@@ -520,14 +588,16 @@ export async function createAsyncOperationLogic(
 
   // One batched format call instead of per-file — see
   // generate-async-operation-logic.ts's doc comment for the same rationale
-  // (only ever 1-2 files here, but keeps both scaffolding paths consistent).
+  // (only ever 1-3 files here, but keeps both scaffolding paths consistent).
   // actors-manifest.json is pre-formatted JSON, not deno-fmt/rustfmt content
   // -- same reasoning generate-async-operation-logic.ts's own manifest write
-  // follows -- so it's excluded from both batches.
-  const tsFiles = [file, registryFile].filter(
+  // follows -- so it's excluded from both batches. Python has no formatter
+  // here (matching generate-async-operation-logic.ts's own lack of one), so
+  // barrelFile is only batched for typescript/rust.
+  const tsFiles = [file, barrelFile, registryFile].filter(
     (f): f is string => f !== undefined && lang === "typescript",
   );
-  const rustFiles = [registryFile].filter(
+  const rustFiles = [barrelFile, registryFile].filter(
     (f): f is string => f !== undefined && lang === "rust",
   );
   await formatTsFilesBestEffort(tsFiles);

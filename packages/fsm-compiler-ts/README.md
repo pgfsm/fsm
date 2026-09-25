@@ -238,6 +238,11 @@ working directory:
 - `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`,
   rewritten from every shared-async-op actor currently on disk for that language
   _at that one `functionVersion`_ (every language, including Go).
+- For `typescript`/`python`/`rust`, an actors barrel re-exporting every
+  shared-async-op actor currently on disk for that language _at that one
+  `functionVersion`_, at
+  `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<barrel file>`
+  (`index.ts`/`__init__.py`/`mod.rs`).
 - For `typescript`/`python`/`rust`, that language's registry file at
   `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
   (`generated_registry.py` for Python specifically — its dotted `import` syntax
