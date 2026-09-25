@@ -24,6 +24,7 @@ import { deriveTemplateInput } from "./scaffold-templates/derive-template-input.
 import { getPreamble, getTemplate } from "./scaffold-templates/registry.ts";
 import { render as renderTsActorsRegistry } from "./scaffold-templates/eta/typescript/actors-registry.generated.ts";
 import { render as renderTsSyncOperationRegistry } from "./scaffold-templates/eta/typescript/sync-operation-registry.generated.ts";
+import { render as renderTsSyncOperationRegistryAggregate } from "./scaffold-templates/eta/typescript/aggregate-generated-sync-operation-registry.generated.ts";
 import { render as renderTsActorsRegistryAggregate } from "./scaffold-templates/eta/typescript/actors-registry-aggregate.generated.ts";
 import { render as renderPyActorsRegistry } from "./scaffold-templates/eta/python/actors-registry.generated.ts";
 import { render as renderPyActorsRegistryAggregate } from "./scaffold-templates/eta/python/actors-registry-aggregate.generated.ts";
@@ -232,6 +233,105 @@ export async function writeSyncOperationRegistry(
   await Deno.writeTextFile(
     file,
     renderTsSyncOperationRegistry({ fsmName, fsmVersion, lang, groups }),
+  );
+  return file;
+}
+
+const AGGREGATE_SYNC_OPERATION_REGISTRY_FILE_NAME =
+  "aggregate-generated-sync-operation-registry.ts";
+
+/**
+ * Discovers every `<fsmName>/<fsmVersion>` group already written under
+ * `absSyncWorkerTypescriptDir` — i.e. that has its own
+ * {@linkcode writeSyncOperationRegistry} output
+ * (`generated-sync-operation-registry.ts`) — the sync-logic counterpart of
+ * `generate-async-operation-logic.ts`'s
+ * {@linkcode collectRegisteredActorsFromAsyncWorkerDir}, simplified: sync
+ * logic writes no manifest of its own, so `fsmName`/`fsmVersion` are read
+ * directly off the two directory levels instead. Rebuilding from disk (not
+ * just the group(s) the current run touched) keeps the aggregate complete
+ * regardless of how many separate `generate-sync-logic` invocations — folder
+ * mode and single-file `--fsm-json` mode alike — have contributed to
+ * `absSyncWorkerTypescriptDir` over time; same rationale as the async
+ * aggregate's own disk-rebuild. Returns `[]` when the directory doesn't exist
+ * yet (e.g. `typescript` wasn't among the requested `langs`).
+ *
+ * Sorted by `fsmName` then `fsmVersion` before returning — `Deno.readDir`'s
+ * iteration order isn't a stable contract, and an aggregate whose import
+ * order shuffled between otherwise-identical regenerations would just be
+ * unreviewable diff noise.
+ */
+async function collectSyncOperationRegistryGroups(
+  absSyncWorkerTypescriptDir: string,
+): Promise<{ fsmName: string; fsmVersion: string }[]> {
+  const groups: { fsmName: string; fsmVersion: string }[] = [];
+
+  let fsmEntries: Deno.DirEntry[];
+  try {
+    fsmEntries = await Array.fromAsync(
+      Deno.readDir(absSyncWorkerTypescriptDir),
+    );
+  } catch (err) {
+    if (isNotFoundError(err)) return groups;
+    throw err;
+  }
+
+  for (const fsmEntry of fsmEntries) {
+    if (!fsmEntry.isDirectory) continue;
+    const fsmDir = `${absSyncWorkerTypescriptDir}/${fsmEntry.name}`;
+    for await (const versionEntry of Deno.readDir(fsmDir)) {
+      if (!versionEntry.isDirectory) continue;
+      const registryPath =
+        `${fsmDir}/${versionEntry.name}/${SYNC_OPERATION_REGISTRY_FILE_NAME}`;
+      try {
+        await Deno.stat(registryPath);
+      } catch (err) {
+        if (isNotFoundError(err)) continue;
+        throw err;
+      }
+      groups.push({ fsmName: fsmEntry.name, fsmVersion: versionEntry.name });
+    }
+  }
+  groups.sort((a, b) =>
+    a.fsmName === b.fsmName
+      ? a.fsmVersion.localeCompare(b.fsmVersion)
+      : a.fsmName.localeCompare(b.fsmName)
+  );
+  return groups;
+}
+
+/**
+ * Writes ONE aggregate sync-operation registry at
+ * `<absSyncWorkerTypescriptDir>/aggregate-generated-sync-operation-registry.ts`
+ * — combining every `<fsmName>/<fsmVersion>`'s own
+ * `generated-sync-operation-registry.ts` (see
+ * {@linkcode writeSyncOperationRegistry}) into one
+ * `SYNC_OPERATION_REGISTRATIONS` array, the same "one fixed file a worker
+ * build imports" shape {@linkcode writeAggregateActorsRegistry} gives async
+ * actors — a sync worker process serves every FSM's action/guard/delay
+ * handlers, not just one. TypeScript only, matching `generate-sync-logic`'s
+ * own current scope. Returns `undefined` (writes nothing) when no
+ * `<fsmName>/<fsmVersion>` group exists yet under `absSyncWorkerTypescriptDir`.
+ */
+export async function writeAggregateSyncOperationRegistry(
+  absSyncWorkerTypescriptDir: string,
+): Promise<string | undefined> {
+  const groups = await collectSyncOperationRegistryGroups(
+    absSyncWorkerTypescriptDir,
+  );
+  if (groups.length === 0) return undefined;
+
+  const groupList = groups.map(({ fsmName, fsmVersion }) => {
+    const key = `${fsmName}/${fsmVersion}`;
+    return { key, alias: groupKeyToIdentifier(key), relDir: `./${key}` };
+  });
+
+  await Deno.mkdir(absSyncWorkerTypescriptDir, { recursive: true });
+  const file =
+    `${absSyncWorkerTypescriptDir}/${AGGREGATE_SYNC_OPERATION_REGISTRY_FILE_NAME}`;
+  await Deno.writeTextFile(
+    file,
+    renderTsSyncOperationRegistryAggregate({ groups: groupList }),
   );
   return file;
 }
