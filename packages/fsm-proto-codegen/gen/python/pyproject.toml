@@ -3,19 +3,33 @@
 # a real installable identity, so consumers `pip install -e` this directory
 # instead of a worker-sdk's sdk.py doing a runtime sys.path.insert with a
 # relative path computed by counting `../` back to this directory — see
-# #106.
+# #106. Published to PyPI as pgfsm-proto-codegen by
+# .github/workflows/proto-publish.yml; `version` must match the other three
+# languages' manifests (see the package README's "Publishing").
 [project]
 name = "pgfsm-proto-codegen"
 version = "0.1.0"
+description = "Generated protobuf + gRPC stubs for the pgfsm Activity Gateway and Sidecar Gateway contracts."
+readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.9"
 dependencies = [
   "grpcio>=1.60,<2",
-  "protobuf>=4,<8",
+  # Lower bound must be the gencode version in the generated _pb2.py headers
+  # ("# Protobuf Python Version: X.Y.Z"): each module calls
+  # ValidateProtobufRuntimeVersion at import time and raises VersionError on
+  # an older runtime. The proto-codegen workflow checks the two agree.
+  "protobuf>=7.35.1,<8",
 ]
+
+[project.urls]
+Repository = "https://github.com/pgfsm/fsm"
+Source = "https://github.com/pgfsm/fsm/tree/main/packages/fsm-proto-codegen"
 
 [tool.setuptools.packages.find]
 include = ["pgfsm*"]
 
 [build-system]
-requires = ["setuptools>=61"]
+# >=77 for the PEP 639 SPDX `license` string above.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"

@@ -1,0 +1,202 @@
+name: proto publish
+
+# Publishes packages/fsm-proto-codegen/gen/ for TypeScript (npm), Python
+# (PyPI), Rust (crates.io) and Go (a module tag), all at one version, from a
+# `proto-v<version>` tag. Only the tag triggers it, and every publish job
+# waits on `verify`, so the four registries can't be released out of step.
+# See the package README's "Publishing" for the release steps and the
+# one-time registry setup.
+
+on:
+  push:
+    tags:
+      - "proto-v[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release manifests
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Deno from the root .prototools.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - name: Version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#proto-v}" >> "$GITHUB_OUTPUT"
+
+      # All three manifests must carry the tag's version (and the protobuf
+      # lower bound must match the generated code) before anything publishes.
+      - name: Check manifests
+        run: >-
+          deno run --allow-read
+          packages/fsm-proto-codegen/scripts/check-release-manifests.ts
+          "${{ steps.version.outputs.version }}"
+
+  # Same deno pack + npm publish steps as npm-publish.yml's non-dnt path
+  # (keep the two in step). deno pack works here without dnt: the generated
+  # code is .js + .d.ts (nothing to transpile), there's no CLI bin, and the
+  # one runtime dependency comes from gen/typescript/deno.json's
+  # `npm:@bufbuild/protobuf` import. Checked against the packed tarball:
+  # package.json declares that dependency and the license, and TypeScript
+  # resolves each export's sibling .d.ts under `nodenext` and `bundler`. The
+  # JavaScript-entrypoint warning deno pack prints (a JSR slow-types note) is
+  # expected. Switch to a scripts/build-npm.ts (@deno/dnt) build if the package
+  # ever needs a package.json field deno pack can't infer.
+  npm:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-proto-codegen/gen/typescript
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Deno from the root .prototools.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      # A prerelease (e.g. 0.2.0-alpha.0) publishes under its own dist-tag;
+      # `npm publish` with no --tag would make it `latest`.
+      - name: Determine npm dist-tag
+        id: dist-tag
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if [[ "$VERSION" =~ -([a-zA-Z]+)(\.|$) ]]; then
+            TAG="${BASH_REMATCH[1]}"
+          else
+            TAG="latest"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: deno pack
+
+      # npm rejects re-publishing a version, so skip (rather than fail) when
+      # a re-run of this release finds it already there.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          DIST_TAG: ${{ steps.dist-tag.outputs.tag }}
+        run: |
+          # Output, not exit status: some npm versions print nothing and exit
+          # 0 for a version that doesn't exist.
+          if [[ -n "$(npm view "@pgfsm/proto-codegen@$VERSION" version 2>/dev/null)" ]]; then
+            echo "@pgfsm/proto-codegen@$VERSION is already on npm; skipping."
+            exit 0
+          fi
+          npm publish ./*.tgz --access public --tag "$DIST_TAG"
+
+  pypi:
+    name: Publish to PyPI
+    needs: verify
+    runs-on: ubuntu-latest
+    # Trusted publishing (OIDC): PyPI's publisher config names this workflow
+    # file and this environment — no API token secret.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist + wheel
+        run: |
+          pip install build
+          python -m build packages/fsm-proto-codegen/gen/python --outdir dist
+
+      # skip-existing so re-running a partly failed release doesn't fail
+      # here on files an earlier attempt already uploaded.
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true
+
+  crates:
+    name: Publish to crates.io
+    needs: verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-proto-codegen/gen/rust
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Root rust-toolchain.toml, found by rustup's upward search.
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install
+
+      # crates.io rejects re-publishing a version, so skip (rather than fail)
+      # when a re-run of this release finds it already there.
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -A "pgfsm-release (github.com/pgfsm/fsm)" \
+            "https://crates.io/api/v1/crates/pgfsm-proto-codegen/$VERSION")
+          if [[ "$status" == "200" ]]; then
+            echo "pgfsm-proto-codegen $VERSION is already on crates.io; skipping."
+            exit 0
+          fi
+          cargo publish
+
+  go:
+    name: Tag Go module
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Go modules have no registry upload: a module in a subdirectory is
+      # released by a tag prefixed with that subdirectory, and the Go module
+      # proxy serves it from there. Tagged at the same commit as proto-v*.
+      # (A future v2+ would also need a /v2 suffix on go.mod's module path.)
+      - name: Push module tag
+        env:
+          TAG: packages/fsm-proto-codegen/gen/go/v${{ needs.verify.outputs.version }}
+        run: |
+          existing=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+          if [[ -n "$existing" ]]; then
+            if [[ "$existing" == "$GITHUB_SHA" ]]; then
+              echo "$TAG already points at $GITHUB_SHA; skipping."
+              exit 0
+            fi
+            echo "::error::$TAG already exists at $existing, not $GITHUB_SHA."
+            exit 1
+          fi
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      # Ask the proxy for the new version so it's fetched and cached now
+      # (and shows up on pkg.go.dev) instead of on the first consumer's
+      # `go get`. Best effort: the tag is the release either way.
+      - name: Warm the Go module proxy
+        env:
+          VERSION: v${{ needs.verify.outputs.version }}
+        run: |
+          curl -fsS "https://proxy.golang.org/github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/@v/$VERSION.info" \
+            || echo "::warning::proxy.golang.org hasn't picked up $VERSION yet; it will on first use."

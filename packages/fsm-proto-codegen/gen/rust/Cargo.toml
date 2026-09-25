@@ -4,10 +4,19 @@
 # the generated Rust stubs a real crate boundary so consumers add a normal
 # path dependency instead of `#[path]`-including a specific .rs file by a
 # relative path computed by counting `../` back to this directory — see #106.
+# Published to crates.io by .github/workflows/proto-publish.yml; `version`
+# must match the other three languages' manifests (see the package README's
+# "Publishing").
 [package]
 name = "pgfsm-proto-codegen"
 version = "0.1.0"
 edition = "2021"
+description = "Generated prost + tonic stubs for the pgfsm Activity Gateway and Sidecar Gateway contracts."
+license = "Apache-2.0"
+repository = "https://github.com/pgfsm/fsm"
+readme = "README.md"
+keywords = ["pgfsm", "grpc", "protobuf", "tonic", "prost"]
+categories = ["network-programming"]
 
 [dependencies]
 prost = "0.14"

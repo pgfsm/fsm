@@ -41,7 +41,9 @@ codegen pipeline works and produces correct, runnable output.
   identity for that language's toolchain — `gen/typescript/deno.json` (`exports`
   map + the `imports` map generated code needs to resolve `@bufbuild/protobuf`
   at runtime), `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`,
-  `gen/go/go.mod` — same convention across all four, see #106.
+  `gen/go/go.mod` — same convention across all four, see #106. Each also has a
+  hand-written `README.md` used as its registry page; all four are published,
+  see [Publishing](#publishing).
 - `package.json` / `node_modules/` (package root) — **not** app dependencies,
   and **not** where consumers import from. The npm-managed half of the
   toolchain: the `buf` CLI itself plus the two `protoc-gen-*` binaries needed on
@@ -312,4 +314,79 @@ on every PR (and `main` push) that touches this package:
   ```
 
   The smoke tests round-trip a message through the wire format, and read each
-  service descriptor (TypeScript) or subclass each servicer (Python).
+  service descriptor (TypeScript) or subclass each servicer (Python). CI also
+  checks each package as it would be published: `cargo publish --dry-run`,
+  Python's built wheel (`twine check --strict`, then the smoke test against the
+  installed wheel), `deno pack --dry-run`, and
+  `scripts/check-release-manifests.ts` (see [Publishing](#publishing)).
+
+## Publishing
+
+All four languages release together, at one version, from one tag, in one run of
+[`proto-publish.yml`](../../.github/workflows/proto-publish.yml). Only a
+`proto-v*` tag starts it, and every publish job waits on the same manifest
+check, so one registry can't be released without the others:
+
+| Language   | Registry  | Package                                                  | Job                                                         |
+| ---------- | --------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| TypeScript | npm       | `@pgfsm/proto-codegen`                                   | `npm`: `deno pack`, then `npm publish` (`NPM_TOKEN`)        |
+| Python     | PyPI      | `pgfsm-proto-codegen`                                    | `pypi`: trusted publishing                                  |
+| Rust       | crates.io | `pgfsm-proto-codegen`                                    | `crates`: `cargo publish` (`CARGO_REGISTRY_TOKEN`)          |
+| Go         | git tag   | `github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go` | `go`: pushes tag `packages/fsm-proto-codegen/gen/go/vX.Y.Z` |
+
+The npm package isn't in `npm-publish.yml` with the repo's other npm packages.
+That workflow can also be run by hand for one package, which would release npm
+out of step with the other three registries.
+
+Go has no registry upload. A Go module in a repo subdirectory is released by a
+tag prefixed with that subdirectory, and the Go module proxy serves it from
+there — which is also why `gen/go` has to stay committed.
+
+### Cutting a release
+
+1. In a PR, bump `version` in `gen/typescript/deno.json`,
+   `gen/python/pyproject.toml` and `gen/rust/Cargo.toml` to the same value (e.g.
+   `0.2.0`, or a prerelease like `0.2.0-alpha.0`, which publishes under npm's
+   `alpha` dist-tag). CI's `Release manifests agree` step fails if they differ.
+2. After it merges, tag the merge commit and push the tag:
+
+   ```sh
+   git tag proto-v0.2.0 <merge-commit>
+   git push origin proto-v0.2.0
+   ```
+
+   This starts `proto-publish.yml`. Its `verify` job runs
+   `scripts/check-release-manifests.ts` with the tag's version, and nothing
+   publishes if a manifest disagrees.
+
+Re-running a partly failed release is safe: each job skips what's already
+published (the npm or crates.io version, the PyPI files, or a Go tag that
+already points at the same commit).
+
+### `pyproject.toml`'s protobuf lower bound
+
+Every generated `_pb2.py` calls `ValidateProtobufRuntimeVersion` at import time,
+and raises `VersionError` on a protobuf runtime older than the `protoc` that
+generated it (`# Protobuf Python Version: X.Y.Z` in each file's header). pip
+wouldn't catch that: it would install an older protobuf that satisfies the
+range, and the import would fail later. So `protobuf>=` in `pyproject.toml` must
+equal that header version. `scripts/check-release-manifests.ts` fails CI if they
+differ, e.g. after a `protoc` bump in the `Dockerfile`.
+
+### One-time registry setup
+
+Needed once, before the first release:
+
+- **npm**: nothing new. `@pgfsm/proto-codegen` publishes under the existing
+  `@pgfsm` scope with the same `NPM_TOKEN` secret as the other packages.
+- **PyPI**: add a
+  [pending trusted publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+  for project `pgfsm-proto-codegen`: owner `pgfsm`, repository `fsm`, workflow
+  `proto-publish.yml`, environment `pypi`. Create a `pypi` environment in the
+  repo's settings; it can require a reviewer approval before each upload.
+- **crates.io**: create an API token with the `publish-new` and `publish-update`
+  scopes, and save it as the repository secret `CARGO_REGISTRY_TOKEN`. After the
+  first publish, the crate can switch to crates.io trusted publishing and drop
+  the token.
+- **Go**: nothing. The workflow pushes the tag with the job's `GITHUB_TOKEN`,
+  and the repository's rulesets only cover branches.

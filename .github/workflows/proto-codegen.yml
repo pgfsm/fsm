@@ -145,8 +145,10 @@ jobs:
         with:
           workspaces: packages/fsm-proto-codegen/gen/rust
 
-      - name: cargo build
-        run: cargo build
+      # Packages the crate exactly as crates.io would receive it (metadata,
+      # file list) and builds that package — not just the checkout.
+      - name: cargo publish --dry-run
+        run: cargo publish --dry-run
 
   python:
     name: Proto stubs (Python)
@@ -158,12 +160,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Installed as a real package (pyproject.toml's grpcio/protobuf ranges);
-      # the script only puts its own test/ directory on sys.path, so it
-      # imports the installed package, not the checkout's gen/python.
-      - name: pip install + smoke test
+      # Builds the same sdist + wheel proto-publish.yml uploads, then installs
+      # the wheel (pyproject.toml's grpcio/protobuf ranges) and smoke-tests it.
+      # The script only puts its own test/ directory on sys.path, so it
+      # imports the installed wheel, not the checkout's gen/python.
+      - name: build + twine check + smoke test
         run: |
-          pip install ./packages/fsm-proto-codegen/gen/python
+          pip install build twine
+          python -m build packages/fsm-proto-codegen/gen/python --outdir "$RUNNER_TEMP/dist"
+          twine check --strict "$RUNNER_TEMP"/dist/*
+          pip install "$RUNNER_TEMP"/dist/*.whl
           python packages/fsm-proto-codegen/test/smoke_test.py
 
   typescript:
@@ -183,3 +189,13 @@ jobs:
         run: |
           deno check packages/fsm-proto-codegen/test/smoke.ts
           deno run --allow-env=BUF_BIGINT_DISABLE packages/fsm-proto-codegen/test/smoke.ts
+
+      # The `deno pack` proto-publish.yml runs for @pgfsm/proto-codegen.
+      - name: deno pack --dry-run
+        working-directory: packages/fsm-proto-codegen/gen/typescript
+        run: deno pack --dry-run
+
+      # The four gen/ packages release together at one version (README's
+      # "Publishing"); catch drift here rather than at tag time.
+      - name: Release manifests agree
+        run: deno run --allow-read packages/fsm-proto-codegen/scripts/check-release-manifests.ts
