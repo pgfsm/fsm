@@ -238,10 +238,12 @@ working directory:
 - `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`,
   rewritten from every shared-async-op actor currently on disk for that language
   _at that one `functionVersion`_ (every language, including Go).
-- For `typescript`/`python`/`rust`, that language's single **global** registry
-  file at `async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>`,
-  rewritten from every shared-async-op actor currently on disk for that language
-  across every `functionVersion`.
+- For `typescript`/`python`/`rust`, that language's registry file at
+  `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
+  (`generated_registry.py` for Python specifically — its dotted `import` syntax
+  can't reference a hyphenated module name), rewritten from every
+  shared-async-op actor currently on disk for that language _at that one
+  `functionVersion`_ (not a global file across every version).
 - For `go`, its own aggregate at
   `async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
   (`go.mod` + `registry.go`, one `require`+`replace` per actor's own standalone

@@ -143,7 +143,7 @@ Deno.test("createAsyncOperationLogic - go also gets actors-manifest.json, with i
   }
 });
 
-Deno.test("createAsyncOperationLogic - writes a global generated-registry.ts entry with the fixed sharedAsyncOperation identity", async () => {
+Deno.test("createAsyncOperationLogic - writes generated-registry.ts under sharedAsyncOperation/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -153,11 +153,11 @@ Deno.test("createAsyncOperationLogic - writes a global generated-registry.ts ent
       "checkCreditScore",
     );
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
     );
     assertStringIncludes(
       registryContent,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/checkCreditScore.ts";',
+      'import { checkCreditScore as checkCreditScore_v01 } from "./actors/checkCreditScore/checkCreditScore.ts";',
     );
     assertStringIncludes(
       registryContent,
@@ -183,7 +183,7 @@ Deno.test("createAsyncOperationLogic - writes a global generated-registry.ts ent
   }
 });
 
-Deno.test("createAsyncOperationLogic - a second call accumulates in the global registry instead of clobbering the first", async () => {
+Deno.test("createAsyncOperationLogic - a second call at the same functionVersion accumulates in that version's own registry instead of clobbering the first", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -194,7 +194,7 @@ Deno.test("createAsyncOperationLogic - a second call accumulates in the global r
     );
     await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
     );
     assertStringIncludes(registryContent, "handler: checkCreditScore_v01,");
     assertStringIncludes(registryContent, "handler: verifyIdentity_v01,");
@@ -203,7 +203,7 @@ Deno.test("createAsyncOperationLogic - a second call accumulates in the global r
   }
 });
 
-Deno.test("createAsyncOperationLogic - a second call with a different function-version accumulates without alias collision", async () => {
+Deno.test("createAsyncOperationLogic - a different function-version gets its own separate registry file, not merged with any other version's (#332)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -218,19 +218,25 @@ Deno.test("createAsyncOperationLogic - a second call with a different function-v
       "v02",
       "checkCreditScore",
     );
-    const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
+    const v01Registry = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
+    );
+    const v02Registry = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v02/generated-registry.ts`,
     );
     assertStringIncludes(
-      registryContent,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./v01/actors/checkCreditScore/checkCreditScore.ts";',
+      v01Registry,
+      'import { checkCreditScore as checkCreditScore_v01 } from "./actors/checkCreditScore/checkCreditScore.ts";',
     );
+    assertStringIncludes(v01Registry, "handler: checkCreditScore_v01,");
+    assertEquals(v01Registry.includes("checkCreditScore_v02"), false);
+
     assertStringIncludes(
-      registryContent,
-      'import { checkCreditScore as checkCreditScore_v02 } from "./v02/actors/checkCreditScore/checkCreditScore.ts";',
+      v02Registry,
+      'import { checkCreditScore as checkCreditScore_v02 } from "./actors/checkCreditScore/checkCreditScore.ts";',
     );
-    assertStringIncludes(registryContent, "handler: checkCreditScore_v01,");
-    assertStringIncludes(registryContent, "handler: checkCreditScore_v02,");
+    assertStringIncludes(v02Registry, "handler: checkCreditScore_v02,");
+    assertEquals(v02Registry.includes("checkCreditScore_v01"), false);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -290,7 +296,7 @@ Deno.test("createAsyncOperationLogic - go actor gets a go.mod rooted at the app 
   }
 });
 
-Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-removed, empty dir left behind) is excluded from a later rebuild (#324)", async () => {
+Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-removed, empty dir left behind) is excluded from a later rebuild of a DIFFERENT actor at the same functionVersion (#324)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -300,7 +306,12 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
       "checkCreditScoreNirajx",
     );
     // Hand-remove the actor's own file + manifest, but leave the now-empty
-    // <name>/ directory behind -- the exact scenario #324 reported.
+    // <name>/ directory behind -- the exact scenario #324 reported. Registries
+    // are now scoped per functionVersion (#332), so a stale entry can no
+    // longer leak into a *different* version's file the way it originally
+    // could into the old single global file -- rebuild a second actor at the
+    // *same* v08 instead, to exercise listExistingSharedAsyncOpActors' own
+    // stale-exclusion within one version's registry.
     await Deno.remove(
       `${dir}/async-worker/python/sharedAsyncOperation/v08/actors/checkCreditScoreNirajx/checkCreditScoreNirajx.py`,
     );
@@ -311,15 +322,15 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
     await createAsyncOperationLogic(
       dir,
       "python",
-      "v09",
-      "checkCreditScoreNirajx",
+      "v08",
+      "verifyIdentity",
     );
 
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/python/sharedAsyncOperation/generated-registry.py`,
+      `${dir}/async-worker/python/sharedAsyncOperation/v08/generated_registry.py`,
     );
-    assertEquals(registryContent.includes("v08"), false);
-    assertStringIncludes(registryContent, "checkCreditScoreNirajx_v09");
+    assertEquals(registryContent.includes("checkCreditScoreNirajx"), false);
+    assertStringIncludes(registryContent, "verifyIdentity_v08");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -371,7 +382,7 @@ Deno.test("createAsyncOperationLogic - go writes its own aggregate at sharedAsyn
   }
 });
 
-Deno.test("createAsyncOperationLogic - go aggregate accumulates across repeated calls, same as the TS/Python/Rust global registry", async () => {
+Deno.test("createAsyncOperationLogic - go aggregate accumulates across repeated calls (unlike TS/Python/Rust's now-per-functionVersion registry, #324's Go aggregate stays a single global file across every version)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");

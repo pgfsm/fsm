@@ -197,26 +197,32 @@ requires or reads `--folder` for this command at all (excluded from both the
 `missing`-args check and the generic `--folder` existence/type validation in
 `cli/index.ts`).
 
-Registry-wise, this command deliberately does **not** mirror
+Registry-wise, this command originally did **not** mirror
 `generate-async-logic`'s per-`<fsmName>/<fsmVersion>` registries — since
-shared-async-op actors have no owning FSM/version to partition by, there's a
+shared-async-op actors have no owning FSM/version to partition by, there was a
 single **global** file per language,
 `<appRoot>/async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>`,
 accumulating every `functionVersion`'s actors across repeated
-`create-async-logic` calls (rebuilt from a fresh directory walk each time, same
-idempotent-rebuild approach as before #309). This needed its own
-`shared-async-op-registry.eta` template per language (typescript/python/rust,
-file name unchanged by #330 — it's a source template file name, unrelated to the
-runtime output directory it writes into) — none of the existing registry
-templates fit, since they all assume the actor being registered is a direct
-sibling of (or reachable through an already-written per-group registry near) the
-file being written, and this one reaches into multiple
-`<functionVersion>/actors/<functionName>/` subtrees from one fixed location.
-Every import is aliased (`<functionName>_<functionVersion>`) since the same
-function name can legitimately recur across different `functionVersion`s.
-Deliberately never touches the FSM-scoped aggregate
-(`<lang>-actors-registry.generated.ts`) — this pool stays fully separate from
-it, same as before #309.
+`create-async-logic` calls. #332 moved it to
+`<appRoot>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
+instead — scoped per `functionVersion`, same as `actors-manifest.json` already
+was (see its own note below) — see #332's own section for why. This needed its
+own `shared-async-op-registry.eta` template per language
+(typescript/python/rust, file name unchanged by #330 — it's a source template
+file name, unrelated to the runtime output directory it writes into) — none of
+the existing registry templates fit, since they all assume the actor being
+registered is a direct sibling of the file being written (true here too, now,
+post-#332), but this one is still hand-fed each actor's own `importPath` rather
+than deriving it structurally the way `generate-async-logic`'s own per-version
+template does. Every import is still aliased
+(`<functionName>_<functionVersion>`) even though a same-file cross-version
+collision is no longer possible post-#332 — kept for a consistent alias format
+across every shared-async-op artifact (including Go's own aggregate, which is
+still global, see below). Deliberately never touches the FSM-scoped aggregate
+(`<lang>-actors-registry.generated.ts`) directly — this pool stays fully
+separate from it, same as before #309 (see #330/#332's own sections for how a
+shared-async-op actor nonetheless ends up reachable from that aggregate via the
+still-open collector-leak issue).
 
 `listExistingSharedAsyncOpActors` (the shared "rebuild from what's on disk" walk
 both the registry and the manifest use) verifies each actor's own stub file
@@ -258,11 +264,11 @@ whenever a shared-async-op actor got swept into it
 (`collectRegisteredActorsFromAsyncWorkerDir` doesn't exclude
 `sharedAsyncOperation/` from that walk — a still-open, separate issue). Renaming
 the real directory to match the identity string removes that specific mismatch;
-it doesn't fully close the leak by itself, since the FSM-scoped aggregate also
-expects a **per-version** registry file
+it didn't fully close the leak by itself, since the FSM-scoped aggregate also
+expected a **per-version** registry file
 (`<parentFsmName>/<parentFsmVersion>/generated-registry.<ext>`, #328) while
-`create-async-logic` still writes a single **global** flat file
-(`sharedAsyncOperation/generated-registry.<ext>`, no per-version nesting).
+`create-async-logic` still wrote a single **global** flat file — #332 (below)
+closes that second gap.
 
 One nuance the rename surfaced: Go module paths conventionally stay lowercase,
 and `goActorModulePath` (operation-logic-scaffold.ts, used when `writeActorFile`
@@ -279,6 +285,57 @@ also explicitly `.toLowerCase()` `SHARED_ASYNC_OP_DIR_NAME` for the same reason
 _declared_ (lowercased) module name, while the `replace` directive's own _target
 path_ (`actorDir`) still uses the case-preserved directory name, since that
 one's a real filesystem path, not a module identifier.
+
+### #332: `generated-registry.<ext>` moves from `sharedAsyncOperation/` to `sharedAsyncOperation/<functionVersion>/`
+
+`rewriteSharedAsyncOpRegistry` (typescript/python/rust only — `REGISTRY_LANGS`,
+Go is unaffected, see above) writes `generated-registry.<ext>` scoped to one
+`functionVersion` now, not a single global file across every version — same
+scoping `rewriteSharedAsyncOpManifest` already had.
+`toSharedAsyncOpRegistryEntry`'s own `importPath` computation drops the
+`<version>/` segment it used to need (the registry is now colocated _inside_
+that version's own directory, so `actors/<name>/<name>.<ext>` is enough —
+mirrors `generate-async-logic`'s own per-version registry's relationship to its
+own `actors/`, #328).
+
+Combined with #330, this is the second and last mismatch behind the
+`generate-async-logic` aggregate-leak issue for the file-path/import-path layer:
+that aggregate's per-group import has always expected
+`<parentFsmName>/<parentFsmVersion>/generated-registry.<ext>` (#328); after #330
+(directory renamed to match `parentFsmName`) and #332 (file moved to match
+`<parentFsmVersion>/`), a shared-async-op actor swept into that aggregate (still
+not _excluded_ from it — that part of the leak issue remains open) now actually
+resolves for `typescript` (verified: `deno run
+cli.ts list` loads it) and, after
+one more fix below, `python`.
+
+**Surfaced a second, previously-masked naming mismatch while verifying this**:
+`rewriteSharedAsyncOpRegistry`'s file name was always the hyphenated
+`generated-registry.<ext>` for every language, but `generate-async-logic`'s own
+per-version registry uses `generated_registry.py` (underscored) for Python
+specifically — required, since Python's dotted `import` syntax can't reference a
+hyphenated module name at all. This was invisible before #330/#332 (the
+directory/nesting mismatches broke resolution earlier in the chain), but became
+the next concrete blocker once those were fixed (confirmed:
+`ModuleNotFoundError` for `sharedAsyncOperation.v01.generated_registry` even
+with the correct directory and nesting in place). Fixed via a new
+`SHARED_ASYNC_OP_REGISTRY_FILE_NAME` map (mirrors
+`operation-logic-scaffold.ts`'s own un-exported `ACTORS_REGISTRY_FILE_NAME`
+exactly) — TypeScript and Rust keep their existing hyphenated names
+(TypeScript's already matched; Rust's FSM-scoped aggregate never reads a
+per-version registry file at all — it `#[path]`-includes the barrel directly —
+so nothing depends on Rust's file name here).
+
+**`rust` is not actually unblocked**, even after both fixes above: its own
+per-version `generated-registry.rs` (create-async-logic's own, which
+`#[path]`-includes each actor file directly) compiles fine standalone, but
+`generate-async-logic`'s FSM-scoped aggregate instead expects a **barrel** at
+`<parentFsmName>/<parentFsmVersion>/actors/mod.rs` — `createAsyncOperationLogic`
+has never called `writeActorsBarrel` for shared-async-op actors, so that file
+has never existed (confirmed: `cargo check` on the FSM-scoped aggregate fails
+with `couldn't read .../sharedAsyncOperation/v01/actors/mod.rs`). This predates
+both #330 and #332 — it's a third, deeper gap requiring `create-async-logic` to
+write a barrel too, out of scope for either issue.
 
 ## npm publish (`deno task build:npm`)
 

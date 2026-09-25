@@ -13,8 +13,8 @@ _SHARED_ASYNC_OP_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _SHARED_ASYNC_OP_ROOT not in sys.path:
     sys.path.insert(0, _SHARED_ASYNC_OP_ROOT)
 
-from v01.actors.byeFromPgfsm.byeFromPgfsm import byeFromPgfsm as byeFromPgfsm_v01
-from v01.actors.helloFromPgfsm.helloFromPgfsm import helloFromPgfsm as helloFromPgfsm_v01
+from actors.byeFromPgfsm.byeFromPgfsm import byeFromPgfsm as byeFromPgfsm_v01
+from actors.helloFromPgfsm.helloFromPgfsm import helloFromPgfsm as helloFromPgfsm_v01
 
 ACTOR_REGISTRATIONS = [
     {

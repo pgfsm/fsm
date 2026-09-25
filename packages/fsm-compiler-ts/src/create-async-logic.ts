@@ -55,6 +55,30 @@ const SHARED_ASYNC_OP_PARENT_FSM_NAME = "sharedAsyncOperation";
 const REGISTRY_LANGS: ActorsBarrelLang[] = ["typescript", "python", "rust"];
 
 /**
+ * Per-language registry file name — matches `operation-logic-scaffold.ts`'s
+ * own `ACTORS_REGISTRY_FILE_NAME` (not exported, so a deliberate separate
+ * copy) rather than the hyphenated `generated-registry.<ext>` this command
+ * used before #332 for every language. Required for Python specifically:
+ * `generate-async-logic`'s FSM-scoped aggregate statically dot-imports each
+ * group's registry (`from <group>.generated_registry import
+ * ACTOR_REGISTRATIONS`), and Python has no way to dot-import a
+ * hyphenated module name — once the real directory (#330) and this
+ * per-version nesting (#332) both matched what that aggregate expects, the
+ * hyphenated file name was the one thing left actually preventing a
+ * shared-async-op actor swept into it from resolving (verified: `import
+ * sharedAsyncOperation.v01.generated_registry` raised `ModuleNotFoundError`
+ * until this file name changed to match). Rust keeps its own hyphenated name
+ * unchanged — its FSM-scoped aggregate never reads a per-version registry
+ * file at all (`#[path]`-includes the barrel directly), so nothing depends
+ * on this file's exact name there.
+ */
+const SHARED_ASYNC_OP_REGISTRY_FILE_NAME: Record<ActorsBarrelLang, string> = {
+  typescript: "generated-registry.ts",
+  python: "generated_registry.py",
+  rust: "generated-registry.rs",
+};
+
+/**
  * Directory name (relative to `<appRoot>/async-worker/go/sharedAsyncOperation/`)
  * holding the Go aggregate registry — same name/shape as
  * `writeAggregateGoRegistry`'s FSM-scoped equivalent
@@ -69,19 +93,27 @@ function isRegistryLang(lang: OperationLang): lang is ActorsBarrelLang {
 }
 
 /**
- * One shared-async-op actor's entry in the global registry — everything the
- * per-language Eta template (`shared-async-op-registry.eta`) needs to import
- * the actor (aliased, since the same function name can recur across
- * different `functionVersion`s and would otherwise collide) and register it.
+ * One shared-async-op actor's entry in its `functionVersion`'s registry —
+ * everything the per-language Eta template (`shared-async-op-registry.eta`)
+ * needs to import the actor (aliased — retained even though each per-version
+ * registry now only ever holds actors at that one version, #332, so a
+ * same-version name collision is the only remaining risk — and it keeps the
+ * alias format consistent with {@linkcode toSharedAsyncOpRegisteredActor}/
+ * `rewriteSharedAsyncOpGoRegistry`) and register it.
  */
 type SharedAsyncOpRegistryEntry = {
   src: string;
   alias: string;
   /**
-   * The import target, already formatted for the target language:
-   * a relative `./`-prefixed module specifier for TypeScript, a dotted
-   * absolute-from-`sharedAsyncOperation/` module path for Python, or a bare
-   * relative file path (no leading `./`) for Rust's `#[path]`.
+   * The import target, already formatted for the target language, relative
+   * to the per-version registry's own directory
+   * (`sharedAsyncOperation/<functionVersion>/`, #332): a relative
+   * `./`-prefixed module specifier for TypeScript, a dotted
+   * absolute-from-that-directory module path for Python (via the `sys.path`
+   * bootstrap in `shared-async-op-registry.eta`, computed from the
+   * registry's own `__file__` so it's correct regardless of which version
+   * directory it ends up in), or a bare relative file path (no leading
+   * `./`) for Rust's `#[path]`.
    */
   importPath: string;
   parentFsmName: string;
@@ -92,7 +124,17 @@ type SharedAsyncOpRegistryEntry = {
   asyncOperationLanguage: OperationLang;
 };
 
-/** Sanitizes `<name>_<version>` into a safe TS/Python/Rust identifier — used as the import alias so two function-versions of the same function name never collide in the same registry file. */
+/**
+ * Sanitizes `<name>_<version>` into a safe TS/Python/Rust/Go identifier —
+ * used as the import alias. Strictly needed only for `rewriteSharedAsyncOpGoRegistry`'s
+ * still-global-across-every-version aggregate (#324), where two
+ * `functionVersion`s of the same function name really can collide in the
+ * same file; kept for `toSharedAsyncOpRegistryEntry`/
+ * `toSharedAsyncOpRegisteredActor` too even though their own per-version
+ * registry/manifest (#332/#322) can no longer have a same-file
+ * cross-version collision, for a consistent alias format across every
+ * shared-async-op artifact.
+ */
 function toRegistryAlias(fileBaseName: string, version: string): string {
   return `${fileBaseName}_${version}`.replace(/[^A-Za-z0-9]+/g, "_");
 }
@@ -108,10 +150,16 @@ function toRegistryAlias(fileBaseName: string, version: string): string {
  * {@linkcode toWrittenActor} computes) actually exists before including a
  * `<name>/` directory — hand-removing an actor's file (and its
  * `actors-manifest.json`) without also removing the now-empty `<name>/`
- * directory used to leave a stale entry behind: the next `create-async-logic`
- * call for a *different* `functionVersion` would still rebuild the global
- * registry from that stale directory, importing a handler from a file that no
- * longer exists (#324).
+ * directory used to leave a stale entry behind that the next
+ * `create-async-logic` call would still rebuild a registry/manifest from,
+ * importing a handler from a file that no longer exists (#324). Originally
+ * reported for {@linkcode rewriteSharedAsyncOpRegistry}'s old single global
+ * file (any *different* `functionVersion`'s rebuild would still pick up a
+ * stale entry from any other version) — its per-version registry (#332)
+ * narrows that specific blast radius to "another call at the *same*
+ * `functionVersion`", but {@linkcode rewriteSharedAsyncOpGoRegistry}'s own
+ * aggregate stays a single global file across every version, so the
+ * original scenario remains fully live for Go.
  */
 async function listExistingSharedAsyncOpActors(
   asyncWorkerRoot: string,
@@ -163,9 +211,12 @@ function toSharedAsyncOpRegistryEntry(
 ): SharedAsyncOpRegistryEntry {
   const alias = toRegistryAlias(name, version);
   const ext = lang === "typescript" ? "ts" : lang === "rust" ? "rs" : "py";
-  // <version>/actors/<name>/<name>.<ext>, relative to sharedAsyncOperation/
-  // (the global registry's own directory).
-  const relParts = [version, "actors", name, name];
+  // actors/<name>/<name>.<ext>, relative to sharedAsyncOperation/<version>/
+  // (the per-version registry's own directory, #332 — the registry is now
+  // colocated one level inside the version it's scoped to, same relationship
+  // generate-async-logic's own per-version registry has to its own actors/,
+  // see #328).
+  const relParts = ["actors", name, name];
   const importPath = lang === "typescript"
     ? `./${relParts.join("/")}.${ext}`
     : lang === "rust"
@@ -224,29 +275,43 @@ function buildSharedAsyncOpRegistryContent(
 }
 
 /**
- * Rewrites `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/generated-registry.<ext>`
- * from every shared-async-op actor currently on disk for `lang` (the one
- * just written by {@linkcode createAsyncOperationLogic} included) — so
- * repeated `create-async-logic` calls accumulate into one global registry
- * across every `functionVersion`, instead of each call clobbering the last.
- * Unlike the FSM-scoped registries `generate-async-logic` writes (one per
- * `<fsmName>/<fsmVersion>`), this is deliberately a single flat file — these
- * actors have no owning FSM/version to partition by.
+ * Rewrites `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
+ * from every shared-async-op actor currently on disk for `lang` *at that one
+ * `functionVersion`* — scoped the same way {@linkcode rewriteSharedAsyncOpManifest}
+ * already scopes `actors-manifest.json` (#332; before, this was a single
+ * **global** flat file across every version, at `sharedAsyncOperation/
+ * generated-registry.<ext>` with no per-version nesting). Repeated
+ * `create-async-logic` calls at the same `functionVersion` still accumulate
+ * into that version's own file instead of clobbering each other; a
+ * *different* `functionVersion` gets its own separate file, not merged with
+ * any other version's.
+ *
+ * This now matches the layout `generate-async-logic`'s FSM-scoped aggregate
+ * always expected (`<parentFsmName>/<parentFsmVersion>/generated-registry.<ext>`,
+ * #328) — combined with #330 (the real directory renamed to match
+ * `parentFsmName`), a shared-async-op actor swept into that aggregate (the
+ * still-open, separate leak issue) now resolves instead of 404ing, for
+ * `typescript`/`python`. (`rust`'s FSM-scoped aggregate never reads this
+ * per-version file at all — see `writeAggregateActorsRegistry`'s own doc
+ * comment — so this doesn't change anything for Rust beyond the file's
+ * location.)
  */
 async function rewriteSharedAsyncOpRegistry(
   asyncWorkerRoot: string,
   lang: OperationLang,
+  functionVersion: string,
 ): Promise<string | undefined> {
   if (!isRegistryLang(lang)) return undefined;
   const existing = await listExistingSharedAsyncOpActors(asyncWorkerRoot, lang);
-  const entries = existing.map(({ name, version }) =>
-    toSharedAsyncOpRegistryEntry(lang, name, version)
-  );
-  const dir = `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}`;
+  const entries = existing
+    .filter(({ version }) => version === functionVersion)
+    .map(({ name, version }) =>
+      toSharedAsyncOpRegistryEntry(lang, name, version)
+    );
+  const dir =
+    `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}/${functionVersion}`;
   await Deno.mkdir(dir, { recursive: true });
-  const file = `${dir}/generated-registry.${
-    lang === "typescript" ? "ts" : lang === "rust" ? "rs" : "py"
-  }`;
+  const file = `${dir}/${SHARED_ASYNC_OP_REGISTRY_FILE_NAME[lang]}`;
   await Deno.writeTextFile(
     file,
     buildSharedAsyncOpRegistryContent(entries, lang),
@@ -383,9 +448,12 @@ async function rewriteSharedAsyncOpGoRegistry(
  *   — every actor at *this* `functionVersion`, for every language (see
  *   {@linkcode rewriteSharedAsyncOpManifest}).
  * - For `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}),
- *   that language's single **global** `generated-registry.*` at
- *   `{cwd}/async-worker/<lang>/sharedAsyncOperation/generated-registry.*`, across
- *   every `functionVersion` (see {@linkcode rewriteSharedAsyncOpRegistry}).
+ *   that language's `generated-registry.*` at *this*
+ *   `functionVersion`'s own directory,
+ *   `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.*`
+ *   (#332 — scoped per-`functionVersion`, mirroring the manifest above, not a
+ *   single global file across every version like before; see
+ *   {@linkcode rewriteSharedAsyncOpRegistry}).
  * - For `go` only, its own aggregate at
  *   `{cwd}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
  *   (`go.mod` + `registry.go`, one `require`+`replace` per actor's own
@@ -435,6 +503,7 @@ export async function createAsyncOperationLogic(
   const registryFile = await rewriteSharedAsyncOpRegistry(
     asyncWorkerRoot,
     lang,
+    functionVersion,
   );
   if (registryFile) {
     logger.info("Wrote actors registry {file}", { file: registryFile });
