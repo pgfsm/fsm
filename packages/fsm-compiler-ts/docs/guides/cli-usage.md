@@ -244,24 +244,23 @@ Takes `-n`/`--function-name` and `-F`/`--function-version` — deliberately
 separate flags from `-N`/`--fsm-name`/`-V`/`--fsm-version`, since these actors
 have no owning FSM at all.
 
-For `typescript`/`python`/`rust`, also rewrites that language's single
-**global** registry at
-`{cwd}/async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>` from
-every shared-async-op actor currently on disk for that language, across every
-`functionVersion` (this run's actor included) — so repeated `create-async-logic`
-calls accumulate into one file instead of each one clobbering the last. Unlike
-the FSM-scoped registries `generate-async-logic` writes (one per
-`<fsmName>/<fsmVersion>`), this is deliberately flat, not partitioned by version
-— and it never touches the FSM-scoped aggregate
-(`<lang>-actors-registry.generated.ts`), which stays fully separate. Every
-entry's identity is fixed: `parentFsmName` and `asyncOperationType` are always
-`"sharedAsyncOperation"` (these actors have no owning FSM), `asyncOperationName`
-is the function name, and `parentFsmVersion`/`asyncOperationVersion` are both
-`--function-version`. Since the same function name can recur across different
-`functionVersion`s, each import in the registry is aliased
-(`<functionName>_<functionVersion>`) to avoid collisions. Go has no shared
-registry — each Go actor is already its own Go module (see its own `go.mod`), so
-only the actor file is written for `go`.
+For `typescript`/`python`/`rust`, also rewrites that language's registry at
+`{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
+(`generated_registry.py` for Python — its dotted `import` syntax can't reference
+a hyphenated module name) from every shared-async-op actor currently on disk for
+that language _at that one `functionVersion`_ (this run's actor included, same
+as `actors-manifest.json` above) — so repeated `create-async-logic` calls at the
+same `functionVersion` accumulate into one file instead of clobbering each
+other; a different `functionVersion` gets its own separate file. This never
+touches the FSM-scoped aggregate (`<lang>-actors-registry.generated.ts`), which
+stays fully separate. Every entry's identity is fixed: `parentFsmName` and
+`asyncOperationType` are always `"sharedAsyncOperation"` (these actors have no
+owning FSM), `asyncOperationName` is the function name, and
+`parentFsmVersion`/`asyncOperationVersion` are both `--function-version`. Since
+the same function name can recur across different `functionVersion`s, each
+import in the registry is aliased (`<functionName>_<functionVersion>`) to avoid
+collisions. Go has no shared registry — each Go actor is already its own Go
+module (see its own `go.mod`), so only the actor file is written for `go`.
 
 ```bash
 cd apps
