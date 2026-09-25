@@ -35,9 +35,10 @@ this app's own `fsm/`:
   `sdk.ts`, `<lang>-actors-registry.generated.ts`, etc.) at
   `async-worker/<lang>/`
 
-`create-async-logic`'s `shared-async-op/` pool (#309/#311) is the same story —
-no `--folder` at all, always anchored at `Deno.cwd()`, run from `apps/`. This
-also matches what actually resolves at runtime: `fsmlet`
+`create-async-logic`'s `sharedAsyncOperation/` pool (#309/#311, renamed from the
+hyphenated `shared-async-op/` by #330) is the same story — no `--folder` at all,
+always anchored at `Deno.cwd()`, run from `apps/`. This also matches what
+actually resolves at runtime: `fsmlet`
 (`packages/fsm-sync-worker-ts/src/fsmlet/fsmworker.ts`) reads
 `${Deno.cwd()}/sync-worker/...`/`${Deno.cwd()}/async-worker/...` when it starts,
 so the worker process itself needs the same `apps/`-level cwd for these paths to

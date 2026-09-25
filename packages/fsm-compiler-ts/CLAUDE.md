@@ -100,7 +100,7 @@ The gotchas below are for whoever next touches
   `generate-async-operation-logic.ts` passes `<fsmName>/<fsmVersion>` there to
   avoid multiple FSMs/versions writing under the same `<lang>` root colliding.
   `create-async-logic.ts`'s shared-async-op pool passes
-  `shared-async-op/<functionVersion>` there too (as of #309, mirroring
+  `sharedAsyncOperation/<functionVersion>` there too (as of #309, mirroring
   `<fsmName>/<fsmVersion>`) — see "`create-async-logic` writes under
   `async-worker/`" below for its own extra nesting need.
 - **`actors-manifest.json` is now per-language, not one combined manifest.**
@@ -149,7 +149,7 @@ The gotchas below are for whoever next touches
   full path already-composed by its caller rather than composing it itself the
   way the async aggregate writers do).
 
-## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324)
+## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`
 and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
@@ -163,13 +163,15 @@ and `-F`/`--function-version` (dedicated flags — no `--fsm-name`, and
 (`writeActorFile`'s now-removed `fileSubPath` param). #322 dropped that second
 nesting level — it had no FSM-scoped equivalent and existed only because the
 user who requested #309 asked for it explicitly; a later request (#322) asked
-for it removed. Current layout:
-`<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
+for it removed. #330 then renamed the top-level directory itself from
+`shared-async-op` (hyphenated) to `sharedAsyncOperation` (see its own section
+below). Current layout:
+`<appRoot>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
 — `writeActorFile`/`writeGoActorModule` no longer take a `fileSubPath` param at
 all (nothing else in the codebase ever passed one).
 
 #322 also added
-`<appRoot>/async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`
+`<appRoot>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`
 — written/rewritten on every `create-async-logic` call via
 `rewriteSharedAsyncOpManifest`, same "rebuild from whatever's actually on disk"
 approach as `rewriteSharedAsyncOpRegistry` below, but scoped to actors at _that
@@ -195,17 +197,19 @@ Registry-wise, this command deliberately does **not** mirror
 `generate-async-logic`'s per-`<fsmName>/<fsmVersion>` registries — since
 shared-async-op actors have no owning FSM/version to partition by, there's a
 single **global** file per language,
-`<appRoot>/async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
+`<appRoot>/async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>`,
 accumulating every `functionVersion`'s actors across repeated
 `create-async-logic` calls (rebuilt from a fresh directory walk each time, same
 idempotent-rebuild approach as before #309). This needed its own
-`shared-async-op-registry.eta` template per language (typescript/python/rust) —
-none of the existing registry templates fit, since they all assume the actor
-being registered is a direct sibling of (or reachable through an already-written
-per-group registry near) the file being written, and this one reaches into
-multiple `<functionVersion>/actors/<functionName>/` subtrees from one fixed
-location. Every import is aliased (`<functionName>_<functionVersion>`) since the
-same function name can legitimately recur across different `functionVersion`s.
+`shared-async-op-registry.eta` template per language (typescript/python/rust,
+file name unchanged by #330 — it's a source template file name, unrelated to the
+runtime output directory it writes into) — none of the existing registry
+templates fit, since they all assume the actor being registered is a direct
+sibling of (or reachable through an already-written per-group registry near) the
+file being written, and this one reaches into multiple
+`<functionVersion>/actors/<functionName>/` subtrees from one fixed location.
+Every import is aliased (`<functionName>_<functionVersion>`) since the same
+function name can legitimately recur across different `functionVersion`s.
 Deliberately never touches the FSM-scoped aggregate
 (`<lang>-actors-registry.generated.ts`) — this pool stays fully separate from
 it, same as before #309.
@@ -222,7 +226,7 @@ one) would still pick up, rebuilding a registry that imports a handler from a
 file that no longer exists.
 
 #324 also added Go's own aggregate,
-`<appRoot>/async-worker/go/shared-async-op/go-actors-registry-generated/`
+`<appRoot>/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
 (`go.mod` + `registry.go`) — before this, `--lang go` wrote the actor file and
 its own standalone `go.mod` but nothing stitched Go shared-async-op actors
 together the way TS/Python/Rust's `generated-registry.*` does, so they had no
@@ -230,13 +234,47 @@ generated way to be imported/dispatched as a group.
 `rewriteSharedAsyncOpGoRegistry` (create-async-logic.ts) mirrors
 `writeAggregateGoRegistry`'s FSM-scoped approach (one `require`+`replace` per
 actor's own module) but is a **separate function**, not a call into
-`writeAggregateGoRegistry` — that function derives each actor's on-disk `go.mod`
-directory from `<parentFsmName>/<parentFsmVersion>` directly, correct for the
-FSM-scoped pool where `parentFsmName` _is_ the real directory name, but
-shared-async-op actors' `parentFsmName` is the fixed identity string
-`"sharedAsyncOperation"` while their real on-disk directory is `shared-async-op`
-(hyphenated) — reusing it verbatim would compute a `replace` target pointing at
-a directory that doesn't exist.
+`writeAggregateGoRegistry` — even after #330, that function is scoped to the
+whole async-worker tree (`generate-async-logic` rebuilds it from every actor it
+finds), while this one writes a self-contained aggregate nested _inside_
+`sharedAsyncOperation/`, rebuildable by `create-async-logic` alone (a project
+that only calls `create-async-logic`, never `generate-async-logic`, still gets a
+working Go aggregate).
+
+### #330: `shared-async-op` (hyphenated) → `sharedAsyncOperation`
+
+`SHARED_ASYNC_OP_DIR_NAME` (create-async-logic.ts) now equals
+`SHARED_ASYNC_OP_PARENT_FSM_NAME` (both `"sharedAsyncOperation"`) — before, the
+real on-disk directory was the hyphenated `shared-async-op`, a different string
+from the `parentFsmName`/`asyncOperationType` identity every shared-async-op
+actor carries. That mismatch is why `generate-async-logic`'s aggregate step
+(which derives its per-group import path from `parentFsmName` literally, not the
+real directory name) always generated a broken import/`#[path]`/`replace`
+whenever a shared-async-op actor got swept into it
+(`collectRegisteredActorsFromAsyncWorkerDir` doesn't exclude
+`sharedAsyncOperation/` from that walk — a still-open, separate issue). Renaming
+the real directory to match the identity string removes that specific mismatch;
+it doesn't fully close the leak by itself, since the FSM-scoped aggregate also
+expects a **per-version** registry file
+(`<parentFsmName>/<parentFsmVersion>/generated-registry.<ext>`, #328) while
+`create-async-logic` still writes a single **global** flat file
+(`sharedAsyncOperation/generated-registry.<ext>`, no per-version nesting).
+
+One nuance the rename surfaced: Go module paths conventionally stay lowercase,
+and `goActorModulePath` (operation-logic-scaffold.ts, used when `writeActorFile`
+writes an individual Go actor's own `go.mod`) unconditionally lowercases the
+directory-name segment it derives identity from — harmless while that segment
+was already all-lowercase (`shared-async-op`), but `sharedAsyncOperation` has
+real uppercase letters, so the actor's own `go.mod` now declares itself as
+`.../sharedasyncoperation/...` (lowercase) while the _real on-disk directory_
+stays `sharedAsyncOperation` (case-preserved, since filesystem paths aren't
+subject to Go's module-path convention). By contrast,
+`rewriteSharedAsyncOpGoRegistry`'s `moduleName`/`modulePath` computations now
+also explicitly `.toLowerCase()` `SHARED_ASYNC_OP_DIR_NAME` for the same reason
+— its `require`/`replace` directives must reference the actor's `go.mod` by its
+_declared_ (lowercased) module name, while the `replace` directive's own _target
+path_ (`actorDir`) still uses the case-preserved directory name, since that
+one's a real filesystem path, not a module identifier.
 
 ## npm publish (`deno task build:npm`)
 

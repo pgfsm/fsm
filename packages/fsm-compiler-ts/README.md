@@ -233,18 +233,19 @@ version name matching `v\d{2}` (e.g. `v01`), required. Unrelated to
 **Output** — always under the reserved `async-worker/` subfolder at the current
 working directory:
 
-- `async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
-- `async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`,
+- `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>`
+- `async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`,
   rewritten from every shared-async-op actor currently on disk for that language
   _at that one `functionVersion`_ (every language, including Go).
 - For `typescript`/`python`/`rust`, that language's single **global** registry
-  file at `async-worker/<lang>/shared-async-op/generated-registry.<ext>`,
+  file at `async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>`,
   rewritten from every shared-async-op actor currently on disk for that language
   across every `functionVersion`.
 - For `go`, its own aggregate at
-  `async-worker/go/shared-async-op/go-actors-registry-generated/` (`go.mod` +
-  `registry.go`, one `require`+`replace` per actor's own standalone Go module —
-  Go actors can't share a flat registry file the way TS/Python/Rust do).
+  `async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
+  (`go.mod` + `registry.go`, one `require`+`replace` per actor's own standalone
+  Go module — Go actors can't share a flat registry file the way TS/Python/Rust
+  do).
 
 Neither ever touches the FSM-scoped aggregate
 (`<lang>-actors-registry.generated.ts`) — this pool is fully separate.

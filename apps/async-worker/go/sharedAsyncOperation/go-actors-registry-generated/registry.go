@@ -2,8 +2,8 @@
 package generatedregistry
 
 import (
-	byeFromPgfsm_v01 "apps/shared-async-op/v01/go/actors/byefrompgfsm"
-	helloFromPgfsm_v01 "apps/shared-async-op/v01/go/actors/hellofrompgfsm"
+	byeFromPgfsm_v01 "apps/sharedasyncoperation/v01/go/actors/byefrompgfsm"
+	helloFromPgfsm_v01 "apps/sharedasyncoperation/v01/go/actors/hellofrompgfsm"
 )
 
 type ActorRegistration struct {

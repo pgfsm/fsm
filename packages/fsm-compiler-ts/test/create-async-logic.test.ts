@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { createAsyncOperationLogic } from "../src/create-async-logic.ts";
 
-Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>", async () => {
+Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const file = await createAsyncOperationLogic(
@@ -12,7 +12,7 @@ Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbs
     );
     assertEquals(
       file,
-      `${dir}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScore/checkCreditScore.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors/checkCreditScore/checkCreditScore.ts`,
     );
     const content = await Deno.readTextFile(file);
     assertEquals(
@@ -24,7 +24,7 @@ Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbs
   }
 });
 
-Deno.test("createAsyncOperationLogic - writes actors-manifest.json under shared-async-op/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
+Deno.test("createAsyncOperationLogic - writes actors-manifest.json under sharedAsyncOperation/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -35,7 +35,7 @@ Deno.test("createAsyncOperationLogic - writes actors-manifest.json under shared-
     );
     const manifest = JSON.parse(
       await Deno.readTextFile(
-        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+        `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors-manifest.json`,
       ),
     );
     assertEquals(manifest, {
@@ -70,7 +70,7 @@ Deno.test("createAsyncOperationLogic - actors-manifest.json accumulates every fu
     await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
     const manifest = JSON.parse(
       await Deno.readTextFile(
-        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+        `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors-manifest.json`,
       ),
     );
     const srcs = manifest.actors.map((a: { src: string }) => a.src).sort();
@@ -97,12 +97,12 @@ Deno.test("createAsyncOperationLogic - actors-manifest.json is scoped to its own
     );
     const v01Manifest = JSON.parse(
       await Deno.readTextFile(
-        `${dir}/async-worker/typescript/shared-async-op/v01/actors-manifest.json`,
+        `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors-manifest.json`,
       ),
     );
     const v02Manifest = JSON.parse(
       await Deno.readTextFile(
-        `${dir}/async-worker/typescript/shared-async-op/v02/actors-manifest.json`,
+        `${dir}/async-worker/typescript/sharedAsyncOperation/v02/actors-manifest.json`,
       ),
     );
     assertEquals(v01Manifest.actors.length, 1);
@@ -120,7 +120,7 @@ Deno.test("createAsyncOperationLogic - go also gets actors-manifest.json, with i
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
     const manifest = JSON.parse(
       await Deno.readTextFile(
-        `${dir}/async-worker/go/shared-async-op/v01/actors-manifest.json`,
+        `${dir}/async-worker/go/sharedAsyncOperation/v01/actors-manifest.json`,
       ),
     );
     assertEquals(manifest, {
@@ -153,7 +153,7 @@ Deno.test("createAsyncOperationLogic - writes a global generated-registry.ts ent
       "checkCreditScore",
     );
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/shared-async-op/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
     );
     assertStringIncludes(
       registryContent,
@@ -194,7 +194,7 @@ Deno.test("createAsyncOperationLogic - a second call accumulates in the global r
     );
     await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/shared-async-op/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
     );
     assertStringIncludes(registryContent, "handler: checkCreditScore_v01,");
     assertStringIncludes(registryContent, "handler: verifyIdentity_v01,");
@@ -219,7 +219,7 @@ Deno.test("createAsyncOperationLogic - a second call with a different function-v
       "checkCreditScore",
     );
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/shared-async-op/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/generated-registry.ts`,
     );
     assertStringIncludes(
       registryContent,
@@ -254,12 +254,12 @@ Deno.test("createAsyncOperationLogic - does not touch the FSM-scoped aggregate r
   }
 });
 
-Deno.test("createAsyncOperationLogic - go writes no registry file (Go has no shared-async-op registry)", async () => {
+Deno.test("createAsyncOperationLogic - go writes no registry file (Go has no sharedAsyncOperation registry)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
     const registryExists = await Deno.stat(
-      `${dir}/async-worker/go/shared-async-op/generated-registry.go`,
+      `${dir}/async-worker/go/sharedAsyncOperation/generated-registry.go`,
     ).then(() => true).catch(() => false);
     assertEquals(registryExists, false);
   } finally {
@@ -279,11 +279,11 @@ Deno.test("createAsyncOperationLogic - go actor gets a go.mod rooted at the app 
       "checkCreditScore",
     );
     const goModContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/shared-async-op/v01/actors/checkCreditScore/go.mod`,
+      `${absAppRoot}/async-worker/go/sharedAsyncOperation/v01/actors/checkCreditScore/go.mod`,
     );
     assertEquals(
       goModContent,
-      "module fsm-core-example/shared-async-op/v01/go/actors/checkcreditscore\n\ngo 1.19\n",
+      "module fsm-core-example/sharedasyncoperation/v01/go/actors/checkcreditscore\n\ngo 1.19\n",
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -302,10 +302,10 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
     // Hand-remove the actor's own file + manifest, but leave the now-empty
     // <name>/ directory behind -- the exact scenario #324 reported.
     await Deno.remove(
-      `${dir}/async-worker/python/shared-async-op/v08/actors/checkCreditScoreNirajx/checkCreditScoreNirajx.py`,
+      `${dir}/async-worker/python/sharedAsyncOperation/v08/actors/checkCreditScoreNirajx/checkCreditScoreNirajx.py`,
     );
     await Deno.remove(
-      `${dir}/async-worker/python/shared-async-op/v08/actors-manifest.json`,
+      `${dir}/async-worker/python/sharedAsyncOperation/v08/actors-manifest.json`,
     );
 
     await createAsyncOperationLogic(
@@ -316,7 +316,7 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
     );
 
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/python/shared-async-op/generated-registry.py`,
+      `${dir}/async-worker/python/sharedAsyncOperation/generated-registry.py`,
     );
     assertEquals(registryContent.includes("v08"), false);
     assertStringIncludes(registryContent, "checkCreditScoreNirajx_v09");
@@ -325,7 +325,7 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
   }
 });
 
-Deno.test("createAsyncOperationLogic - go writes its own aggregate at shared-async-op/go-actors-registry-generated/ (#324)", async () => {
+Deno.test("createAsyncOperationLogic - go writes its own aggregate at sharedAsyncOperation/go-actors-registry-generated/ (#324)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const absAppRoot = `${dir}/fsm-core-example`;
@@ -338,21 +338,21 @@ Deno.test("createAsyncOperationLogic - go writes its own aggregate at shared-asy
     );
 
     const goModContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/shared-async-op/go-actors-registry-generated/go.mod`,
+      `${absAppRoot}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/go.mod`,
     );
     assertEquals(
       goModContent,
-      "module fsm-core-example/shared-async-op/go-actors-registry-generated\n\ngo 1.19\n\n" +
-        "require fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx v0.0.0\n\n" +
-        "replace fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx => ../v08/actors/checkCreditScoreNirajx\n",
+      "module fsm-core-example/sharedasyncoperation/go-actors-registry-generated\n\ngo 1.19\n\n" +
+        "require fsm-core-example/sharedasyncoperation/v08/go/actors/checkcreditscorenirajx v0.0.0\n\n" +
+        "replace fsm-core-example/sharedasyncoperation/v08/go/actors/checkcreditscorenirajx => ../v08/actors/checkCreditScoreNirajx\n",
     );
 
     const registryContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/shared-async-op/go-actors-registry-generated/registry.go`,
+      `${absAppRoot}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/registry.go`,
     );
     assertStringIncludes(
       registryContent,
-      'checkCreditScoreNirajx_v08 "fsm-core-example/shared-async-op/v08/go/actors/checkcreditscorenirajx"',
+      'checkCreditScoreNirajx_v08 "fsm-core-example/sharedasyncoperation/v08/go/actors/checkcreditscorenirajx"',
     );
     assertStringIncludes(
       registryContent,
@@ -377,7 +377,7 @@ Deno.test("createAsyncOperationLogic - go aggregate accumulates across repeated 
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
     await createAsyncOperationLogic(dir, "go", "v01", "verifyIdentity");
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/go/shared-async-op/go-actors-registry-generated/registry.go`,
+      `${dir}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/registry.go`,
     );
     assertStringIncludes(
       registryContent,
