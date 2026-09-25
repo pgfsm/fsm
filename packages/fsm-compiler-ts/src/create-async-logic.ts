@@ -2,6 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import { isNotFoundError, isVersionFolderName } from "./util.ts";
 import {
   ASYNC_WORKER_DIR_NAME,
+  collectRegisteredActorsFromAsyncWorkerDir,
   formatGoFilesBestEffort,
   formatRustFilesBestEffort,
   formatTsFilesBestEffort,
@@ -11,6 +12,8 @@ import {
   writeActorFile,
   writeActorsBarrel,
   writeActorsManifest,
+  writeAggregateActorsRegistry,
+  writeAggregateGoRegistry,
 } from "./operation-logic-scaffold.ts";
 import { render as renderTsSharedAsyncOpRegistry } from "./scaffold-templates/eta/typescript/shared-async-op-registry.generated.ts";
 import { render as renderPySharedAsyncOpRegistry } from "./scaffold-templates/eta/python/shared-async-op-registry.generated.ts";
@@ -517,10 +520,23 @@ async function rewriteSharedAsyncOpGoRegistry(
  *   `{cwd}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
  *   (`go.mod` + `registry.go`, one `require`+`replace` per actor's own
  *   standalone Go module — see {@linkcode rewriteSharedAsyncOpGoRegistry}).
+ * - The FSM-scoped aggregate for `lang` too (#336) —
+ *   `typescript-actors-registry.generated.ts`/`python_actors_registry_generated.py`/
+ *   `rust-actors-registry.generated.rs` at
+ *   `{cwd}/async-worker/<lang>/`, or Go's own
+ *   `{cwd}/async-worker/go/go-actors-registry-generated/`, via the same
+ *   {@linkcode collectRegisteredActorsFromAsyncWorkerDir} +
+ *   {@linkcode writeAggregateActorsRegistry}/{@linkcode writeAggregateGoRegistry}
+ *   helpers `generate-async-operation-logic.ts` uses — so a shared-async-op
+ *   actor is reachable from the FSM-scoped aggregate immediately, without a
+ *   separate `generate-async-logic` run. `collectRegisteredActorsFromAsyncWorkerDir`
+ *   already picks up this pool's own `actors-manifest.json` (written above,
+ *   since #322), so no separate collection logic is needed here. The worker
+ *   SDK (`cli.ts`/`sdk.ts`/etc, written by `writeWorkerSdk`) is deliberately
+ *   NOT refreshed here — it needs a real FSM source tree
+ *   (`realPluginRootAbsPath`) that this command doesn't have (no `--folder`).
  *
- * None of these ever touch the FSM-scoped aggregate
- * (`<lang>-actors-registry.generated.ts`) — this pool is fully separate from
- * it. Every entry's identity is fixed to `parentFsmName`/`asyncOperationType`
+ * Every entry's identity is fixed to `parentFsmName`/`asyncOperationType`
  * `"sharedAsyncOperation"` since these actors have no owning FSM. Returns the
  * actor file's absolute path.
  */
@@ -586,25 +602,73 @@ export async function createAsyncOperationLogic(
     });
   }
 
+  // Refreshes the FSM-scoped aggregate for `lang` too (#336) -- rebuilt from
+  // every RegisteredActor on disk under writeRootAbsPath (this pool's own
+  // actors-manifest.json included, since #322), same as
+  // generate-async-operation-logic.ts's own writeAggregateArtifacts step.
+  const allRegisteredActors = await collectRegisteredActorsFromAsyncWorkerDir(
+    writeRootAbsPath,
+  );
+  const aggregateFile = isRegistryLang(lang)
+    ? await writeAggregateActorsRegistry(
+      writeRootAbsPath,
+      allRegisteredActors,
+      lang,
+    )
+    : undefined;
+  const fsmScopedGoRegistryFile = lang === "go"
+    ? await writeAggregateGoRegistry(
+      writeRootAbsPath,
+      appRootDirName,
+      allRegisteredActors,
+    )
+    : undefined;
+  if (aggregateFile) {
+    logger.info("Wrote FSM-scoped aggregate registry {file}", {
+      file: aggregateFile,
+    });
+  }
+  if (fsmScopedGoRegistryFile) {
+    logger.info("Wrote FSM-scoped aggregate registry {file}", {
+      file: fsmScopedGoRegistryFile,
+    });
+  }
+
   // One batched format call instead of per-file — see
   // generate-async-operation-logic.ts's doc comment for the same rationale
-  // (only ever 1-3 files here, but keeps both scaffolding paths consistent).
-  // actors-manifest.json is pre-formatted JSON, not deno-fmt/rustfmt content
-  // -- same reasoning generate-async-operation-logic.ts's own manifest write
-  // follows -- so it's excluded from both batches. Python has no formatter
-  // here (matching generate-async-operation-logic.ts's own lack of one), so
-  // barrelFile is only batched for typescript/rust.
-  const tsFiles = [file, barrelFile, registryFile].filter(
+  // (only ever a handful of files here, but keeps both scaffolding paths
+  // consistent). actors-manifest.json is pre-formatted JSON, not
+  // deno-fmt/rustfmt content -- same reasoning
+  // generate-async-operation-logic.ts's own manifest write follows -- so it's
+  // excluded from both batches. Python has no formatter here (matching
+  // generate-async-operation-logic.ts's own lack of one), so barrelFile is
+  // only batched for typescript/rust.
+  const tsFiles = [file, barrelFile, registryFile, aggregateFile].filter(
     (f): f is string => f !== undefined && lang === "typescript",
   );
-  const rustFiles = [barrelFile, registryFile].filter(
+  const rustFiles = [barrelFile, registryFile, aggregateFile].filter(
     (f): f is string => f !== undefined && lang === "rust",
   );
   await formatTsFilesBestEffort(tsFiles);
   await formatRustFilesBestEffort(rustFiles);
-  if (goRegistry) {
-    await formatGoFilesBestEffort([goRegistry.registryFile]);
-    await goModTidyManyBestEffort([goRegistry.goModDir]);
+  const goFilesToFormat = [
+    goRegistry?.registryFile,
+    fsmScopedGoRegistryFile,
+  ].filter((f): f is string => f !== undefined);
+  if (goFilesToFormat.length > 0) {
+    await formatGoFilesBestEffort(goFilesToFormat);
+  }
+  const goModDirsToTidy = [
+    goRegistry?.goModDir,
+    fsmScopedGoRegistryFile
+      ? fsmScopedGoRegistryFile.slice(
+        0,
+        fsmScopedGoRegistryFile.lastIndexOf("/"),
+      )
+      : undefined,
+  ].filter((d): d is string => d !== undefined);
+  if (goModDirsToTidy.length > 0) {
+    await goModTidyManyBestEffort(goModDirsToTidy);
   }
 
   return file;

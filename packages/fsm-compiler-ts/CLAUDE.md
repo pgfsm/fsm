@@ -218,11 +218,10 @@ template does. Every import is still aliased
 (`<functionName>_<functionVersion>`) even though a same-file cross-version
 collision is no longer possible post-#332 — kept for a consistent alias format
 across every shared-async-op artifact (including Go's own aggregate, which is
-still global, see below). Deliberately never touches the FSM-scoped aggregate
-(`<lang>-actors-registry.generated.ts`) directly — this pool stays fully
-separate from it, same as before #309 (see #330/#332's own sections for how a
-shared-async-op actor nonetheless ends up reachable from that aggregate via the
-still-open collector-leak issue).
+still global, see below). Before #336, this command never touched the FSM-scoped
+aggregate (`<lang>-actors-registry.generated.ts`) directly — see #336's own
+section below for why that changed and how a shared-async-op actor became
+reachable from it.
 
 `listExistingSharedAsyncOpActors` (the shared "rebuild from what's on disk" walk
 both the registry and the manifest use) verifies each actor's own stub file
@@ -375,6 +374,42 @@ missing-barrel error above). TS's own worker-SDK CLI `list` command and Python's
 unaffected by this change. The FSM-scoped aggregate's own demonstration files
 were reverted back to their previously-committed state after verification — only
 the shared-async-op pool's own new barrel files ship with this change.
+
+### #336: `create-async-logic` refreshes the FSM-scoped aggregate itself
+
+Before this, a shared-async-op actor only became reachable from the FSM-scoped
+aggregate (`<lang>-actors-registry.generated.ts` /
+`async-worker/go/go-actors-registry-generated/`) once `generate-async-logic`/
+`generate-all` ran separately afterward — via
+`collectRegisteredActorsFromAsyncWorkerDir` not excluding
+`sharedAsyncOperation/` from its walk (the "collector-leak issue" referenced
+throughout #330/#332/#334's own sections above, which those three issues made
+resolve _correctly_ rather than closing outright). A project that only ever
+calls `create-async-logic` had no way to get a working FSM-scoped aggregate at
+all.
+
+`createAsyncOperationLogic` now calls the same
+`collectRegisteredActorsFromAsyncWorkerDir` +
+`writeAggregateActorsRegistry`/`writeAggregateGoRegistry` helpers
+`generate-async-operation-logic.ts`'s own `writeAggregateArtifacts` uses, scoped
+to just the language this call wrote (`isRegistryLang(lang)` for TS/Python/Rust,
+`lang === "go"` for Go) rather than looping over every language unconditionally
+the way `writeAggregateArtifacts` does — since a single `create-async-logic`
+invocation only ever touches one language, and
+`collectRegisteredActorsFromAsyncWorkerDir` re-reads the _entire_ disk state
+regardless, refreshing an untouched language's aggregate would just be a no-op
+rewrite. No new collection logic was needed:
+`collectRegisteredActorsFromAsyncWorkerDir` already reads this pool's own
+`actors-manifest.json` back (written since #322), so it picks up shared-async-op
+actors for free.
+
+Deliberately does **not** call `writeWorkerSdk` (the `cli.ts`/`sdk.ts`/etc
+worker SDK entrypoint) — that needs a real FSM source tree
+(`realPluginRootAbsPath`) for its `gatewaySidecarProtoGen*` targets, which
+`create-async-logic` doesn't have (no `--folder`, see #311 above). A worker SDK
+build still needs a `generate-async-logic`/`generate-all` run at least once;
+only the aggregate _registry_ files are kept fresh by `create-async-logic` alone
+now.
 
 ## npm publish (`deno task build:npm`)
 

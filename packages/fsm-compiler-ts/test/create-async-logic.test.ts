@@ -351,7 +351,7 @@ Deno.test("createAsyncOperationLogic - go writes no actors barrel (Go has no sha
   }
 });
 
-Deno.test("createAsyncOperationLogic - does not touch the FSM-scoped aggregate registry", async () => {
+Deno.test("createAsyncOperationLogic - also refreshes the FSM-scoped aggregate registry for lang (#336)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -360,10 +360,67 @@ Deno.test("createAsyncOperationLogic - does not touch the FSM-scoped aggregate r
       "v01",
       "checkCreditScore",
     );
-    const aggregateExists = await Deno.stat(
+    const aggregateContent = await Deno.readTextFile(
       `${dir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
-    ).then(() => true).catch(() => false);
-    assertEquals(aggregateExists, false);
+    );
+    assertStringIncludes(
+      aggregateContent,
+      'from "./sharedAsyncOperation/v01/generated-registry.ts";',
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - a second call at a different functionVersion keeps both versions' actors in the FSM-scoped aggregate (#336)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v02",
+      "verifyIdentity",
+    );
+    const aggregateContent = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    );
+    assertStringIncludes(
+      aggregateContent,
+      'from "./sharedAsyncOperation/v01/generated-registry.ts";',
+    );
+    assertStringIncludes(
+      aggregateContent,
+      'from "./sharedAsyncOperation/v02/generated-registry.ts";',
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - go also refreshes its FSM-scoped aggregate at async-worker/go/go-actors-registry-generated/ (#336)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const absAppRoot = `${dir}/fsm-core-example`;
+    await Deno.mkdir(absAppRoot, { recursive: true });
+    await createAsyncOperationLogic(
+      absAppRoot,
+      "go",
+      "v01",
+      "checkCreditScore",
+    );
+    const registryContent = await Deno.readTextFile(
+      `${absAppRoot}/async-worker/go/go-actors-registry-generated/registry.go`,
+    );
+    assertStringIncludes(
+      registryContent,
+      'ParentFsmName:          "sharedAsyncOperation",',
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
