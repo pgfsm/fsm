@@ -242,6 +242,115 @@ Deno.test("createAsyncOperationLogic - a different function-version gets its own
   }
 });
 
+Deno.test("createAsyncOperationLogic - writes actors/index.ts barrel under sharedAsyncOperation/<functionVersion>/ re-exporting every typescript actor at that version (#334)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
+    const barrelContent = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors/index.ts`,
+    );
+    assertStringIncludes(
+      barrelContent,
+      'export { checkCreditScore } from "./checkCreditScore/checkCreditScore.ts";',
+    );
+    assertStringIncludes(
+      barrelContent,
+      'export { verifyIdentity } from "./verifyIdentity/verifyIdentity.ts";',
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - writes actors/__init__.py barrel for python (#334)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(dir, "python", "v01", "checkCreditScore");
+    const barrelContent = await Deno.readTextFile(
+      `${dir}/async-worker/python/sharedAsyncOperation/v01/actors/__init__.py`,
+    );
+    assertStringIncludes(
+      barrelContent,
+      "from .checkCreditScore.checkCreditScore import checkCreditScore",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - writes actors/mod.rs barrel for rust, closing the barrel gap the FSM-scoped aggregate's #[path] include relies on (#334)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(dir, "rust", "v01", "checkCreditScore");
+    const barrelContent = await Deno.readTextFile(
+      `${dir}/async-worker/rust/sharedAsyncOperation/v01/actors/mod.rs`,
+    );
+    assertStringIncludes(
+      barrelContent,
+      '#[path = "checkCreditScore/checkCreditScore.rs"]',
+    );
+    assertStringIncludes(
+      barrelContent,
+      "pub use checkCreditScore::checkCreditScore;",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - barrel is scoped to its own functionVersion, not shared across versions", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v01",
+      "checkCreditScore",
+    );
+    await createAsyncOperationLogic(
+      dir,
+      "typescript",
+      "v02",
+      "checkCreditScore",
+    );
+    const v01Barrel = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actors/index.ts`,
+    );
+    const v02Barrel = await Deno.readTextFile(
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v02/actors/index.ts`,
+    );
+    assertStringIncludes(
+      v01Barrel,
+      'export { checkCreditScore } from "./checkCreditScore/checkCreditScore.ts";',
+    );
+    assertStringIncludes(
+      v02Barrel,
+      'export { checkCreditScore } from "./checkCreditScore/checkCreditScore.ts";',
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("createAsyncOperationLogic - go writes no actors barrel (Go has no sharedAsyncOperation barrel)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
+    const barrelExists = await Deno.stat(
+      `${dir}/async-worker/go/sharedAsyncOperation/v01/actors/mod.rs`,
+    ).then(() => true).catch(() => false);
+    assertEquals(barrelExists, false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("createAsyncOperationLogic - does not touch the FSM-scoped aggregate registry", async () => {
   const dir = await Deno.makeTempDir();
   try {

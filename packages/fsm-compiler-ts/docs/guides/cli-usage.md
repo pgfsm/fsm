@@ -244,6 +244,15 @@ Takes `-n`/`--function-name` and `-F`/`--function-version` — deliberately
 separate flags from `-N`/`--fsm-name`/`-V`/`--fsm-version`, since these actors
 have no owning FSM at all.
 
+For `typescript`/`python`/`rust`, also rewrites that language's actors barrel
+(`index.ts`/`__init__.py`/`mod.rs`) at
+`{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<barrel file>`,
+re-exporting every shared-async-op actor currently on disk for that language _at
+that one `functionVersion`_ (#334 — closes the gap where a shared-async-op actor
+swept into `generate-async-logic`'s FSM-scoped aggregate had no barrel for
+Rust's aggregate to `#[path]`-include). Go gets no barrel, same as no registry
+below.
+
 For `typescript`/`python`/`rust`, also rewrites that language's registry at
 `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
 (`generated_registry.py` for Python — its dotted `import` syntax can't reference
