@@ -342,26 +342,118 @@ Go has no registry upload. A Go module in a repo subdirectory is released by a
 tag prefixed with that subdirectory, and the Go module proxy serves it from
 there — which is also why `gen/go` has to stay committed.
 
-### Cutting a release
+### Releasing a new version
 
-1. In a PR, bump `version` in `gen/typescript/deno.json`,
-   `gen/python/pyproject.toml` and `gen/rust/Cargo.toml` to the same value (e.g.
-   `0.2.0`, or a prerelease like `0.2.0-alpha.0`, which publishes under npm's
-   `alpha` dist-tag). CI's `Release manifests agree` step fails if they differ.
-2. After it merges, tag the merge commit and push the tag:
+A release is two steps: a PR that bumps the version, then a tag on the merged
+commit. The tag, not the merge, is what publishes. The first release was
+`proto-v0.1.0`. To see what's been released so far:
 
-   ```sh
-   git tag proto-v0.2.0 <merge-commit>
-   git push origin proto-v0.2.0
-   ```
+```sh
+git fetch --tags && git tag -l 'proto-v*' --sort=-v:refname
+```
 
-   This starts `proto-publish.yml`. Its `verify` job runs
-   `scripts/check-release-manifests.ts` with the tag's version, and nothing
-   publishes if a manifest disagrees.
+#### 1. Pick the version number
 
-Re-running a partly failed release is safe: each job skips what's already
-published (the npm or crates.io version, the PyPI files, or a Go tag that
-already points at the same commit).
+| What changed since the last release                                                                      | Before 1.0           | From 1.0 on          |
+| -------------------------------------------------------------------------------------------------------- | -------------------- | -------------------- |
+| Breaking contract change: field removed, renumbered or retyped, RPC removed (`buf breaking` flags these) | minor: 0.1.0 → 0.2.0 | major: 1.2.0 → 2.0.0 |
+| New fields, messages or RPCs (backward-compatible)                                                       | minor: 0.1.0 → 0.2.0 | minor: 1.2.0 → 1.3.0 |
+| No contract change: package metadata, READMEs, a `protoc`/plugin bump                                    | patch: 0.1.0 → 0.1.1 | patch: 1.2.0 → 1.2.1 |
+
+A prerelease adds a suffix: `0.2.0-alpha.0`, then `0.2.0-alpha.1`, and so on.
+npm publishes it under the `alpha` dist-tag, not `latest`, so a plain
+`npm install` doesn't pick it up. PyPI shows it as `0.2.0a0`, and pip skips it
+unless asked for `--pre`.
+
+Going to **2.0.0 or later** also needs a Go change: Go requires the module path
+of a v2+ module to end in `/v2`. Change `module` in `gen/go/go.mod`, the
+`module=` option on both Go plugins in each `*.buf.gen.yaml`, and every `.proto`
+file's `option go_package` to use `.../gen/go/v2`, then regenerate. Output stays
+under `gen/go/`, because `module=` strips that prefix. Every Go consumer then
+changes its import paths too.
+
+#### 2. Bump the version in a PR
+
+Set `version` to the new number in all three manifests:
+
+| File                        | Line to change        | Registry  |
+| --------------------------- | --------------------- | --------- |
+| `gen/typescript/deno.json`  | `"version": "0.2.0",` | npm       |
+| `gen/python/pyproject.toml` | `version = "0.2.0"`   | PyPI      |
+| `gen/rust/Cargo.toml`       | `version = "0.2.0"`   | crates.io |
+
+Go has no manifest version. Its version comes only from the tag the workflow
+creates in step 4.
+
+The bump goes through a PR like any other change: `main` only accepts PRs with
+passing CI. CI's `Release manifests agree` step fails the PR if the three files
+disagree. If the `.proto` files changed, the regenerated `gen/` must already be
+on `main` or in this PR (the drift check enforces it).
+
+#### 3. Tag the merge commit and push the tag
+
+Once the PR is merged and `main`'s CI is green:
+
+```sh
+git fetch origin
+git tag proto-v0.2.0 origin/main   # or the merge commit's SHA
+git push origin proto-v0.2.0
+```
+
+The tag must be exactly `proto-v` + the version in the manifests.
+
+#### 4. Watch the release
+
+Pushing the tag starts `proto-publish.yml`. Its `verify` job re-runs
+`scripts/check-release-manifests.ts` against the tag's version. If that passes,
+four jobs run in parallel: `npm`, `pypi`, `crates` and `go`. The `go` job pushes
+the tag `packages/fsm-proto-codegen/gen/go/v0.2.0` at the same commit.
+
+```sh
+gh run list --workflow proto-publish.yml --limit 1
+gh run watch <run-id> --exit-status
+```
+
+#### 5. Check each registry
+
+```sh
+npm view @pgfsm/proto-codegen@0.2.0 version --prefer-online
+curl -s https://pypi.org/pypi/pgfsm-proto-codegen/0.2.0/json | head -c 200
+curl -s -A "pgfsm-release-check" https://crates.io/api/v1/crates/pgfsm-proto-codegen/0.2.0 | head -c 200
+curl -s https://proxy.golang.org/github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/@v/v0.2.0.info
+```
+
+npm can keep answering 404 for a few minutes after a successful publish, because
+its CDN caches the earlier "not found" response. That happened on `0.1.0` and
+cleared after about 4 minutes. If the `npm` job's log shows
+`+ @pgfsm/proto-codegen@0.2.0`, the publish worked; wait and retry.
+
+#### If something goes wrong
+
+- **`verify` fails** ("manifest versions disagree"): usually the tag was pushed
+  before the bump PR merged, or its number doesn't match the manifests. Nothing
+  was published, so delete the tag, fix the cause, and tag again:
+
+  ```sh
+  git push origin :refs/tags/proto-v0.2.0 && git tag -d proto-v0.2.0
+  ```
+
+- **One publish job fails** (e.g. a registry outage or an expired token): fix
+  the cause, then re-run it with **Re-run failed jobs** in the Actions UI or
+  `gh run rerun <run-id> --failed`. Re-running is safe: each job skips what's
+  already published (the npm or crates.io version, the PyPI files, or a Go tag
+  already at the same commit).
+
+- **A bad version got published**: registries never let a published version
+  number be reused, so don't delete the tag and re-release the same number.
+  Publish a fixed version with the next patch number, then mark the bad one:
+
+  | Registry  | Mark the bad version                                                             |
+  | --------- | -------------------------------------------------------------------------------- |
+  | npm       | `npm deprecate @pgfsm/proto-codegen@0.2.0 "broken, use 0.2.1"`                   |
+  | PyPI      | yank the release from the project's release management page on pypi.org          |
+  | crates.io | `cargo yank --version 0.2.0 pgfsm-proto-codegen`                                 |
+  | Go        | add `retract v0.2.0 // broken, use v0.2.1` to `gen/go/go.mod` in the fix release |
 
 ### `pyproject.toml`'s protobuf lower bound
 
@@ -375,7 +467,9 @@ differ, e.g. after a `protoc` bump in the `Dockerfile`.
 
 ### One-time registry setup
 
-Needed once, before the first release:
+Done before `0.1.0`, and kept here in case it needs redoing (for example a
+rotated token, or a renamed workflow file or environment, which PyPI's trusted
+publisher must match exactly):
 
 - **npm**: nothing new. `@pgfsm/proto-codegen` publishes under the existing
   `@pgfsm` scope with the same `NPM_TOKEN` secret as the other packages.
