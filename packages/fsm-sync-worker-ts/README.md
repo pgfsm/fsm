@@ -7,13 +7,16 @@ never blocks on or owns worker lifecycle. Kubernetes-style split: `fsmlet`
 `fsmctl`; `pgcron` is a one-shot deploy-time alternative to running a standing
 `fsmscheduler`.
 
+`fsmlet` has no CLI bin yet (removed for now — see this package's `CLAUDE.md`) —
+embed `runFsmlet`/`startFsmlet` directly (see Programmatic usage below).
+
 ## Install
 
-This package ships four CLI bins, so a plain `npx @pgfsm/sync-worker` can't tell
-which one to run — pass `-p`/`--package` and name the bin after `--`:
+This package ships three CLI bins, so a plain `npx @pgfsm/sync-worker` can't
+tell which one to run — pass `-p`/`--package` and name the bin after `--`:
 
 ```bash
-npx -p @pgfsm/sync-worker -- fsmlet --help
+npx -p @pgfsm/sync-worker -- fsmscheduler --help
 ```
 
 or install it as a dependency / global CLI, after which each bin is callable
@@ -21,36 +24,16 @@ directly:
 
 ```bash
 npm install @pgfsm/sync-worker
-npm install -g @pgfsm/sync-worker   # for global fsmlet/fsmscheduler/fsmctl/pgcron commands
+npm install -g @pgfsm/sync-worker   # for global fsmscheduler/fsmctl/pgcron commands
 ```
 
 No Deno install is required to use the CLIs this way.
 
 ## Usage
 
-Four CLIs ship in this package. Run any of them with `--help` for its full flag
-reference. Examples below assume a global install (`fsmlet ...`); via plain
-`npx` prefix each with `npx -p @pgfsm/sync-worker --`.
-
-### `fsmlet` — node agent (kubelet equivalent)
-
-**Input** — `-f`/`--fsm-folder-path <path>`: absolute path to the compiled FSM
-folder, required. `-d`/`--db-url <url>` (falls back to `DATABASE_URL`).
-`-m`/`--max-concurrency <n>`: max FSM instances driven concurrently (default
-`8`). `-i`/`--fsmlet-id <id>`: stable identity (falls back to `FSMLET_ID` env,
-then a random UUID per startup).
-
-**Output/side effect** — starts a long-running process: registers itself in
-`fsm_daemon_node`, creates its private pgmq queues, then polls
-`daemon_{id}_start`/`daemon_{id}_resume` for work `fsmscheduler` routes to it
-based on module availability and capacity. Sends a heartbeat every 5s so the
-scheduler can score this node. Deregisters cleanly on shutdown
-(`SIGINT`/`SIGTERM`; a second signal force-exits).
-
-```bash
-fsmlet -f /abs/path/to/fsm
-fsmlet -f /abs/path/to/fsm --max-concurrency 16 --fsmlet-id worker-1
-```
+Three CLIs ship in this package. Run any of them with `--help` for its full flag
+reference. Examples below assume a global install (`fsmscheduler ...`); via
+plain `npx` prefix each with `npx -p @pgfsm/sync-worker --`.
 
 ### `fsmscheduler` — control-plane router (kube-scheduler equivalent)
 
@@ -133,7 +116,7 @@ pgcron --schedule "10 seconds"
 
 ```typescript
 import {
-  runFsmlet, // node-agent implementation behind the fsmlet CLI
+  runFsmlet, // node-agent implementation — no CLI bin yet, embed directly
   runFsmScheduler, // control-plane routing implementation behind fsmscheduler
   startFSMWorker, // drive a single FSM instance
   startFSMWorkerWithDBLock, // same, holding a DB-level advisory lock

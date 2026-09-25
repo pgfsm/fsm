@@ -8,7 +8,7 @@ import type { DBDeps } from "@pgfsm/db";
 const logger = getLogger(["@pgfsm/worker", "macrostep"]);
 const actionsLogger = getLogger(["@pgfsm/worker", "macrostep", "actions"]);
 import type { FsmQueueMessage } from "../types.ts";
-import type { FsmModuleDefinition, MacrostepV2Result } from "./type.ts";
+import type { MacrostepV2Result, SyncOperationRegistration } from "./type.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -58,6 +58,25 @@ export function splitBySendEventName<
   return [newTotal, removed];
 }
 
+/**
+ * Finds a single handler in the compiler-generated sync-operation
+ * registrations sub-array (see `sync-operation-registrations.ts`) by type +
+ * name — the counterpart of the old `fsmModuleDefinition.actions[name]`/
+ * `fsmModuleDefinition.guards[name]` map lookups, now that the worker is
+ * handed the raw `SyncOperationRegistration[]` sub-array for this
+ * FSM/version rather than pre-grouped `{actions, guards, delays}` maps.
+ */
+function findSyncOperationHandler(
+  registrations: SyncOperationRegistration[] | null | undefined,
+  syncOperationType: SyncOperationRegistration["syncOperationType"],
+  syncOperationName: string,
+): ((...args: unknown[]) => unknown) | undefined {
+  return registrations?.find((r) =>
+    r.syncOperationType === syncOperationType &&
+    r.syncOperationName === syncOperationName
+  )?.handler;
+}
+
 // Helper function to process a message for a given queue
 // This function should be pure and reusable for different message processing logic
 //
@@ -65,14 +84,11 @@ export function splitBySendEventName<
 // @param queueName - The name of the queue
 // @param msg - The message object to process
 // @returns Promise<void>
-// Helper: run an action implementation from an actions module.
+// Helper: run an action implementation resolved from the FSM's sync-operation registrations.
 export async function runActionImplementation(
   actionKind: "exit" | "transition" | "entry",
   action: Json,
-  actionsModule:
-    | Record<string, (...args: unknown[]) => unknown>
-    | null
-    | undefined,
+  syncOperationRegistrations: SyncOperationRegistration[] | null | undefined,
   current_context: Json,
   meta: {
     deps: DBDeps;
@@ -86,8 +102,13 @@ export async function runActionImplementation(
   });
   try {
     const actionName = action.type || action.action_type || action.name;
-    if (actionsModule && typeof actionsModule[actionName] === "function") {
-      const result = await actionsModule[actionName](
+    const handler = findSyncOperationHandler(
+      syncOperationRegistrations,
+      "action",
+      actionName,
+    );
+    if (typeof handler === "function") {
+      const result = await handler(
         current_context,
         action.params || {},
         meta,
@@ -116,7 +137,7 @@ export async function macrostepV2(
   resolvedStateValue: Json,
   fsmName: string,
   fsmVersion: number | string,
-  fsmModuleDefinition?: FsmModuleDefinition,
+  syncOperationRegistrations?: SyncOperationRegistration[],
 ): Promise<MacrostepV2Result | undefined> {
   const resolvedState = resolvedStateValue as {
     json: Json;
@@ -199,7 +220,11 @@ export async function macrostepV2(
               Json
             >;
           if (condObj.type) {
-            const guardFn = fsmModuleDefinition?.guards?.[condObj.type];
+            const guardFn = findSyncOperationHandler(
+              syncOperationRegistrations,
+              "guard",
+              condObj.type,
+            );
             if (typeof guardFn === "function") {
               const eval_result = await guardFn(
                 current_context,
@@ -267,7 +292,7 @@ export async function macrostepV2(
       current_context = await runActionImplementation(
         "exit",
         action,
-        fsmModuleDefinition?.actions,
+        syncOperationRegistrations,
         current_context,
         { deps, queueName, msg },
       );
@@ -280,7 +305,7 @@ export async function macrostepV2(
     current_context = await runActionImplementation(
       "transition",
       action,
-      fsmModuleDefinition?.actions,
+      syncOperationRegistrations,
       current_context,
       { deps, queueName, msg },
     );
@@ -307,7 +332,7 @@ export async function macrostepV2(
       current_context = await runActionImplementation(
         "entry",
         action,
-        fsmModuleDefinition?.actions,
+        syncOperationRegistrations,
         current_context,
         { deps, queueName, msg },
       );
