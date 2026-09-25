@@ -9,10 +9,7 @@ import type {
   FsmStartupConfig,
 } from "./type.ts";
 import type { FsmPluginValidationResult } from "@pgfsm/compiler";
-import {
-  validateSyncOperationFromFolders,
-  validateSyncOperationFromFsmJson,
-} from "@pgfsm/compiler";
+import { discoverVerifiedFsmModules } from "./sync-operation-registrations.ts";
 import type { AsyncActor, FsmModule } from "@pgfsm/db";
 import {
   checkRegistryAndWorkingForAsyncActors,
@@ -88,7 +85,8 @@ class Semaphore {
  * FSM fsmlet — node agent (kubelet equivalent).
  *
  * On startup:
- *   1. validateSyncOperationFromFolders FSM modules.
+ *   1. discoverVerifiedFsmModules FSM modules from the compiler-generated
+ *      sync-worker output (see sync-operation-registrations.ts, #340).
  *   2. based on asyncOperationVerificationMode, verifies asyncOperationActors in the FSM modules.
  *   3. Load each verified FSM module into the database.
  *   4. Registers itself with valid FSM modules in fsm_workerlet.
@@ -128,8 +126,13 @@ export async function startFsmlet(
     },
   );
   if (fsmConfig) {
-    // Step 1: validateSyncOperationFromFolders FSM modules, or — for a single
-    // fsm.json file — validateSyncOperationFromFsmJson against just that FSM.
+    // Step 1: discover this fsmlet's FSM modules straight from the
+    // compiler-generated sync-worker output — no per-instance dynamic-import
+    // validation against the source FSM tree any more (see
+    // sync-operation-registrations.ts, #340). Single fsm.json mode narrows to
+    // just that one <fsmName>/<fsmVersion>; folder mode takes every group the
+    // aggregate registry has, minus skipDirs (matched against fsmName, same
+    // as the old source-tree walk skipped top-level plugin-root folders).
     const fsmSource = fsmConfig.fsm
       ? isFsmJsonFileConfig(fsmConfig.fsm)
         ? fsmConfig.fsm.fsmJsonPath
@@ -137,17 +140,15 @@ export async function startFsmlet(
       : undefined;
     const outputFsm = fsmConfig.fsm
       ? isFsmJsonFileConfig(fsmConfig.fsm)
-        ? [
-          await validateSyncOperationFromFsmJson(
-            fsmConfig.fsm.fsmJsonPath,
-            fsmConfig.fsm.fsmName,
-            fsmConfig.fsm.fsmVersion,
-          ),
-        ]
-        : await validateSyncOperationFromFolders(
-          fsmConfig.fsm.folderPath,
-          fsmConfig.fsm.skipDirs ?? [],
-        )
+        ? await discoverVerifiedFsmModules({
+          mode: "single",
+          fsmName: fsmConfig.fsm.fsmName,
+          fsmVersion: fsmConfig.fsm.fsmVersion,
+        })
+        : await discoverVerifiedFsmModules({
+          mode: "all",
+          skipFsmNames: fsmConfig.fsm.skipDirs ?? [],
+        })
       : [];
     const verifiedFsm = outputFsm.filter((m) => m.isFsmModuleVerified === true);
 
@@ -337,8 +338,6 @@ export async function startFsmlet(
           instanceId,
           fsmName,
           fsmVersion,
-          module,
-          false,
           controller.signal,
         )
           .then((result) => {

@@ -77,3 +77,49 @@ where to look first.
 - `fsmlet/` — node-agent implementation for FSM workers
 - `fsmscheduler/` — control-plane routing implementation
 - `logger.ts` — composition-root LogTape config for this process
+
+## Workers are driven by the compiled `SYNC_OPERATION_REGISTRATIONS` aggregate, not per-instance validation (#340)
+
+`fsmlet.ts`'s startup no longer calls `@pgfsm/compiler`'s
+`validateSyncOperationFromFsmJson`/`validateSyncOperationFromFolders`, and
+`fsmworker.ts`'s `startFSMWorkerWithDBLock` no longer calls
+`validateSyncOperationFromFolder` or dynamically `import()`s each
+`<fsmName>/<fsmVersion>`'s own `actions|guards|delays/index.ts` (nor
+`async-worker/.../actors/index.ts` — that field was write-only, never actually
+consumed downstream). Both were re-validating/re-resolving sync-operation
+modules per fsmlet startup or per dispatched instance, duplicating work the
+compiler already does at generate-time.
+
+Both now go through `fsmlet/sync-operation-registrations.ts`, which dynamically
+imports the compiler-generated
+`sync-worker/typescript/aggregate-generated-sync-operation-registry.ts`
+(`SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[]` — see
+fsm-compiler-ts #338) once per call site and trusts it: any
+`<fsmName>/<fsmVersion>` present there, with a readable `fsm.json` copy
+alongside it, is considered verified — the compiler is what guarantees the
+registered handlers actually exist, not this process (deliberately no
+re-validation via dynamic import, and no AJV schema check either, now that this
+package only ever consumes already-compiled output).
+
+- `discoverVerifiedFsmModules({ mode: "all" | "single", ... })` replaces
+  `fsmlet.ts`'s step 1 (still returns `FsmPluginValidationResult[]`, the
+  `@pgfsm/compiler` type the rest of `fsmlet.ts` already threads through
+  `loadFsmFromJson`/`checkRegistryForAsyncActors`/`registerFsmlet`, to keep
+  those downstream steps unchanged — `fsmAbsFolderPath`/`fsmModuleDefinition`/
+  `failedMethods` are now best-effort placeholders, no longer meaningful once
+  module resolution and validation both live in the compiler).
+- `loadAllSyncOperationRegistrations()` + `syncOperationRegistrationsFor(...)`
+  replace `fsmworker.ts`'s per-instance dynamic-import branch:
+  `startFSMWorkerWithDBLock` loads the aggregate once, filters it down to the
+  dispatched instance's own `<fsmName>/<fsmVersion>` sub-array, and threads that
+  sub-array — not a pre-grouped `{actions, guards, delays}` map — through
+  `startFSMWorker` into `macrostepV2` (`fsmworker-helper.ts`).
+  `macrostepV2`/`runActionImplementation` resolve a handler by
+  `syncOperationType` + `syncOperationName` from that sub-array (see
+  `findSyncOperationHandler`) instead of indexing into a map.
+- `FsmModuleDefinition` (the old `{actions, guards, delays, actors}` map type)
+  is gone — replaced by `SyncOperationRegistration` (mirrors the compiler's own
+  generated type) in the public export surface (`index.ts`).
+- `startFSMWorkerWithDBLock`'s `verifiedModule`/`validatePlugin` params are gone
+  (nothing else read them once the dynamic-import branch was removed); its only
+  remaining identity params are `fsm_name`/`fsm_version`.

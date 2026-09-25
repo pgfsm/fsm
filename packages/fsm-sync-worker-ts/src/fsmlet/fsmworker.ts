@@ -11,19 +11,20 @@ import {
   getFsmDataResolveStateValue,
 } from "@pgfsm/db";
 
-import { validateSyncOperationFromFolder } from "@pgfsm/compiler";
-import type { FsmPluginValidationResult } from "@pgfsm/compiler";
-
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
 import type { FsmQueueMessage } from "../types.ts";
-import type { FsmModuleDefinition } from "./type.ts";
+import type { SyncOperationRegistration } from "./type.ts";
+import {
+  loadAllSyncOperationRegistrations,
+  syncOperationRegistrationsFor,
+} from "./sync-operation-registrations.ts";
 
 export async function startFSMWorker(
   deps: DBDeps,
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  fsmModuleDefinition?: FsmModuleDefinition,
+  syncOperationRegistrations?: SyncOperationRegistration[],
   signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
@@ -64,7 +65,7 @@ export async function startFSMWorker(
               fsmDataWithResolvedStateValue.resolved_state_value,
               fsm_name,
               fsm_version,
-              fsmModuleDefinition,
+              syncOperationRegistrations,
             );
             logger.info("Macrostep result: {result}", {
               result: macrostepV2Result,
@@ -110,77 +111,34 @@ export async function startFSMWorkerWithDBLock(
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  verifiedModule?: FsmPluginValidationResult,
-  validatePlugin?: boolean,
   signal?: AbortSignal,
   onStop?: () => void,
 ): Promise<{ status: "success" | "fail"; message: string }> {
-  let fsmModuleDefinition: FsmModuleDefinition | undefined = undefined;
-  if (verifiedModule?.fsmAbsFolderPath) {
-    try {
-      if (validatePlugin) {
-        const fsmJsonPath = `${verifiedModule.fsmAbsFolderPath}/fsm.json`;
-        const fsmJsonText = await Deno.readTextFile(fsmJsonPath);
-        const fsmData = JSON.parse(fsmJsonText);
-        const result = await validateSyncOperationFromFolder(
-          fsmData,
-          fsm_name,
-          String(fsm_version),
-          verifiedModule.fsmAbsFolderPath,
-          verifiedModule.fsmRelativeFolderPath ?? "",
-          verifiedModule.fsmParentDirName ?? "",
-          verifiedModule.fsmParentAbsFolderPath ?? "",
-          verifiedModule.fsmParentRelativeFolderPath ?? "",
-        );
-        // validateSyncOperationFromFolder types this as Json, but it's always
-        // the { actions, guards, delays, actors } module-namespace record.
-        fsmModuleDefinition = result
-          .fsmModuleDefinition as unknown as FsmModuleDefinition;
-        logger.info(
-          "Loaded fsmModuleDefinition via validateSyncOperationFromFolder for {fsmName}/{fsmVersion}",
-          { fsmName: fsm_name, fsmVersion: fsm_version },
-        );
-      } else {
-        // generate-sync-logic/generate-async-logic both always write to
-        // {cwd}/<sync|async>-worker/typescript/<fsmName>/<fsmVersion>/,
-        // independent of the source FSM tree's own location (see
-        // fsm-compiler-ts's generate-sync-operation-logic.ts/
-        // generate-async-operation-logic.ts).
-        const syncWorkerBase =
-          `${Deno.cwd()}/sync-worker/typescript/${fsm_name}/${fsm_version}`;
-        const actorsBase =
-          `${Deno.cwd()}/async-worker/typescript/${fsm_name}/${fsm_version}`;
-        const [actions, guards, delays, actors] = await Promise.allSettled([
-          import(`${syncWorkerBase}/actions/index.ts`),
-          import(`${syncWorkerBase}/guards/index.ts`),
-          import(`${syncWorkerBase}/delays/index.ts`),
-          import(`${actorsBase}/actors/index.ts`),
-        ]);
-        fsmModuleDefinition = {
-          actions: actions.status === "fulfilled" ? actions.value : null,
-          guards: guards.status === "fulfilled" ? guards.value : null,
-          delays: delays.status === "fulfilled" ? delays.value : null,
-          actors: actors.status === "fulfilled" ? actors.value : null,
-        };
-        logger.info("Loaded fsmModuleDefinition for {fsmName}/{fsmVersion}", {
-          fsmName: fsm_name,
-          fsmVersion: fsm_version,
-        });
-      }
-    } catch (err) {
-      logger.warning(
-        "Could not load fsmModuleDefinition for {fsmName}/{fsmVersion}: {error}",
-        { fsmName: fsm_name, fsmVersion: fsm_version, error: err },
-      );
-    }
-  }
-
-  if (!fsmModuleDefinition) {
+  // Sync-operation handlers are resolved from the compiler-generated
+  // aggregate registry (fsm-compiler-ts #338) rather than validated/loaded
+  // per instance — the compiler is what guarantees these handlers exist, not
+  // this process (see sync-operation-registrations.ts, #340).
+  const allRegistrations = await loadAllSyncOperationRegistrations();
+  if (!allRegistrations) {
     return {
       status: "fail",
-      message: `Failed to load module for ${fsm_name}/${fsm_version}`,
+      message:
+        `Failed to load sync-operation registrations for ${fsm_name}/${fsm_version}`,
     };
   }
+  const syncOperationRegistrations = syncOperationRegistrationsFor(
+    allRegistrations,
+    fsm_name,
+    String(fsm_version),
+  );
+  logger.info(
+    "Loaded {count} sync-operation registration(s) for {fsmName}/{fsmVersion}",
+    {
+      count: syncOperationRegistrations.length,
+      fsmName: fsm_name,
+      fsmVersion: fsm_version,
+    },
+  );
 
   if (!(await lockFsmInstance(deps, queueName))) {
     return {
@@ -200,7 +158,7 @@ export async function startFSMWorkerWithDBLock(
       queueName,
       fsm_name,
       fsm_version,
-      fsmModuleDefinition,
+      syncOperationRegistrations,
       signal,
     );
     logger.info("FSM Lock for queue {queueName} released after graceful stop", {

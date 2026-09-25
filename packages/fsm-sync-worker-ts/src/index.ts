@@ -16,8 +16,8 @@ export type {
   FsmFolderConfig,
   FsmletHandle,
   FsmletOptions,
-  FsmModuleDefinition,
   FsmStartupConfig,
+  SyncOperationRegistration,
 } from "./fsmlet/type.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
 export { runFsmScheduler } from "./fsmscheduler/fsmscheduler.ts";

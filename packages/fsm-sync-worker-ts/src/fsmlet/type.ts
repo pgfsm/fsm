@@ -78,12 +78,26 @@ export type FsmletHandle = {
   getActiveWorkerIds: () => string[];
 };
 
-// Used in: fsmworker-helper.ts, index.ts (direct import)
-export type FsmModuleDefinition = {
-  actions: Record<string, (...args: unknown[]) => unknown> | null;
-  guards: Record<string, (...args: unknown[]) => unknown> | null;
-  delays: Record<string, (...args: unknown[]) => unknown> | null;
-  actors: Record<string, (...args: unknown[]) => unknown> | null;
+/**
+ * One entry of the compiler-generated aggregate sync-operation registry
+ * (`sync-worker/typescript/aggregate-generated-sync-operation-registry.ts` —
+ * see fsm-compiler-ts #338), mirroring the `SyncOperationRegistration` type
+ * that generated file itself declares. Not imported from `@pgfsm/compiler`
+ * directly — that generated file is per-project output living under the
+ * consumer's own `sync-worker/typescript/`, not a package this library
+ * statically depends on, so it's loaded via dynamic `import()` at runtime
+ * (see `sync-operation-registrations.ts`) and typed against this local
+ * mirror instead.
+ * Used in: sync-operation-registrations.ts, fsmworker.ts, fsmworker-helper.ts,
+ * index.ts (direct import)
+ */
+export type SyncOperationRegistration = {
+  fsmName: string;
+  fsmVersion: string;
+  syncOperationType: "action" | "guard" | "delay";
+  syncOperationName: string;
+  syncOperationLanguage: string;
+  handler: (...args: unknown[]) => unknown;
 };
 
 /**
