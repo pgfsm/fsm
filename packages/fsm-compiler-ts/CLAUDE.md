@@ -188,14 +188,16 @@ Once the aggregate registry itself exists, `writeSyncAggregateArtifacts` also
 calls `writeSyncWorkerRunner` (`operation-logic-scaffold.ts`), which writes two
 more files as its siblings at `<writeRootAbsPath>/sync-worker/typescript/`:
 
-- `run-sync-worker.ts` — a minimal, fully static entry point (no per-project
-  templating — every project gets byte-identical content) importing
+- `run-sync-worker.ts` — a fully static entry point (no per-project templating —
+  every project gets byte-identical content) importing
   `SYNC_OPERATION_REGISTRATIONS` by relative path and `@pgfsm/sync-worker`'s
   `runFsmlet` by bare specifier, calling it with a `DATABASE_URL`-derived
-  `dbConfig`. Mirrors `packages/fsm-sync-worker-ts/test-cli-sdk.ts` (that file's
-  own `@pgfsm/sync-worker` counterpart), adjusted for a bare import instead of a
-  relative one into that package's own source tree, since this generated copy
-  lives in a consumer project instead.
+  `dbConfig`. Started life as a direct port of
+  `packages/fsm-sync-worker-ts/test-cli-sdk.ts` (that file's own
+  `@pgfsm/sync-worker` counterpart, adjusted for a bare import instead of a
+  relative one since this generated copy lives in a consumer project); #346
+  below fleshed it out into something closer to a real CLI entry point (`.env`
+  loading, structured logging, graceful shutdown).
 - `deno.json` — declares `@pgfsm/sync-worker` as a real `npm:` import so
   `run-sync-worker.ts`'s bare specifier resolves, mirroring the existing
   `worker-sdk-deno-json.eta` pattern already used for
@@ -231,14 +233,56 @@ above.
 
 Both files are skipped when the aggregate registry itself wasn't written (no
 `<fsmName>/<fsmVersion>` groups found) — no point in a runnable entry point
-importing an aggregate that doesn't exist. Verified end-to-end against
-`apps/fsm-core-example/fsm`: generated content matches exactly (both with and
-without `--project-name`), `deno task` in the generated directory lists `dev`/
-`dev:watch` with no warnings, and the generated `run-sync-worker.ts` resolves
-its bare `@pgfsm/sync-worker` import correctly against the generated `deno.json`
-(`deno check` fails only on the network fetch of the pinned npm version, since
-`@pgfsm/sync-worker@0.2.0` itself hasn't been published yet as of this writing —
-expected, not a bug here).
+importing an aggregate that doesn't exist.
+
+## `run-sync-worker.ts` gained `.env` loading, structured logging, and graceful shutdown (#346)
+
+Fleshed out from the original 3-line script (`SYNC_OPERATION_REGISTRATIONS` in,
+`runFsmlet` call out) into a real entry point, mirroring the shutdown/logging
+pattern every hand-written CLI in `fsm-sync-worker-ts` already uses (see
+`cli/fsmscheduler.ts`, and the now-removed `cli/fsmlet.ts`'s own copy of the
+same pattern before #340/#341 deleted it):
+
+- `dotenv.config({ path: ".env" })` before anything else reads
+  `Deno.env.get("DATABASE_URL")`, so a `.env` file next to `run-sync-worker.ts`
+  works without the caller having to export the var into the shell first.
+- `@pgfsm/logging`'s `configureLogging` is called once, for the
+  `CATEGORY.worker`/`CATEGORY.fsmlet`/`CATEGORY.db` namespaces — the three
+  `@pgfsm/sync-worker`'s own
+  `runFsmlet`/`startFsmlet`/`startFSMWorkerWithDBLock` call chain actually logs
+  under (confirmed by grep across that package's `getLogger([...])` call sites)
+  — at `isTerminal ? "debug" : "info"`, the same level-selection
+  `packages/fsm-sync-worker-ts/src/logger.ts`'s own `configureWorkerLogger`
+  uses. `getLogger([CATEGORY.fsmlet])` then gives this file its own logger for
+  the shutdown messages below.
+- Graceful shutdown: an `AbortController` threaded into `runFsmlet`'s
+  `options.signal` (its third positional argument now — previously omitted
+  entirely, since `runFsmlet` never had a caller-driven shutdown path here),
+  with
+  `Deno.addSignalListener("SIGINT", onSignal)`/`Deno.addSignalListener("SIGTERM",
+  onSignal)`
+  — a second signal force-exits (`Deno.exit(0)`), an identical double-signal
+  contract to every other CLI in this repo.
+
+The generated `deno.json`'s `imports` grew three entries to match:
+`@pgfsm/logging`, `@logtape/logtape` (a _direct_ dependency of `@pgfsm/logging`,
+not just transitive — Deno's import map requires an explicit entry for every
+bare specifier actually imported, even one only re-exported by another npm
+package), and `dotenv`. All three version-pinned the same "hardcode directly in
+the Eta template" way as `@pgfsm/sync-worker`'s own entry (see #342 above) —
+`@pgfsm/logging@^0.1.0`, `@logtape/logtape@^2.2`, `dotenv@^16.5.0` (the latter
+two matching `fsm-sync-worker-ts/deno.json`'s own pins exactly).
+
+Verified end-to-end against `apps/fsm-core-example/fsm`: generated content
+matches exactly (both with and without `--project-name`), and the generated
+`run-sync-worker.ts` resolves every bare import (`@pgfsm/sync-worker`,
+`@pgfsm/logging`, `@logtape/logtape`, `dotenv`) correctly against the generated
+`deno.json` and type-checks clean end to end (`deno check
+--min-dep-age=0` —
+Deno's default 24 h minimum-dependency-age policy otherwise blocks a
+just-published npm version like `@pgfsm/sync-worker@0.2.0`; unrelated to this
+change, and not something a real consumer hits once that version ages past a
+day).
 
 ## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330, #332, #334)
 
