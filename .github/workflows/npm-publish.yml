@@ -1,5 +1,10 @@
 name: npm publish
 
+# @pgfsm/proto-codegen is deliberately not here: it releases together with
+# its PyPI / crates.io / Go counterparts from one proto-v* tag, in
+# proto-publish.yml (whose npm job mirrors the deno pack steps below — keep
+# the two in step).
+
 on:
   push:
     tags:

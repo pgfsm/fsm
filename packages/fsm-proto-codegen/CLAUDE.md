@@ -48,3 +48,16 @@ plugin pipeline to produce stubs for all four polyglot actor languages
 `package.json` / `node_modules/` here are not app dependencies — just the
 `protoc-gen-es` / `protoc-gen-connect-es` binaries `buf generate` needs on
 `PATH` for TypeScript output. Nothing in this package is imported by app code.
+
+## Publishing
+
+The four `gen/` packages release together from one `proto-v<version>` tag, all
+in `.github/workflows/proto-publish.yml`: npm (`deno pack` of `gen/typescript`),
+PyPI, crates.io and the Go module tag. Proto is deliberately not in
+`npm-publish.yml`, whose manual runs could release npm alone. Bump `version` in
+`gen/typescript/deno.json`, `gen/python/pyproject.toml` and
+`gen/rust/Cargo.toml` together (Go takes the version from the tag).
+`scripts/check-release-manifests.ts` enforces that, and that `pyproject.toml`'s
+`protobuf>=` equals the gencode version stamped into `gen/python/**/*_pb2.py`.
+After a `protoc` bump in the `Dockerfile`, raise that bound to match. See
+README's "Publishing".
