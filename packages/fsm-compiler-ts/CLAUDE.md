@@ -182,6 +182,43 @@ call this via a shared `writeSyncAggregateArtifacts` helper, after their own
 `scaffoldSyncLogicForVersion` call(s), same call order the async side's
 `writeAggregateArtifacts` uses.
 
+## `generate-sync-logic` also scaffolds a runnable `run-sync-worker.ts` + `deno.json` (#342)
+
+Once the aggregate registry itself exists, `writeSyncAggregateArtifacts` also
+calls `writeSyncWorkerRunner` (`operation-logic-scaffold.ts`), which writes two
+more files as its siblings at `<writeRootAbsPath>/sync-worker/typescript/`:
+
+- `run-sync-worker.ts` — a minimal, fully static entry point (no per-project
+  templating — every project gets byte-identical content) importing
+  `SYNC_OPERATION_REGISTRATIONS` by relative path and `@pgfsm/sync-worker`'s
+  `runFsmlet` by bare specifier, calling it with a `DATABASE_URL`-derived
+  `dbConfig`. Mirrors `packages/fsm-sync-worker-ts/test-cli-sdk.ts` (that file's
+  own `@pgfsm/sync-worker` counterpart), adjusted for a bare import instead of a
+  relative one into that package's own source tree, since this generated copy
+  lives in a consumer project instead.
+- `deno.json` — declares `@pgfsm/sync-worker` as a real `npm:` import so
+  `run-sync-worker.ts`'s bare specifier resolves, mirroring the existing
+  `worker-sdk-deno-json.eta` pattern already used for
+  `async-worker/typescript/deno.json`'s own npm imports (e.g.
+  `@connectrpc/connect`) — same "hardcode a version pin directly in the Eta
+  template" approach as that file, not a dynamic sibling-`deno.json` lookup
+  (this compiler ships standalone to npm/npx; a generated consumer project has
+  no monorepo sibling to read a version from). Currently pinned to `^0.2.0` —
+  bump this template's pin by hand whenever `@pgfsm/sync-worker`'s own public
+  API changes in a way `run-sync-worker.ts`'s call shape depends on (its
+  `runFsmlet(dbConfig, syncOperationRegistrations, options?)` signature as of
+  `@pgfsm/sync-worker` #340/#341 — older `0.1.x` releases had a different,
+  incompatible `runFsmlet` signature, so this pin is a floor, not a formality).
+
+Both are skipped when the aggregate registry itself wasn't written (no
+`<fsmName>/<fsmVersion>` groups found) — no point in a runnable entry point
+importing an aggregate that doesn't exist. Verified end-to-end against
+`apps/fsm-core-example/fsm`: generated content matches exactly, and the
+generated `run-sync-worker.ts` resolves its bare `@pgfsm/sync-worker` import
+correctly against the generated `deno.json` (`deno check` fails only on the
+network fetch of the pinned npm version, since `@pgfsm/sync-worker@0.2.0` itself
+hasn't been published yet as of this writing — expected, not a bug here).
+
 ## `create-async-logic` writes under `async-worker/`, with its own global registry (#309, #311, #322, #324, #330, #332, #334)
 
 Rewritten in #309 to match the #307 async-worker/ model: `-n`/`--function-name`

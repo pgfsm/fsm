@@ -7,6 +7,7 @@ import {
   writeAggregateSyncOperationRegistry,
   writeOperationModule,
   writeSyncOperationRegistry,
+  writeSyncWorkerRunner,
 } from "./operation-logic-scaffold.ts";
 import type {
   FsmMachineJson,
@@ -131,6 +132,13 @@ async function scaffoldSyncLogicForVersion(
  * the requested `langs` (there's then nothing under
  * `sync-worker/typescript/` to aggregate). Mutates `tsFiles` in place, same
  * as {@linkcode scaffoldSyncLogicForVersion}.
+ *
+ * Once the aggregate itself exists, also (re)writes `run-sync-worker.ts` +
+ * `deno.json` alongside it (see {@linkcode writeSyncWorkerRunner}) — a
+ * minimal runnable entry point a generated project can `deno run` directly
+ * to start its fsmlet, importing `@pgfsm/sync-worker` as a real npm
+ * dependency. Skipped when there's no aggregate to import (nothing to run
+ * yet).
  */
 async function writeSyncAggregateArtifacts(
   writeRootAbsPath: string,
@@ -145,6 +153,15 @@ async function writeSyncAggregateArtifacts(
     tsFiles.push(aggregateFile);
     logger.info("Wrote aggregate sync operation registry {file}", {
       file: aggregateFile,
+    });
+
+    const { runFile, denoJsonFile } = await writeSyncWorkerRunner(
+      absSyncWorkerTypescriptDir,
+    );
+    tsFiles.push(runFile);
+    logger.info("Wrote sync worker runner {runFile} and {denoJsonFile}", {
+      runFile,
+      denoJsonFile,
     });
   }
 }
