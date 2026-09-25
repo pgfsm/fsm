@@ -231,7 +231,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 Scaffold a **single** actor stub in the shared, non-FSM-scoped async-operation
 pool — for actors that aren't driven by any one FSM's `invoke` list. Writes one
 file at
-`{cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionVersion>/<functionName>.<ext>`,
+`{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>`,
 via the same `writeActorFile` helper `generate-async-logic` uses per invoke
 object, so stub content/formatting matches the rest of the pipeline.
 
@@ -246,8 +246,8 @@ have no owning FSM at all.
 
 For `typescript`/`python`/`rust`, also rewrites that language's single
 **global** registry at
-`{cwd}/async-worker/<lang>/shared-async-op/generated-registry.<ext>` from every
-shared-async-op actor currently on disk for that language, across every
+`{cwd}/async-worker/<lang>/sharedAsyncOperation/generated-registry.<ext>` from
+every shared-async-op actor currently on disk for that language, across every
 `functionVersion` (this run's actor included) — so repeated `create-async-logic`
 calls accumulate into one file instead of each one clobbering the last. Unlike
 the FSM-scoped registries `generate-async-logic` writes (one per

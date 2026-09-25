@@ -29,9 +29,15 @@ const logger = getLogger(["@pgfsm/compiler", "create-async-logic"]);
  * Directory name (relative to `<appRoot>/async-worker/<lang>/`) holding
  * actors that aren't scoped to any one FSM's `invoke` list — hand-created via
  * this command rather than scaffolded in bulk from `fsm.json` by
- * {@linkcode generateAsyncOperationLogicFromFolders}.
+ * {@linkcode generateAsyncOperationLogicFromFolders}. Matches
+ * {@linkcode SHARED_ASYNC_OP_PARENT_FSM_NAME} exactly (#330 — was the
+ * hyphenated `"shared-async-op"` before; `generate-async-logic`'s aggregate
+ * step derives its per-group import path from `parentFsmName` literally, so
+ * a real directory name that didn't match it made that path always point at
+ * a nonexistent directory whenever a shared-async-op actor got swept into
+ * the FSM-scoped aggregate).
  */
-const SHARED_ASYNC_OP_DIR_NAME = "shared-async-op";
+const SHARED_ASYNC_OP_DIR_NAME = "sharedAsyncOperation";
 
 /**
  * Fixed `parentFsmName`/`asyncOperationType` identity every shared-async-op
@@ -49,7 +55,7 @@ const SHARED_ASYNC_OP_PARENT_FSM_NAME = "sharedAsyncOperation";
 const REGISTRY_LANGS: ActorsBarrelLang[] = ["typescript", "python", "rust"];
 
 /**
- * Directory name (relative to `<appRoot>/async-worker/go/shared-async-op/`)
+ * Directory name (relative to `<appRoot>/async-worker/go/sharedAsyncOperation/`)
  * holding the Go aggregate registry — same name/shape as
  * `writeAggregateGoRegistry`'s FSM-scoped equivalent
  * (`operation-logic-scaffold.ts`'s own `GO_AGGREGATE_DIR_NAME`, not exported,
@@ -74,7 +80,7 @@ type SharedAsyncOpRegistryEntry = {
   /**
    * The import target, already formatted for the target language:
    * a relative `./`-prefixed module specifier for TypeScript, a dotted
-   * absolute-from-`shared-async-op/` module path for Python, or a bare
+   * absolute-from-`sharedAsyncOperation/` module path for Python, or a bare
    * relative file path (no leading `./`) for Rust's `#[path]`.
    */
   importPath: string;
@@ -93,7 +99,7 @@ function toRegistryAlias(fileBaseName: string, version: string): string {
 
 /**
  * Lists every `{ name, version }` pair already scaffolded under
- * `<asyncWorkerRoot>/<lang>/shared-async-op/<version>/actors/<name>/`, by
+ * `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/<version>/actors/<name>/`, by
  * reading directories rather than a manifest, so the registry/manifest it
  * feeds always matches what's actually on disk even if a file was
  * hand-removed. `version` comes from the outer version folder.
@@ -157,8 +163,8 @@ function toSharedAsyncOpRegistryEntry(
 ): SharedAsyncOpRegistryEntry {
   const alias = toRegistryAlias(name, version);
   const ext = lang === "typescript" ? "ts" : lang === "rust" ? "rs" : "py";
-  // <version>/actors/<name>/<name>.<ext>, relative to shared-async-op/ (the
-  // global registry's own directory).
+  // <version>/actors/<name>/<name>.<ext>, relative to sharedAsyncOperation/
+  // (the global registry's own directory).
   const relParts = [version, "actors", name, name];
   const importPath = lang === "typescript"
     ? `./${relParts.join("/")}.${ext}`
@@ -218,7 +224,7 @@ function buildSharedAsyncOpRegistryContent(
 }
 
 /**
- * Rewrites `<asyncWorkerRoot>/<lang>/shared-async-op/generated-registry.<ext>`
+ * Rewrites `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/generated-registry.<ext>`
  * from every shared-async-op actor currently on disk for `lang` (the one
  * just written by {@linkcode createAsyncOperationLogic} included) — so
  * repeated `create-async-logic` calls accumulate into one global registry
@@ -249,7 +255,7 @@ async function rewriteSharedAsyncOpRegistry(
 }
 
 /**
- * Rewrites `<asyncWorkerRoot>/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`
+ * Rewrites `<asyncWorkerRoot>/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`
  * from every shared-async-op actor currently on disk for `lang` *at that one
  * `functionVersion`* (unlike {@linkcode rewriteSharedAsyncOpRegistry}'s
  * single global file across every version, since this manifest lives inside
@@ -276,7 +282,7 @@ async function rewriteSharedAsyncOpManifest(
 
 /**
  * Go's own aggregate for the shared-async-op pool, at
- * `<asyncWorkerRoot>/go/shared-async-op/go-actors-registry-generated/`
+ * `<asyncWorkerRoot>/go/sharedAsyncOperation/go-actors-registry-generated/`
  * (`go.mod` + `registry.go`) — mirrors `writeAggregateGoRegistry`'s
  * FSM-scoped approach (one `require`+`replace` per actor's own standalone
  * Go module, since Go has no dynamic-loading equivalent to TS/Python's
@@ -285,15 +291,20 @@ async function rewriteSharedAsyncOpManifest(
  * {@linkcode createAsyncOperationLogic} included), same idempotent-rebuild
  * approach as {@linkcode rewriteSharedAsyncOpRegistry}.
  *
- * Deliberately **not** a reuse of `writeAggregateGoRegistry` itself — that
- * function derives each actor's on-disk `go.mod` directory from
- * `<parentFsmName>/<parentFsmVersion>` directly (correct for the FSM-scoped
- * pool, where `parentFsmName` *is* the real directory name), but
- * shared-async-op actors' `parentFsmName` is the fixed identity string
- * `"sharedAsyncOperation"` while their real on-disk directory is
- * {@linkcode SHARED_ASYNC_OP_DIR_NAME} (`"shared-async-op"`, hyphenated) —
- * those two strings differ, so reusing it verbatim would compute a
- * `replace` target pointing at a directory that doesn't exist.
+ * Deliberately **not** a reuse of `writeAggregateGoRegistry` itself, even
+ * though {@linkcode SHARED_ASYNC_OP_DIR_NAME} now matches `parentFsmName`
+ * exactly (#330 — it didn't before, which independently made that reuse
+ * compute a broken `replace` target; fixed now, but not the reason this
+ * stays separate). `writeAggregateGoRegistry` writes into
+ * `<writeRootAbsPath>/async-worker/go/go-actors-registry-generated/`, a
+ * *single* aggregate for the whole async-worker tree that `generate-async-logic`
+ * rebuilds from every actor it finds (FSM-scoped and, per the still-open
+ * aggregate-leak issue, shared-async-op actors too). This function instead
+ * writes a self-contained aggregate nested *inside*
+ * `sharedAsyncOperation/`, scoped to only the shared-async-op pool and
+ * rebuildable by `create-async-logic` alone — a project that only ever
+ * calls `create-async-logic` (never `generate-async-logic`) still gets a
+ * working Go aggregate for its shared actors.
  *
  * Returns `undefined` (writes nothing) when there are no Go shared-async-op
  * actors, matching `writeAggregateGoRegistry`'s own empty-set behavior.
@@ -311,8 +322,14 @@ async function rewriteSharedAsyncOpGoRegistry(
 
   const withMeta = existing.map(({ name, version }) => {
     const registered = toSharedAsyncOpRegisteredActor("go", name, version);
+    // Matches goActorModulePath's own convention (operation-logic-scaffold.ts)
+    // for the individual actor's own go.mod, written via writeActorFile ->
+    // writeGoActorModule when lang === "go" -- it unconditionally lowercases
+    // the fsmName segment (Go module paths disallow uppercase), so this
+    // require+replace's left-hand module path must too, or it won't match
+    // that go.mod's own declared `module` line.
     const modulePath =
-      `${goModuleAppRoot}/${SHARED_ASYNC_OP_DIR_NAME}/${version}/go/actors/${name.toLowerCase()}`;
+      `${goModuleAppRoot}/${SHARED_ASYNC_OP_DIR_NAME.toLowerCase()}/${version}/go/actors/${name.toLowerCase()}`;
     const actorDir =
       `${asyncWorkerRoot}/go/${SHARED_ASYNC_OP_DIR_NAME}/${version}/actors/${name}`;
     return {
@@ -325,7 +342,7 @@ async function rewriteSharedAsyncOpGoRegistry(
 
   const goModContent = renderGoModAggregate({
     moduleName:
-      `${goModuleAppRoot}/${SHARED_ASYNC_OP_DIR_NAME}/${GO_AGGREGATE_DIR_NAME}`,
+      `${goModuleAppRoot}/${SHARED_ASYNC_OP_DIR_NAME.toLowerCase()}/${GO_AGGREGATE_DIR_NAME}`,
     requires: withMeta.map((a) => ({ modulePath: a.modulePath })),
     replaces: withMeta.map((a) => ({
       modulePath: a.modulePath,
@@ -350,7 +367,7 @@ async function rewriteSharedAsyncOpGoRegistry(
 /**
  * Scaffolds a single new actor stub in the shared, non-FSM-scoped async
  * operation pool at
- * `{cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors/<functionName>/<functionName>.<ext>`,
+ * `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>`,
  * via the same {@linkcode writeActorFile} helper
  * `generateAsyncOperationLogicFromFolders` uses per invoke object — so stub
  * content/formatting matches the rest of the actor-scaffolding pipeline.
@@ -362,15 +379,15 @@ async function rewriteSharedAsyncOpGoRegistry(
  * Also writes/rewrites the following, all derived from whatever's actually
  * on disk (not just this one call's own actor), so repeated calls accumulate
  * instead of clobbering each other:
- * - `{cwd}/async-worker/<lang>/shared-async-op/<functionVersion>/actors-manifest.json`
+ * - `{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors-manifest.json`
  *   — every actor at *this* `functionVersion`, for every language (see
  *   {@linkcode rewriteSharedAsyncOpManifest}).
  * - For `typescript`/`python`/`rust` (see {@linkcode ActorsBarrelLang}),
  *   that language's single **global** `generated-registry.*` at
- *   `{cwd}/async-worker/<lang>/shared-async-op/generated-registry.*`, across
+ *   `{cwd}/async-worker/<lang>/sharedAsyncOperation/generated-registry.*`, across
  *   every `functionVersion` (see {@linkcode rewriteSharedAsyncOpRegistry}).
  * - For `go` only, its own aggregate at
- *   `{cwd}/async-worker/go/shared-async-op/go-actors-registry-generated/`
+ *   `{cwd}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/`
  *   (`go.mod` + `registry.go`, one `require`+`replace` per actor's own
  *   standalone Go module — see {@linkcode rewriteSharedAsyncOpGoRegistry}).
  *

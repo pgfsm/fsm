@@ -692,7 +692,7 @@ Deno.test("cli create-async-logic rejects a comma-separated --lang (exactly one 
   assertStringIncludes(stderr, "--lang");
 });
 
-Deno.test("cli create-async-logic writes a single actor file under cwd's async-worker/shared-async-op, independent of --folder (there is none)", async () => {
+Deno.test("cli create-async-logic writes a single actor file under cwd's async-worker/sharedAsyncOperation, independent of --folder (there is none)", async () => {
   const { code } = await runCli(
     [
       "-c",
@@ -709,7 +709,7 @@ Deno.test("cli create-async-logic writes a single actor file under cwd's async-w
   );
   assertEquals(code, 0);
   const stat = await Deno.stat(
-    `${APP_ROOT}/async-worker/typescript/shared-async-op/v01/actors/checkCreditScoreCliTest/checkCreditScoreCliTest.ts`,
+    `${APP_ROOT}/async-worker/typescript/sharedAsyncOperation/v01/actors/checkCreditScoreCliTest/checkCreditScoreCliTest.ts`,
   );
   assertEquals(stat.isFile, true);
 });
