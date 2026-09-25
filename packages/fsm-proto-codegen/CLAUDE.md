@@ -52,12 +52,32 @@ plugin pipeline to produce stubs for all four polyglot actor languages
 ## Publishing
 
 The four `gen/` packages release together from one `proto-v<version>` tag, all
-in `.github/workflows/proto-publish.yml`: npm (`deno pack` of `gen/typescript`),
-PyPI, crates.io and the Go module tag. Proto is deliberately not in
-`npm-publish.yml`, whose manual runs could release npm alone. Bump `version` in
-`gen/typescript/deno.json`, `gen/python/pyproject.toml` and
-`gen/rust/Cargo.toml` together (Go takes the version from the tag).
-`scripts/check-release-manifests.ts` enforces that, and that `pyproject.toml`'s
-`protobuf>=` equals the gencode version stamped into `gen/python/**/*_pb2.py`.
-After a `protoc` bump in the `Dockerfile`, raise that bound to match. See
-README's "Publishing".
+in `.github/workflows/proto-publish.yml`: npm `@pgfsm/proto-codegen`
+(`deno pack` of `gen/typescript`), PyPI and crates.io `pgfsm-proto-codegen`, and
+the Go module tag `packages/fsm-proto-codegen/gen/go/v<version>`. Proto is
+deliberately not in `npm-publish.yml`, whose manual runs could release npm
+alone. First release: `proto-v0.1.0`.
+
+Releasing a new version (full procedure, version-number rules and recovery in
+README's "Releasing a new version"):
+
+1. Pick the number: breaking contract change → minor before 1.0, major after;
+   additive → minor; no contract change → patch. Prerelease: `X.Y.Z-alpha.N`.
+   2.0.0+ also needs a `/v2` Go module path.
+2. In an issue-linked PR, set `version` in `gen/typescript/deno.json`,
+   `gen/python/pyproject.toml` and `gen/rust/Cargo.toml` to the same value. Go
+   has no manifest version; it comes from the tag.
+3. After merge, with `main` green:
+   `git fetch origin && git tag proto-v<version> origin/main && git push origin proto-v<version>`.
+   Pushing a tag publishes to four public registries and can't be undone, so
+   agents only do it when the user asks.
+4. Watch the run (`gh run list --workflow proto-publish.yml`) and check each
+   registry. npm can serve a cached 404 for a few minutes after a successful
+   publish.
+
+`scripts/check-release-manifests.ts` fails CI (and the release's `verify` job)
+if the three versions disagree, or if they don't match the tag. It also fails if
+`pyproject.toml`'s `protobuf>=` differs from the gencode version stamped into
+`gen/python/**/*_pb2.py`; after a `protoc` bump in the `Dockerfile`, raise that
+bound to match. A published version number can never be reused: fix forward with
+a new patch, and deprecate or yank the bad one.
