@@ -11,20 +11,29 @@ exists, the plugin table, per-language gotchas) are in this package's
 ```bash
 cd packages/fsm-proto-codegen
 npm install                          # once, or after a plugin version bump
-npm run generate:local               # buf generate --template local.buf.gen.yaml (recommended)
+npm run generate:local:docker        # local.buf.gen.yaml, containerized -- canonical, what CI checks gen/ against
+npm run generate:local               # buf generate --template local.buf.gen.yaml on the host (gen/python caveat)
 npm run generate:remote              # buf generate --template remote.buf.gen.yaml (works, but prefer local)
 npm run generate:hybrid              # buf generate --template hybrid.buf.gen.yaml (TS local + rest remote)
-npm run generate:local:docker        # local.buf.gen.yaml, containerized -- no host toolchain installs
 ```
+
+Commit exactly what `generate:local:docker` produces, in the same PR as the
+`.proto` change. `.github/workflows/proto-codegen.yml` runs `buf lint`,
+`buf breaking` (against the PR base), a regenerate-and-diff drift check on
+`gen/`, and a build/smoke test per language (`test/smoke.ts`,
+`test/smoke_test.py`, `go build`, `cargo build`) — see README's "Verifying a
+regen" to run them locally.
 
 `buf` itself and TypeScript's two `protoc-gen-*` plugins come from
 `node_modules/.bin` via `npm install` — no separate `buf` CLI install needed.
 `generate:local` additionally needs `protoc`, `grpc_python_plugin`,
 `protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-prost`, `protoc-gen-tonic` on
 `PATH` (not npm-managed) — see README's "Local plugin install".
-`generate:local:docker` needs none of that on the host, just Docker — see
-README's "Regenerating with Docker" for the one output caveat
-(`grpc_python_plugin`'s style, not byte-identical to committed `gen/python/`).
+`generate:local:docker` needs none of that on the host, just Docker. A host
+`generate:local` rewrites every `*_pb2_grpc.py` in Homebrew's newer
+`grpc_python_plugin` style, which fails CI's drift check — discard those files
+(README's "Regenerating with Docker"). After a Docker run, `node_modules/` holds
+Linux binaries: `rm -rf node_modules && npm ci` before the next host run.
 
 ## What it does
 

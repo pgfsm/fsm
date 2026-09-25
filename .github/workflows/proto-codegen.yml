@@ -1,0 +1,185 @@
+name: Proto codegen
+
+# Checks packages/fsm-proto-codegen: buf lint + breaking-change detection on
+# every proto/<service>/ module, a drift check that the committed gen/ output
+# is exactly what the codegen image regenerates, and a build/smoke test of each
+# language's stubs. CI never commits generated code — regenerating and
+# committing gen/ is the PR author's job (see the package README's
+# "Regenerating"); this workflow only fails when they didn't.
+#
+# A separate workflow (not a ci.yml job) so the path filter below can skip it
+# on the many PRs that don't touch the package.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/fsm-proto-codegen/**
+      - .github/workflows/proto-codegen.yml
+  pull_request:
+    paths:
+      - packages/fsm-proto-codegen/**
+      - .github/workflows/proto-codegen.yml
+
+permissions:
+  contents: read
+
+jobs:
+  codegen:
+    name: Proto (lint · breaking · drift)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-proto-codegen
+    steps:
+      # Full history so `buf breaking` can read the base commit's .proto files
+      # straight out of .git.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      # Same Node major as the Dockerfile's node:22 base image.
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+
+      # buf itself comes from package.json's @bufbuild/buf pin.
+      - name: npm ci
+        run: npm ci
+
+      # Each proto/<service>/ is its own Buf module with its own buf.yaml
+      # lint/breaking policy (see README's Layout), so lint each separately.
+      - name: buf lint
+        run: |
+          for module in proto/*/; do
+            echo "::group::buf lint $module"
+            npx buf lint "$module"
+            echo "::endgroup::"
+          done
+
+      # Against the PR's base commit (or the previous main commit on push). A
+      # module that doesn't exist at the base yet is new — nothing to break.
+      - name: buf breaking
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No base commit to compare against; skipping."
+            exit 0
+          fi
+          for module in proto/*/; do
+            module="${module%/}"
+            subdir="packages/fsm-proto-codegen/$module"
+            if ! git cat-file -e "$BASE_SHA:$subdir/buf.yaml" 2>/dev/null; then
+              echo "$module is new since $BASE_SHA; skipping."
+              continue
+            fi
+            echo "::group::buf breaking $module"
+            npx buf breaking "$module" --against "../../.git#ref=$BASE_SHA,subdir=$subdir"
+            echo "::endgroup::"
+          done
+
+      # Same Dockerfile `npm run generate:local:docker` builds, with its layers
+      # (the go install / cargo install stages take minutes) cached in the
+      # GitHub Actions cache so they only rebuild when the Dockerfile changes.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build codegen image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: packages/fsm-proto-codegen
+          tags: fsm-proto-codegen-local
+          load: true
+          cache-from: type=gha,scope=fsm-proto-codegen
+          cache-to: type=gha,scope=fsm-proto-codegen,mode=max
+
+      # The `docker run` half of `npm run generate:local:docker`; the image is
+      # already built above.
+      - name: Regenerate gen/
+        run: docker run --rm -v "$PWD:/workspace" fsm-proto-codegen-local
+
+      # `git status` rather than `git diff` so newly generated (untracked)
+      # files count as drift too.
+      - name: Check gen/ matches the committed output
+        run: |
+          if [[ -n "$(git status --porcelain -- gen/)" ]]; then
+            git status --short -- gen/
+            git diff -- gen/
+            echo "::error::gen/ is out of date — run 'npm run generate:local:docker' in packages/fsm-proto-codegen and commit the result."
+            exit 1
+          fi
+
+  go:
+    name: Proto stubs (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-proto-codegen/gen/go
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: packages/fsm-proto-codegen/gen/go/go.mod
+          cache-dependency-path: packages/fsm-proto-codegen/gen/go/go.sum
+
+      - name: go build + vet
+        run: |
+          go build ./...
+          go vet ./...
+
+  rust:
+    name: Proto stubs (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-proto-codegen/gen/rust
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Root rust-toolchain.toml, found by rustup's upward search.
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: packages/fsm-proto-codegen/gen/rust
+
+      - name: cargo build
+        run: cargo build
+
+  python:
+    name: Proto stubs (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Installed as a real package (pyproject.toml's grpcio/protobuf ranges);
+      # the script only puts its own test/ directory on sys.path, so it
+      # imports the installed package, not the checkout's gen/python.
+      - name: pip install + smoke test
+        run: |
+          pip install ./packages/fsm-proto-codegen/gen/python
+          python packages/fsm-proto-codegen/test/smoke_test.py
+
+  typescript:
+    name: Proto stubs (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Deno from the root .prototools.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      # Resolves @pgfsm/proto-codegen through the root deno.json workspace,
+      # the same way in-repo consumers do.
+      - name: deno check + smoke test
+        run: |
+          deno check packages/fsm-proto-codegen/test/smoke.ts
+          deno run --allow-env=BUF_BIGINT_DISABLE packages/fsm-proto-codegen/test/smoke.ts

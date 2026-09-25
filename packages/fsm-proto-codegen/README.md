@@ -76,11 +76,17 @@ which one to actually run:
 cd packages/fsm-proto-codegen
 npm install                          # once, or after pulling a version bump
 
-npm run generate:local               # recommended — see below
+npm run generate:local:docker        # canonical — what CI checks gen/ against, see below
+npm run generate:local               # local.buf.gen.yaml on the host (gen/python caveat, see below)
 npm run generate:remote              # BSR only, no local toolchain needed
 npm run generate:hybrid              # TS local + Python/Rust/Go remote
-npm run generate:local:docker        # local.buf.gen.yaml's plugins, containerized — see below
 ```
+
+**`generate:local:docker` is the canonical generator.** CI's
+[`proto-codegen` workflow](../../.github/workflows/proto-codegen.yml) rebuilds
+the same image, regenerates, and fails the PR if `gen/` differs from what's
+committed — so commit exactly what `generate:local:docker` produces, in the same
+PR as the `.proto` change. CI never commits generated code itself.
 
 All four are plain `npm run` scripts (`package.json`'s `scripts:`); the first
 three run `buf` directly, so `buf` itself and TypeScript's two `protoc-gen-*`
@@ -121,12 +127,13 @@ output for every language — pick based on which toolchain cost you're avoiding
   (npm already gets you TypeScript's)? → `hybrid.buf.gen.yaml`.
 - Full exact version control, every language, no BSR dependency, but also no
   local Go/Rust/`protoc`/`grpc` installs? → `npm run generate:local:docker` —
-  same plugin versions as `local.buf.gen.yaml`, containerized, with one caveat
-  (`grpc_python_plugin`'s output) — see
-  [Regenerating with Docker](#regenerating-with-docker).
+  same plugin versions as `local.buf.gen.yaml`, containerized. The default
+  recommendation: it's what's committed under `gen/` today and what CI checks
+  against — see [Regenerating with Docker](#regenerating-with-docker).
 - Full exact version control, every language, no BSR dependency, no Docker
-  either? → `local.buf.gen.yaml` on the host — the default recommendation, and
-  what's committed under `gen/` today.
+  either? → `local.buf.gen.yaml` on the host — matches the committed output
+  except `*_pb2_grpc.py` (Homebrew's newer `grpc_python_plugin`), which must not
+  be committed — see [Regenerating with Docker](#regenerating-with-docker).
 
 | Language   | Local plugin (`local.buf.gen.yaml`)                                              | Remote plugin (`remote.buf.gen.yaml`)                                                 | Runtime deps a consumer needs                                                              |
 | ---------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -188,21 +195,31 @@ binary, apt-installs `grpc_python_plugin`) and runs
 generate:local` inside a container with this directory
 bind-mounted, so output lands directly in `gen/` like a normal local run.
 
+This is the canonical generator: the committed `gen/` is byte-identical to its
+output, and CI's `proto-codegen` workflow enforces that on every PR touching
+this package.
+
 Output matches `local.buf.gen.yaml`'s native-host output exactly for TypeScript,
 Rust, and Python's message/`.pyi` files (`protoc` is pinned to the identical
 `v35.1` release via GitHub, not `apt`'s much older bookworm build). The one
 exception: `*_pb2_grpc.py`, from `grpc_python_plugin`. The grpc project
 publishes no prebuilt plugin binaries at all (only source), so pinning it
 exactly would mean building the whole grpc C++ project from source in the image
-— disproportionate for one binary. Debian's bundled version produces valid but
-differently-styled output (old-style `class Foo(object):`, no
+— disproportionate for one binary. The image uses Debian's bundled version,
+which produces valid but older-style output (`class Foo(object):`, no
 `_registered_method=True` — confirmed by actually importing, instantiating, and
-subclassing it, not just diffing), not byte-identical to what's committed.
-Discard it if you don't want the diff:
+subclassing it, not just diffing). That older style is what's committed, so a
+host `npm run generate:local` with Homebrew's newer `grpc` rewrites every
+`*_pb2_grpc.py` and fails CI's drift check. Discard that part of a host run:
 
 ```sh
-git checkout -- gen/python/
+git checkout -- 'gen/python/**/*_pb2_grpc.py'
 ```
+
+The container runs `npm install` into the bind-mounted `node_modules/`, which
+leaves Linux `buf`/`protoc-gen-*` binaries behind. Before running any `npm run`
+script on the host again (macOS/Windows), reinstall:
+`rm -rf node_modules && npm ci`.
 
 ### TypeScript: local is preferred, but remote is pinned to match
 
@@ -269,14 +286,30 @@ independent of how the `.proto` files themselves are nested.
 
 ## Verifying a regen
 
-Each language was confirmed to actually build/run against `local.buf.gen.yaml`'s
-generated output, not just parse:
+CI's [`proto-codegen` workflow](../../.github/workflows/proto-codegen.yml) runs
+on every PR (and `main` push) that touches this package:
 
-- **Go**: `go build` in an isolated module requiring
-  `google.golang.org/protobuf` + `google.golang.org/grpc`.
-- **Python**: `grpcio`/`protobuf` installed, then the `_pb2`/`_pb2_grpc` modules
-  imported and a message actually instantiated.
-- **Rust**: `cargo build` against `prost`/`tonic`/`tonic-prost` `^0.14`.
-- **TypeScript**: run (not just type-checked) under Deno against
-  `@bufbuild/protobuf@^1`, instantiating a message and reading the service
-  descriptor's `typeName`.
+- **`buf lint`** on each `proto/<service>/` module, against its own `buf.yaml`.
+- **`buf breaking`** on each module against the PR's base commit (modules new
+  since the base are skipped).
+- **Drift check**: regenerate with the `Dockerfile` image (layers cached in the
+  GitHub Actions cache) and fail if `gen/` has any change, including new
+  untracked files.
+- **Build/smoke test per language**, so each language's stubs actually build and
+  run, not just parse. Run the same checks locally from the repo root:
+
+  ```sh
+  # Go
+  (cd packages/fsm-proto-codegen/gen/go && go build ./... && go vet ./...)
+  # Rust — prost/tonic/tonic-prost ^0.14
+  (cd packages/fsm-proto-codegen/gen/rust && cargo build)
+  # Python — in a venv; imports the installed package, not the checkout
+  pip install ./packages/fsm-proto-codegen/gen/python
+  python packages/fsm-proto-codegen/test/smoke_test.py
+  # TypeScript — type-checks against the generated .d.ts, then runs
+  deno check packages/fsm-proto-codegen/test/smoke.ts
+  deno run --allow-env=BUF_BIGINT_DISABLE packages/fsm-proto-codegen/test/smoke.ts
+  ```
+
+  The smoke tests round-trip a message through the wire format, and read each
+  service descriptor (TypeScript) or subclass each servicer (Python).
