@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { PoolConfig } from "pg";
 import type { Database, Json } from "@pgfsm/db/database.types";
+import type { FsmModule } from "@pgfsm/db";
 
 /**
  * The PG-generated Args shape for `fsm_core.archive_event_from_fsm_type_worker_v2`
@@ -16,8 +17,6 @@ type ArchiveWorkerArgs =
 
 // Used in: fsmlet.ts, index.ts (direct import)
 export type DbConfig = PoolConfig & { connectionString: string };
-
-import type { FsmPluginValidationResult } from "@pgfsm/compiler";
 
 // Used in: index.ts (direct import)
 export type FsmFolderConfig = {
@@ -44,12 +43,6 @@ export type FsmStartupConfig = {
   fsm?: FsmFolderConfig | FsmJsonFileConfig;
 };
 
-// Used in: index.ts (direct import)
-export type BootstrapResult = {
-  pool: Pool;
-  verifiedFsmModules: FsmPluginValidationResult[];
-};
-
 // Used in: fsmlet.ts
 export type ActiveWorker = { controller: AbortController };
 
@@ -71,7 +64,13 @@ export type FsmletOptions = {
 // Used in: fsmlet.ts, index.ts (direct import)
 export type FsmletHandle = {
   pool: Pool | null;
-  verifiedFsmWithAsyncOps: FsmPluginValidationResult[];
+  /**
+   * Every `<fsmName>/<fsmVersion>` this fsmlet registered itself for —
+   * derived directly from the statically-imported `SYNC_OPERATION_REGISTRATIONS`
+   * aggregate registry, not from any validation/verification pass (fsmlet.ts
+   * no longer does either — see fsm-sync-worker-ts #340).
+   */
+  registeredFsmModules: FsmModule[];
   fsmletId: string;
   /** Resolves when the fsmlet exits cleanly. Does NOT close the pool. */
   daemon: Promise<void>;

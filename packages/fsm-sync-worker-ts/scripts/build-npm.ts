@@ -4,7 +4,7 @@ await emptyDir("./dist");
 
 const packageVersion = Deno.args[0]?.replace(/^v/, "") ?? "0.0.0";
 
-// All four CLIs' --version flag needs this build's actual version string,
+// All three CLIs' --version flag needs this build's actual version string,
 // which deno.json only has for the Deno-native path — generate the
 // npm-build variant of src/cli/version.ts fresh on every build:npm run
 // rather than hand-maintaining it (see .gitignore: this file isn't
@@ -17,27 +17,20 @@ await Deno.writeTextFile(
   };\n`,
 );
 
-// @pgfsm/compiler is published to npm independently — map it to the real
-// npm dependency instead of letting dnt inline its source, so a fix
-// published there reaches this package via semver instead of requiring a
-// republish here too. Version is read from its own deno.json rather than
-// hardcoded, so it can't silently drift from whatever this build actually
-// resolved locally. Same pattern as fsm-compiler-ts's build-npm.ts mapping
-// @pgfsm/db (#250).
-const compilerDenoJson = JSON.parse(
-  await Deno.readTextFile("../fsm-compiler-ts/deno.json"),
-);
-const compilerVersionRange = `^${compilerDenoJson.version}`;
-
-// @pgfsm/db is published to npm independently too (see #286) — same
-// real-dependency treatment as @pgfsm/compiler above.
+// @pgfsm/db is published to npm independently — map it to the real npm
+// dependency instead of letting dnt inline its source, so a fix published
+// there reaches this package via semver instead of requiring a republish
+// here too. Version is read from its own deno.json rather than hardcoded, so
+// it can't silently drift from whatever this build actually resolved
+// locally. Same pattern as fsm-compiler-ts's build-npm.ts mapping @pgfsm/db
+// (#250).
 const dbDenoJson = JSON.parse(
   await Deno.readTextFile("../fsm-core-db-ts/deno.json"),
 );
 const dbVersionRange = `^${dbDenoJson.version}`;
 
 // @pgfsm/logging is published to npm independently too (#293) — same
-// real-dependency treatment as @pgfsm/compiler/@pgfsm/db above.
+// real-dependency treatment as @pgfsm/db above.
 const loggingDenoJson = JSON.parse(
   await Deno.readTextFile("../fsm-logging-ts/deno.json"),
 );
@@ -46,7 +39,6 @@ const loggingVersionRange = `^${loggingDenoJson.version}`;
 await build({
   entryPoints: [
     "./src/index.ts",
-    { kind: "bin", name: "fsmlet", path: "./src/cli/fsmlet.ts" },
     { kind: "bin", name: "fsmscheduler", path: "./src/cli/fsmscheduler.ts" },
     { kind: "bin", name: "fsmctl", path: "./src/cli/fsmctl.ts" },
     { kind: "bin", name: "pgcron", path: "./src/cli/pgcron.ts" },
@@ -62,16 +54,11 @@ await build({
   // module instead, one invocation-text pair per bin since each bin's
   // correct npm invocation differs by name.
   mappings: {
-    "./src/cli/fsmlet-invocation.ts": "./src/cli/fsmlet-invocation.node.ts",
     "./src/cli/fsmscheduler-invocation.ts":
       "./src/cli/fsmscheduler-invocation.node.ts",
     "./src/cli/fsmctl-invocation.ts": "./src/cli/fsmctl-invocation.node.ts",
     "./src/cli/pgcron-invocation.ts": "./src/cli/pgcron-invocation.node.ts",
     "./src/cli/version.ts": "./src/cli/version.node.ts",
-    "@pgfsm/compiler": {
-      name: "@pgfsm/compiler",
-      version: compilerVersionRange,
-    },
     "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
     "@pgfsm/db/database.types": {
       name: "@pgfsm/db",
@@ -84,7 +71,7 @@ await build({
     name: "@pgfsm/sync-worker",
     version: packageVersion,
     description:
-      "Out-of-band worker fleet (fsmlet/fsmscheduler/fsmctl/pgcron) driving FSM instances for PostgreSQL-backed state machines",
+      "Out-of-band worker fleet (fsmscheduler/fsmctl/pgcron) driving FSM instances for PostgreSQL-backed state machines",
     license: "Apache-2.0",
     // pg ships no types of its own; dnt only auto-installs packages that
     // are themselves import specifiers, so without this the type-check

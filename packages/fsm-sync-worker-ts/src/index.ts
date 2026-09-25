@@ -11,7 +11,6 @@ export {
   splitBySendEventName,
 } from "./fsmlet/fsmworker-helper.ts";
 export type {
-  BootstrapResult,
   DbConfig,
   FsmFolderConfig,
   FsmletHandle,

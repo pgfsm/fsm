@@ -14,17 +14,13 @@ import {
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
 import type { FsmQueueMessage } from "../types.ts";
 import type { SyncOperationRegistration } from "./type.ts";
-import {
-  loadAllSyncOperationRegistrations,
-  syncOperationRegistrationsFor,
-} from "./sync-operation-registrations.ts";
 
 export async function startFSMWorker(
   deps: DBDeps,
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
-  syncOperationRegistrations?: SyncOperationRegistration[],
+  syncOperationRegistrations: SyncOperationRegistration[],
   signal?: AbortSignal,
 ) {
   const visibilityTimeout = 30;
@@ -111,35 +107,10 @@ export async function startFSMWorkerWithDBLock(
   queueName: string,
   fsm_name: string,
   fsm_version: number | string,
+  syncOperationRegistrations: SyncOperationRegistration[],
   signal?: AbortSignal,
   onStop?: () => void,
 ): Promise<{ status: "success" | "fail"; message: string }> {
-  // Sync-operation handlers are resolved from the compiler-generated
-  // aggregate registry (fsm-compiler-ts #338) rather than validated/loaded
-  // per instance — the compiler is what guarantees these handlers exist, not
-  // this process (see sync-operation-registrations.ts, #340).
-  const allRegistrations = await loadAllSyncOperationRegistrations();
-  if (!allRegistrations) {
-    return {
-      status: "fail",
-      message:
-        `Failed to load sync-operation registrations for ${fsm_name}/${fsm_version}`,
-    };
-  }
-  const syncOperationRegistrations = syncOperationRegistrationsFor(
-    allRegistrations,
-    fsm_name,
-    String(fsm_version),
-  );
-  logger.info(
-    "Loaded {count} sync-operation registration(s) for {fsmName}/{fsmVersion}",
-    {
-      count: syncOperationRegistrations.length,
-      fsmName: fsm_name,
-      fsmVersion: fsm_version,
-    },
-  );
-
   if (!(await lockFsmInstance(deps, queueName))) {
     return {
       status: "fail",

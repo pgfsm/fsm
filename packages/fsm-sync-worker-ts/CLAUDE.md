@@ -26,13 +26,16 @@ Full CLI reference (flags, defaults, examples) lives in
 ## Commands
 
 ```bash
-deno task fsmlet       # node agent — claims & drives FSM workers
 deno task fsmscheduler # control-plane router (run once per cluster)
 deno task cli          # fsmctl — one-shot create/resume/send/stop
 deno task pgcron       # one-shot: (re)register the pg_cron drain job
 deno task check        # deno check src/index.ts
 deno task build:npm    # scripts/build-npm.ts (dnt npm build)
 ```
+
+`fsmlet` has no CLI/task for now (removed — see its own section below);
+`runFsmlet`/`startFsmlet` (`src/fsmlet/fsmlet.ts`) are still there to embed
+directly.
 
 Deno version is managed by `.prototools`: `proto install deno --pin local`.
 `README.md` is the npm/npx-consumer-facing document (published to `dist/` — see
@@ -43,8 +46,9 @@ below); keep source-only detail here instead of there.
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, not `deno pack`
 (used for this repo's other npm-published packages) — see
 `packages/fsm-compiler-ts/CLAUDE.md`'s "npm publish" section for why dnt is
-required to ship CLI `bin` entries. Registers the library export alongside four
-shebanged bins (`fsmlet`, `fsmscheduler`, `fsmctl`, `pgcron`) in one pass.
+required to ship CLI `bin` entries. Registers the library export alongside three
+shebanged bins (`fsmscheduler`, `fsmctl`, `pgcron`) in one pass — `fsmlet` is
+not among them for now (see its own section below).
 `.github/workflows/npm-publish.yml` builds this package's `sync-worker` matrix
 entry through the dnt path.
 
@@ -52,15 +56,16 @@ entry through the dnt path.
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
 local `deno task build:npm` skips it.
 
-**Multi-bin `npx` gotcha**: because this package registers four bins and none of
-them is named `sync-worker` (the derived executable name from the package name),
-a plain `npx @pgfsm/sync-worker fsmlet ...` does **not** work — npm can't
-determine which bin to run and errors `could not determine executable
-to run`
-(verified empirically against a scratch multi-bin package). The correct form is
-`npx -p @pgfsm/sync-worker -- fsmlet ...` (or a real install, after which each
-bin is callable directly) — see `README.md`'s Install section, which documents
-this.
+**Multi-bin `npx` gotcha**: because this package registers three bins and none
+of them is named `sync-worker` (the derived executable name from the package
+name), a plain `npx @pgfsm/sync-worker fsmscheduler ...` does **not** work — npm
+can't determine which bin to run and errors
+`could not determine
+executable to run` (verified empirically against a scratch
+multi-bin package). The correct form is
+`npx -p @pgfsm/sync-worker -- fsmscheduler ...` (or a real install, after which
+each bin is callable directly) — see `README.md`'s Install section, which
+documents this.
 
 **Previously known issue, now resolved**: `deno task build:npm` used to fail its
 type-check pass with `TS2345` errors in `src/fsmlet/fsmlet.ts` around
@@ -72,54 +77,69 @@ where to look first.
 
 ## Structure (`src/`)
 
-- `cli/` — four CLI entry points (`fsmlet.ts`, `fsmscheduler.ts`, `fsmctl.ts`,
-  `pgcron.ts`)
-- `fsmlet/` — node-agent implementation for FSM workers
+- `cli/` — three CLI entry points (`fsmscheduler.ts`, `fsmctl.ts`, `pgcron.ts`)
+- `fsmlet/` — node-agent implementation for FSM workers (no CLI entry point for
+  now — see its own section below)
 - `fsmscheduler/` — control-plane routing implementation
 - `logger.ts` — composition-root LogTape config for this process
 
-## Workers are driven by the compiled `SYNC_OPERATION_REGISTRATIONS` aggregate, not per-instance validation (#340)
+## `fsmlet` is driven directly by the compiled `SYNC_OPERATION_REGISTRATIONS` aggregate; no discovery/validation, no CLI for now (#340)
 
-`fsmlet.ts`'s startup no longer calls `@pgfsm/compiler`'s
-`validateSyncOperationFromFsmJson`/`validateSyncOperationFromFolders`, and
-`fsmworker.ts`'s `startFSMWorkerWithDBLock` no longer calls
-`validateSyncOperationFromFolder` or dynamically `import()`s each
-`<fsmName>/<fsmVersion>`'s own `actions|guards|delays/index.ts` (nor
-`async-worker/.../actors/index.ts` — that field was write-only, never actually
-consumed downstream). Both were re-validating/re-resolving sync-operation
-modules per fsmlet startup or per dispatched instance, duplicating work the
-compiler already does at generate-time.
+`fsmlet.ts` runs no discovery/validation/DB-load pass at startup any more — no
+`@pgfsm/compiler` `validateSyncOperationFromFsmJson`/
+`validateSyncOperationFromFolders` (an intermediate
+`fsmlet/sync-operation-registrations.ts` module briefly replaced these with a
+dynamic-import-based `discoverVerifiedFsmModules` helper; that module has since
+been removed too — see below), no `checkRegistryForAsyncActors`/
+`checkRegistryAndWorkingForAsyncActors` async-actor-registry verification
+(`asyncOperationVerificationMode` is assumed `"none"` for now — a project's FSMs
+and their actors are trusted once compiled), and no `loadFsmFromJson` call —
+FSMs must already be loaded into the database by whatever separately ran that
+step.
 
-Both now go through `fsmlet/sync-operation-registrations.ts`, which dynamically
-imports the compiler-generated
-`sync-worker/typescript/aggregate-generated-sync-operation-registry.ts`
+Instead, `fsmlet.ts` statically imports the compiler-generated aggregate
+registry directly:
+
+```ts
+import { SYNC_OPERATION_REGISTRATIONS } from "../../../../apps/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+```
+
 (`SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[]` — see
-fsm-compiler-ts #338) once per call site and trusts it: any
-`<fsmName>/<fsmVersion>` present there, with a readable `fsm.json` copy
-alongside it, is considered verified — the compiler is what guarantees the
-registered handlers actually exist, not this process (deliberately no
-re-validation via dynamic import, and no AJV schema check either, now that this
-package only ever consumes already-compiled output).
+fsm-compiler-ts #338; the import path is a hardcoded relative reference into
+`apps/fsm-core-example`'s own generated output — there's no per-project config
+for this yet) and derives everything from it:
 
-- `discoverVerifiedFsmModules({ mode: "all" | "single", ... })` replaces
-  `fsmlet.ts`'s step 1 (still returns `FsmPluginValidationResult[]`, the
-  `@pgfsm/compiler` type the rest of `fsmlet.ts` already threads through
-  `loadFsmFromJson`/`checkRegistryForAsyncActors`/`registerFsmlet`, to keep
-  those downstream steps unchanged — `fsmAbsFolderPath`/`fsmModuleDefinition`/
-  `failedMethods` are now best-effort placeholders, no longer meaningful once
-  module resolution and validation both live in the compiler).
-- `loadAllSyncOperationRegistrations()` + `syncOperationRegistrationsFor(...)`
-  replace `fsmworker.ts`'s per-instance dynamic-import branch:
-  `startFSMWorkerWithDBLock` loads the aggregate once, filters it down to the
-  dispatched instance's own `<fsmName>/<fsmVersion>` sub-array, and threads that
-  sub-array — not a pre-grouped `{actions, guards, delays}` map — through
-  `startFSMWorker` into `macrostepV2` (`fsmworker-helper.ts`).
+- `startFsmlet` builds `registeredFsmModules` (`{fsm_name, fsm_version}[]`,
+  deduped from every `SYNC_OPERATION_REGISTRATIONS` entry) and passes it
+  straight to `registerFsmlet` — that's the _first_ real step now, replacing the
+  old discover → verify-async-actors → load-into-db → register sequence.
+- `processNextWork` (`fsmlet.ts`) filters `SYNC_OPERATION_REGISTRATIONS` by the
+  claimed dispatch entry's own `fsm_name`/`fsm_version` and passes that
+  sub-array into `startFSMWorkerWithDBLock`.
+- `startFSMWorkerWithDBLock`/`startFSMWorker` (`fsmworker.ts`) take that
+  sub-array as a required
+  `syncOperationRegistrations: SyncOperationRegistration[]` parameter and thread
+  it straight through to `macrostepV2` (`fsmworker-helper.ts`) — no loading or
+  filtering of their own any more (the now-removed
+  `sync-operation-registrations.ts`'s `loadAllSyncOperationRegistrations`/
+  `syncOperationRegistrationsFor` used to do this inside `fsmworker.ts` itself).
   `macrostepV2`/`runActionImplementation` resolve a handler by
   `syncOperationType` + `syncOperationName` from that sub-array (see
-  `findSyncOperationHandler`) instead of indexing into a map.
-- `FsmModuleDefinition` (the old `{actions, guards, delays, actors}` map type)
-  is gone — replaced by `SyncOperationRegistration` (mirrors the compiler's own
-  generated type) in the public export surface (`index.ts`).
-- `startFSMWorkerWithDBLock`'s `verifiedModule`/`validatePlugin` params are gone
-  (nothing else read them once the dynamic-import branch was removed); its only
-  remaining identity params are `fsm_name`/`fsm_version`.
+  `findSyncOperationHandler`) instead of indexing into a
+  `{actions, guards, delays}` map — `FsmModuleDefinition` (that old map type) is
+  gone, replaced by `SyncOperationRegistration` in the public export surface
+  (`index.ts`).
+- `FsmletHandle.verifiedFsmWithAsyncOps: FsmPluginValidationResult[]`
+  (`type.ts`) is renamed `registeredFsmModules: FsmModule[]` — there's no more
+  verification producing a `FsmPluginValidationResult`, just the plain
+  `{fsm_name, fsm_version}` pairs `registerFsmlet` itself expects.
+
+**No CLI for now**: `src/cli/fsmlet.ts` and its `fsmlet-invocation.ts`/
+`.node.ts` helpers are removed, along with `deno.json`'s `fsmlet` task and
+`scripts/build-npm.ts`'s `fsmlet` bin registration/mapping entry — the old
+`--fsm-folder-path`/`--fsm-name`/`--fsm-version` flags drove the
+discovery/validation flow above, which no longer exists, so there was no
+meaningful per-invocation flag surface left for a CLI to expose. The library
+implementation (`runFsmlet`/`startFsmlet`, `src/fsmlet/fsmlet.ts`) is untouched
+and still exported from `index.ts` — embed it directly in your own process
+instead of shelling out to a CLI.

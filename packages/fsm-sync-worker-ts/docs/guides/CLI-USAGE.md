@@ -1,13 +1,16 @@
 # fsm-sync-worker-ts — CLI Usage Guide
 
-This package provides four CLIs:
+This package provides three CLIs:
 
 | CLI              | Entry point               | Role                                                                                                                          |
 | ---------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **fsmlet**       | `src/cli/fsmlet.ts`       | Long-running node agent (kubelet equivalent) — registers itself, claims and drives FSM workers up to a concurrency limit      |
 | **fsmscheduler** | `src/cli/fsmscheduler.ts` | Control-plane routing process (kube-scheduler equivalent) for `fsmlet` node agents. Run once per cluster, not on worker nodes |
 | **fsmctl**       | `src/cli/fsmctl.ts`       | One-shot control CLI (kubectl equivalent) — create/resume/send/stop against the dispatch-queue model, then exits              |
 | **pgcron**       | `src/cli/pgcron.ts`       | One-shot deploy-time script — (re)registers the `pg_cron` job that drains the dispatch queue on a timer                       |
+
+> **`fsmlet`** (the kubelet-equivalent node agent) has no CLI for now — see this
+> package's `CLAUDE.md` for why. Embed `runFsmlet`/`startFsmlet`
+> (`src/fsmlet/fsmlet.ts`) directly in your own process instead.
 
 > **Async-operation CLIs** (`async-operation-workerlet`,
 > `async-operation-scheduler`, `async-operation-ctl`) live in the sibling
@@ -23,84 +26,6 @@ This package provides four CLIs:
    - `.env` file in the directory you run the CLI from, containing
      `DATABASE_URL=postgresql://...`
    - `--db-url` / `-d` flag passed directly (takes precedence over `.env`)
-3. **FSM folder path** — path to the FSM definition folder tree (e.g.
-   `apps/fsm-core-example/fsm`). Folders must contain subdirectories for
-   `actions/`, `guards/`, `delays/`, and/or `actors/` with TypeScript module
-   files.
-
----
-
-## fsmlet — node agent
-
-`fsmlet` is the long-running scheduler-aware agent (kubelet equivalent). It
-validates FSM modules at startup, registers itself in `fsm_workerlet`, then
-waits for the scheduler to route work to it via `pg_notify`. It drives multiple
-FSM instances concurrently up to `--max-concurrency`.
-
-### Invocation
-
-```bash
-# From repo root
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
-  -f <fsm-folder-path> [options]
-```
-
-### Options
-
-| Flag                       | Alias | Required | Default                    | Description                                                                 |
-| -------------------------- | ----- | -------- | -------------------------- | --------------------------------------------------------------------------- |
-| `--fsm-folder-path <path>` | `-f`  | yes      | —                          | Path to the FSM folder tree (validated at startup before any DB connection) |
-| `--db-url <url>`           | `-d`  | no       | `DATABASE_URL` from `.env` | PostgreSQL connection string                                                |
-| `--max-concurrency <n>`    | `-m`  | no       | `8`                        | Max FSM instances driven concurrently on this node                          |
-| `--fsmlet-id <id>`         | `-i`  | no       | random UUID                | Stable identity across restarts — also read from `FSMLET_ID` env var        |
-| `--version`                | `-v`  | —        | —                          | Print `@pgfsm/sync-worker`'s version and exit                               |
-| `--help`                   | `-h`  | —        | —                          | Print help and exit                                                         |
-
-### Example
-
-```bash
-# Minimal — reads DATABASE_URL from .env
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
-  -f apps/fsm-core-example/fsm
-
-# Full options
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts \
-  -f apps/fsm-core-example/fsm \
-  -d postgresql://user:pass@localhost:5432/db \
-  -m 4 \
-  -i my-node-01
-```
-
-### Startup sequence
-
-1. **Validate** — runs `validateSyncOperationFromFolders` on the FSM folder;
-   only modules that pass (`isFsmModuleVerified = true`) proceed.
-2. **Register** — inserts this node into `fsm_workerlet` with the verified FSM
-   list and `max-concurrency`.
-3. **LISTEN** — opens a dedicated connection and subscribes to:
-   - `fsm_fsmlet_work_<id>` — scheduler routes a work item here
-   - `fsm_worker_stop` — abort a specific running instance
-4. **Claim & dispatch** — on each notification, calls
-   `claim_scheduled_for_fsmlet()` atomically, then starts an FSM worker (bounded
-   by `--max-concurrency` via a semaphore).
-5. **Heartbeat** — sends a heartbeat every 5 s so the scheduler can score this
-   node.
-6. **Fallback poll** — polls every 30 s to catch any `pg_notify` missed after a
-   LISTEN connection drop.
-
-### Graceful shutdown
-
-| Signal                             | Behaviour                                                                                            |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Ctrl+C once** (SIGINT / SIGTERM) | Aborts all active workers, drains until they exit, deregisters from `fsm_workerlet`, closes the pool |
-| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`) — DB lock and registration are cleaned up by session-end                 |
-
-### Environment variables
-
-| Variable       | Description                                                        |
-| -------------- | ------------------------------------------------------------------ |
-| `DATABASE_URL` | Fallback DB connection string (used when `--db-url` is not passed) |
-| `FSMLET_ID`    | Fallback stable identity (used when `--fsmlet-id` is not passed)   |
 
 ---
 
@@ -318,7 +243,6 @@ register or update the job.
   "tasks": {
     "cli": "deno run --allow-all src/cli/fsmctl.ts",
     "dev": "deno run --allow-all --watch src/cli/fsmctl.ts",
-    "fsmlet": "deno run --allow-all src/cli/fsmlet.ts",
     "fsmscheduler": "deno run --allow-all src/cli/fsmscheduler.ts",
     "pgcron": "deno run --allow-all src/cli/pgcron.ts",
     "check": "deno check src/index.ts"
@@ -327,14 +251,11 @@ register or update the job.
 ```
 
 Run from `packages/fsm-sync-worker-ts/`, each task takes the CLI's own flags
-after the task name, e.g. `deno task fsmlet -f <path>` or
-`deno task cli -c create
--n creditCheck -V 1`. Equivalent direct invocations
-from the repo root:
+after the task name, e.g. `deno task cli -c create -n creditCheck -V 1`.
+Equivalent direct invocations from the repo root:
 
 ```bash
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c <command> [options]
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmlet.ts -f <path>
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmscheduler.ts
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/pgcron.ts
 ```
@@ -344,10 +265,11 @@ For the async-operation CLI tasks, see
 
 ---
 
-## FSM folder structure expected by `-f` / `--folder-path`
+## FSM folder structure expected by `--folder-path`
 
-Both `fsmlet` (`--fsm-folder-path`) and the sibling package's
-`async-operation-workerlet` (`--folder-path`) expect the same tree layout:
+The sibling package's `async-operation-workerlet` (`--folder-path`) expects this
+tree layout (`fsmlet` took an equivalent `--fsm-folder-path` before its CLI was
+removed — see the note near the top of this doc):
 
 ```
 <fsm-folder>/
