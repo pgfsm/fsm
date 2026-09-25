@@ -7,6 +7,7 @@ import {
   writeAggregateSyncOperationRegistry,
   writeOperationModule,
   writeSyncOperationRegistry,
+  writeSyncWorkerRunner,
 } from "./operation-logic-scaffold.ts";
 import type {
   FsmMachineJson,
@@ -131,10 +132,20 @@ async function scaffoldSyncLogicForVersion(
  * the requested `langs` (there's then nothing under
  * `sync-worker/typescript/` to aggregate). Mutates `tsFiles` in place, same
  * as {@linkcode scaffoldSyncLogicForVersion}.
+ *
+ * Once the aggregate itself exists, also (re)writes `run-sync-worker.ts` +
+ * `deno.json` alongside it (see {@linkcode writeSyncWorkerRunner}) — a
+ * minimal runnable entry point a generated project can `deno run` directly
+ * to start its fsmlet, importing `@pgfsm/sync-worker` as a real npm
+ * dependency. Skipped when there's no aggregate to import (nothing to run
+ * yet). `projectName`, when given, becomes that `deno.json`'s own `name`
+ * field (falls back to a random `sync-worker-<8 hex chars>` otherwise — see
+ * {@linkcode writeSyncWorkerRunner}).
  */
 async function writeSyncAggregateArtifacts(
   writeRootAbsPath: string,
   tsFiles: string[],
+  projectName?: string,
 ): Promise<void> {
   const absSyncWorkerTypescriptDir =
     `${writeRootAbsPath}/${SYNC_WORKER_DIR_NAME}/typescript`;
@@ -145,6 +156,16 @@ async function writeSyncAggregateArtifacts(
     tsFiles.push(aggregateFile);
     logger.info("Wrote aggregate sync operation registry {file}", {
       file: aggregateFile,
+    });
+
+    const { runFile, denoJsonFile } = await writeSyncWorkerRunner(
+      absSyncWorkerTypescriptDir,
+      projectName,
+    );
+    tsFiles.push(runFile);
+    logger.info("Wrote sync worker runner {runFile} and {denoJsonFile}", {
+      runFile,
+      denoJsonFile,
     });
   }
 }
@@ -168,12 +189,17 @@ async function writeSyncAggregateArtifacts(
  * {@linkcode writeSyncAggregateArtifacts}) combining every
  * `<fsmName>/<fsmVersion>`'s own registry into one
  * `SYNC_OPERATION_REGISTRATIONS` array a sync worker build imports.
+ *
+ * `projectName`, when given (the CLI's `--project-name`), becomes the
+ * generated `run-sync-worker.ts`/`deno.json` pair's own `deno.json` `name`
+ * field — see {@linkcode writeSyncAggregateArtifacts}.
  */
 export async function generateSyncOperationLogicFromFolders(
   folderPath: string,
   langs: OperationLang[],
   skipDirs: string[] = [],
   writeRootAbsPath: string,
+  projectName?: string,
 ): Promise<void> {
   logger.info("Scaffolding sync operation logic ({langs}) from {path}", {
     langs: langs.join(", "),
@@ -199,7 +225,7 @@ export async function generateSyncOperationLogicFromFolders(
     },
   );
 
-  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles);
+  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles, projectName);
 
   await formatTsFilesBestEffort(tsFiles);
 }
@@ -222,6 +248,8 @@ export async function generateSyncOperationLogicFromFolders(
  * {@linkcode generateSyncOperationLogicFromFolders} — rebuilt from whatever's
  * actually on disk under `sync-worker/typescript/`, so this run only needs to
  * have already scaffolded *this* fsm.json's own registry (above) first.
+ * `projectName`, when given, becomes the generated `deno.json`'s own `name`
+ * field — see {@linkcode writeSyncAggregateArtifacts}.
  */
 export async function generateSyncOperationLogicFromFsmJson(
   fsmJsonPath: string,
@@ -229,6 +257,7 @@ export async function generateSyncOperationLogicFromFsmJson(
   fsmName: string,
   fsmVersion: string,
   langs: OperationLang[],
+  projectName?: string,
 ): Promise<void> {
   logger.info(
     "Scaffolding sync operation logic ({langs}) from {path} into {writeRootAbsPath}",
@@ -252,7 +281,7 @@ export async function generateSyncOperationLogicFromFsmJson(
     tsFiles,
   );
 
-  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles);
+  await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles, projectName);
 
   await formatTsFilesBestEffort(tsFiles);
 }

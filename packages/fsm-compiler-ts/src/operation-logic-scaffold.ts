@@ -25,6 +25,8 @@ import { getPreamble, getTemplate } from "./scaffold-templates/registry.ts";
 import { render as renderTsActorsRegistry } from "./scaffold-templates/eta/typescript/actors-registry.generated.ts";
 import { render as renderTsSyncOperationRegistry } from "./scaffold-templates/eta/typescript/sync-operation-registry.generated.ts";
 import { render as renderTsSyncOperationRegistryAggregate } from "./scaffold-templates/eta/typescript/aggregate-generated-sync-operation-registry.generated.ts";
+import { render as renderTsRunSyncWorker } from "./scaffold-templates/eta/typescript/run-sync-worker.generated.ts";
+import { render as renderTsSyncWorkerDenoJson } from "./scaffold-templates/eta/typescript/sync-worker-deno-json.generated.ts";
 import { render as renderTsActorsRegistryAggregate } from "./scaffold-templates/eta/typescript/actors-registry-aggregate.generated.ts";
 import { render as renderPyActorsRegistry } from "./scaffold-templates/eta/python/actors-registry.generated.ts";
 import { render as renderPyActorsRegistryAggregate } from "./scaffold-templates/eta/python/actors-registry-aggregate.generated.ts";
@@ -334,6 +336,51 @@ export async function writeAggregateSyncOperationRegistry(
     renderTsSyncOperationRegistryAggregate({ groups: groupList }),
   );
   return file;
+}
+
+const RUN_SYNC_WORKER_FILE_NAME = "run-sync-worker.ts";
+const SYNC_WORKER_DENO_JSON_FILE_NAME = "deno.json";
+
+/**
+ * Writes a minimal runnable entry point,
+ * `<absSyncWorkerTypescriptDir>/run-sync-worker.ts`, plus the `deno.json`
+ * declaring `@pgfsm/sync-worker` as an npm import so that entry point's bare
+ * specifier resolves — both siblings of
+ * `aggregate-generated-sync-operation-registry.ts`
+ * (see {@linkcode writeAggregateSyncOperationRegistry}), which `run-sync-worker.ts`
+ * imports by relative path. `run-sync-worker.ts` itself is static content, no
+ * per-project templating: it just imports `SYNC_OPERATION_REGISTRATIONS` and
+ * calls `@pgfsm/sync-worker`'s `runFsmlet` with a `DATABASE_URL`-derived
+ * `dbConfig` — mirrors `packages/fsm-sync-worker-ts/test-cli-sdk.ts` (adjusted
+ * to the bare `@pgfsm/sync-worker` import this file needs, since it lives
+ * alongside the aggregate registry rather than inside that package's own
+ * tree). Only called when the aggregate registry itself was written (see
+ * `generate-sync-operation-logic.ts`'s `writeSyncAggregateArtifacts`) — no
+ * point in a runnable entry point importing an aggregate that doesn't exist.
+ *
+ * `deno.json`'s own `name` field is `projectName` when the caller supplies
+ * one (`generate-sync-logic --project-name`), or else a random
+ * `sync-worker-<8 hex chars>` — Deno's config schema treats a bare `name`
+ * with no `exports` as an incomplete JSR-publish config (hence this file
+ * also sets `exports`, even though nothing here is actually meant for JSR),
+ * so a name is always written rather than left out.
+ */
+export async function writeSyncWorkerRunner(
+  absSyncWorkerTypescriptDir: string,
+  projectName?: string,
+): Promise<{ runFile: string; denoJsonFile: string }> {
+  await Deno.mkdir(absSyncWorkerTypescriptDir, { recursive: true });
+
+  const runFile = `${absSyncWorkerTypescriptDir}/${RUN_SYNC_WORKER_FILE_NAME}`;
+  await Deno.writeTextFile(runFile, renderTsRunSyncWorker({}));
+
+  const name = projectName ??
+    `sync-worker-${crypto.randomUUID().split("-")[0]}`;
+  const denoJsonFile =
+    `${absSyncWorkerTypescriptDir}/${SYNC_WORKER_DENO_JSON_FILE_NAME}`;
+  await Deno.writeTextFile(denoJsonFile, renderTsSyncWorkerDenoJson({ name }));
+
+  return { runFile, denoJsonFile };
 }
 
 /**

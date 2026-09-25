@@ -42,6 +42,7 @@ const args = parseArgs(Deno.args, {
     "fsm-version",
     "function-name",
     "function-version",
+    "project-name",
   ],
   boolean: ["help", "version", "show-recommendation"],
   alias: {
@@ -80,7 +81,7 @@ USAGE
 COMMANDS
   generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. The aggregate registry/worker SDK (cli.ts, sdk.ts, <lang>-actors-registry.generated.ts, etc.) are written to {cwd}/async-worker/<lang>/
-  generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used
+  generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. Once the aggregate registry exists, also writes a runnable run-sync-worker.ts + deno.json at {cwd}/sync-worker/typescript/ — --project-name sets that deno.json's own name (defaults to a random sync-worker-<8 hex chars> otherwise)
   generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file (--output required for either single-file mode). When --folder is an fsm.json file, generate-fsm-json is skipped (the fsm.json already exists) and only generate-async-logic/generate-sync-logic run against it. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
   create-async-logic                  Scaffold a single actor stub in the shared, non-FSM-scoped async-op pool (--function-name/--function-version required; no --folder — always anchored at {cwd}). Always written to {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.ext. Also rewrites that language's registry at {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.ext (scoped to that function-version's own actors), and refreshes that language's FSM-scoped aggregate registry too ({cwd}/async-worker/<lang>/<lang>-actors-registry.generated.ext, or Go's {cwd}/async-worker/go/go-actors-registry-generated/) — but not the worker SDK (cli.ts/sdk.ts/etc), which still needs a generate-async-logic/generate-all run
   delete                              Delete generated fsm.json / xstate-fsm.json files
@@ -97,6 +98,7 @@ OPTIONS
   -F, --function-version <version>     Function version folder name, e.g. v01 (create-async-logic only, required — unrelated to --fsm-version)
   -N, --fsm-name <name>                FSM name, e.g. creditCheck (generate-sync-logic/generate-async-logic/validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
   -V, --fsm-version <version>          FSM version folder name, e.g. v01 (generate-sync-logic/generate-async-logic/validate-sync-operation only, required when --folder is a single fsm.json file — there's no <fsmName>/<fsmVersion>/fsm.json folder structure to infer it from)
+  --project-name <name>                Name for the generated run-sync-worker.ts's deno.json (generate-sync-logic only, optional — defaults to a random sync-worker-<8 hex chars> when omitted)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
@@ -438,6 +440,7 @@ try {
           args["fsm-name"]!,
           args["fsm-version"]!,
           langs,
+          args["project-name"],
         );
       } else {
         await generateSyncOperationLogicFromFolders(
@@ -445,6 +448,7 @@ try {
           langs,
           skipDirs,
           Deno.cwd(),
+          args["project-name"],
         );
       }
       break;
