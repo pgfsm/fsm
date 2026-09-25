@@ -747,7 +747,7 @@ Deno.test("writeAggregateSyncOperationRegistry - combines every <fsmName>/<fsmVe
   }
 });
 
-Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts importing the aggregate + @pgfsm/sync-worker, and a deno.json declaring it", async () => {
+Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts importing the aggregate + @pgfsm/sync-worker, and a deno.json declaring it, random name by default", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const { runFile, denoJsonFile } = await writeSyncWorkerRunner(dir);
@@ -769,6 +769,16 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts importing the aggre
 
     const denoJsonContent = await Deno.readTextFile(denoJsonFile);
     const parsed = JSON.parse(denoJsonContent);
+    // No projectName given -- falls back to a random sync-worker-<8 hex chars>.
+    assertEquals(/^sync-worker-[0-9a-f]{8}$/.test(parsed.name), true);
+    assertEquals(
+      parsed.description.includes("@pgfsm/compiler") &&
+        parsed.description.includes("@pgfsm/sync-worker"),
+      true,
+    );
+    // Deno warns "exports" should accompany a "name" (JSR-publish config
+    // convention) -- harmless either way here, but this silences it.
+    assertEquals(parsed.exports, "./run-sync-worker.ts");
     assertEquals(typeof parsed.imports["@pgfsm/sync-worker"], "string");
     assertEquals(
       parsed.imports["@pgfsm/sync-worker"].startsWith(
@@ -776,6 +786,25 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts importing the aggre
       ),
       true,
     );
+    assertEquals(parsed.tasks.dev, "deno run --allow-all run-sync-worker.ts");
+    assertEquals(
+      parsed.tasks["dev:watch"],
+      "deno run --allow-all --watch=. run-sync-worker.ts",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeSyncWorkerRunner - uses the given projectName as deno.json's name instead of a random one", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const { denoJsonFile } = await writeSyncWorkerRunner(
+      dir,
+      "creditcheck-worker",
+    );
+    const parsed = JSON.parse(await Deno.readTextFile(denoJsonFile));
+    assertEquals(parsed.name, "creditcheck-worker");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
