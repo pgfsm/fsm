@@ -813,6 +813,49 @@ Deno.test("cli generate-all rejects a --folder file that's neither .ts nor .json
   assertStringIncludes(stderr, "must be a .ts or fsm.json file");
 });
 
+// --- --overwrite (#381) ---
+
+Deno.test("cli rejects an invalid --overwrite value", async () => {
+  const { code, stderr } = await runCli([
+    "-c",
+    "generate-sync-logic",
+    "-f",
+    FSM_FOLDER,
+    "--overwrite",
+    "never",
+  ]);
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "Invalid --overwrite value");
+});
+
+Deno.test("cli --overwrite generated-only keeps an edited stub on re-run and reports it", async () => {
+  const cwd = `${FIXTURE_ROOT}/overwrite-generated-only`;
+  await Deno.mkdir(cwd, { recursive: true });
+  const argv = [
+    "-c",
+    "generate-sync-logic",
+    "-f",
+    SINGLE_FSM_JSON,
+    "-N",
+    "creditCheck",
+    "-V",
+    "v01",
+    "--overwrite",
+    "generated-only",
+  ];
+  assertEquals((await runCli(argv, undefined, cwd)).code, 0);
+  const actions =
+    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`;
+  const edited = (await Deno.readTextFile(actions)) + "// mine\n";
+  await Deno.writeTextFile(actions, edited);
+
+  const { code, stdout } = await runCli(argv, undefined, cwd);
+  assertEquals(code, 0);
+  assertEquals(await Deno.readTextFile(actions), edited);
+  assertStringIncludes(stdout, "Kept");
+  assertStringIncludes(stdout, "kept.");
+});
+
 // --- create-async-logic ---
 
 Deno.test("cli create-async-logic without --function-version exits 1", async () => {

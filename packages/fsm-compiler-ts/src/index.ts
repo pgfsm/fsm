@@ -24,6 +24,14 @@ export {
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
 export { generateAll } from "./generate-all.ts";
+export { withWritePolicy } from "./write-policy.ts";
+export type {
+  FileClass,
+  FileWriteAction,
+  FileWriteEvent,
+  OverwriteMode,
+  WritePolicyOptions,
+} from "./write-policy.ts";
 export type { GenerateAllOptions } from "./generate-all.ts";
 export {
   isOperationLang,

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { writeOwnedFile } from "./write-policy.ts";
 import { extractFsmPluginRefs, RAISE_CANCEL } from "./util.ts";
 import {
   eachVersionedFsmFolder,
@@ -106,9 +107,10 @@ async function scaffoldSyncLogicForVersion(
       });
 
       const fsmJsonCopyFile = `${absVersionLangOutputPath}/fsm.json`;
-      await Deno.writeTextFile(
+      await writeOwnedFile(
         fsmJsonCopyFile,
         JSON.stringify(fsmData, null, 2) + "\n",
+        "generated",
       );
       logger.info("Wrote fsm.json copy {file}", { file: fsmJsonCopyFile });
     }

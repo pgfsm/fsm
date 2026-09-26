@@ -107,6 +107,46 @@ Gotchas:
   reference the removed versions until `generate-sync-logic`/
   `generate-async-logic` run again.
 
+## File ownership: `--overwrite generated-only` (#381, SPEC-004)
+
+Every file write goes through
+`writeOwnedFile(path, content, fileClass,
+requiredNames?)` (`write-policy.ts`) —
+there is no bare `Deno.writeTextFile` left in the scaffolding code, so a new
+writer must pick a class too. `"generated"` files are always rewritten;
+`"scaffolded"` ones are kept when they already exist and the mode is
+`"generated-only"`. The mode and an `onFileWrite` callback travel in an
+`AsyncLocalStorage` scope (`withWritePolicy`) instead of being threaded through
+every positional-parameter entry point: the CLI wraps its whole command switch,
+`generateAll` takes `overwrite`/`onFileWrite` in its options, and other library
+callers wrap their own call. A nested scope inherits whatever it leaves
+undefined. Default is `"all"`, the historical behaviour.
+
+Gotchas:
+
+- **Go's worker module is generated, not scaffolded** — a deliberate departure
+  from SPEC-004's table. `async-worker/go/go.mod` carries a `require`/`replace`
+  per Go actor, so keeping it would break the build as soon as a Go actor is
+  added, and `main.go` must match the SDK version that `go.mod` pins. Developer
+  dependencies go in each Go actor's own (scaffolded) `go.mod`.
+- **Formatters skip kept files.** `formatTsFilesBestEffort`/`Rust`/`Go` filter
+  through `withoutKept`, otherwise `deno fmt`/`rustfmt`/`gofmt` would still
+  rewrite the developer's file the run just kept. `go mod tidy` only ever runs
+  in generated module directories.
+- **Missing-export report is a text check.** `requiredNames` are the stub
+  function names (`deriveTemplateInput(...).fnName`, so delay prefixes and Go
+  capitalization apply); a kept file that doesn't contain one as a whole
+  identifier is reported via `missingNames`. It's advisory —
+  `validate-sync-operation` is the real check.
+- **Scaffolded templates say "yours to edit"**, not "Do not edit"
+  (`run-sync-worker.eta`, `run-async-worker.eta` ×2, `worker-sdk-main.eta` for
+  Rust, `worker-sdk-cargo-toml.eta`, `worker-sdk-pyproject.eta`).
+  `removeStaleGeneratedFile`'s `AUTO-GENERATED` match only targets pre-#358
+  legacy files, so the new header never makes them removable.
+- **Under npx, check missing paths with `isNotFoundError`**, never
+  `instanceof Deno.errors.NotFound` — the shim's `realPath` throws Node's raw
+  ENOENT too (#386, like #278's `remove`).
+
 The gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:
 

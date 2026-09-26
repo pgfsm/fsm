@@ -245,10 +245,16 @@ the workers. It is for after the developer edits a `machine.ts` or `fsm.json`.
 
 Every file the compiler writes falls into one of two classes:
 
-| Class                                      | Files                                                                                                                                                                                                                                                                                                 | On re-run               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels                                                                                                 | Always rewritten        |
-| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, `main.go`, and `deno.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` (for both the worker projects and the individual Go actor modules) | Written only if missing |
+| Class                                      | Files                                                                                                                                                                                                                                                                  | On re-run               |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`) | Always rewritten        |
+| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s         | Written only if missing |
+
+Implemented in #381, with one change from the original table: the Go worker's
+`go.mod` lists a `require`/`replace` for every Go actor module, so it can't be
+left untouched once a Go actor is added, and `main.go` must match the SDK
+version that `go.mod` pins. Both are generated; a Go actor's own dependencies go
+in that actor's `go.mod`.
 
 Generated files carry a do-not-edit header. Stub modules need one more step:
 when an FSM gains a new action, the existing `actions/index.ts` is kept and the
@@ -371,6 +377,7 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
 <!-- Filled in after acceptance. Proposed breakdown:
 1. compiler: `overwrite: "generated-only"` ownership option + do-not-edit headers (prereq)
 2. compiler: single-FSM-version generation with explicit identity into {cwd}/fsm (done: #372/#374, #376/#378)
+Issues: #381 (1), #382 (3), #383 (4), #384 (5), #385 (`pgfsm init`, deferred)
 3. new packages/fsm-cli-ts: create/add/sync, project discovery, plan printer, config schema
 4. npm-publish.yml matrix entry + README/docs; point compiler README at @pgfsm/cli
 5. (optional) @pgfsm/create shim

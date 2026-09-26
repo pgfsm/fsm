@@ -19,6 +19,7 @@ import type {
   WrittenActor,
 } from "./types/index.ts";
 import { deriveTemplateInput } from "./scaffold-templates/derive-template-input.ts";
+import { withoutKept, writeOwnedFile } from "./write-policy.ts";
 import { getPreamble, getTemplate } from "./scaffold-templates/registry.ts";
 import { render as renderTsActorsRegistry } from "./scaffold-templates/eta/typescript/actors-registry.generated.ts";
 import { render as renderTsSyncOperationRegistry } from "./scaffold-templates/eta/typescript/sync-operation-registry.generated.ts";
@@ -145,7 +146,12 @@ export async function writeOperationModule(
     : `${absFolderPath}/${lang}/${kind}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${operationModuleFileName(lang)}`;
-  await Deno.writeTextFile(file, renderOperationModule(lang, kind, names));
+  await writeOwnedFile(
+    file,
+    renderOperationModule(lang, kind, names),
+    "scaffolded",
+    [...new Set(names)].map((n) => deriveTemplateInput(kind, n, lang).fnName),
+  );
 }
 
 const SYNC_OPERATION_REGISTRY_FILE_NAME =
@@ -215,9 +221,10 @@ export async function writeSyncOperationRegistry(
   await Deno.mkdir(absSyncWorkerLangFolderPath, { recursive: true });
   const file =
     `${absSyncWorkerLangFolderPath}/${SYNC_OPERATION_REGISTRY_FILE_NAME}`;
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     file,
     renderTsSyncOperationRegistry({ fsmName, fsmVersion, lang, groups }),
+    "generated",
   );
   return file;
 }
@@ -314,9 +321,10 @@ export async function writeAggregateSyncOperationRegistry(
   await Deno.mkdir(absSyncWorkerTypescriptDir, { recursive: true });
   const file =
     `${absSyncWorkerTypescriptDir}/${AGGREGATE_SYNC_OPERATION_REGISTRY_FILE_NAME}`;
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     file,
     renderTsSyncOperationRegistryAggregate({ groups: groupList }),
+    "generated",
   );
   return file;
 }
@@ -355,13 +363,17 @@ export async function writeSyncWorkerRunner(
   await Deno.mkdir(absSyncWorkerTypescriptDir, { recursive: true });
 
   const runFile = `${absSyncWorkerTypescriptDir}/${RUN_SYNC_WORKER_FILE_NAME}`;
-  await Deno.writeTextFile(runFile, renderTsRunSyncWorker({}));
+  await writeOwnedFile(runFile, renderTsRunSyncWorker({}), "scaffolded");
 
   const name = projectName ??
     `sync-worker-${crypto.randomUUID().split("-")[0]}`;
   const denoJsonFile =
     `${absSyncWorkerTypescriptDir}/${SYNC_WORKER_DENO_JSON_FILE_NAME}`;
-  await Deno.writeTextFile(denoJsonFile, renderTsSyncWorkerDenoJson({ name }));
+  await writeOwnedFile(
+    denoJsonFile,
+    renderTsSyncWorkerDenoJson({ name }),
+    "scaffolded",
+  );
 
   return { runFile, denoJsonFile };
 }
@@ -438,9 +450,10 @@ async function writeGoActorModule(
   const dir = subPath
     ? `${absFolderPath}/go/${subPath}/actors/${actorDirName}`
     : `${absFolderPath}/go/actors/${actorDirName}`;
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     `${dir}/go.mod`,
     renderGoModActor({ modulePath }),
+    "scaffolded",
   );
 }
 
@@ -477,9 +490,11 @@ export async function writeActorFile(
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${name}.${operationFileExtension(lang)}`;
   const header = getPreamble(lang, "actors");
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     file,
     withSingleTrailingNewline(header + renderStub(lang, "actors", actor.src)),
+    "scaffolded",
+    [deriveTemplateInput("actors", actor.src, lang).fnName],
   );
   if (lang === "go") {
     await writeGoActorModule(
@@ -583,7 +598,11 @@ export async function writeActorsManifest(
       exportedAsyncOperationName: exportedName,
     })),
   };
-  await Deno.writeTextFile(file, JSON.stringify(manifest, null, 2) + "\n");
+  await writeOwnedFile(
+    file,
+    JSON.stringify(manifest, null, 2) + "\n",
+    "generated",
+  );
   return file;
 }
 
@@ -636,7 +655,7 @@ export async function writeActorsBarrel(
   const content = langActors.map((a) => actorsBarrelEntry(lang, a)).join(
     separator,
   ) + "\n";
-  await Deno.writeTextFile(file, content);
+  await writeOwnedFile(file, content, "generated");
   return file;
 }
 
@@ -702,7 +721,11 @@ export async function writeActorsRegistry(
     : `${absFolderPath}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${ACTORS_REGISTRY_FILE_NAME[lang]}`;
-  await Deno.writeTextFile(file, buildActorsRegistryContent(langActors, lang));
+  await writeOwnedFile(
+    file,
+    buildActorsRegistryContent(langActors, lang),
+    "generated",
+  );
   return file;
 }
 
@@ -720,8 +743,11 @@ export async function writeActorsRegistry(
  * {@linkcode DenoCommand} there — see its doc comment).
  */
 export async function formatTsFilesBestEffort(
-  paths: string[],
+  allPaths: string[],
 ): Promise<void> {
+  // Never reformat a scaffolded file this run kept (#381) -- it's the
+  // developer's code now.
+  const paths = withoutKept(allPaths);
   if (paths.length === 0 || !DenoCommand) return;
   try {
     await new DenoCommand("deno", { args: ["fmt", ...paths], stderr: "null" })
@@ -744,8 +770,9 @@ export async function formatTsFilesBestEffort(
  * {@linkcode DenoCommand} there).
  */
 export async function formatRustFilesBestEffort(
-  paths: string[],
+  allPaths: string[],
 ): Promise<void> {
+  const paths = withoutKept(allPaths); // see formatTsFilesBestEffort
   if (paths.length === 0 || !DenoCommand) return;
   try {
     // --edition / --style-edition 2021: two separate rustfmt settings, both
@@ -938,9 +965,10 @@ export async function writeAggregateActorsRegistry(
   const dir = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${AGGREGATE_ACTORS_REGISTRY_FILE_NAME[lang]}`;
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     file,
     buildAggregateRegistryContent(langActors, lang),
+    "generated",
   );
   return file;
 }
@@ -964,8 +992,9 @@ const GO_AGGREGATE_DIR_NAME = "go-actors-registry-generated";
 
 /** Runs `gofmt -w` once across every path passed in. See {@linkcode formatTsFilesBestEffort} for the batching rationale; same best-effort tolerance (empty `paths`, missing `gofmt`, npm/npx build). */
 export async function formatGoFilesBestEffort(
-  paths: string[],
+  allPaths: string[],
 ): Promise<void> {
+  const paths = withoutKept(allPaths); // see formatTsFilesBestEffort
   if (paths.length === 0 || !DenoCommand) return;
   try {
     await new DenoCommand("gofmt", { args: ["-w", ...paths], stderr: "null" })
@@ -1068,7 +1097,7 @@ export async function writeAggregateGoRegistry(
       ),
     })),
   });
-  await Deno.writeTextFile(`${dir}/go.mod`, goModContent);
+  await writeOwnedFile(`${dir}/go.mod`, goModContent, "generated");
 
   const registryContent = renderGoActorsRegistryAggregate({
     imports: withMeta.map((a) => ({
@@ -1078,7 +1107,7 @@ export async function writeAggregateGoRegistry(
     actors: withMeta,
   });
   const registryFile = `${dir}/registry.go`;
-  await Deno.writeTextFile(registryFile, registryContent);
+  await writeOwnedFile(registryFile, registryContent, "generated");
   return registryFile;
 }
 
@@ -1218,11 +1247,12 @@ export async function writeWorkerSdk(
     // (#358); this project only gets a thin entry point wiring its registry
     // into that package's runActorWorkerCli.
     const runFile = `${dir}/run-async-worker.ts`;
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       runFile,
       renderTsRunAsyncWorker({
         registryImportPath: "./typescript-actors-registry.generated.ts",
       }),
+      "scaffolded",
     );
     tsFiles.push(runFile);
     for (const file of LEGACY_TS_WORKER_SDK_FILES) {
@@ -1234,7 +1264,11 @@ export async function writeWorkerSdk(
     // run-async-worker.ts's bare npm imports don't resolve at all once
     // async-worker/typescript/ sits outside the caller's own workspace
     // member import map (see #316, #318).
-    await Deno.writeTextFile(`${dir}/deno.json`, renderTsWorkerSdkDenoJson({}));
+    await writeOwnedFile(
+      `${dir}/deno.json`,
+      renderTsWorkerSdkDenoJson({}),
+      "scaffolded",
+    );
   }
 
   const wrotePython = hasLang("python");
@@ -1244,7 +1278,7 @@ export async function writeWorkerSdk(
     // Same shape as TypeScript above: the SDK lives in the published
     // pgfsm-async-worker-sdk package (#364), pinned by this directory's
     // pyproject.toml; the project only gets a thin entry point.
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       `${dir}/run_async_worker.py`,
       renderPyRunAsyncWorker({
         registryModuleName: AGGREGATE_ACTORS_REGISTRY_FILE_NAME.python.replace(
@@ -1252,10 +1286,12 @@ export async function writeWorkerSdk(
           "",
         ),
       }),
+      "scaffolded",
     );
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       `${dir}/pyproject.toml`,
       renderPyWorkerSdkPyproject({}),
+      "scaffolded",
     );
     for (const file of LEGACY_PY_WORKER_SDK_FILES) {
       await removeStaleGeneratedFile(`${dir}/${file}`);
@@ -1270,23 +1306,26 @@ export async function writeWorkerSdk(
     // Same shape as TypeScript/Python above: the SDK lives in the published
     // pgfsm-async-worker-sdk crate (#368), pinned by this directory's
     // Cargo.toml; the project only gets a thin main.rs.
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       mainFile,
       renderRustWorkerSdkMain({
         registryRelativePath: "../rust-actors-registry.generated.rs",
       }),
+      "scaffolded",
     );
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       `${dir}/Cargo.toml`,
       renderRustWorkerSdkCargoToml({}),
+      "scaffolded",
     );
     for (const file of LEGACY_RUST_WORKER_SDK_FILES) {
       await removeStaleGeneratedFile(`${dir}/${file}`);
     }
     rustFiles.push(mainFile);
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       `${dir}/.gitignore`,
       renderRustWorkerSdkGitignore({}),
+      "scaffolded",
     );
   }
 
@@ -1299,20 +1338,25 @@ export async function writeWorkerSdk(
     // module (#370), required by this directory's go.mod; the project only
     // gets a thin main.go.
     const mainFile = `${dir}/main.go`;
-    await Deno.writeTextFile(
+    // Generated, not scaffolded: main.go must match the SDK version this
+    // directory's (always-regenerated) go.mod pins -- developers add their
+    // own dependencies in each actor's own go.mod instead.
+    await writeOwnedFile(
       mainFile,
       renderGoWorkerSdkMain({
         registryModulePath: aggregateModulePath,
         sdkModulePath: GO_ASYNC_WORKER_SDK_MODULE_PATH,
       }),
+      "generated",
     );
     for (const file of LEGACY_GO_WORKER_SDK_FILES) {
       await removeStaleGeneratedFile(`${dir}/${file}`);
     }
     goFiles.push(mainFile);
-    await Deno.writeTextFile(
+    await writeOwnedFile(
       `${dir}/.gitignore`,
       renderGoWorkerSdkGitignore({}),
+      "scaffolded",
     );
 
     // Go's `replace` directives are only honored in the module actually
@@ -1350,7 +1394,7 @@ export async function writeWorkerSdk(
         })),
       ],
     });
-    await Deno.writeTextFile(`${dir}/go.mod`, goModContent);
+    await writeOwnedFile(`${dir}/go.mod`, goModContent, "generated");
     goModDir = dir;
   }
 
