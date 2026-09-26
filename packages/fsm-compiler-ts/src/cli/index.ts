@@ -40,7 +40,13 @@ const args = parseArgs(Deno.args, {
     "function-version",
     "project-name",
   ],
-  boolean: ["help", "version", "show-recommendation", "force"],
+  boolean: [
+    "help",
+    "version",
+    "show-recommendation",
+    "force",
+    "include-workers",
+  ],
   alias: {
     h: "help",
     c: "command",
@@ -79,7 +85,7 @@ COMMANDS
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. Once the aggregate registry exists, also writes a runnable run-sync-worker.ts + deno.json at {cwd}/sync-worker/typescript/ — --project-name sets that deno.json's own name (defaults to a random sync-worker-<8 hex chars> otherwise)
   generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file. Always writes {cwd}/async-worker/ and {cwd}/sync-worker/ (run it from your app root) — --output is not accepted. A single machine.ts compiles into {cwd}/fsm/<fsmName>/<fsmVersion>/ like generate-fsm-json; a single fsm.json skips generate-fsm-json and is copied there. Either single-file mode requires --fsm-name/--fsm-version. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
   create-async-logic                  Scaffold a single actor stub in the shared, non-FSM-scoped async-op pool (--function-name/--function-version required; no --folder — always anchored at {cwd}). Always written to {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.ext. Also rewrites that language's registry at {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.ext (scoped to that function-version's own actors), and refreshes that language's FSM-scoped aggregate registry too ({cwd}/async-worker/<lang>/<lang>-actors-registry.generated.ext, or Go's {cwd}/async-worker/go/go-actors-registry-generated/) — but not the worker SDK (run-async-worker.ts/run_async_worker.py/etc), which still needs a generate-async-logic/generate-all run
-  delete                              Delete generated fsm.json / xstate-fsm.json files
+  delete                              Delete generated fsm.json / xstate-fsm.json files (version folders without a machine.ts are kept). {cwd}/sync-worker/ and {cwd}/async-worker/ stub folders are kept unless --include-workers is passed
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json)
   validate-async-operation            [DEPRECATED] Validate async operation logic (actors) for a sharedAsyncOperation folder — unsupported under the npm/npx build, requires the Deno-native CLI
   load                                Load FSM JSON into the database
@@ -94,6 +100,7 @@ OPTIONS
   -V, --fsm-version <version>          FSM version folder name, e.g. v01 (same commands and cases as --fsm-name; for a machine.ts it also fills in missing asyncOperationVersion)
   --project-name <name>                Name for the generated run-sync-worker.ts's deno.json (generate-sync-logic only, optional — defaults to a random sync-worker-<8 hex chars> when omitted)
   --force                              Overwrite {cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json even when it belongs to a different machine id (generate-fsm-json/generate-all single-file mode only)
+  --include-workers                    Also remove each FSM version's {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/ and {cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/ folders, including implemented stubs (delete only)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
@@ -471,7 +478,9 @@ try {
       );
       break;
     case "delete":
-      await deleteFsmJSONFromFolders(folder!, skipDirs);
+      await deleteFsmJSONFromFolders(folder!, skipDirs, {
+        includeWorkers: args["include-workers"],
+      });
       break;
     case "validate-sync-operation": {
       if (folderIsFsmJsonFile) {

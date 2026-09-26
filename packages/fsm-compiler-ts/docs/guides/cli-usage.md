@@ -36,6 +36,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | `--version`               | `-v`  | Print `@pgfsm/compiler`'s own version and exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `--show-recommendation`   | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate-fsm-json`/`generate-all` only)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `--force`                 |       | Overwrite `{cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json` even when it belongs to a different machine `id` (`generate-fsm-json`/`generate-all` single-file mode only)                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--include-workers`       |       | `delete` only: also remove each deleted FSM version's `{cwd}/sync-worker/` and `{cwd}/async-worker/` folders, including implemented stubs                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `--help`                  | `-h`  | Show help message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ---
@@ -299,11 +300,26 @@ deno run --allow-all ../packages/fsm-compiler-ts/src/cli/index.ts \
 ### `delete`
 
 Delete all generated `fsm.json` and `xstate-fsm.json` files from a folder tree.
+Version folders with no `machine.ts` are skipped, since their `fsm.json` can't
+be regenerated from there.
+
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/` and
+`{cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/` are kept by default, because
+they hold your implemented stubs (#377); the command logs which ones it kept.
+`--include-workers` removes them too. Aggregate registries aren't rewritten
+either way, so re-run `generate-sync-logic`/`generate-async-logic` after
+removing worker folders.
 
 ```bash
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
   -c delete \
   -f apps/fsm-core-example/fsm
+
+# Also remove each deleted version's sync-worker/ and async-worker/ folders
+deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
+  -c delete \
+  -f apps/fsm-core-example/fsm \
+  --include-workers
 ```
 
 ---

@@ -274,15 +274,22 @@ npx @pgfsm/compiler -c create-async-logic --lang typescript --function-name chec
 
 **Input** — `-f`/`--folder`: plugin-root directory. `-s`/`--skip-dirs`.
 
-**Output/side effect** — per version folder, removes `fsm.json`,
-`xstate-fsm.json` and the `typescript/`/`python/` subdirectories, if present
-(`rust/`/`go/` are left alone); also removes that FSM/version's
-`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/` (`generate-sync-logic`'s
-own output location — see above — not a subdirectory of the version folder
-itself). Missing files are skipped silently, not an error.
+**Output/side effect** — per version folder, removes `fsm.json` and
+`xstate-fsm.json`. Version folders with no `machine.ts` are left alone, since
+their `fsm.json` can't be regenerated from there. Missing files are skipped
+silently, not an error.
+
+The worker folders `{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/` and
+`{cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/` are **kept** by default,
+because they hold the stubs you implement; the command logs which ones it kept.
+Pass `--include-workers` to remove them too, scoped to the FSM versions being
+deleted. The aggregate registries under `sync-worker/typescript/` and
+`async-worker/<lang>/` are not rewritten, so re-run `generate-sync-logic`/
+`generate-async-logic` afterwards.
 
 ```bash
 npx @pgfsm/compiler -c delete -f fsm
+npx @pgfsm/compiler -c delete -f fsm --include-workers   # also removes implemented stubs
 ```
 
 ### `validate-sync-operation` — check action/guard/delay stubs are implemented

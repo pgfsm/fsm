@@ -41,6 +41,7 @@ export {
   validateSyncOperationFromFsmJson,
 } from "./validate-sync-operation-logic.ts";
 export { deleteFsmJSONFromFolders } from "./delete-fsm-json-from-folders.ts";
+export type { DeleteFsmJsonOptions } from "./delete-fsm-json-from-folders.ts";
 export {
   DELAY_ACTION_NAME_PREFIX,
   extractFsmPluginRefs,
