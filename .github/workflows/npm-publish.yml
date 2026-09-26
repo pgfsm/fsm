@@ -12,6 +12,7 @@ on:
       - "db-v[0-9]*"
       - "sync-worker-v[0-9]*"
       - "async-worker-v[0-9]*"
+      - "async-worker-sdk-v[0-9]*"
       - "logging-v[0-9]*"
   workflow_dispatch:
     inputs:
@@ -24,6 +25,7 @@ on:
           - db
           - sync-worker
           - async-worker
+          - async-worker-sdk
           - logging
           - all
 
@@ -73,6 +75,13 @@ jobs:
           - id: async-worker
             path: packages/fsm-core-async-op-worker
             tag_prefix: async-worker-v
+            dnt: true
+          # No CLI bin — on dnt to declare @pgfsm/proto-codegen as a real npm
+          # dependency (build-npm.ts maps its subpath imports) instead of
+          # inlining the generated stubs (#358).
+          - id: async-worker-sdk
+            path: packages/fsm-async-worker-sdk-ts
+            tag_prefix: async-worker-sdk-v
             dnt: true
           - id: logging
             path: packages/fsm-logging-ts

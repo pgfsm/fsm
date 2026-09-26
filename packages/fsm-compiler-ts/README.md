@@ -160,11 +160,15 @@ working directory. Per `<lang>/<fsmName>/<fsmVersion>/` (folder mode derives
 Both modes also refresh the aggregate registry plus worker SDK — one per
 language, combining every FSM version's actors — since a worker process serves
 its language's actors across every FSM, not just one, at `async-worker/<lang>/`
-directly (`cli.ts`, `sdk.ts`, `typescript-actors-registry.generated.ts`, etc. —
-alongside every `<fsmName>/<fsmVersion>/` this run wrote for that language). The
-actor set aggregated always comes from the real FSM tree, regardless:
-`--folder`'s own walk in directory mode, or the target `fsm.json`'s own location
-(found by walking three directories up) in single-file mode.
+directly (for TypeScript, `run-async-worker.ts` plus a `deno.json` pinning the
+published `@pgfsm/async-worker-sdk` package;
+`typescript-actors-registry.generated.ts`, etc. — alongside every
+`<fsmName>/<fsmVersion>/` this run wrote for that language). Regenerating also
+removes a `cli.ts`/`sdk.ts` left by an older compiler version, as long as it
+still has the auto-generated header. The actor set aggregated always comes from
+the real FSM tree, regardless: `--folder`'s own walk in directory mode, or the
+target `fsm.json`'s own location (found by walking three directories up) in
+single-file mode.
 
 ```bash
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm

@@ -181,7 +181,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
       // protocol on any iterable it wraps for abort handling (native async
       // generators get `throw`/`return` for free; this hand-rolled queue
       // needs them spelled out) — see the identically-shaped queue in
-      // worker-sdk-sdk.eta, where omitting these fails client calls outright
+      // @pgfsm/async-worker-sdk's actorWorker.ts, where omitting these fails client calls outright
       // with "AsyncIterable does not implement throw".
       return: (value?: T): Promise<IteratorResult<T>> => {
         this.close();

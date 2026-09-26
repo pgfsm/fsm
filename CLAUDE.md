@@ -47,6 +47,7 @@ packages/
   fsm-core-db-ts/         # Raw pg client helpers (TypeScript) — see CLAUDE.md
   fsm-sync-worker-ts/     # Worker fleet: fsmlet/fsmscheduler dispatch-queue CLIs — see CLAUDE.md
   fsm-core-async-op-worker/ # Activity Gateway: async-op worker-registration/dispatch CLIs (@pgfsm/async-worker) — see CLAUDE.md
+  fsm-async-worker-sdk-ts/ # Async actor worker SDK (TypeScript) — connects to the Activity Gateway, @pgfsm/async-worker-sdk; not the deprecated fsm-async-worker-ts — see CLAUDE.md
   fsm-async-worker-ts/    # Deprecated v1 async-op worker fleet (@pgfsm/async-worker-old); superseded by fsm-core-async-op-worker — see CLAUDE.md
   fsm-devstack-ts/        # fsmdev CLI: local dev-stack orchestration across compiler/sync-worker/async-worker, @pgfsm/devstack — see CLAUDE.md
   fsm-logging-ts/         # Shared LogTape logging config, @pgfsm/logging — see CLAUDE.md

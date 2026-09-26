@@ -8,13 +8,13 @@ packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/sidecargateway/v
 #100), registers actors from a compiler-generated registry, and serves invoke
 requests.
 
-Python counterpart of ../typescript/sdk.ts's ActorWorker — same actor_key()
+Python counterpart of @pgfsm/async-worker-sdk's ActorWorker — same actor_key()
 identity (parent_fsm_name@parent_fsm_version@async_operation_type@async_operation_name@async_operation_version@
 async_operation_language), same register -> heartbeat -> serve lifecycle. Outgoing
 messages (register, heartbeat, invoke_result, invoke_error) are pushed onto
 a thread-safe queue.Queue that doubles as the request generator grpc's
 synchronous stream_stream stub drains on its own thread — the natural Python
-analogue of sdk.ts's push-based AsyncQueue, and a better fit than a second
+analogue of @pgfsm/async-worker-sdk's push-based AsyncQueue, and a better fit than a second
 manual reader/writer thread pair for the same duplex stream.
 
 Actor discovery is no longer a runtime folder scan + dynamic module load —

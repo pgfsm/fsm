@@ -7,7 +7,7 @@ import { machineWithProvider } from "../machine-with-provider.ts";
 import { runFsmScheduler, startFsmlet } from "@pgfsm/sync-worker";
 import type { FsmletHandle } from "@pgfsm/sync-worker";
 import { startActivityGatewayServer } from "@pgfsm/async-worker";
-import { ActorWorker } from "../../../../../async-worker/typescript/sdk.ts";
+import { ActorWorker } from "@pgfsm/async-worker-sdk";
 import { ACTOR_REGISTRATIONS } from "../../../../../async-worker/typescript/creditCheck/v01/generated-registry.ts";
 import {
   createFsmInstanceFromName,

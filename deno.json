@@ -1,10 +1,10 @@
 {
   "workspace": [
     "apps/fsm-core-example",
-    "apps/async-worker/typescript",
     "packages/fsm-logging-ts",
     "packages/fsm-core-db-ts",
     "packages/fsm-core-async-op-worker",
+    "packages/fsm-async-worker-sdk-ts",
     "packages/fsm-sync-worker-ts",
     "packages/fsm-async-worker-ts",
     "apps/fsm-core-ts-hono-deno",

@@ -138,15 +138,15 @@ All workflows live in `.github/workflows/`.
 All `uses:` actions are **pinned to commit SHAs** (with a `# vX.Y.Z` comment)
 for supply-chain safety; Renovate keeps the digests updated.
 
-| Workflow          | Trigger                                                                     | Tool(s)                                                                          | Purpose                                                                         |
-| ----------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `ci.yml`          | push `main`, PR                                                             | `deno fmt/lint/test` + `cargo fmt/clippy`                                        | Lint, format & unit-test gate                                                   |
-| `codeql.yml`      | push `main`, PR, weekly cron                                                | `github/codeql-action`                                                           | SAST for TypeScript + Rust                                                      |
-| `reuse.yml`       | push `main`, PR                                                             | `fsfe/reuse-action`                                                              | License/SPDX compliance                                                         |
-| `gitleaks.yml`    | push `main`, PR                                                             | `j178/prek-action` → gitleaks                                                    | Secret scanning                                                                 |
-| `sbom.yml`        | push `main`, PR, release                                                    | cdxgen + grype + `upload-artifact` + `action-gh-release` + `anchore/sbom-action` | SBOM generation, CVE scan, attach SBOM to releases, dependency-graph submission |
-| `cla.yml`         | issue comment, `pull_request_target`                                        | `contributor-assistant/github-action`                                            | Contributor License Agreement checks                                            |
-| `npm-publish.yml` | tag push (`compiler-v*`/`db-v*`/`sync-worker-v*`/`async-worker-v*`), manual | `setup-deno` + `setup-node` + `deno pack` + `npm publish`                        | Publish TS packages to npm                                                      |
+| Workflow          | Trigger                                                                                           | Tool(s)                                                                          | Purpose                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `ci.yml`          | push `main`, PR                                                                                   | `deno fmt/lint/test` + `cargo fmt/clippy`                                        | Lint, format & unit-test gate                                                   |
+| `codeql.yml`      | push `main`, PR, weekly cron                                                                      | `github/codeql-action`                                                           | SAST for TypeScript + Rust                                                      |
+| `reuse.yml`       | push `main`, PR                                                                                   | `fsfe/reuse-action`                                                              | License/SPDX compliance                                                         |
+| `gitleaks.yml`    | push `main`, PR                                                                                   | `j178/prek-action` → gitleaks                                                    | Secret scanning                                                                 |
+| `sbom.yml`        | push `main`, PR, release                                                                          | cdxgen + grype + `upload-artifact` + `action-gh-release` + `anchore/sbom-action` | SBOM generation, CVE scan, attach SBOM to releases, dependency-graph submission |
+| `cla.yml`         | issue comment, `pull_request_target`                                                              | `contributor-assistant/github-action`                                            | Contributor License Agreement checks                                            |
+| `npm-publish.yml` | tag push (`compiler-v*`/`db-v*`/`sync-worker-v*`/`async-worker-v*`/`async-worker-sdk-v*`), manual | `setup-deno` + `setup-node` + `deno pack` + `npm publish`                        | Publish TS packages to npm                                                      |
 
 > **CI test scope:** `ci.yml` runs only the DB-free unit suites
 > (`packages/fsm-compiler-ts`, `apps/fsm-core-ts-hono-deno/stoker-src`). The
@@ -167,8 +167,9 @@ them to npm, and attach the CycloneDX SBOM to GitHub Releases.
 | **`softprops/action-gh-release`** | Attaches the CycloneDX SBOM to GitHub Releases    | `sbom.yml`        |
 
 > Releases are tag-driven (`compiler-v*`, `db-v*`, `sync-worker-v*`,
-> `async-worker-v*`). Package versions for `packages/database-src` are computed
-> by `tsx` scripts (`get-next-pkg-version.ts`).
+> `async-worker-v*`, `async-worker-sdk-v*`). Package versions for
+> `packages/database-src` are computed by `tsx` scripts
+> (`get-next-pkg-version.ts`).
 
 ---
 

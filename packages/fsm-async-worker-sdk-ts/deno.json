@@ -1,0 +1,21 @@
+{
+  "name": "@pgfsm/async-worker-sdk",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "imports": {
+    "@connectrpc/connect": "npm:@connectrpc/connect@^1.7.0",
+    "@connectrpc/connect-node": "npm:@connectrpc/connect-node@^1.7.0",
+    "@deno/dnt": "jsr:@deno/dnt@^0.43.0",
+    "@logtape/logtape": "npm:@logtape/logtape@^2.2",
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/cli": "jsr:@std/cli@1"
+  },
+  "tasks": {
+    "test": "deno test --allow-all test/",
+    "check": "deno check src/index.ts",
+    "build:npm": "deno run --allow-all scripts/build-npm.ts"
+  }
+}
