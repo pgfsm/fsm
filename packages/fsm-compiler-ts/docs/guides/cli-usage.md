@@ -103,7 +103,8 @@ derives `<fsmName>/<fsmVersion>` per FSM while walking; single-file mode uses
 `--fsm-name`/`--fsm-version` directly) — so multiple FSMs/versions scaffolded
 from the same working directory don't collide, and so the per-FSM actor tree
 sits right beside that language's aggregate registry/worker SDK (TypeScript:
-`run-async-worker.ts` + `deno.json` importing `@pgfsm/async-worker-sdk`;
+`run-async-worker.ts` + `deno.json` importing `@pgfsm/async-worker-sdk`; Python:
+`run_async_worker.py` + `pyproject.toml` pinning `pgfsm-async-worker-sdk`;
 `<lang>-actors-registry.generated.ts`, etc. — written once per language at
 `async-worker/<lang>/`, refreshed on every run from the real FSM tree's own
 walk, not re-walked from the output itself).

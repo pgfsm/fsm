@@ -268,7 +268,9 @@ const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
       join(dir, "run-async-worker.ts")
     } start --gateway-socket ${socket}`,
   python: (dir) =>
-    `python3 ${join(dir, "cli.py")} start --gateway-socket ${socket}`,
+    `uv run --project ${dir} ${
+      join(dir, "run_async_worker.py")
+    } start --gateway-socket ${socket}`,
   rust: (dir) =>
     `(cd ${dir} && cargo run --release -- --gateway-socket ${socket})`,
   go: (dir) => `(cd ${dir} && go run . --gateway-socket ${socket})`,

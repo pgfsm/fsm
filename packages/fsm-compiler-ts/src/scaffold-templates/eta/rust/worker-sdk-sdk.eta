@@ -23,7 +23,7 @@
 //! invoke_result, invoke_error) are pushed onto a
 //! `tokio::sync::mpsc::UnboundedSender` whose receiver, wrapped in a
 //! `UnboundedReceiverStream`, is handed to tonic as the request stream —
-//! the Rust analogue of @pgfsm/async-worker-sdk's push-based AsyncQueue and sdk.py's
+//! the Rust analogue of @pgfsm/async-worker-sdk's push-based AsyncQueue and pgfsm-async-worker-sdk's
 //! queue.Queue-backed generator. Dropping the sender ends the stream, which
 //! is how `stop()` (a plain sync method, safe to call from a signal handler)
 //! shuts things down without needing an async context itself.

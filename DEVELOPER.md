@@ -247,19 +247,15 @@ deno run --allow-all apps/async-worker/typescript/run-async-worker.ts start \
 ```
 
 ```bash
-# Python — must run from inside its own directory, for both steps: pip (and
-# uv) resolve a relative editable path inside requirements.txt against cwd,
-# not the file's own location, so `pip install -r <path>` from elsewhere
-# silently resolves the fsm-proto-codegen editable dependency to the wrong
-# place. Also install via `python3 -m pip`, not a bare `pip` — on a machine
-# with more than one Python (proto/pyenv/homebrew/etc. alongside the system
-# one), bare `pip` can silently resolve to a *different* interpreter than
-# `python3` below, so the install lands somewhere `python3 cli.py` never
-# looks (surfaces as `ModuleNotFoundError: No module named 'pgfsm'`).
-# `python3 -m pip` always installs into the same interpreter running it.
-cd apps/async-worker/python
-python3 -m pip install -r requirements.txt
-python3 cli.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+# Python — the SDK is the published pgfsm-async-worker-sdk package, pinned
+# by pyproject.toml in that directory; uv creates the environment and installs
+# it on first run. `--project` makes this work from apps/ (no cd needed).
+# Without uv: `python3 -m pip install "pgfsm-async-worker-sdk>=0.1.0,<0.2"`
+# then `python3 apps/async-worker/python/run_async_worker.py start ...` — use
+# `python3 -m pip`, not a bare `pip`, so the install lands in the same
+# interpreter that runs the worker.
+uv run --project apps/async-worker/python apps/async-worker/python/run_async_worker.py start \
+  --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash

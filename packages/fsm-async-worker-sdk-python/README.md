@@ -1,0 +1,84 @@
+# pgfsm-async-worker-sdk
+
+Python worker SDK for the pgfsm Activity Gateway. A worker process built on it
+connects to the gateway's sidecar Unix socket, registers a set of actors, and
+serves the invocations the gateway routes to them over the
+`pgfsm.sidecargateway.v1.SidecarGatewayService` gRPC stream (stubs from
+[`pgfsm-proto-codegen`](https://pypi.org/project/pgfsm-proto-codegen/)).
+
+It never opens a database connection — that stays in the gateway.
+
+Python counterpart of the TypeScript
+[`@pgfsm/async-worker-sdk`](https://www.npmjs.com/package/@pgfsm/async-worker-sdk).
+
+## Usage
+
+You normally don't write against this package directly. `@pgfsm/compiler`'s
+`generate-async-logic` writes a small `run_async_worker.py` plus a
+`pyproject.toml` that pins this package:
+
+```python
+# async-worker/python/run_async_worker.py (generated)
+import logging
+import sys
+
+from pgfsm.async_worker_sdk import run_actor_worker_cli
+from python_actors_registry_generated import ACTOR_REGISTRATIONS
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    raise SystemExit(run_actor_worker_cli(ACTOR_REGISTRATIONS, sys.argv[1:]))
+```
+
+Run it from that directory with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv run run_async_worker.py list    # print the actors in the registry, no gateway needed
+uv run run_async_worker.py start   # connect to the gateway and serve invocations
+```
+
+or with pip: `python3 -m pip install pgfsm-async-worker-sdk`, then
+`python3 run_async_worker.py start`.
+
+### Options
+
+```
+-g, --gateway-socket <path>   Sidecar socket to connect to (default: /tmp/pgfsm-activity-gateway-workers.sock)
+-i, --worker-id <id>          Stable worker identity (default: python-<random>)
+    --heartbeat-ms <ms>       Heartbeat interval (default: 5000)
+-h, --help                    Show this help message
+```
+
+SIGINT/SIGTERM stop the worker gracefully (it unregisters from the gateway).
+
+## API
+
+- `run_actor_worker_cli(registrations, args, invocation=None) -> int` — the
+  `list`/`start` CLI. Returns the process exit code instead of exiting.
+- `ActorWorker(worker_id, gateway_socket_path, registrations, heartbeat_ms=5000)`
+  — `run()` registers every actor and serves invocations until `stop()` is
+  called or the gateway ends the stream.
+
+A registration is a dict:
+
+```python
+{
+    "parent_fsm_name": "creditCheck",
+    "parent_fsm_version": "v01",
+    "async_operation_type": "internalAsyncOperation",
+    "async_operation_name": "checkBureau",
+    "async_operation_version": "v01",
+    "async_operation_language": "python",
+    "handler": check_bureau,  # (input) -> JSON-serializable output; may be async
+}
+```
+
+A handler that raises is reported to the gateway as an `INTERNAL` invoke error;
+an invoke for an unregistered actor is reported as `NOT_FOUND`.
+
+Logging goes through the standard `logging` module (`pgfsm.async_worker_sdk`
+loggers); the library never configures logging itself.
+
+## License
+
+Apache-2.0

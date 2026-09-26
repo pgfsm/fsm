@@ -2,7 +2,7 @@
 // worker-sdk/go reference binary — Go reference worker for the Activity
 // Gateway.
 //
-// Go counterpart of @pgfsm/async-worker-sdk's runActorWorkerCli and ../python/cli.py: actors come
+// Go counterpart of @pgfsm/async-worker-sdk's runActorWorkerCli and ../python/run_async_worker.py: actors come
 // from a compiler-generated registry
 // (fsm-core-example/go-actors-registry-generated, see fsm-compiler-ts's
 // writeAggregateGoRegistry), not a folder scan. Go has no runtime mechanism

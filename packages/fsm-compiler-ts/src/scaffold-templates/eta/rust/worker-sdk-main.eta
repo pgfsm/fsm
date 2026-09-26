@@ -2,7 +2,7 @@
 //! worker-sdk/rust reference binary — Rust reference worker for the
 //! Activity Gateway.
 //!
-//! Rust counterpart of @pgfsm/async-worker-sdk's runActorWorkerCli and ../python/cli.py: actors
+//! Rust counterpart of @pgfsm/async-worker-sdk's runActorWorkerCli and ../python/run_async_worker.py: actors
 //! come from a compiler-generated registry (`generated_registry` below,
 //! `#[path]`-included from a fixed location — see fsm-compiler-ts's
 //! `writeAggregateActorsRegistry`), not a folder scan. Rust has no runtime
