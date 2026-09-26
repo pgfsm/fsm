@@ -1,7 +1,7 @@
 // TypeScript worker SDK: connects to the Activity Gateway's sidecar Unix
 // socket via the generated pgfsm.sidecargateway.v1.SidecarGatewayService
 // bidi-streaming client (@pgfsm/proto-codegen, from
-// packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/sidecargateway/v1/sidecar_gateway.proto,
+// packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/sidecargateway/v1/sidecar_gateway.proto,
 // #100), registers actors from a compiler-generated registry, and serves
 // invoke requests.
 //
@@ -50,7 +50,7 @@ const logger = getLogger([
 
 // `deno check` fails to merge these generated classes' sibling .d.ts type
 // declarations with their .js value bindings when a class name is used
-// directly as a type (the same gap fsm-core-async-op-worker's
+// directly as a type (the same gap fsm-async-worker-gateway-ts's
 // gatewayClient.ts documents for Connect's `Client<T>` utility type) —
 // deriving instance types from the constructors via `InstanceType<typeof X>`
 // sidesteps it, and every type position below goes through one of these
@@ -63,7 +63,7 @@ type InvokeMessage = InstanceType<typeof Invoke>;
  * Plain structural mirror of the generated `RegisteredActor` proto message
  * — hand-written rather than derived via `InstanceType<typeof X>` since it
  * crosses this module's own exported surface (`ActorRegistration`) the same
- * way fsm-core-async-op-worker's sidecar/gateway.ts's identical type does.
+ * way fsm-async-worker-gateway-ts's sidecar/gateway.ts's identical type does.
  */
 export interface RegisteredActor {
   parentFsmName: string;
@@ -121,7 +121,7 @@ function parseInputJson(json: string): unknown {
  * stream — `run()`/`heartbeatLoop()`/`handleInvoke()` push register,
  * heartbeat, invoke_result, and invoke_error messages onto it; the transport
  * drains it as the actual HTTP/2 request stream. Mirrors
- * fsm-core-async-op-worker's sidecar/gateway.ts's identically-shaped queue on
+ * fsm-async-worker-gateway-ts's sidecar/gateway.ts's identically-shaped queue on
  * the server side — a separate copy rather than a shared import, since this
  * package deliberately doesn't depend on the gateway package (which pulls in
  * pg).

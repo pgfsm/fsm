@@ -323,7 +323,7 @@ running `fsmscheduler` + `fsmlet` to pick the work up. `POST /fsm/resume` and
 `GET /fsm/currentActive`, the remaining in-process `/fsm` routes, were removed —
 see ADR-002. The `/fsmpromise` routes (in-process, backed by v1's
 `startFSMPromiseWorker`) were removed too — `async-operation-workerlet` (v1) and
-`fsm-core-async-op-worker` (v2) are both driven only via their own CLIs, not
+`fsm-async-worker-gateway-ts` (v2) are both driven only via their own CLIs, not
 through the HTTP API.
 
 ---

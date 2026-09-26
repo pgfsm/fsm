@@ -1,6 +1,6 @@
 {
-  "name": "@pgfsm/async-worker",
-  "version": "0.1.6",
+  "name": "@pgfsm/async-worker-gateway",
+  "version": "0.2.0",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

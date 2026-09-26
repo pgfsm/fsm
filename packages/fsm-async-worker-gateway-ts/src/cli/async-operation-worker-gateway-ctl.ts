@@ -26,7 +26,7 @@ USAGE
 
 OPTIONS
   --target <target>              gRPC target (default: ${DEFAULT_TARGET})
-  -v, --version                  Print @pgfsm/async-worker's version and exit
+  -v, --version                  Print @pgfsm/async-worker-gateway's version and exit
   -h, --help                     Show this help message
 
 INVOKE OPTIONS
@@ -47,7 +47,7 @@ COMMANDS
 
 DESCRIPTION
   A thin debug/test client for the Activity Gateway's gRPC contract
-  (packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/activitygateway/v1/activity_gateway.proto)
+  (packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/activitygateway/v1/activity_gateway.proto)
   — connects, calls one RPC, prints the result, and exits. Actor identity
   matches ActorPluginValidationResult /
   sidecar/gateway.ts's actorKey():

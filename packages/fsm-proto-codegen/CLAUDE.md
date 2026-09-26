@@ -42,7 +42,7 @@ under `proto/<service>/`, each its own independent Buf module — see README's
 Layout section) and the codegen config that runs every one of them through Buf's
 plugin pipeline to produce stubs for all four polyglot actor languages
 (TypeScript, Python, Rust, Go), committed under `gen/`. Today that's
-`proto/fsm-core-async-op-worker/` — the Activity Gateway's client-facing
+`proto/fsm-async-worker-gateway-ts/` — the Activity Gateway's client-facing
 `activity_gateway.proto` and worker-facing `sidecar_gateway.proto`.
 
 `package.json` / `node_modules/` here are not app dependencies — just the

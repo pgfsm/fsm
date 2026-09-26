@@ -30,7 +30,7 @@ const loggingDenoJson = JSON.parse(
 );
 const loggingVersionRange = `^${loggingDenoJson.version}`;
 
-// @pgfsm/sync-worker and @pgfsm/async-worker are a different case (#251):
+// @pgfsm/sync-worker and @pgfsm/async-worker-gateway are a different case (#251):
 // fsmdev.ts no longer imports either as a JS module at all — the
 // self-owned run-gateway.ts/run-fsmlet.ts wrapper bins that used to do that
 // are gone, replaced with spawning those packages' own real published bins
@@ -45,7 +45,7 @@ const syncWorkerDenoJson = JSON.parse(
 );
 const syncWorkerVersionRange = `^${syncWorkerDenoJson.version}`;
 const asyncWorkerDenoJson = JSON.parse(
-  await Deno.readTextFile("../fsm-core-async-op-worker/deno.json"),
+  await Deno.readTextFile("../fsm-async-worker-gateway-ts/deno.json"),
 );
 const asyncWorkerVersionRange = `^${asyncWorkerDenoJson.version}`;
 
@@ -87,7 +87,7 @@ await build({
     // bin-on-PATH linking, not because the compiled code imports them.
     dependencies: {
       "@pgfsm/sync-worker": syncWorkerVersionRange,
-      "@pgfsm/async-worker": asyncWorkerVersionRange,
+      "@pgfsm/async-worker-gateway": asyncWorkerVersionRange,
     },
   },
   compilerOptions: {

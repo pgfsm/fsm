@@ -65,7 +65,7 @@ OPTIONS
   --poll-interval-ms <ms>          Async-op poll loop interval (default: 30000)
   --disable-poll-loop              Don't start the poll loop -- gateway/sidecar only
   --ensure-queue-on-register       Ensure a PGMQ queue exists for every actor a worker registers (default: off)
-  -v, --version                    Print @pgfsm/async-worker's version and exit
+  -v, --version                    Print @pgfsm/async-worker-gateway's version and exit
   -h, --help                       Show this help message
 
 DESCRIPTION

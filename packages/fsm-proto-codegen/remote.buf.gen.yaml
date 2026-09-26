@@ -2,7 +2,7 @@ version: v2
 managed:
   enabled: true
 inputs:
-  - directory: proto/fsm-core-async-op-worker
+  - directory: proto/fsm-async-worker-gateway-ts
 plugins:
   # TypeScript — protobuf-es (message types) + Connect (client/server RPC
   # stubs), both resolved from BSR. Pinned to matching v1 releases, not

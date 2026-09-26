@@ -67,7 +67,7 @@ await build({
     "@pgfsm/logging": { name: "@pgfsm/logging", version: loggingVersionRange },
   },
   package: {
-    name: "@pgfsm/async-worker",
+    name: "@pgfsm/async-worker-gateway",
     version: packageVersion,
     description:
       "Activity Gateway (async-operation-worker-gateway/-ctl) for async-operation-type FSM operations across polyglot actors",

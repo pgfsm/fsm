@@ -9,7 +9,7 @@
 // speak (the former sidecar/protocol.ts's readFrame/writeFrame/makeEnvelope,
 // deleted along with the compiler's legacy worker SDKs in #356) with the
 // generated pgfsm.sidecargateway.v1.SidecarGatewayService stub, from
-// packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/sidecargateway/v1/sidecar_gateway.proto
+// packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/sidecargateway/v1/sidecar_gateway.proto
 // — see #100. Imported as @pgfsm/proto-codegen (a Deno workspace-linked package, not published —
 // see #103), not a relative path into fsm-proto-codegen/gen/. The
 // connection/registration/pending-invoke bookkeeping is otherwise unchanged

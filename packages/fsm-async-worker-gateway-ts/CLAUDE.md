@@ -1,7 +1,7 @@
-# CLAUDE.md — Activity Gateway (`packages/fsm-core-async-op-worker/`)
+# CLAUDE.md — Activity Gateway (`packages/fsm-async-worker-gateway-ts/`)
 
-Scoped guidance for `@pgfsm/async-worker`. Repo-wide conventions and session
-protocol live in the root `CLAUDE.md` / `AGENTS.md`.
+Scoped guidance for `@pgfsm/async-worker-gateway`. Repo-wide conventions and
+session protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 
 ## What it is
 
@@ -39,9 +39,13 @@ Deno version is managed by `.prototools`: `proto install deno --pin local`.
 `deno pack`) is required to ship CLI `bin` entries. Registers both the library
 export and the shebanged `async-operation-worker-gateway`/
 `async-operation-worker-gateway-ctl` bins. `.github/workflows/npm-publish.yml`'s
-`async-worker` matrix entry points at this package (repointed from
+`async-worker-gateway` matrix entry points at this package (repointed from
 `fsm-async-worker-ts`/v1 in #175/#176, once this package took over the
-`@pgfsm/async-worker` name in #171).
+`@pgfsm/async-worker` name in #171). #361 renamed it to
+`@pgfsm/async-worker-gateway` (from 0.2.0; tag `async-worker-gateway-v*`), since
+it's the gateway workers connect to, not a worker — the worker side is
+`@pgfsm/async-worker-sdk`. `@pgfsm/async-worker` (0.1.3–0.1.6) is deprecated on
+npm in favour of the new name.
 
 `postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
@@ -73,15 +77,15 @@ that package's own `CLAUDE.md`.
 
 **Multi-bin `npx` gotcha**: because this package registers two bins and neither
 is named `async-worker` (the derived executable name from the package name), a
-plain `npx @pgfsm/async-worker async-operation-worker-gateway ...` does **not**
-work — npm can't determine which bin to run and errors
+plain `npx @pgfsm/async-worker-gateway async-operation-worker-gateway ...` does
+**not** work — npm can't determine which bin to run and errors
 `could
 not determine executable to run` (verified empirically against a scratch
 multi-bin package). The correct form is
-`npx -p @pgfsm/async-worker -- async-operation-worker-gateway ...` (or a real
-install, after which each bin is callable directly) — see `README.md`'s Install
-section, which documents this. Same issue applies to `fsm-sync-worker-ts` (four
-bins) — see its `CLAUDE.md`.
+`npx -p @pgfsm/async-worker-gateway -- async-operation-worker-gateway ...` (or a
+real install, after which each bin is callable directly) — see `README.md`'s
+Install section, which documents this. Same issue applies to
+`fsm-sync-worker-ts` (four bins) — see its `CLAUDE.md`.
 
 ## Structure (`src/`)
 

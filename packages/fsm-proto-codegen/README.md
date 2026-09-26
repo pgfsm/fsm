@@ -23,8 +23,8 @@ codegen pipeline works and produces correct, runnable output.
 ## Layout
 
 - `proto/<service>/` — one directory per service that defines `.proto`
-  contracts, e.g. `proto/fsm-core-async-op-worker/` for the Activity Gateway and
-  Sidecar Gateway contracts. Each is its own independent Buf module: its own
+  contracts, e.g. `proto/fsm-async-worker-gateway-ts/` for the Activity Gateway
+  and Sidecar Gateway contracts. Each is its own independent Buf module: its own
   `buf.yaml` (lint/breaking-change policy), scoped to that service alone.
   Centralizing here is about _location_, not _governance_ — one service's lint
   exceptions or breaking-change policy never leak onto another's. See

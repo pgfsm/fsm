@@ -42,7 +42,7 @@ await configureLogging({
 // bin. generate-all/pgcron are one-shot, so they're called as plain library
 // functions below instead — no subprocess needed either way.
 const GATEWAY_SCRIPT = new URL(
-  "../../../fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts",
+  "../../../fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts",
   import.meta.url,
 );
 const FSMLET_SCRIPT = new URL(
@@ -108,7 +108,7 @@ DESCRIPTION
        in-process, calling the library functions directly
     2. pgcron registration (@pgfsm/db)                        — one-shot,
        idempotent, in-process
-    3. the Activity Gateway (@pgfsm/async-worker's
+    3. the Activity Gateway (@pgfsm/async-worker-gateway's
        async-operation-worker-gateway) and fsmlet (@pgfsm/sync-worker's
        fsmlet) — each spawned as that package's own real CLI process (see
        packages/fsm-devstack-ts/CLAUDE.md) and supervised together:
@@ -265,7 +265,7 @@ function toProcessSpec(
 const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
   typescript: (dir) =>
     `deno run --allow-all ${
-      join(dir, "cli.ts")
+      join(dir, "run-async-worker.ts")
     } start --gateway-socket ${socket}`,
   python: (dir) =>
     `python3 ${join(dir, "cli.py")} start --gateway-socket ${socket}`,

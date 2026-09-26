@@ -71,8 +71,8 @@ package's own `CLAUDE.md` for the exact commands.
    `MacrostepV2Result`'s history: its keys had silently diverged from the PG
    parameter names it was ultimately built to feed). Verify with
    `deno task check` (checks `src/index.ts`).
-5. **`packages/fsm-core-async-op-worker/` is usually _not_ in this chain.** Its
-   `fsmType`/`fsmLanguage`-carrying types (`RegisteredActor` in
+5. **`packages/fsm-async-worker-gateway-ts/` is usually _not_ in this chain.**
+   Its `fsmType`/`fsmLanguage`-carrying types (`RegisteredActor` in
    `sidecar/gateway.ts`, `ActivityInvokeInput`, `ClaimedAsyncOperationEvent`, …)
    are deliberately `string`, mirroring the wire format — a `.proto` file
    (checked directly: `fsm_type`/`fsm_language` are plain `string` in
@@ -86,16 +86,16 @@ package's own `CLAUDE.md` for the exact commands.
    `claim_pending_async_operation_events_for_workers_v2` or
    `ensure_async_operation_queue_for_worker_v2` specifically.
 6. **Re-publish `fsm-compiler-ts`, `fsm-sync-worker-ts`, and/or
-   `fsm-core-async-op-worker` if any already shipped the changed code.** All
+   `fsm-async-worker-gateway-ts` if any already shipped the changed code.** All
    three vendor `fsm-core-db-ts` source directly into their npm builds via `dnt`
    (resolved as a Deno workspace member, not an `npm:`/`jsr:` dependency — see
    each package's `CLAUDE.md`), so a fix published to `@pgfsm/db` on npm does
    **not** reach existing `@pgfsm/compiler`/
-   `@pgfsm/sync-worker`/`@pgfsm/async-worker` installs via semver. If this DB
-   change touches code any of the three already bundled, cut a new release of
-   that package too, or the fix silently won't reach its users. (A real
-   `@pgfsm/db` npm dependency was evaluated instead of vendoring — see #249 —
-   and rejected for now: the published `@pgfsm/db` release routinely lags the
+   `@pgfsm/sync-worker`/`@pgfsm/async-worker-gateway` installs via semver. If
+   this DB change touches code any of the three already bundled, cut a new
+   release of that package too, or the fix silently won't reach its users. (A
+   real `@pgfsm/db` npm dependency was evaluated instead of vendoring — see #249
+   — and rejected for now: the published `@pgfsm/db` release routinely lags the
    in-repo source these packages actually build against, so a semver dependency
    would just trade one drift problem for another.)
 

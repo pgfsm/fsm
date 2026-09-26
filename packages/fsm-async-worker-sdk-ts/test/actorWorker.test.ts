@@ -1,11 +1,14 @@
-// End-to-end: a real in-process SidecarGateway (fsm-core-async-op-worker —
+// End-to-end: a real in-process SidecarGateway (fsm-async-worker-gateway-ts —
 // it never opens a database connection) on a temp Unix socket, with this
 // package's ActorWorker registering against it and serving invokes over the
-// generated gRPC stream. @pgfsm/async-worker is a test-only workspace import;
+// generated gRPC stream. @pgfsm/async-worker-gateway is a test-only workspace import;
 // the published package never depends on it.
 
 import { assertEquals, assertRejects } from "@std/assert";
-import { ActivityInvokeError, SidecarGateway } from "@pgfsm/async-worker";
+import {
+  ActivityInvokeError,
+  SidecarGateway,
+} from "@pgfsm/async-worker-gateway";
 import { type ActorRegistration, ActorWorker } from "../src/index.ts";
 
 const IDENTITY = {

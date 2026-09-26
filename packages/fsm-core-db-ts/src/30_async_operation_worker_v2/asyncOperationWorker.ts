@@ -16,7 +16,7 @@ const COMPUTE_ASYNC_OPERATION_QUEUE_NAME_FN =
 /**
  * A registered async-operation-actor identity, as sent to
  * `claimPendingAsyncOperationEventsForWorkers` — mirrors
- * `@pgfsm/async-worker`'s `SidecarGateway`-registered actor shape
+ * `@pgfsm/async-worker-gateway`'s `SidecarGateway`-registered actor shape
  * minus `handler` (an in-process function reference, not serializable to
  * Postgres).
  */
@@ -39,7 +39,7 @@ type ClaimPendingAsyncOperationEventsForWorkersRow = {
  * returns pending async-operation-queue work matching them: for each identity, reads
  * up to one message (if any) from that identity's PGMQ queue, skipping
  * identities with no queue yet. See that function's own comment (and
- * `packages/fsm-core-async-op-worker/docs/guides/CLI-USAGE.md`'s "PGMQ
+ * `packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md`'s "PGMQ
  * message payload shape" section) for the row shape returned.
  */
 export async function claimPendingAsyncOperationEventsForWorkers(
@@ -108,7 +108,7 @@ export interface EnsureAsyncOperationQueueForWorkerResult {
  *   `<parentFsmName>_<parentFsmVersion>_<asyncOperationType[0]>_<asyncOperationName>_<asyncOperationVersion>_<asyncOperationLanguage>`
  *
  * Idempotent: safe to call every time a worker registers this actor, not
- * just the first time (see fsm-core-async-op-worker's
+ * just the first time (see fsm-async-worker-gateway-ts's
  * `ensureQueueOnRegister` option).
  *
  * PGMQ enforces a hard 48-character queue name limit (`pgmq.validate_queue_name`)
