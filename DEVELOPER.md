@@ -242,7 +242,7 @@ block breaks the next one's relative paths.
 ```bash
 # TypeScript — runs from apps/ as-is (Deno resolves imports against the
 # module's own path, not cwd)
-deno run --allow-all apps/async-worker/typescript/cli.ts start \
+deno run --allow-all apps/async-worker/typescript/run-async-worker.ts start \
   --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 

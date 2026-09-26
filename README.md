@@ -220,7 +220,7 @@ terminal at **`apps/`**.
 ```bash
 # TypeScript — the compiler generates Deno source, so this still needs a Deno
 # install (`deno run`, not `npx`/`node`) even in the npx-first flow
-deno run --allow-all apps/async-worker/typescript/cli.ts start \
+deno run --allow-all apps/async-worker/typescript/run-async-worker.ts start \
   --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
