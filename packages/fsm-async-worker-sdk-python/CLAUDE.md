@@ -62,16 +62,84 @@ temp Unix socket: register, invoke, handler error → `INTERNAL`, unknown actor 
 path. `tests/test_cli.py` covers the CLI's exit codes. CI runs both (`ci.yml`,
 `python-async-worker-sdk` job).
 
-## PyPI publish
+## Releasing
 
-`.github/workflows/pypi-publish.yml`, from an `async-worker-sdk-py-v<version>`
-tag; the tag must match `pyproject.toml`'s `version`. Trusted publishing (OIDC)
-through the `pypi` environment — PyPI needs a trusted publisher for
-`pgfsm-async-worker-sdk` naming that workflow file.
+`.github/workflows/pypi-publish.yml` publishes to PyPI when an
+`async-worker-sdk-py-v<version>` tag is pushed. It runs these steps in order,
+and stops at the first failure:
 
-The compiler's `worker-sdk-pyproject.eta` pins
-`pgfsm-async-worker-sdk>=0.1.0,<0.2`. Bump that pin by hand when this package's
-API changes in a way `run-async-worker.eta`'s call depends on.
+1. Check the tag's version against `uv version --short`.
+2. Run `uv run --locked pytest -q`. `--locked` fails if `uv.lock` is stale.
+3. `uv build`.
+4. Upload with trusted publishing (OIDC), through the `pypi` environment.
+   `skip-existing` makes a re-run safe.
+
+This release is independent of `pgfsm-proto-codegen`, which publishes from
+`proto-publish.yml` on `proto-v*` tags. The README's "Releasing (maintainers)"
+section has the short version; the full procedure is below.
+
+### Procedure
+
+1. **Pick the version** (below 1.0): a breaking API change → minor; new
+   backward-compatible features → minor; fixes only → patch.
+2. **Bump it in an issue-linked PR**, from this directory:
+   `uv version --bump minor|patch` (or `uv version X.Y.Z`). That rewrites
+   `pyproject.toml` and `uv.lock` together; commit both. For prereleases, uv
+   stores PEP 440 form: `uv version 0.2.0-alpha.0` writes `0.2.0a0`, so the tag
+   is `async-worker-sdk-py-v0.2.0a0`.
+3. **If the new version needs a newer `pgfsm-proto-codegen`:** release
+   proto-codegen first (`proto-v*`, see `packages/fsm-proto-codegen/README.md`'s
+   "Releasing a new version"). Then raise the `pgfsm-proto-codegen>=` pin in
+   `pyproject.toml` (and run `uv lock`) in this PR. Otherwise installing the SDK
+   fails to resolve.
+4. **After merge, with `main` green, tag and push:**
+   `git fetch origin && git tag async-worker-sdk-py-v<version> origin/main && git push origin async-worker-sdk-py-v<version>`.
+   A pushed tag publishes publicly and can't be undone, so agents only push one
+   when the user asks.
+5. **Check the release:** watch the run
+   (`gh run list --workflow pypi-publish.yml`), then install it from PyPI into a
+   fresh venv and import `pgfsm.async_worker_sdk`.
+
+### Letting generated projects use a new minor version
+
+Generated projects pin `pgfsm-async-worker-sdk>=0.1.0,<0.2`, so they won't pick
+up `0.2.0` until that pin moves. Update it in the same PR as the bump, or a
+follow-up once the release is on PyPI. It lives in:
+
+- `packages/fsm-compiler-ts/src/scaffold-templates/eta/python/worker-sdk-pyproject.eta`,
+  then, in `packages/fsm-compiler-ts`, run
+  `deno task generate:templates && deno fmt src/scaffold-templates` to refresh
+  `worker-sdk-pyproject.generated.ts`. The generator writes unformatted output,
+  so without the `deno fmt` every `*.generated.ts` shows a formatting-only diff.
+- `packages/fsm-compiler-ts/test/operation-logic-scaffold.test.ts`, which
+  asserts the pin string.
+- `apps/async-worker/python/pyproject.toml`, the committed generated copy (the
+  `dependencies` pin and its pip comment).
+- `DEVELOPER.md`'s pip install example.
+
+Patch releases need none of this: the existing `<0.2` range already allows them.
+
+### If something goes wrong
+
+- **Tag/version mismatch:** nothing was published. Delete the tag
+  (`git push origin :refs/tags/<tag> && git tag -d <tag>`), fix the cause, and
+  tag again.
+- **Tests or the upload failed:** fix the cause and re-run the failed job.
+  Re-running is safe because `skip-existing` skips files already uploaded.
+- **A bad version shipped:** PyPI never accepts the same version twice. Release
+  the next patch, then yank the bad one on pypi.org.
+
+### One-time setup (done)
+
+- The `pypi` GitHub environment has a deployment rule allowing tags
+  `async-worker-sdk-py-v*` (next to `proto-v*`). Without it, the job is rejected
+  before it starts.
+- PyPI has a trusted publisher for `pgfsm-async-worker-sdk`: owner `pgfsm`,
+  repository `fsm`, workflow `pypi-publish.yml`, environment `pypi`. Renaming
+  the workflow file or the environment breaks publishing until this is updated
+  to match.
+
+### Using the SDK from `apps/async-worker/python` before a release
 
 Inside this repo, the committed `apps/async-worker/python/pyproject.toml` uses
 that same pin, so `uv run run_async_worker.py` there only works once the

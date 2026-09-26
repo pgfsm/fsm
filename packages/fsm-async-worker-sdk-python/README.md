@@ -79,6 +79,50 @@ an invoke for an unregistered actor is reported as `NOT_FOUND`.
 Logging goes through the standard `logging` module (`pgfsm.async_worker_sdk`
 loggers); the library never configures logging itself.
 
+## Releasing (maintainers)
+
+Released from the [pgfsm/fsm](https://github.com/pgfsm/fsm) monorepo by
+`.github/workflows/pypi-publish.yml`. Pushing an
+`async-worker-sdk-py-v<version>` tag publishes to PyPI with trusted publishing
+(no API token). This package releases independently of
+[`pgfsm-proto-codegen`](https://pypi.org/project/pgfsm-proto-codegen/).
+
+1. **Pick the version.** While below 1.0: breaking API change → minor (`0.1.0` →
+   `0.2.0`); new backward-compatible features → minor; fixes only → patch
+   (`0.1.0` → `0.1.1`).
+2. **Bump it in a PR.** From `packages/fsm-async-worker-sdk-python`:
+
+   ```bash
+   uv version --bump minor     # or: --bump patch, or an exact version: uv version 0.2.0
+   ```
+
+   This updates `pyproject.toml` and `uv.lock` together; commit both. If the new
+   version needs a newer `pgfsm-proto-codegen`, release that first, then raise
+   the `pgfsm-proto-codegen>=` pin here.
+3. **Tag the merge commit and push the tag.** The tag must be exactly
+   `async-worker-sdk-py-v` + `uv version --short`:
+
+   ```bash
+   git fetch origin
+   git tag async-worker-sdk-py-v0.2.0 origin/main
+   git push origin async-worker-sdk-py-v0.2.0
+   ```
+
+4. **Check the release.** `gh run list --workflow pypi-publish.yml` shows the
+   run, which checks the tag against `pyproject.toml`, runs the tests, builds,
+   and uploads. Then confirm https://pypi.org/project/pgfsm-async-worker-sdk/
+   lists the version and it installs:
+   `pip install pgfsm-async-worker-sdk==0.2.0`.
+
+For prereleases, uv writes the version in PEP 440 form
+(`uv version 0.2.0-alpha.0` stores `0.2.0a0`), so tag
+`async-worker-sdk-py-v0.2.0a0`. pip only installs a prerelease if asked
+explicitly (`--pre` or an exact `==` version).
+
+A published version can never be re-uploaded. If a bad version ships, release
+the next patch and yank the bad one on pypi.org. Yanked versions stay
+installable when pinned exactly, but resolvers skip them otherwise.
+
 ## License
 
 Apache-2.0
