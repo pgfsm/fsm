@@ -98,8 +98,14 @@ Gotchas:
 - **`delete` skips version folders with no machine.ts**
   (`delete-fsm-json-from-folders.ts`) — their fsm.json can't be regenerated from
   there, so deleting it (and its worker folders) would lose the only copy.
-  `delete` still removes worker stub folders for folders that do have a
-  machine.ts; that's #377.
+- **`delete` keeps worker folders unless `--include-workers`** (#377,
+  `DeleteFsmJsonOptions.includeWorkers`). Before, it removed
+  `{cwd}/sync-worker/typescript/<N>/<V>` and every
+  `{cwd}/async-worker/<lang>/<N>/<V>` unconditionally — the stubs the developer
+  implements. By default it now logs the kept folders instead. Neither mode
+  rewrites the aggregate registries, so after `--include-workers` they still
+  reference the removed versions until `generate-sync-logic`/
+  `generate-async-logic` run again.
 
 The gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:
