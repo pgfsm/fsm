@@ -25,6 +25,8 @@ export {
 } from "./generate-sync-operation-logic.ts";
 export { generateAll } from "./generate-all.ts";
 export { withWritePolicy } from "./write-policy.ts";
+export { scaffoldWorkerProjects } from "./scaffold-worker-projects.ts";
+export type { ScaffoldWorkerProjectsOptions } from "./scaffold-worker-projects.ts";
 export type {
   FileClass,
   FileWriteAction,
@@ -53,6 +55,7 @@ export type { DeleteFsmJsonOptions } from "./delete-fsm-json-from-folders.ts";
 export {
   DELAY_ACTION_NAME_PREFIX,
   extractFsmPluginRefs,
+  isNotFoundError,
   isTimestampFolderName,
   isValidDateFolderName,
   isVersionFolderName,

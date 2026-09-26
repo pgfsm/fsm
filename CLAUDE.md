@@ -53,6 +53,7 @@ packages/
   fsm-async-worker-sdk-go/ # Async actor worker SDK (Go) — module github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go, package asyncworkersdk — see CLAUDE.md
   fsm-async-worker-ts/    # Deprecated v1 async-op worker fleet (@pgfsm/async-worker-old); superseded by fsm-async-worker-gateway-ts — see CLAUDE.md
   fsm-devstack-ts/        # fsmdev CLI: local dev-stack orchestration across compiler/sync-worker/async-worker, @pgfsm/devstack — see CLAUDE.md
+  fsm-cli-ts/             # pgfsm CLI: npx create/add/sync for FSM worker projects (SPEC-004), @pgfsm/cli — see CLAUDE.md
   fsm-logging-ts/         # Shared LogTape logging config, @pgfsm/logging — see CLAUDE.md
   fsm-proto-codegen/      # Buf-driven multi-language proto stub generation — see CLAUDE.md
 ```

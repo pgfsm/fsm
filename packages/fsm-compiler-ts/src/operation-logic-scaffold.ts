@@ -307,11 +307,14 @@ async function collectSyncOperationRegistryGroups(
  */
 export async function writeAggregateSyncOperationRegistry(
   absSyncWorkerTypescriptDir: string,
+  allowEmpty = false,
 ): Promise<string | undefined> {
   const groups = await collectSyncOperationRegistryGroups(
     absSyncWorkerTypescriptDir,
   );
-  if (groups.length === 0) return undefined;
+  // allowEmpty: scaffoldWorkerProjects writes a buildable, empty aggregate
+  // before any FSM exists (#382).
+  if (groups.length === 0 && !allowEmpty) return undefined;
 
   const groupList = groups.map(({ fsmName, fsmVersion }) => {
     const key = `${fsmName}/${fsmVersion}`;
@@ -958,9 +961,11 @@ export async function writeAggregateActorsRegistry(
   writeRootAbsPath: string,
   actors: RegisteredActor[],
   lang: ActorsBarrelLang,
+  allowEmpty = false,
 ): Promise<string | undefined> {
   const langActors = actors.filter((a) => a.asyncOperationLanguage === lang);
-  if (langActors.length === 0) return undefined;
+  // allowEmpty: see writeAggregateSyncOperationRegistry.
+  if (langActors.length === 0 && !allowEmpty) return undefined;
 
   const dir = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
@@ -1072,9 +1077,11 @@ export async function writeAggregateGoRegistry(
   writeRootAbsPath: string,
   goModuleAppRoot: string,
   actors: RegisteredActor[],
+  allowEmpty = false,
 ): Promise<string | undefined> {
   const goActors = actors.filter((a) => a.asyncOperationLanguage === "go");
-  if (goActors.length === 0) return undefined;
+  // allowEmpty: see writeAggregateSyncOperationRegistry.
+  if (goActors.length === 0 && !allowEmpty) return undefined;
 
   const dir =
     `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/go/${GO_AGGREGATE_DIR_NAME}`;
@@ -1220,6 +1227,7 @@ export async function writeWorkerSdk(
   writeRootAbsPath: string,
   goModuleAppRoot: string,
   actors: RegisteredActor[],
+  ensureLangs: OperationLang[] = [],
 ): Promise<{
   typescript: boolean;
   python: boolean;
@@ -1231,7 +1239,10 @@ export async function writeWorkerSdk(
   goModDir?: string;
 }> {
   const appRoot = goModuleAppRoot;
+  // ensureLangs: also write a language's worker project when no actor uses
+  // it yet, so scaffoldWorkerProjects can lay down all four up front (#382).
   const hasLang = (lang: OperationLang) =>
+    ensureLangs.includes(lang) ||
     actors.some((a) => a.asyncOperationLanguage === lang);
 
   const tsFiles: string[] = [];

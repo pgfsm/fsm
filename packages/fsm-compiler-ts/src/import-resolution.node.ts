@@ -19,10 +19,13 @@ let registered = false;
 export function ensureImportMapResolution(): Promise<void> {
   if (!registered) {
     registered = true;
-    register(
-      new URL("./cli/loader.node.js", import.meta.url).href,
-      import.meta.url,
-    );
+    const loaderUrl = new URL("./cli/loader.node.js", import.meta.url).href;
+    // The loader's own URL goes in as `data` rather than being read from
+    // import.meta inside it: dnt rewrites import.meta into a ponyfill that
+    // only exists on the main thread, and hooks run on Node's loader thread.
+    register(loaderUrl, import.meta.url, {
+      data: { ownResolveBase: loaderUrl },
+    });
   }
   return Promise.resolve();
 }

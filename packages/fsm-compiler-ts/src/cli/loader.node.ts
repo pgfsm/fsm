@@ -283,7 +283,9 @@ export async function resolve(
 
     const importMap = await findMergedImportMap(dirname(parentPath));
     const mapped = importMap[specifier];
-    if (!mapped || !mapped.startsWith("npm:")) throw err;
+    if (!mapped || !mapped.startsWith("npm:")) {
+      return resolveFromOwnDependencies(specifier, context, nextResolve, err);
+    }
 
     const pkgSpec = mapped.slice("npm:".length);
     let installDir: string;
@@ -299,5 +301,43 @@ export async function resolve(
     const fakeParentURL =
       pathToFileURL(join(installDir, "__pgfsm_compiler_resolver__.mjs")).href;
     return nextResolve(specifier, { ...context, parentURL: fakeParentURL });
+  }
+}
+
+/**
+ * Last resort for a bare specifier nothing near the importing file maps
+ * (#382): resolve it as if this package imported it, so a user's
+ * machine.ts gets @pgfsm/compiler's own `xstate` dependency with zero config
+ * (e.g. `npx @pgfsm/cli add ~/designs/machine.ts`). Relative/absolute/URL
+ * specifiers are never redirected, and a miss here rethrows the ORIGINAL
+ * resolution error (see #271).
+ */
+/** Where this package's own dependencies resolve from; set by {@linkcode initialize}. */
+let ownResolveBase: string | undefined;
+
+/**
+ * Node calls this once when the hook is registered, with the `data`
+ * import-resolution.node.ts passes: this module's own URL, which can't be
+ * read from import.meta here under the dnt build (see there).
+ */
+export function initialize(data?: { ownResolveBase?: string }): void {
+  ownResolveBase = data?.ownResolveBase;
+}
+
+async function resolveFromOwnDependencies(
+  specifier: string,
+  context: ResolveContext,
+  nextResolve: NextResolve,
+  originalError: unknown,
+): Promise<ResolveResult> {
+  const bare = !/^(\.{0,2}\/|[a-zA-Z][a-zA-Z\d+.-]*:)/.test(specifier);
+  if (!bare || !ownResolveBase) throw originalError;
+  try {
+    return await nextResolve(specifier, {
+      ...context,
+      parentURL: ownResolveBase,
+    });
+  } catch {
+    throw originalError;
   }
 }
