@@ -36,10 +36,11 @@ Flow:
 
 ## Index
 
-| Spec                                                       | Title                                                 | Status   |
-| ---------------------------------------------------------- | ----------------------------------------------------- | -------- |
-| [SPEC-002](spec-002-proto-contracts-in-codegen-package.md) | Proto Contract Ownership Moves to `fsm-proto-codegen` | Accepted |
-| [SPEC-003](spec-003-pgcron-fsm-scheduler.md)               | Replace the fsmscheduler TS Process with pg_cron      | Accepted |
+| Spec                                                       | Title                                                                | Status   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------- | -------- |
+| [SPEC-002](spec-002-proto-contracts-in-codegen-package.md) | Proto Contract Ownership Moves to `fsm-proto-codegen`                | Accepted |
+| [SPEC-003](spec-003-pgcron-fsm-scheduler.md)               | Replace the fsmscheduler TS Process with pg_cron                     | Accepted |
+| [SPEC-004](spec-004-pgfsm-cli-create-add.md)               | `@pgfsm/cli` — npx `create` / `add` / `sync` for FSM Worker Projects | Draft    |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
