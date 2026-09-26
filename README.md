@@ -226,10 +226,9 @@ deno run --allow-all apps/async-worker/typescript/run-async-worker.ts start \
 ```
 
 ```bash
-# Python
-cd apps/async-worker/python
-python3 -m pip install -r requirements.txt
-python3 cli.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+# Python — uv installs the pinned pgfsm-async-worker-sdk from pyproject.toml
+uv run --project apps/async-worker/python apps/async-worker/python/run_async_worker.py start \
+  --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash

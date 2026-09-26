@@ -1,0 +1,63 @@
+name: pypi publish
+
+# Publishes packages/fsm-async-worker-sdk-python to PyPI as
+# pgfsm-async-worker-sdk from an `async-worker-sdk-py-v<version>` tag. The
+# tag's version must match pyproject.toml's. (pgfsm-proto-codegen publishes
+# from proto-publish.yml instead, in step with its other languages.)
+#
+# One-time setup: add a PyPI trusted publisher for pgfsm-async-worker-sdk
+# naming this workflow file and the `pypi` environment.
+
+on:
+  push:
+    tags:
+      - "async-worker-sdk-py-v[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  pypi:
+    name: Publish pgfsm-async-worker-sdk to PyPI
+    runs-on: ubuntu-latest
+    # Trusted publishing (OIDC): PyPI's publisher config names this workflow
+    # file and this environment — no API token secret.
+    environment: pypi
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: packages/fsm-async-worker-sdk-python
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Check tag matches pyproject.toml
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          want="${TAG_VERSION#async-worker-sdk-py-v}"
+          have="$(uv version --short)"
+          if [[ "$want" != "$have" ]]; then
+            echo "::error::tag version $want != pyproject.toml version $have"
+            exit 1
+          fi
+
+      - name: Test
+        run: uv run --locked pytest -q
+
+      - name: Build sdist + wheel
+        run: uv build --out-dir "$GITHUB_WORKSPACE/dist"
+
+      # skip-existing so re-running a partly failed release doesn't fail
+      # here on files an earlier attempt already uploaded.
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
+          skip-existing: true

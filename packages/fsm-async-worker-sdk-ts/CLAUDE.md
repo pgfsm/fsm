@@ -30,9 +30,10 @@ only a thin `run-async-worker.ts` (`run-async-worker.eta`) and a `deno.json`
 pinning this package (`worker-sdk-deno-json.eta`), the same shape
 `generate-sync-logic`'s `run-sync-worker.ts` has with `@pgfsm/sync-worker`.
 
-Python/Rust/Go workers still get their SDK written out by the compiler
-(`sdk.py`/`sdk.rs`/`sdk.go`); this package is the TypeScript reference for
-moving them to published packages too.
+Python followed in #364 (`packages/fsm-async-worker-sdk-python/`,
+`pgfsm-async-worker-sdk` on PyPI). Rust/Go workers still get their SDK written
+out by the compiler (`sdk.rs`/`sdk.go`); these two packages are the reference
+for moving them to published packages too.
 
 ## Rules
 

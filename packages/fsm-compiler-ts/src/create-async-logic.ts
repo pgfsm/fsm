@@ -532,7 +532,7 @@ async function rewriteSharedAsyncOpGoRegistry(
  *   separate `generate-async-logic` run. `collectRegisteredActorsFromAsyncWorkerDir`
  *   already picks up this pool's own `actors-manifest.json` (written above,
  *   since #322), so no separate collection logic is needed here. The worker
- *   SDK (`run-async-worker.ts`/`sdk.py`/etc, written by `writeWorkerSdk`) is deliberately
+ *   SDK (`run-async-worker.ts`/`run_async_worker.py`/etc, written by `writeWorkerSdk`) is deliberately
  *   NOT refreshed here — it needs a real FSM source tree
  *   (`realPluginRootAbsPath`) that this command doesn't have (no `--folder`).
  *

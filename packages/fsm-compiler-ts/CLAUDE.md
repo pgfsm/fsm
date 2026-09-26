@@ -123,11 +123,13 @@ The gotchas below are for whoever next touches
   `RegisteredActor.exportedName` is serialized under the manifest's own
   `exportedAsyncOperationName` key — the in-memory field name is unchanged, this
   is a manifest-output-only rename.
-- **`writeWorkerSdk` writes a TypeScript-only `deno.json` alongside `cli.ts`/
-  `sdk.ts`** (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) —
-  scoped to that one language subdirectory, matching Python's
-  `requirements.txt`/Rust's `Cargo.toml`/Go's `go.mod`, all written by this same
-  function for their own language (`worker-sdk-deno-json.eta`). The
+- **`writeWorkerSdk` writes a TypeScript-only `deno.json` alongside
+  `run-async-worker.ts`**
+  (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) — scoped to
+  that one language subdirectory, matching Python's `pyproject.toml` (alongside
+  `run_async_worker.py`, pinning the published `pgfsm-async-worker-sdk` — #364;
+  `worker-sdk-pyproject.eta`)/Rust's `Cargo.toml`/Go's `go.mod`, all written by
+  this same function for their own language (`worker-sdk-deno-json.eta`). The
   `--worker-sdk-protocol legacy` variant and its `-legacy` templates were
   removed in #356 — the gateway only speaks the gRPC `SidecarGatewayService`
   protocol. Runs for both {@linkcode generateAsyncOperationLogicFromFolders} and
