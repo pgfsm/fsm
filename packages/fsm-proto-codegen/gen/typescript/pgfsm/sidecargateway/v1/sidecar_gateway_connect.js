@@ -13,7 +13,8 @@ import { MethodKind } from "@bufbuild/protobuf";
  * (sidecar/protocol.ts) hand-ported per language by fsm-compiler-ts's
  * worker-sdk-protocol.eta templates with no schema to check them against
  * (#88). This proto is the single source of truth those copies drove from;
- * see #100 for the migration.
+ * see #100 for the migration. The envelope and its templates were removed
+ * entirely in #356.
  *
  * Unlike activity_gateway.proto (the client-facing leg, #86/#87 — a client
  * calls Invoke() and gets one response back), this leg is not unary: the

@@ -10,7 +10,8 @@ option go_package = "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/side
 // (sidecar/protocol.ts) hand-ported per language by fsm-compiler-ts's
 // worker-sdk-protocol.eta templates with no schema to check them against
 // (#88). This proto is the single source of truth those copies drove from;
-// see #100 for the migration.
+// see #100 for the migration. The envelope and its templates were removed
+// entirely in #356.
 //
 // Unlike activity_gateway.proto (the client-facing leg, #86/#87 — a client
 // calls Invoke() and gets one response back), this leg is not unary: the
@@ -38,8 +39,8 @@ service SidecarGatewayService {
 
 // One actor entrypoint a worker process serves. Mirrors
 // ActorPluginValidationResult's identity fields (see @pgfsm/compiler's
-// util.ts) — actorKey() in the current sidecar/protocol.ts is what the
-// gateway routes on. async_operation_language is part of the identity (not
+// util.ts) — actorKey() in fsm-core-async-op-worker's sidecar/gateway.ts is
+// what the gateway routes on. async_operation_language is part of the identity (not
 // just a display field) because the other five fields alone aren't
 // guaranteed unique across languages.
 message RegisteredActor {
@@ -66,7 +67,7 @@ message RegisterAck {
   bool accepted = 1;
   string gateway_protocol_version = 2;
   // "parentFsmName@parentFsmVersion@asyncOperationType@asyncOperationName@asyncOperationVersion@asyncOperationLanguage"
-  // keys, mirroring sidecar/protocol.ts's actorKey().
+  // keys, mirroring sidecar/gateway.ts's actorKey().
   repeated string registered_actors = 3;
   repeated string rejected_actors = 4;
 }
@@ -116,10 +117,9 @@ message InvokeError {
 }
 
 // Pushed by the gateway to ask a worker to abandon an in-flight invoke.
-// Not yet acted on by any worker SDK (mirrors the current protocol.ts
-// "cancel" WireType, which gateway.ts/sdk.ts already carry but don't wire up
-// to real cancellation) — carried here so the schema doesn't need a second
-// breaking change once that lands.
+// Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
+// and the generated worker SDKs accept it but ignore it — carried here so the
+// schema doesn't need a second breaking change once that lands.
 message Cancel {
   string invoke_id = 1;
 }

@@ -1,6 +1,6 @@
 {
   "name": "@pgfsm/proto-codegen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "exports": {
     "./activitygateway/v1/connect": "./pgfsm/activitygateway/v1/activity_gateway_connect.js",
