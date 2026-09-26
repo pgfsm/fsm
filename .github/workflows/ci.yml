@@ -99,6 +99,38 @@ jobs:
       - name: cargo publish --dry-run
         run: cargo publish --dry-run --locked
 
+  go-async-worker-sdk:
+    name: Go async worker SDK (gofmt · vet · test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/fsm-async-worker-sdk-go
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: packages/fsm-async-worker-sdk-go/go.mod
+          cache-dependency-path: packages/fsm-async-worker-sdk-go/go.sum
+
+      - name: gofmt check
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "::error::gofmt needed on: $unformatted"
+            exit 1
+          fi
+
+      # -mod=readonly fails if go.mod/go.sum would need changes.
+      - name: go vet
+        run: go vet -mod=readonly ./...
+
+      # The tests run ActorWorker end to end against an in-process grpc-go
+      # gateway on a Unix socket; no database. -race because Stop() and the
+      # heartbeat send on the stream concurrently with Run().
+      - name: go test
+        run: go test -mod=readonly -race ./...
+
   rust-fmt:
     name: Rust (fmt)
     runs-on: ubuntu-latest

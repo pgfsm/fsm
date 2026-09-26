@@ -72,16 +72,18 @@ The gotchas below are for whoever next touches
   `<writeRootAbsPath>/async-worker/<lang>/` tree — per-version actors nested
   `<fsmName>/<fsmVersion>/` deep, the aggregate directly in `<lang>/`. This is
   what made the aggregate's own relative-import computation trivial (see below).
-- **`realPluginRootAbsPath` narrowed to one job: deriving `goModuleAppRoot` and
-  `writeWorkerSdk`'s `repoRootAbsPath`.** It's the real FSM source tree —
-  `--folder` itself in directory mode, or derived from the target `fsm.json`'s
-  own location three levels up in single-file mode — used only for (a) the real
-  app-root directory name (`"fsm-core-example"`) each Go actor's own `go.mod`
-  names itself under, and (b) `writeWorkerSdk`'s `gatewaySidecarProtoGen*`
-  targets, which point at a sibling monorepo package relative to where the
-  _source_ tree sits, a relationship independent of where output gets written.
-  It is **not** used anymore to locate per-version actor files or registries —
-  those are always reachable from `writeRootAbsPath` alone now.
+- **`realPluginRootAbsPath` narrowed to one job: deriving `goModuleAppRoot`.**
+  It's the real FSM source tree — `--folder` itself in directory mode, or
+  derived from the target `fsm.json`'s own location three levels up in
+  single-file mode — used only for the real app-root directory name
+  (`"fsm-core-example"`) each Go actor's own `go.mod` names itself under. It
+  used to also feed `writeWorkerSdk`'s `gatewaySidecarProtoGen*` targets
+  (monorepo-relative `path =`/`replace` paths to
+  `packages/fsm-proto-codegen/gen/`); those went away once every language's
+  worker SDK became a published package (#358/#364/#368/#370), and
+  `writeWorkerSdk` no longer takes it. It is **not** used to locate per-version
+  actor files or registries either — those are always reachable from
+  `writeRootAbsPath` alone.
 - **The aggregate's relative-import computation is trivial by construction
   now.** `writeAggregateActorsRegistry`/`buildAggregateRegistryContent` no
   longer take a `realPluginRootAbsPath` param at all — since every
@@ -130,14 +132,16 @@ The gotchas below are for whoever next touches
   `run_async_worker.py`, pinning the published `pgfsm-async-worker-sdk` — #364;
   `worker-sdk-pyproject.eta`)/Rust's `Cargo.toml` (alongside `src/main.rs`,
   depending on the published `pgfsm-async-worker-sdk` crate — #368;
-  `worker-sdk-cargo-toml.eta`)/Go's `go.mod`, all written by this same function
-  for their own language (`worker-sdk-deno-json.eta`). The
-  `--worker-sdk-protocol legacy` variant and its `-legacy` templates were
-  removed in #356 — the gateway only speaks the gRPC `SidecarGatewayService`
-  protocol. Runs for both {@linkcode generateAsyncOperationLogicFromFolders} and
-  {@linkcode generateAsyncOperationLogicFromFsmJson} (both share
-  `writeAggregateArtifacts` → `writeWorkerSdk`), so it's kept in sync on every
-  regeneration regardless of which CLI mode wrote it.
+  `worker-sdk-cargo-toml.eta`)/Go's `go.mod` (alongside `main.go`, requiring the
+  published `fsm-async-worker-sdk-go` module — #370; `go-mod-aggregate.eta`),
+  all written by this same function for their own language
+  (`worker-sdk-deno-json.eta`). The `--worker-sdk-protocol legacy` variant and
+  its `-legacy` templates were removed in #356 — the gateway only speaks the
+  gRPC `SidecarGatewayService` protocol. Runs for both {@linkcode
+  generateAsyncOperationLogicFromFolders} and {@linkcode
+  generateAsyncOperationLogicFromFsmJson} (both share `writeAggregateArtifacts`
+  → `writeWorkerSdk`), so it's kept in sync on every regeneration regardless of
+  which CLI mode wrote it.
 - **`WrittenActor.filePath` dropped its `<lang>/` prefix** (now
   `actors/<fileBaseName>/<fileBaseName>.<ext>`, not
   `<lang>/actors/<fileBaseName>/<fileBaseName>.<ext>`) — it's informational
@@ -535,13 +539,14 @@ rewrite. No new collection logic was needed:
 `actors-manifest.json` back (written since #322), so it picks up shared-async-op
 actors for free.
 
-Deliberately does **not** call `writeWorkerSdk` (the `cli.ts`/`sdk.ts`/etc
-worker SDK entrypoint) — that needs a real FSM source tree
-(`realPluginRootAbsPath`) for its `gatewaySidecarProtoGen*` targets, which
-`create-async-logic` doesn't have (no `--folder`, see #311 above). A worker SDK
-build still needs a `generate-async-logic`/`generate-all` run at least once;
-only the aggregate _registry_ files are kept fresh by `create-async-logic` alone
-now.
+Deliberately does **not** call `writeWorkerSdk` (the worker SDK entry point +
+manifest per language). It was originally blocked because `writeWorkerSdk`
+needed a real FSM source tree (`realPluginRootAbsPath`) for its
+`gatewaySidecarProtoGen*` targets, which `create-async-logic` doesn't have (no
+`--folder`, see #311 above). Since #370 `writeWorkerSdk` no longer needs it, so
+that reason is gone, but the behavior hasn't changed: a worker SDK build still
+needs a `generate-async-logic`/`generate-all` run at least once; only the
+aggregate _registry_ files are kept fresh by `create-async-logic` alone.
 
 ## npm publish (`deno task build:npm`)
 

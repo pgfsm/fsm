@@ -232,9 +232,10 @@ uv run --project apps/async-worker/python apps/async-worker/python/run_async_wor
 ```
 
 ```bash
-# Go — must run from inside its own directory (go.mod resolves relative to it)
+# Go — must run from inside its own directory (go.mod resolves relative to it);
+# go installs the required fsm-async-worker-sdk-go module from go.mod
 cd apps/async-worker/go
-go run . --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+go run . start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash
@@ -244,9 +245,9 @@ cd apps/async-worker/rust
 cargo run --release -- start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
-`list` (TypeScript/Python/Rust; Go has no subcommands) prints the actors
-compiled into that process's registry without connecting to the gateway — useful
-to sanity-check a generated registry before wiring up the real socket.
+`list` (every language) prints the actors compiled into that process's registry
+without connecting to the gateway — useful to sanity-check a generated registry
+before wiring up the real socket.
 
 ### Start the FSM worker
 

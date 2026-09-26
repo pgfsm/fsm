@@ -273,7 +273,7 @@ const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
     } start --gateway-socket ${socket}`,
   rust: (dir) =>
     `(cd ${dir} && cargo run --release -- start --gateway-socket ${socket})`,
-  go: (dir) => `(cd ${dir} && go run . --gateway-socket ${socket})`,
+  go: (dir) => `(cd ${dir} && go run . start --gateway-socket ${socket})`,
 };
 
 function printWorkerSdkStartInstructions(appRoot: string): void {

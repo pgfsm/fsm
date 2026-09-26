@@ -148,12 +148,14 @@ for supply-chain safety; Renovate keeps the digests updated.
 | `cla.yml`            | issue comment, `pull_request_target`                                                                      | `contributor-assistant/github-action`                                            | Contributor License Agreement checks                                            |
 | `pypi-publish.yml`   | tag push (`async-worker-sdk-py-v*`)                                                                       | `setup-python` + `uv build` + `pypa/gh-action-pypi-publish`                      | Publish `pgfsm-async-worker-sdk` to PyPI                                        |
 | `crates-publish.yml` | tag push (`async-worker-sdk-rs-v*`)                                                                       | `cargo test` + `cargo publish`                                                   | Publish the `pgfsm-async-worker-sdk` crate to crates.io                         |
+| `go-publish.yml`     | tag push (`async-worker-sdk-go-v*`)                                                                       | `go test` + `git tag` + Go module proxy                                          | Release the `fsm-async-worker-sdk-go` Go module                                 |
 | `npm-publish.yml`    | tag push (`compiler-v*`/`db-v*`/`sync-worker-v*`/`async-worker-gateway-v*`/`async-worker-sdk-v*`), manual | `setup-deno` + `setup-node` + `deno pack` + `npm publish`                        | Publish TS packages to npm                                                      |
 
 > **CI test scope:** `ci.yml` runs only the DB-free unit suites
 > (`packages/fsm-compiler-ts`, `apps/fsm-core-ts-hono-deno/stoker-src`), plus
 > `packages/fsm-async-worker-sdk-python`'s pytest suite via `uv` and
-> `packages/fsm-async-worker-sdk-rust`'s `cargo test`/`clippy`. The route/db
+> `packages/fsm-async-worker-sdk-rust`'s `cargo test`/`clippy` and
+> `packages/fsm-async-worker-sdk-go`'s `go vet`/`go test -race`. The route/db
 > integration tests need a live Postgres + `fsm_core` extension and are excluded
 > until a service container is added.
 

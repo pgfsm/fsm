@@ -220,11 +220,7 @@ async function scaffoldAsyncLogicForVersion(
  * alongside every `<fsmName>/<fsmVersion>/` {@linkcode
  * scaffoldAsyncLogicForVersion} wrote — both live under the same
  * `async-worker/<lang>/` tree by construction now (see {@linkcode
- * writeAggregateActorsRegistry}'s own doc comment). `realPluginRootAbsPath`
- * (the real FSM source tree) is only still needed for {@linkcode
- * writeWorkerSdk}'s `gatewaySidecarProtoGen*` targets, which point at
- * sibling monorepo packages relative to where the source tree sits, not to
- * `writeRootAbsPath`. Shared by
+ * writeAggregateActorsRegistry}'s own doc comment). Shared by
  * {@linkcode generateAsyncOperationLogicFromFolders} and
  * {@linkcode generateAsyncOperationLogicFromFsmJson} — both call this
  * *after* their own `scaffoldAsyncLogicForVersion` call(s) have already
@@ -236,7 +232,6 @@ async function scaffoldAsyncLogicForVersion(
 async function writeAggregateArtifacts(
   writeRootAbsPath: string,
   goModuleAppRoot: string,
-  realPluginRootAbsPath: string,
   tsFiles: string[],
   rustFiles: string[],
   goFiles: string[],
@@ -289,7 +284,6 @@ async function writeAggregateArtifacts(
   const wrote = await writeWorkerSdk(
     writeRootAbsPath,
     goModuleAppRoot,
-    realPluginRootAbsPath,
     allRegisteredActors,
   );
   tsFiles.push(...wrote.tsFiles);
@@ -400,7 +394,6 @@ export async function generateAsyncOperationLogicFromFolders(
   await writeAggregateArtifacts(
     writeRootAbsPath,
     goModuleAppRoot,
-    realPluginRootAbsPath,
     tsFiles,
     rustFiles,
     goFiles,
@@ -483,7 +476,6 @@ export async function generateAsyncOperationLogicFromFsmJson(
   await writeAggregateArtifacts(
     writeRootAbsPath,
     goModuleAppRoot,
-    realPluginRootAbsPath,
     tsFiles,
     rustFiles,
     goFiles,

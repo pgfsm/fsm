@@ -31,10 +31,11 @@ pinning this package (`worker-sdk-deno-json.eta`), the same shape
 `generate-sync-logic`'s `run-sync-worker.ts` has with `@pgfsm/sync-worker`.
 
 Python followed in #364 (`packages/fsm-async-worker-sdk-python/`,
-`pgfsm-async-worker-sdk` on PyPI) and Rust in #368
-(`packages/fsm-async-worker-sdk-rust/`, `pgfsm-async-worker-sdk` on crates.io).
-Go workers still get their SDK written out by the compiler (`sdk.go`); these
-three packages are the reference for moving it to a published package too.
+`pgfsm-async-worker-sdk` on PyPI), Rust in #368
+(`packages/fsm-async-worker-sdk-rust/`, `pgfsm-async-worker-sdk` on crates.io)
+and Go in #370 (`packages/fsm-async-worker-sdk-go/`, the
+`github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go` module). No language's
+worker SDK is written out by the compiler any more.
 
 ## Rules
 

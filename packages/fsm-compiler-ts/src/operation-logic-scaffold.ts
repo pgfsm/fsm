@@ -41,7 +41,6 @@ import { render as renderRustWorkerSdkMain } from "./scaffold-templates/eta/rust
 import { render as renderRustWorkerSdkCargoToml } from "./scaffold-templates/eta/rust/worker-sdk-cargo-toml.generated.ts";
 import { render as renderRustWorkerSdkGitignore } from "./scaffold-templates/eta/rust/worker-sdk-gitignore.generated.ts";
 import { render as renderGoWorkerSdkMain } from "./scaffold-templates/eta/go/worker-sdk-main.generated.ts";
-import { render as renderGoWorkerSdkSdk } from "./scaffold-templates/eta/go/worker-sdk-sdk.generated.ts";
 import { render as renderGoWorkerSdkGitignore } from "./scaffold-templates/eta/go/worker-sdk-gitignore.generated.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "scaffold"]);
@@ -1108,6 +1107,27 @@ const LEGACY_PY_WORKER_SDK_FILES = ["cli.py", "sdk.py", "requirements.txt"];
 const LEGACY_RUST_WORKER_SDK_FILES = ["src/sdk.rs"];
 
 /**
+ * The Go worker SDK's file from before #370: the whole SDK as `sdk.go`, in the
+ * same `package main` as the old `main.go`. Now `main.go` imports the published
+ * Go module {@linkcode GO_ASYNC_WORKER_SDK_MODULE_PATH}, required by `go.mod`.
+ */
+const LEGACY_GO_WORKER_SDK_FILES = ["sdk.go"];
+
+/**
+ * The published Go worker SDK module (`packages/fsm-async-worker-sdk-go/`,
+ * #370), released by a `packages/fsm-async-worker-sdk-go/v<version>` git tag.
+ * {@linkcode GO_ASYNC_WORKER_SDK_VERSION} is the minimum version the
+ * generated `go.mod` requires (Go's minimal version selection may pick a
+ * newer one another dependency asks for). Bump it by hand when `main.go`'s
+ * call depends on newer SDK API, same as the other languages' pins.
+ */
+const GO_ASYNC_WORKER_SDK_MODULE_PATH =
+  "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go";
+const GO_ASYNC_WORKER_SDK_VERSION = "v0.1.0";
+/** The generated worker `go.mod`'s `go` line: the SDK module's own minimum. */
+const GO_WORKER_GO_VERSION = "1.25.0";
+
+/**
  * This compiler's auto-generated header, as a `//` or `#` comment, optionally
  * after a shebang line (the old Python `cli.py` had one).
  */
@@ -1132,36 +1152,6 @@ async function removeStaleGeneratedFile(path: string): Promise<void> {
   logger.info("Removed stale generated worker SDK file {path}", { path });
 }
 /**
- * Go module path (matching sidecar_gateway.proto's `go_package` option) for
- * the generated grpc-go stub (`packages/fsm-proto-codegen/gen/go/`) —
- * required+replaced in worker-sdk/go's own go.mod the same way each
- * compiled-in actor module is (see the `replace` comment in
- * {@linkcode writeWorkerSdk} below), since Go `replace` directives don't
- * propagate transitively through a dependency. This one's a bare module
- * path, not a filesystem path, so it stays a fixed constant — see
- * {@linkcode gatewaySidecarProtoGenGoRelPath} for the `replace` target.
- */
-const GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH =
-  "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go";
-/**
- * The `replace` target for {@linkcode GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH}.
- *
- * Computed via {@linkcode relativeImportDir} rather than a fixed depth —
- * `dir` (where this actually gets written) and `repoRootAbsPath` can be
- * arbitrarily far apart now that `writeRootAbsPath`/`--plugin-root` is a pure
- * write destination.
- */
-function gatewaySidecarProtoGenGoRelPath(
-  dir: string,
-  repoRootAbsPath: string,
-): string {
-  return relativeImportDir(
-    dir,
-    `${repoRootAbsPath}/packages/fsm-proto-codegen/gen/go`,
-  );
-}
-
-/**
  * Writes the cli/main entrypoint + sdk implementation + build
  * manifest for one language, at `<writeRootAbsPath>/async-worker/<lang>/`
  * — the same directory {@linkcode writeAggregateActorsRegistry} (TS/Python/
@@ -1179,35 +1169,27 @@ function gatewaySidecarProtoGenGoRelPath(
  * {@linkcode formatRustFilesBestEffort} / {@linkcode formatGoFilesBestEffort} /
  * {@linkcode goModTidyManyBestEffort} instead of per-file.
  *
- * TypeScript, Python and Rust get no SDK source at all: `run-async-worker.ts`
- * imports the published `@pgfsm/async-worker-sdk` package (#358),
- * `run_async_worker.py` the published `pgfsm-async-worker-sdk` (#364), and
- * Rust's `src/main.rs` the published `pgfsm-async-worker-sdk` crate (#368).
- * Go still gets `sdk.go` written out, which, unlike the registries, doesn't
- * vary per project at all — every project using this gateway gets
- * byte-identical content. It's still
- * rendered through Eta (a static template, no `<% %>` tags) rather than
- * written as plain strings, for the same reason every other generated file
- * in this package is: consistency, and so the "AUTO-GENERATED, do not edit"
- * header is never forgotten.
+ * No language gets SDK source written out any more: each gets only a thin
+ * entry point plus a manifest pinning its published SDK package —
+ * `run-async-worker.ts` + `deno.json` (`@pgfsm/async-worker-sdk`, #358),
+ * `run_async_worker.py` + `pyproject.toml` (`pgfsm-async-worker-sdk` on PyPI,
+ * #364), `src/main.rs` + `Cargo.toml` (`pgfsm-async-worker-sdk` on crates.io,
+ * #368) and `main.go` + `go.mod` ({@linkcode GO_ASYNC_WORKER_SDK_MODULE_PATH},
+ * #370). Each also removes that language's pre-SDK files if they still carry
+ * the generated header (see {@linkcode removeStaleGeneratedFile}).
  *
  * `goModuleAppRoot` — see {@linkcode writeAggregateGoRegistry}'s doc comment;
  * same real-app-root-name-vs-write-location distinction applies here for the
- * Go worker-sdk's own consumer `go.mod`. This Go worker-sdk's own actor
- * `replace` targets are computed from `writeRootAbsPath` (where actors'
- * `go.mod`s now physically live — see {@linkcode writeActorFile}'s
- * `subPath`), not `realPluginRootAbsPath`. `realPluginRootAbsPath` (where the
- * actual FSM source tree lives) is used only to compute every
- * `gatewaySidecarProtoGen*` target — those point at a sibling package
- * elsewhere in *this monorepo* (`packages/fsm-proto-codegen/`), a
- * relationship that depends on where the source FSM tree sits relative to the
- * repo root, not on `writeRootAbsPath` (which can now be anywhere the caller
- * chooses).
+ * Go worker's own consumer `go.mod`. Its actor `replace` targets are computed
+ * from `writeRootAbsPath` (where actors' `go.mod`s physically live — see
+ * {@linkcode writeActorFile}'s `subPath`). Nothing here depends on where the
+ * monorepo sits any more: every SDK and the proto stubs behind it come from a
+ * package registry, so there's no `path =`/`replace` into
+ * `packages/fsm-proto-codegen/`.
  */
 export async function writeWorkerSdk(
   writeRootAbsPath: string,
   goModuleAppRoot: string,
-  realPluginRootAbsPath: string,
   actors: RegisteredActor[],
 ): Promise<{
   typescript: boolean;
@@ -1220,11 +1202,6 @@ export async function writeWorkerSdk(
   goModDir?: string;
 }> {
   const appRoot = goModuleAppRoot;
-  // <realPluginRoot> sits at <repoRoot>/apps/<appName>/<pluginRootDirName>
-  // -- three levels below repo root (same assumption the fixed-depth
-  // GATEWAY_SIDECAR_* constants used to bake in directly).
-  const repoRootAbsPath = realPluginRootAbsPath.split("/").slice(0, -3)
-    .join("/");
   const hasLang = (lang: OperationLang) =>
     actors.some((a) => a.asyncOperationLanguage === lang);
 
@@ -1317,17 +1294,22 @@ export async function writeWorkerSdk(
   if (wroteGo) {
     const dir = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/go`;
     await Deno.mkdir(dir, { recursive: true });
+    const aggregateModulePath = `${appRoot}/${GO_AGGREGATE_DIR_NAME}`;
+    // Same shape as the other languages: the SDK lives in the published Go
+    // module (#370), required by this directory's go.mod; the project only
+    // gets a thin main.go.
     const mainFile = `${dir}/main.go`;
-    await Deno.writeTextFile(mainFile, renderGoWorkerSdkMain({}));
-    const sdkFile = `${dir}/sdk.go`;
     await Deno.writeTextFile(
-      sdkFile,
-      renderGoWorkerSdkSdk({
-        protoGenGoImportPath:
-          `${GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH}/sidecargateway/v1`,
+      mainFile,
+      renderGoWorkerSdkMain({
+        registryModulePath: aggregateModulePath,
+        sdkModulePath: GO_ASYNC_WORKER_SDK_MODULE_PATH,
       }),
     );
-    goFiles.push(sdkFile);
+    for (const file of LEGACY_GO_WORKER_SDK_FILES) {
+      await removeStaleGeneratedFile(`${dir}/${file}`);
+    }
+    goFiles.push(mainFile);
     await Deno.writeTextFile(
       `${dir}/.gitignore`,
       renderGoWorkerSdkGitignore({}),
@@ -1341,15 +1323,18 @@ export async function writeWorkerSdk(
     // individual actor module the aggregate pulls in, on top of the
     // aggregate's own require+replace, or the build can't resolve them.
     const goActors = actors.filter((a) => a.asyncOperationLanguage === "go");
-    const aggregateModulePath = `${appRoot}/${GO_AGGREGATE_DIR_NAME}`;
     const goModContent = renderGoModAggregate({
-      moduleName: "pgfsm/async-op-worker-sdk",
+      moduleName: "pgfsm/async-worker-go",
+      goVersion: GO_WORKER_GO_VERSION,
       requires: [
         { modulePath: aggregateModulePath },
         ...goActors.map((a) => ({
           modulePath: goActorModulePathFromRegisteredActor(appRoot, a),
         })),
-        { modulePath: GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH },
+        {
+          modulePath: GO_ASYNC_WORKER_SDK_MODULE_PATH,
+          version: GO_ASYNC_WORKER_SDK_VERSION,
+        },
       ],
       replaces: [
         {
@@ -1363,10 +1348,6 @@ export async function writeWorkerSdk(
             `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/go/${a.parentFsmName}/${a.parentFsmVersion}/actors/${a.fileBaseName}`,
           ),
         })),
-        {
-          modulePath: GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH,
-          target: gatewaySidecarProtoGenGoRelPath(dir, repoRootAbsPath),
-        },
       ],
     });
     await Deno.writeTextFile(`${dir}/go.mod`, goModContent);

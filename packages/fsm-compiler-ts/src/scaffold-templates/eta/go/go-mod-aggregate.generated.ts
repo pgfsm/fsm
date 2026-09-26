@@ -3,7 +3,7 @@
 import { eta } from "../eta-instance.ts";
 
 const compiled = eta.compile(
-  "module <%~ it.moduleName %>\n\ngo 1.19\n\n<% for (const r of it.requires) { -%>\nrequire <%~ r.modulePath %> v0.0.0\n<% } -%>\n\n<% for (const r of it.replaces) { -%>\nreplace <%~ r.modulePath %> => <%~ r.target %>\n<% } -%>\n",
+  'module <%~ it.moduleName %>\n\ngo <%~ it.goVersion ?? "1.19" %>\n\n<% for (const r of it.requires) { -%>\nrequire <%~ r.modulePath %> <%~ r.version ?? "v0.0.0" %>\n<% } -%>\n\n<% for (const r of it.replaces) { -%>\nreplace <%~ r.modulePath %> => <%~ r.target %>\n<% } -%>\n',
 );
 
 export const render: (input: unknown) => string = (input) =>
