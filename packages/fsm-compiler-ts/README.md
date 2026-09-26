@@ -138,8 +138,7 @@ want `async-worker/` to land in before running it.
   either; mirrors `generate-sync-logic`/`validate-sync-operation`'s own
   single-file-mode flags).
 
-`-p`/`--worker-sdk-protocol`: `grpc` (default) or `legacy` — directory mode
-only. `-s`/`--skip-dirs`: directory mode only.
+`-s`/`--skip-dirs`: directory mode only.
 
 **Output** — always under the reserved `async-worker/` subfolder at the current
 working directory. Per `<lang>/<fsmName>/<fsmVersion>/` (folder mode derives
@@ -169,7 +168,6 @@ actor set aggregated always comes from the real FSM tree, regardless:
 
 ```bash
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm
-npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
 ```
 
@@ -206,9 +204,8 @@ invocation instead of three. Accepts three input shapes:
   the same conventional depth for both commands' identity derivation to work).
   Also requires `-o`/`--output`.
 
-`-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
-`-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,
-same as the individual commands.
+`-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1), and `-l`/`--lang`
+(step 3) all apply, same as the individual commands.
 
 ```bash
 npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm
@@ -322,7 +319,7 @@ import type { OperationLang, WorkflowType } from "@pgfsm/compiler";
 // OperationLang = "typescript" | "python" | "rust" | "go"
 ```
 
-`generateAsyncOperationLogicFromFolders`'s 4th parameter, `writeRootAbsPath`, is
+`generateAsyncOperationLogicFromFolders`'s 3rd parameter, `writeRootAbsPath`, is
 required — a pure write destination for the aggregate registry/worker SDK (see
 the CLI section above for what it does and doesn't control). The CLI itself has
 no dedicated flag for it: it passes `--folder`'s own value in directory mode, or

@@ -39,7 +39,7 @@
 --
 -- unlike the existing 'sharedPromise_<asyncOperationName>_<asyncOperationVersion>' convention (see
 -- archive_from_fsm_instance_worker_v2.sql), this one is unique per actor
--- identity including language, matching sidecar/protocol.ts's actorKey() --
+-- identity including language, matching sidecar/gateway.ts's actorKey() --
 -- two workers of different languages serving the "same" actor never share a
 -- queue (in the async_operation_type = 'internalAsyncOperation' case, this still holds
 -- since async_operation_language is shortened, not dropped -- two languages sharing the

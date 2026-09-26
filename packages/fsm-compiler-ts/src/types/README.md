@@ -38,6 +38,5 @@ question doesn't need re-investigating later.
 
 ## No schema equivalent at all
 
-`FailedMethod`, `OperationKind`, `ActorsBarrelLang`, `WorkerSdkProtocol`,
-`WriteWorkerSdkOptions` — pure compiler-internal concepts with nothing in
-`fsm.machine.schema.v3.json` to derive from.
+`FailedMethod`, `OperationKind`, `ActorsBarrelLang` — pure compiler-internal
+concepts with nothing in `fsm.machine.schema.v3.json` to derive from.

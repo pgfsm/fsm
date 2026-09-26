@@ -1108,7 +1108,7 @@ Deno.test("writeAggregateGoRegistry - writes nothing when there are no go actors
   }
 });
 
-Deno.test("writeWorkerSdk - writes cli/main+sdk+protocol+manifest per language, only for languages with actors", async () => {
+Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for languages with actors", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const appRootAbsPath = `${dir}/apps/fsm-core-example`;
@@ -1233,78 +1233,6 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+protocol+manifest per language, 
         `${file} should start with ${header}`,
       );
     }
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-});
-
-Deno.test('writeWorkerSdk - protocol: "legacy" restores protocol.{py,rs,go} and the pre-#100 sdk imports', async () => {
-  const dir = await Deno.makeTempDir();
-  try {
-    const appRootAbsPath = `${dir}/apps/fsm-core-example`;
-    const actors = [
-      ...actorsForBarrelTests, // typescript, python, rust
-      ...actorsForGoAggregateTests, // go
-    ];
-    const base = `${appRootAbsPath}/async-worker`;
-    const wrote = await writeWorkerSdk(
-      appRootAbsPath,
-      "fsm-core-example",
-      `${appRootAbsPath}/fsm`,
-      actors,
-      {
-        protocol: "legacy",
-      },
-    );
-    assertEquals(wrote, {
-      typescript: true,
-      python: true,
-      rust: true,
-      go: true,
-      tsFiles: [`${base}/typescript/cli.ts`, `${base}/typescript/sdk.ts`],
-      rustFiles: [`${base}/rust/src/main.rs`, `${base}/rust/src/sdk.rs`],
-      goFiles: [`${base}/go/sdk.go`],
-      goModDir: `${base}/go`,
-    });
-    assertExists(await Deno.stat(`${base}/python/protocol.py`));
-    assertExists(await Deno.stat(`${base}/rust/src/protocol.rs`));
-    assertExists(await Deno.stat(`${base}/go/protocol.go`));
-
-    const tsDenoJson = JSON.parse(
-      await Deno.readTextFile(`${base}/typescript/deno.json`),
-    );
-    assertEquals(
-      "@connectrpc/connect" in tsDenoJson.imports,
-      false,
-      "legacy deno.json should not import connectrpc -- sdk.ts's legacy variant doesn't use it",
-    );
-
-    const tsSdk = await Deno.readTextFile(`${base}/typescript/sdk.ts`);
-    assertEquals(
-      tsSdk.includes(
-        'from "../../../../packages/fsm-core-async-op-worker/src/sidecar/protocol.ts";',
-      ),
-      true,
-    );
-
-    const pySdk = await Deno.readTextFile(`${base}/python/sdk.py`);
-    assertEquals(
-      pySdk.includes("from protocol import actor_key, make_envelope"),
-      true,
-    );
-
-    const rustSdk = await Deno.readTextFile(`${base}/rust/src/sdk.rs`);
-    assertEquals(
-      rustSdk.includes("use crate::protocol::"),
-      true,
-    );
-
-    const goMod = await Deno.readTextFile(`${base}/go/go.mod`);
-    assertEquals(
-      goMod.includes("fsm-proto-codegen"),
-      false,
-      "legacy go.mod should not require the generated proto module",
-    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

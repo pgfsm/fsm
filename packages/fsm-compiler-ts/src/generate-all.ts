@@ -16,7 +16,7 @@ import {
   oneLevelUp,
   resolvePluginRootAbsPath,
 } from "./operation-logic-scaffold.ts";
-import type { OperationLang, WorkerSdkProtocol } from "./types/index.ts";
+import type { OperationLang } from "./types/index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "generate-all"]);
 
@@ -40,8 +40,6 @@ export interface GenerateAllOptions {
    * Only applies to the generate-fsm-json step.
    */
   showRecommendation?: boolean;
-  /** Sidecar wire protocol for generated worker SDKs. Defaults to `"grpc"`. */
-  workerSdkProtocol?: WorkerSdkProtocol;
   /** Language(s) to scaffold sync operation logic (actions/guards/delays) in. Defaults to `["typescript"]`. */
   langs?: OperationLang[];
 }
@@ -85,7 +83,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     output,
     skipDirs = [],
     showRecommendation = false,
-    workerSdkProtocol = "grpc",
     langs = ["typescript"],
   } = options;
 
@@ -141,7 +138,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
       versionFolderPath,
       fsmIdentity.fsmName,
       fsmIdentity.fsmVersion,
-      workerSdkProtocol,
     );
     await generateSyncOperationLogicFromFsmJson(
       folder,
@@ -176,7 +172,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
       versionFolderPath,
       fsmIdentity.fsmName,
       fsmIdentity.fsmVersion,
-      workerSdkProtocol,
     );
     await generateSyncOperationLogicFromFsmJson(
       fsmJsonPath,
@@ -209,7 +204,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     await generateAsyncOperationLogicFromFolders(
       folder,
       skipDirs,
-      workerSdkProtocol,
       writeRootAbsPath,
     );
   } catch (err) {

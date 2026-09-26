@@ -348,7 +348,7 @@ deno task gateway-ctl <list|invoke> [options]
 | `--version`                         | —            | —                                       | Print `@pgfsm/async-worker`'s version and exit                |
 | `--help`                            | —            | —                                       | Print help and exit                                           |
 
-Identity flags match `sidecar/protocol.ts`'s `actorKey()` shape — the exact six
+Identity flags match `sidecar/gateway.ts`'s `actorKey()` shape — the exact six
 fields `list`'s output concatenates with `@`.
 
 ### Examples
