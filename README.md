@@ -121,8 +121,7 @@ additionally refreshes the aggregate registry/worker SDK in both `-f`/`--folder`
 shapes, written once per language at `async-worker/<lang>/`, refreshed from the
 real FSM tree's own walk. `generate-all` runs `generate-fsm-json`, then
 `generate-async-logic`, then `generate-sync-logic` in one invocation instead of
-three — it's the one exception that still uses `-o`/`--output` (single-file
-modes only) rather than `Deno.cwd()`. See
+three, and like them writes under `Deno.cwd()`. See
 [the package's own README](./packages/fsm-compiler-ts/README.md) for details and
 examples.
 

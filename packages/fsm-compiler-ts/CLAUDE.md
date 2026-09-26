@@ -54,13 +54,22 @@ version folder to accept as `--output` in the first place. Folder mode derives
 `<fsmName>/<fsmVersion>` per FSM while walking the plugin-root tree, same as
 before.
 
-`generate-all` is the one exception: its own async-/sync-logic steps still write
-under its existing `writeRootAbsPath` convention (the app root — one level above
-`--folder` — in folder mode; `--output`'s own value in either single-file mode),
-nested `<sync|async>-worker/<lang>/<fsmName>/<fsmVersion>/` deep rather than
-directly into it. `fsmName`/`fsmVersion` are derived from `--output`'s own path
-the same way `generateAsyncOperationLogicFromFsmJson`'s `realPluginRootAbsPath`
-derivation already did — see `generate-all.ts`.
+`generate-all` follows the same rule since #372: `generateAll` takes a required
+`writeRootAbsPath` option (the CLI passes `Deno.cwd()`), used in every mode, and
+the CLI rejects `--output` for it with an explicit error rather than ignoring
+it. Before #372 folder mode wrote one level above `--folder` and the single-file
+modes wrote under `--output`. Single-file mode requires `fsmName`/`fsmVersion`
+(`-N`/`-V`), same as the standalone commands — deliberately never derived via
+`fsmIdentityFromVersionFolderPath`, which just takes the last two path segments
+unvalidated (`-f a/fsm.json` from `/home/dev/proj` would yield `proj`/`a` and
+silently write there, and for machine.ts that bad version would also be baked
+into `asyncOperationVersion`). `generateAll` throws for a library caller; the
+CLI checks up front so it can print help. Guessing identity with a confirmation
+prompt belongs in the project-aware `@pgfsm/cli` (SPEC-004), not here.
+machine.ts mode writes `fsm.json` next to the machine.ts. fsmdev's own
+in-process copy of the folder-mode sequence
+(`fsm-devstack-ts/src/cli/fsmdev.ts`'s `runGenerateAll`) deliberately still
+writes one level above its `--fsm-folder`.
 
 The gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:

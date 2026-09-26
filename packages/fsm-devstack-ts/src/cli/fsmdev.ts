@@ -167,10 +167,12 @@ function dbArgs(): string[] {
   return dbUrl ? ["-d", dbUrl] : [];
 }
 
-// generate-all, folder mode — the exact sequence fsm-compiler-ts's own CLI
-// runs for `-c generate-all`. One step's partial failure across some FSMs
-// doesn't block the next step from running for the rest (see that CLI's
-// "generate-all" case for why each is caught independently).
+// generate-all, folder mode — the same step sequence fsm-compiler-ts's own
+// CLI runs for `-c generate-all`, except the write root: that CLI anchors at
+// Deno.cwd() (#372), while fsmdev keeps writing one level above --fsm-folder
+// (the app root) so it works from any cwd. One step's partial failure across
+// some FSMs doesn't block the next step from running for the rest (see that
+// CLI's "generate-all" case for why each is caught independently).
 async function runGenerateAll(): Promise<string> {
   logger.info("Running generate-all...");
   const writeRootAbsPath = dirname(fsmFolder);
