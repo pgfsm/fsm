@@ -43,9 +43,10 @@ apps/sync-worker/
         ...
 apps/async-worker/
   <lang>/                 ← one subtree per language actually used (typescript/python/rust/go)
-    run-async-worker.ts (ts) / run_async_worker.py (py) / main.rs, sdk.rs, ... , <lang>-actors-registry.generated.ts  ← aggregate worker SDK
+    run-async-worker.ts (ts) / run_async_worker.py (py) / src/main.rs (rust) / main.go, sdk.go (go) , <lang>-actors-registry.generated.ts  ← aggregate worker SDK
     deno.json              ← (typescript only) scoped import map pinning @pgfsm/async-worker-sdk — see CLAUDE.md
     pyproject.toml         ← (python only) uv project pinning pgfsm-async-worker-sdk — see CLAUDE.md
+    Cargo.toml             ← (rust only) cargo project depending on the pgfsm-async-worker-sdk crate
     <asyncOperationName>/
       v01/
         actors/index.ts   ← actor implementations

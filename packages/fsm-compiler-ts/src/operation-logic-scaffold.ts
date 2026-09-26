@@ -38,7 +38,6 @@ import { render as renderTsWorkerSdkDenoJson } from "./scaffold-templates/eta/ty
 import { render as renderPyRunAsyncWorker } from "./scaffold-templates/eta/python/run-async-worker.generated.ts";
 import { render as renderPyWorkerSdkPyproject } from "./scaffold-templates/eta/python/worker-sdk-pyproject.generated.ts";
 import { render as renderRustWorkerSdkMain } from "./scaffold-templates/eta/rust/worker-sdk-main.generated.ts";
-import { render as renderRustWorkerSdkSdk } from "./scaffold-templates/eta/rust/worker-sdk-sdk.generated.ts";
 import { render as renderRustWorkerSdkCargoToml } from "./scaffold-templates/eta/rust/worker-sdk-cargo-toml.generated.ts";
 import { render as renderRustWorkerSdkGitignore } from "./scaffold-templates/eta/rust/worker-sdk-gitignore.generated.ts";
 import { render as renderGoWorkerSdkMain } from "./scaffold-templates/eta/go/worker-sdk-main.generated.ts";
@@ -1102,6 +1101,13 @@ const LEGACY_TS_WORKER_SDK_FILES = ["cli.ts", "sdk.ts"];
 const LEGACY_PY_WORKER_SDK_FILES = ["cli.py", "sdk.py", "requirements.txt"];
 
 /**
+ * The Rust worker SDK's file from before #368: the whole SDK as `src/sdk.rs`,
+ * `mod`-included by the old `main.rs`. Now `main.rs` uses the published
+ * `pgfsm-async-worker-sdk` crate, pinned by `Cargo.toml`.
+ */
+const LEGACY_RUST_WORKER_SDK_FILES = ["src/sdk.rs"];
+
+/**
  * This compiler's auto-generated header, as a `//` or `#` comment, optionally
  * after a shebang line (the old Python `cli.py` had one).
  */
@@ -1126,25 +1132,6 @@ async function removeStaleGeneratedFile(path: string): Promise<void> {
   logger.info("Removed stale generated worker SDK file {path}", { path });
 }
 /**
- * Cargo `path` dependency target from wherever `Cargo.toml` actually lands
- * to the `pgfsm-proto-codegen` crate wrapping
- * `packages/fsm-proto-codegen/gen/rust/` — see #106.
- *
- * Computed via {@linkcode relativeImportDir} rather than a fixed depth —
- * `dir` (where this actually gets written) and `repoRootAbsPath` can be
- * arbitrarily far apart now that `writeRootAbsPath`/`--plugin-root` is a pure
- * write destination.
- */
-function gatewaySidecarProtoGenRustCratePath(
-  dir: string,
-  repoRootAbsPath: string,
-): string {
-  return relativeImportDir(
-    dir,
-    `${repoRootAbsPath}/packages/fsm-proto-codegen/gen/rust`,
-  );
-}
-/**
  * Go module path (matching sidecar_gateway.proto's `go_package` option) for
  * the generated grpc-go stub (`packages/fsm-proto-codegen/gen/go/`) —
  * required+replaced in worker-sdk/go's own go.mod the same way each
@@ -1156,7 +1143,14 @@ function gatewaySidecarProtoGenRustCratePath(
  */
 const GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH =
   "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go";
-/** The `replace` target for {@linkcode GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH} — computed, see {@linkcode gatewaySidecarProtoGenRustCratePath}. */
+/**
+ * The `replace` target for {@linkcode GATEWAY_SIDECAR_PROTO_GEN_GO_MODULE_PATH}.
+ *
+ * Computed via {@linkcode relativeImportDir} rather than a fixed depth —
+ * `dir` (where this actually gets written) and `repoRootAbsPath` can be
+ * arbitrarily far apart now that `writeRootAbsPath`/`--plugin-root` is a pure
+ * write destination.
+ */
 function gatewaySidecarProtoGenGoRelPath(
   dir: string,
   repoRootAbsPath: string,
@@ -1185,12 +1179,13 @@ function gatewaySidecarProtoGenGoRelPath(
  * {@linkcode formatRustFilesBestEffort} / {@linkcode formatGoFilesBestEffort} /
  * {@linkcode goModTidyManyBestEffort} instead of per-file.
  *
- * TypeScript and Python get no SDK source at all: `run-async-worker.ts`
- * imports the published `@pgfsm/async-worker-sdk` package (#358), and
- * `run_async_worker.py` the published `pgfsm-async-worker-sdk` (#364).
- * Rust/Go still get `sdk.{rs,go}` written out, which, unlike the registries, don't vary per
- * project at all — every project using this gateway gets byte-identical
- * content. They're still
+ * TypeScript, Python and Rust get no SDK source at all: `run-async-worker.ts`
+ * imports the published `@pgfsm/async-worker-sdk` package (#358),
+ * `run_async_worker.py` the published `pgfsm-async-worker-sdk` (#364), and
+ * Rust's `src/main.rs` the published `pgfsm-async-worker-sdk` crate (#368).
+ * Go still gets `sdk.go` written out, which, unlike the registries, doesn't
+ * vary per project at all — every project using this gateway gets
+ * byte-identical content. It's still
  * rendered through Eta (a static template, no `<% %>` tags) rather than
  * written as plain strings, for the same reason every other generated file
  * in this package is: consistency, and so the "AUTO-GENERATED, do not edit"
@@ -1295,24 +1290,23 @@ export async function writeWorkerSdk(
     const dir = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/rust`;
     await Deno.mkdir(`${dir}/src`, { recursive: true });
     const mainFile = `${dir}/src/main.rs`;
-    const sdkFile = `${dir}/src/sdk.rs`;
+    // Same shape as TypeScript/Python above: the SDK lives in the published
+    // pgfsm-async-worker-sdk crate (#368), pinned by this directory's
+    // Cargo.toml; the project only gets a thin main.rs.
     await Deno.writeTextFile(
       mainFile,
       renderRustWorkerSdkMain({
         registryRelativePath: "../rust-actors-registry.generated.rs",
       }),
     );
-    await Deno.writeTextFile(sdkFile, renderRustWorkerSdkSdk({}));
     await Deno.writeTextFile(
       `${dir}/Cargo.toml`,
-      renderRustWorkerSdkCargoToml({
-        protoGenRustCratePath: gatewaySidecarProtoGenRustCratePath(
-          dir,
-          repoRootAbsPath,
-        ),
-      }),
+      renderRustWorkerSdkCargoToml({}),
     );
-    rustFiles.push(mainFile, sdkFile);
+    for (const file of LEGACY_RUST_WORKER_SDK_FILES) {
+      await removeStaleGeneratedFile(`${dir}/${file}`);
+    }
+    rustFiles.push(mainFile);
     await Deno.writeTextFile(
       `${dir}/.gitignore`,
       renderRustWorkerSdkGitignore({}),

@@ -238,14 +238,15 @@ go run . --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash
-# Rust — same directory requirement as Go
+# Rust — same directory requirement as Go; cargo installs the pinned
+# pgfsm-async-worker-sdk crate from Cargo.toml
 cd apps/async-worker/rust
-cargo run --release -- --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+cargo run --release -- start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
-`list` (TypeScript/Python only) prints the actors compiled into that process's
-registry without connecting to the gateway — useful to sanity-check a generated
-registry before wiring up the real socket.
+`list` (TypeScript/Python/Rust; Go has no subcommands) prints the actors
+compiled into that process's registry without connecting to the gateway — useful
+to sanity-check a generated registry before wiring up the real socket.
 
 ### Start the FSM worker
 

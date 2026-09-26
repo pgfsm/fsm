@@ -272,7 +272,7 @@ const WORKER_SDK_START_COMMAND: Record<string, (dir: string) => string> = {
       join(dir, "run_async_worker.py")
     } start --gateway-socket ${socket}`,
   rust: (dir) =>
-    `(cd ${dir} && cargo run --release -- --gateway-socket ${socket})`,
+    `(cd ${dir} && cargo run --release -- start --gateway-socket ${socket})`,
   go: (dir) => `(cd ${dir} && go run . --gateway-socket ${socket})`,
 };
 

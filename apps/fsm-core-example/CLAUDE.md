@@ -34,7 +34,8 @@ this app's own `fsm/`:
   `python`, `rust`, `go`), plus that language's aggregate worker SDK
   (TypeScript: `run-async-worker.ts` + `deno.json`, importing
   `@pgfsm/async-worker-sdk`; Python: `run_async_worker.py` + `pyproject.toml`,
-  importing `pgfsm-async-worker-sdk`; Rust/Go: `main.rs`/`sdk.rs` etc.;
+  importing `pgfsm-async-worker-sdk`; Rust: `src/main.rs` + `Cargo.toml`, using
+  the `pgfsm-async-worker-sdk` crate; Go: `main.go`/`sdk.go` etc.;
   `<lang>-actors-registry.generated.ts`, etc.) at `async-worker/<lang>/`
 
 `create-async-logic`'s `sharedAsyncOperation/` pool (#309/#311, renamed from the

@@ -1,0 +1,33 @@
+# Rust worker SDK for the pgfsm Activity Gateway — see CLAUDE.md. Published to
+# crates.io as pgfsm-async-worker-sdk by .github/workflows/crates-publish.yml
+# from an `async-worker-sdk-rs-v<version>` tag.
+[package]
+name = "pgfsm-async-worker-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Rust worker SDK for the pgfsm Activity Gateway: registers actors and serves invocations over the sidecar gRPC stream."
+license = "Apache-2.0"
+repository = "https://github.com/pgfsm/fsm"
+readme = "README.md"
+keywords = ["pgfsm", "grpc", "worker", "fsm"]
+categories = ["network-programming"]
+
+[dependencies]
+# Generated pgfsm.sidecargateway.v1 client stubs, from crates.io (not the
+# monorepo's packages/fsm-proto-codegen/gen/rust). Its prost/tonic/tonic-prost
+# must share one major with ours below — see fsm-proto-codegen's README.
+pgfsm-proto-codegen = "0.1.1"
+tonic = { version = "0.14", features = ["transport"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
+tokio-stream = "0.1"
+serde_json = "1"
+# Library-side logging facade only; the generated worker main configures a
+# logger (env_logger) once, same split as the Python SDK's `logging`.
+log = "0.4"
+
+[dev-dependencies]
+# The tests run ActorWorker end to end against a fake SidecarGatewayService
+# served on a temp Unix socket.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal", "net"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tempfile = "3"
