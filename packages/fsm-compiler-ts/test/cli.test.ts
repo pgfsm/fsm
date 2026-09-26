@@ -928,6 +928,77 @@ Deno.test("cli delete runs successfully on example folder", async () => {
   await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]); // restore generated files
 });
 
+// Sets up <cwd>/fsm/checkout/v01/{machine.ts,fsm.json,xstate-fsm.json} plus an
+// implemented sync stub and async actor stub under <cwd>'s worker folders.
+async function setUpDeleteFixture(name: string) {
+  const cwd = `${FIXTURE_ROOT}/${name}`;
+  const versionDir = `${cwd}/fsm/checkout/v01`;
+  await Deno.mkdir(versionDir, { recursive: true });
+  await copy(
+    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
+    `${versionDir}/machine.ts`,
+  );
+  await copy(SINGLE_FSM_JSON, `${versionDir}/fsm.json`);
+  await Deno.writeTextFile(`${versionDir}/xstate-fsm.json`, "{}\n");
+  const syncStub =
+    `${cwd}/sync-worker/typescript/checkout/v01/actions/index.ts`;
+  const actorStub =
+    `${cwd}/async-worker/python/checkout/v01/actors/verifyCredentials/verifyCredentials.py`;
+  for (const stub of [syncStub, actorStub]) {
+    await Deno.mkdir(stub.substring(0, stub.lastIndexOf("/")), {
+      recursive: true,
+    });
+    await Deno.writeTextFile(stub, "// implemented by hand\n");
+  }
+  return { cwd, versionDir, syncStub, actorStub };
+}
+
+Deno.test("cli delete removes fsm.json/xstate-fsm.json but keeps implemented worker stubs by default (#377)", async () => {
+  const { cwd, versionDir, syncStub, actorStub } = await setUpDeleteFixture(
+    "delete-keeps-stubs",
+  );
+  const { code, stdout } = await runCli(
+    ["-c", "delete", "-f", "fsm"],
+    undefined,
+    cwd,
+  );
+  assertEquals(code, 0);
+  assertEquals(await pathExists(`${versionDir}/fsm.json`), false);
+  assertEquals(await pathExists(`${versionDir}/xstate-fsm.json`), false);
+  assertEquals(await Deno.readTextFile(syncStub), "// implemented by hand\n");
+  assertEquals(await Deno.readTextFile(actorStub), "// implemented by hand\n");
+  assertStringIncludes(stdout, "--include-workers");
+});
+
+Deno.test("cli delete --include-workers also removes that FSM version's worker folders", async () => {
+  const { cwd, versionDir } = await setUpDeleteFixture(
+    "delete-include-workers",
+  );
+  // Another FSM's worker folder must survive: removal is scoped per version.
+  const otherStub = `${cwd}/sync-worker/typescript/other/v01/actions/index.ts`;
+  await Deno.mkdir(otherStub.substring(0, otherStub.lastIndexOf("/")), {
+    recursive: true,
+  });
+  await Deno.writeTextFile(otherStub, "// other fsm\n");
+
+  const { code } = await runCli(
+    ["-c", "delete", "-f", "fsm", "--include-workers"],
+    undefined,
+    cwd,
+  );
+  assertEquals(code, 0);
+  assertEquals(await pathExists(`${versionDir}/fsm.json`), false);
+  assertEquals(
+    await pathExists(`${cwd}/sync-worker/typescript/checkout/v01`),
+    false,
+  );
+  assertEquals(
+    await pathExists(`${cwd}/async-worker/python/checkout/v01`),
+    false,
+  );
+  assert(await pathExists(otherStub));
+});
+
 Deno.test("cli delete keeps fsm.json (and its worker folders) in a version folder with no machine.ts", async () => {
   const cwd = `${FIXTURE_ROOT}/delete-no-machine-ts`;
   const versionDir = `${cwd}/fsm/checkout/v01`;
