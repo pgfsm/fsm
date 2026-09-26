@@ -120,9 +120,8 @@ aggregate registry/worker SDK (`async-worker/<lang>/`, see the table above) in
 both `-f`/`--folder` shapes, written once per language at
 `async-worker/<lang>/`, refreshed from the real FSM tree's own walk.
 `generate-all` runs `generate-fsm-json`, then `generate-async-logic`, then
-`generate-sync-logic` in one invocation instead of three — it's the one
-exception that still uses `-o`/`--output` (single-file modes only) rather than
-`Deno.cwd()`. See
+`generate-sync-logic` in one invocation instead of three, and like them writes
+under `Deno.cwd()`. See
 [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md) for
 details and examples.
 
