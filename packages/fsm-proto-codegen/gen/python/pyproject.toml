@@ -8,7 +8,7 @@
 # languages' manifests (see the package README's "Publishing").
 [project]
 name = "pgfsm-proto-codegen"
-version = "0.1.0"
+version = "0.1.1"
 description = "Generated protobuf + gRPC stubs for the pgfsm Activity Gateway and Sidecar Gateway contracts."
 readme = "README.md"
 license = "Apache-2.0"

@@ -8,8 +8,8 @@ import { proto3 } from "@bufbuild/protobuf";
 /**
  * One actor entrypoint a worker process serves. Mirrors
  * ActorPluginValidationResult's identity fields (see @pgfsm/compiler's
- * util.ts) — actorKey() in the current sidecar/protocol.ts is what the
- * gateway routes on. async_operation_language is part of the identity (not
+ * util.ts) — actorKey() in fsm-core-async-op-worker's sidecar/gateway.ts is
+ * what the gateway routes on. async_operation_language is part of the identity (not
  * just a display field) because the other five fields alone aren't
  * guaranteed unique across languages.
  *
@@ -136,10 +136,9 @@ export const InvokeError = /*@__PURE__*/ proto3.makeMessageType(
 
 /**
  * Pushed by the gateway to ask a worker to abandon an in-flight invoke.
- * Not yet acted on by any worker SDK (mirrors the current protocol.ts
- * "cancel" WireType, which gateway.ts/sdk.ts already carry but don't wire up
- * to real cancellation) — carried here so the schema doesn't need a second
- * breaking change once that lands.
+ * Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
+ * and the generated worker SDKs accept it but ignore it — carried here so the
+ * schema doesn't need a second breaking change once that lands.
  *
  * @generated from message pgfsm.sidecargateway.v1.Cancel
  */

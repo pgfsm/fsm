@@ -23,8 +23,8 @@ const (
 
 // One actor entrypoint a worker process serves. Mirrors
 // ActorPluginValidationResult's identity fields (see @pgfsm/compiler's
-// util.ts) — actorKey() in the current sidecar/protocol.ts is what the
-// gateway routes on. async_operation_language is part of the identity (not
+// util.ts) — actorKey() in fsm-core-async-op-worker's sidecar/gateway.ts is
+// what the gateway routes on. async_operation_language is part of the identity (not
 // just a display field) because the other five fields alone aren't
 // guaranteed unique across languages.
 type RegisteredActor struct {
@@ -202,7 +202,7 @@ type RegisterAck struct {
 	Accepted               bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	GatewayProtocolVersion string                 `protobuf:"bytes,2,opt,name=gateway_protocol_version,json=gatewayProtocolVersion,proto3" json:"gateway_protocol_version,omitempty"`
 	// "parentFsmName@parentFsmVersion@asyncOperationType@asyncOperationName@asyncOperationVersion@asyncOperationLanguage"
-	// keys, mirroring sidecar/protocol.ts's actorKey().
+	// keys, mirroring sidecar/gateway.ts's actorKey().
 	RegisteredActors []string `protobuf:"bytes,3,rep,name=registered_actors,json=registeredActors,proto3" json:"registered_actors,omitempty"`
 	RejectedActors   []string `protobuf:"bytes,4,rep,name=rejected_actors,json=rejectedActors,proto3" json:"rejected_actors,omitempty"`
 	unknownFields    protoimpl.UnknownFields
@@ -631,10 +631,9 @@ func (x *InvokeError) GetDurationMs() uint32 {
 }
 
 // Pushed by the gateway to ask a worker to abandon an in-flight invoke.
-// Not yet acted on by any worker SDK (mirrors the current protocol.ts
-// "cancel" WireType, which gateway.ts/sdk.ts already carry but don't wire up
-// to real cancellation) — carried here so the schema doesn't need a second
-// breaking change once that lands.
+// Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
+// and the generated worker SDKs accept it but ignore it — carried here so the
+// schema doesn't need a second breaking change once that lands.
 type Cancel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InvokeId      string                 `protobuf:"bytes,1,opt,name=invoke_id,json=invokeId,proto3" json:"invoke_id,omitempty"`
