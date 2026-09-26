@@ -28,6 +28,22 @@ async function deleteFsmJSONFromFolder(
   absFolderPath: string,
   _parentSource: string,
 ) {
+  // A version folder with no machine.ts holds an fsm.json that can't be
+  // regenerated from here -- e.g. one written by generate-fsm-json's
+  // single-file mode into {cwd}/fsm/ from a machine.ts that lives elsewhere
+  // (#376), or a hand-authored fsm.json. Deleting it would lose the only
+  // copy, so keep it (and its worker folders) untouched.
+  try {
+    await Deno.stat(`${absFolderPath}/machine.ts`);
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    logger.info(
+      "No machine.ts in {path}: keeping fsm.json, since it can't be regenerated from here",
+      { path: absFolderPath },
+    );
+    return;
+  }
+
   try {
     await Deno.remove(`${absFolderPath}/xstate-fsm.json`);
     await Deno.remove(`${absFolderPath}/fsm.json`);
