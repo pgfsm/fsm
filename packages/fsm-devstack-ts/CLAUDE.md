@@ -15,8 +15,10 @@ file's: it only documents the currently-publishable library export
 1. `generate-all` — one-shot, must succeed first. Calls `@pgfsm/compiler`'s
    `generateFsmJSONFromFolders` / `generateAsyncOperationLogicFromFolders` /
    `generateSyncOperationLogicFromFolders` directly, in-process, replicating
-   fsm-compiler-ts's own CLI's folder-mode `generate-all` sequence exactly
-   (including its per-step error aggregation).
+   fsm-compiler-ts's own CLI's folder-mode `generate-all` step sequence
+   (including its per-step error aggregation). The one difference is the write
+   root: fsmdev writes to the app root, one level above `--fsm-folder`, while
+   the compiler's `generate-all` writes under `Deno.cwd()` (#372).
 2. Prints the exact start command for every worker-SDK language `generate-all`
    actually generated (typescript/python/rust/go — whichever subdirectories
    exist under `<app-root>/async-worker/`, `fsm-compiler-ts`'s reserved async-op

@@ -54,13 +54,52 @@ version folder to accept as `--output` in the first place. Folder mode derives
 `<fsmName>/<fsmVersion>` per FSM while walking the plugin-root tree, same as
 before.
 
-`generate-all` is the one exception: its own async-/sync-logic steps still write
-under its existing `writeRootAbsPath` convention (the app root — one level above
-`--folder` — in folder mode; `--output`'s own value in either single-file mode),
-nested `<sync|async>-worker/<lang>/<fsmName>/<fsmVersion>/` deep rather than
-directly into it. `fsmName`/`fsmVersion` are derived from `--output`'s own path
-the same way `generateAsyncOperationLogicFromFsmJson`'s `realPluginRootAbsPath`
-derivation already did — see `generate-all.ts`.
+`generate-all` follows the same rule since #372: `generateAll` takes a required
+`writeRootAbsPath` option (the CLI passes `Deno.cwd()`), used in every mode, and
+the CLI rejects `--output` for it with an explicit error rather than ignoring
+it. Before #372 folder mode wrote one level above `--folder` and the single-file
+modes wrote under `--output`. Single-file mode requires `fsmName`/`fsmVersion`
+(`-N`/`-V`), same as the standalone commands — deliberately never derived via
+`fsmIdentityFromVersionFolderPath`, which just takes the last two path segments
+unvalidated (`-f a/fsm.json` from `/home/dev/proj` would yield `proj`/`a` and
+silently write there, and for machine.ts that bad version would also be baked
+into `asyncOperationVersion`). `generateAll` throws for a library caller; the
+CLI checks up front so it can print help. Guessing identity with a confirmation
+prompt belongs in the project-aware `@pgfsm/cli` (SPEC-004), not here. fsmdev's
+own in-process copy of the folder-mode sequence
+(`fsm-devstack-ts/src/cli/fsmdev.ts`'s `runGenerateAll`) deliberately still
+writes one level above its `--fsm-folder`.
+
+## Single-file mode writes `{cwd}/fsm/<fsmName>/<fsmVersion>/`; `--output` is gone (#376)
+
+`generate-fsm-json -f <machine.ts> -N <name> -V <version>`
+(`generateFsmJSONIntoFsmDir`, `generate-fsm-json.ts`) extends the cwd anchor to
+the FSM definitions themselves, so a project is `{cwd}/fsm` +
+`{cwd}/sync-worker` + `{cwd}/async-worker`. `generate-all`'s machine.ts mode
+calls the same function, and its fsm.json mode copies the given file there via
+`copyFsmJsonIntoFsmDir`. No command takes `--output` any more; the CLI keeps it
+declared in `parseArgs` only to reject it with an explicit error.
+
+Gotchas:
+
+- **machine.ts is compiled from its own location and never copied.** A copy
+  couldn't resolve its bare imports (e.g. `xstate` via the source tree's own
+  `deno.json` import map — see #270) or any relative import. So
+  `{cwd}/fsm/<N>/<V>/` usually holds build output only; it's an in-place compile
+  when the machine.ts already sits there.
+- **Compile, then write.** `generateFsmJSONFromMachineFile` was split into
+  `compileMachineFile` (pure, in memory) and `writeCompiledMachine`, so a failed
+  compile writes nothing — previously xstate-fsm.json was written before the
+  rest of the pipeline ran. Folder mode goes through the same pair.
+- **Machine-id guard.** `assertSameMachineIdOrForce` refuses to replace a target
+  fsm.json whose top-level `id` differs from the new one unless `--force`
+  (`force` option). It's only as strong as the ids: every example machine here
+  leaves xstate's default `(machine)` id, so they all match.
+- **`delete` skips version folders with no machine.ts**
+  (`delete-fsm-json-from-folders.ts`) — their fsm.json can't be regenerated from
+  there, so deleting it (and its worker folders) would lose the only copy.
+  `delete` still removes worker stub folders for folders that do have a
+  machine.ts; that's #377.
 
 The gotchas below are for whoever next touches
 `generate-async-operation-logic.ts`/`operation-logic-scaffold.ts`:

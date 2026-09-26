@@ -1,7 +1,8 @@
 import { getLogger } from "@logtape/logtape";
 import {
+  copyFsmJsonIntoFsmDir,
   generateFsmJSONFromFolders,
-  generateFsmJSONFromMachineFile,
+  generateFsmJSONIntoFsmDir,
 } from "./generate-fsm-json.ts";
 import {
   generateAsyncOperationLogicFromFolders,
@@ -11,11 +12,6 @@ import {
   generateSyncOperationLogicFromFolders,
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
-import {
-  fsmIdentityFromVersionFolderPath,
-  oneLevelUp,
-  resolvePluginRootAbsPath,
-} from "./operation-logic-scaffold.ts";
 import type { OperationLang } from "./types/index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "generate-all"]);
@@ -27,12 +23,23 @@ export interface GenerateAllOptions {
    */
   folder: string;
   /**
-   * Version folder to write generated output into. Required when `folder` is
-   * a single machine.ts or fsm.json file; ignored (each versioned FSM folder
-   * under `folder` is written into directly) when `folder` is a plugin-root
-   * folder.
+   * Absolute directory `async-worker/` and `sync-worker/` are written under,
+   * in every mode. The CLI always passes `Deno.cwd()`, the same anchor
+   * generate-sync-logic/generate-async-logic use (#305/#307); a library
+   * caller can point it anywhere.
    */
-  output?: string;
+  writeRootAbsPath: string;
+  /**
+   * FSM name, e.g. `creditCheck`. Required in single-file mode; ignored in
+   * folder mode, which derives identity per FSM while walking the tree.
+   */
+  fsmName?: string;
+  /**
+   * FSM version folder name, e.g. `v01`. Required in single-file mode (it
+   * also fills in missing `asyncOperationVersion` when compiling a
+   * machine.ts); ignored in folder mode.
+   */
+  fsmVersion?: string;
   /** Subdirectory names to skip while walking a plugin-root folder. */
   skipDirs?: string[];
   /**
@@ -42,6 +49,11 @@ export interface GenerateAllOptions {
   showRecommendation?: boolean;
   /** Language(s) to scaffold sync operation logic (actions/guards/delays) in. Defaults to `["typescript"]`. */
   langs?: OperationLang[];
+  /**
+   * Single-file mode: overwrite a `fsm/<fsmName>/<fsmVersion>/fsm.json`
+   * under `writeRootAbsPath` that belongs to a different machine id.
+   */
+  force?: boolean;
 }
 
 /**
@@ -50,6 +62,13 @@ export interface GenerateAllOptions {
  * single fsm.json file — whichever `options.folder` points at. Backs the
  * CLI's `generate-all` command; also usable directly from an npm/npx
  * consumer.
+ *
+ * Every mode writes `async-worker/` and `sync-worker/` under
+ * `options.writeRootAbsPath` (#372) — the CLI passes `Deno.cwd()`, matching
+ * generate-sync-logic/generate-async-logic. There is no `--output`: before
+ * #372, folder mode wrote one level above `folder` and single-file modes
+ * wrote under `--output`, so the same command landed in different places
+ * depending on what it was pointed at.
  *
  * - **Folder mode** (`folder` is a plugin-root directory): runs all three
  *   steps across the whole tree. Each step already walks every versioned FSM
@@ -61,26 +80,29 @@ export interface GenerateAllOptions {
  *   shouldn't block every other FSM's actor/sync stubs from being scaffolded.
  *   Every collected step failure is re-thrown together as a single
  *   `AggregateError` once the run finishes.
- * - **Single machine.ts file mode** (`folder` is a `.ts` file; `output`
- *   required): chains all three steps for just this one FSM version. `output`
- *   is the destination for `fsm.json`/`xstate-fsm.json`; the actor stubs +
- *   aggregate registry and the sync stubs also write under `output`, but
- *   nested `async-worker/<lang>/<fsmName>/<fsmVersion>/` /
- *   `sync-worker/<lang>/<fsmName>/<fsmVersion>/` deep rather than directly
- *   into it (`fsmName`/`fsmVersion` derived from `output`'s own path, same
- *   convention the aggregate step already relies on) — a step's failure here
- *   simply aborts, since there's only one FSM and nothing left for a later
- *   step to still succeed on.
- * - **Single fsm.json file mode** (`folder` is a `.json` file; `output`
- *   required): the fsm.json already exists, so generate-fsm-json is skipped
- *   entirely and only generate-async-logic/generate-sync-logic run against
- *   it, mirroring generate-async-logic/generate-sync-logic's own
- *   single-fsm.json mode.
+ * - **Single machine.ts file mode** (`folder` is a `.ts` file): chains all
+ *   three steps for just this one FSM version. `fsm.json`/`xstate-fsm.json`
+ *   are written to `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/`, exactly
+ *   like generate-fsm-json's own single-file mode (#376; machine.ts itself
+ *   stays put) — a step's failure here simply aborts, since there's only one
+ *   FSM and nothing left for a later step to still succeed on.
+ * - **Single fsm.json file mode** (`folder` is a `.json` file): the fsm.json
+ *   already exists, so generate-fsm-json is skipped; it is copied to
+ *   `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/fsm.json` (#376) and
+ *   generate-async-logic/generate-sync-logic run against that copy.
+ *
+ * Either way, a later folder-mode run on `<writeRootAbsPath>/fsm` rebuilds
+ * the same project without pointing back at the original file.
+ *
+ * Both single-file modes require `fsmName` and `fsmVersion`, like
+ * generate-sync-logic/generate-async-logic's own single-fsm.json mode. They
+ * are never guessed from the file's parent folders: `-f a/fsm.json` would
+ * otherwise silently become `<cwd's name>/a` (#372).
  */
 export async function generateAll(options: GenerateAllOptions): Promise<void> {
   const {
     folder,
-    output,
+    writeRootAbsPath,
     skipDirs = [],
     showRecommendation = false,
     langs = ["typescript"],
@@ -102,82 +124,58 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
     );
   }
 
-  if ((folderIsFsmJsonFile || folderIsMachineTsFile) && !output) {
-    throw new Error(
-      `generate-all requires --output <version-folder> when --folder is a single ${
-        folderIsFsmJsonFile ? "fsm.json" : "machine.ts"
-      } file`,
-    );
-  }
-
-  if (folderIsFsmJsonFile) {
-    // fsm.json already exists (folder points straight at it) — skip
-    // generateFsmJSONFromMachineFile entirely and run only the remaining two
-    // steps against the provided file, mirroring generate-async-logic/
-    // generate-sync-logic's own single-fsm.json mode.
-    const versionFolderPath = resolvePluginRootAbsPath(output!);
-    // fsm.json is expected at the conventional <pluginRoot>/<fsmName>/<version>
-    // depth (same assumption generateAsyncOperationLogicFromFsmJson's own
-    // realPluginRootAbsPath derivation makes) -- both generate-async-logic's
-    // and generate-sync-logic's single-file modes need fsmName/fsmVersion
-    // explicitly now, unlike --output, which can point anywhere.
-    const absFsmJsonPath = folder.startsWith("/")
-      ? folder
-      : `${Deno.cwd()}/${folder}`;
-    const absFsmJsonDir = absFsmJsonPath.substring(
-      0,
-      absFsmJsonPath.lastIndexOf("/"),
-    );
-    const fsmIdentity = fsmIdentityFromVersionFolderPath(absFsmJsonDir);
-    logger.info(
-      "--folder is an fsm.json file: skipping generate-fsm-json and writing async-worker/ + sync-worker/ under {versionFolderPath}",
-      { versionFolderPath },
-    );
-    await generateAsyncOperationLogicFromFsmJson(
-      folder,
-      versionFolderPath,
-      fsmIdentity.fsmName,
-      fsmIdentity.fsmVersion,
-    );
-    await generateSyncOperationLogicFromFsmJson(
-      folder,
-      versionFolderPath,
-      fsmIdentity.fsmName,
-      fsmIdentity.fsmVersion,
-      langs,
-    );
-    return;
-  }
-
-  if (folderIsMachineTsFile) {
-    // Single-file mode: chain all three steps for just this one FSM version,
-    // output serving as the destination for every step alike (fsm.json/
-    // xstate-fsm.json, actor stubs + aggregate registry, sync stubs) — a
-    // step's failure here simply aborts (there's only one FSM, so there's
-    // nothing left for a later step to still succeed on).
+  if (folderIsFsmJsonFile || folderIsMachineTsFile) {
+    const { fsmName, fsmVersion } = options;
+    if (!fsmName || !fsmVersion) {
+      throw new Error(
+        `generate-all requires --fsm-name and --fsm-version when --folder is a single ${
+          folderIsFsmJsonFile ? "fsm.json" : "machine.ts"
+        } file`,
+      );
+    }
     const absPath = folder.startsWith("/") ? folder : `${Deno.cwd()}/${folder}`;
-    const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
-    const fsmIdentity = fsmIdentityFromVersionFolderPath(absDir);
-    const versionFolderPath = resolvePluginRootAbsPath(output!);
 
-    await generateFsmJSONFromMachineFile(
-      absDir,
-      fsmIdentity.fsmVersion,
-      showRecommendation,
-      versionFolderPath,
+    let fsmJsonPath: string;
+    if (folderIsMachineTsFile) {
+      const targetDir = await generateFsmJSONIntoFsmDir({
+        machineTsPath: absPath,
+        fsmName,
+        fsmVersion,
+        writeRootAbsPath,
+        showRecommendation,
+        force: options.force,
+      });
+      fsmJsonPath = `${targetDir}/fsm.json`;
+    } else {
+      // fsm.json already exists (folder points straight at it) — skip
+      // compiling entirely, just copy it into the fsm/ tree.
+      logger.info(
+        "--folder is an fsm.json file: skipping generate-fsm-json",
+      );
+      fsmJsonPath = await copyFsmJsonIntoFsmDir({
+        fsmJsonPath: absPath,
+        fsmName,
+        fsmVersion,
+        writeRootAbsPath,
+        force: options.force,
+      });
+    }
+
+    logger.info(
+      "Writing async-worker/ + sync-worker/ for {fsmName}/{fsmVersion} under {writeRootAbsPath}",
+      { fsmName, fsmVersion, writeRootAbsPath },
     );
-    const fsmJsonPath = `${versionFolderPath}/fsm.json`;
     await generateAsyncOperationLogicFromFsmJson(
       fsmJsonPath,
-      versionFolderPath,
-      fsmIdentity.fsmName,
-      fsmIdentity.fsmVersion,
+      writeRootAbsPath,
+      fsmName,
+      fsmVersion,
     );
     await generateSyncOperationLogicFromFsmJson(
       fsmJsonPath,
-      versionFolderPath,
-      fsmIdentity.fsmName,
-      fsmIdentity.fsmVersion,
+      writeRootAbsPath,
+      fsmName,
+      fsmVersion,
       langs,
     );
     return;
@@ -187,12 +185,6 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
   // doc-comment above for why each step's AggregateError is caught rather
   // than left to propagate immediately.
   const stepErrors: Error[] = [];
-
-  // Shared by the async- and sync-logic steps below: one level above --folder
-  // (the app root), matching the on-disk layout apps/fsm-core-example/ uses
-  // -- async-worker/ and sync-worker/ both sit beside the fsm/ plugin-root
-  // folder, not inside it.
-  const writeRootAbsPath = oneLevelUp(resolvePluginRootAbsPath(folder));
 
   try {
     await generateFsmJSONFromFolders(folder, skipDirs, showRecommendation);

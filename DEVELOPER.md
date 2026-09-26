@@ -74,9 +74,9 @@ Example :
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Source  | An existing XState 5 `machine.ts`                                                                                                                                                                                                                                                                                                                                                                                           | No XState source — hand-author `fsm.json` directly against the schema                                                                                                                 |
 | How     | Point the compiler at `machine.ts`; it emits `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                 | Author states, transitions, and `invoke` objects by hand, then validate against the schema with any JSON Schema validator, e.g. [`ajv-cli`](https://github.com/ajv-validator/ajv-cli) |
-| Command | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01`                                                                                                                                                                                                                            | `npx ajv-cli validate -s packages/database-src/fsm.machine.schema.v3.json -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json`                                                      |
+| Command | `deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts -N creditCheck -V v01` (writes `{cwd}/fsm/creditCheck/v01/`)                                                                                                                                                                                                                   | `npx ajv-cli validate -s packages/database-src/fsm.machine.schema.v3.json -d apps/fsm-core-example/fsm/creditCheck/v01/fsm.json`                                                      |
 | Steps   | 1. Export raw XState JSON → write `xstate-fsm.json`<br>2. Strip null entries from action arrays<br>3. Normalize string actions to `{ type }` objects<br>4. Set `actionName` from `delay` on raise/cancel actions<br>5. Fill in missing `fsmType`/`fsmVersion` on `invoke` (actor) entries<br>6. Write `fsm.json`<br>7. _(optional, `--show-recommendation`)_ validate `fsm.json` against the schema and log recommendations | None — you author `fsm.json` by hand, then run the `ajv-cli` command yourself                                                                                                         |
-| Output  | `fsm.json` + `xstate-fsm.json`                                                                                                                                                                                                                                                                                                                                                                                              | `fsm.json`                                                                                                                                                                            |
+| Output  | `fsm.json` + `xstate-fsm.json` in `{cwd}/fsm/<fsmName>/<fsmVersion>/`                                                                                                                                                                                                                                                                                                                                                       | `fsm.json`                                                                                                                                                                            |
 
 ---
 
@@ -109,20 +109,18 @@ See the compiler [TODO](./packages/fsm-compiler-ts/docs/todo/TODO.md) for both
 planned-gap items.
 
 Both `generate-sync-logic` and `generate-async-logic` always write to
-`Deno.cwd()`, never relative to `-f`/`--folder` or `-o`/`--output` — run both
-from **`apps/`** (see the table's own `Command` row above), so
-`sync-worker/`/`async-worker/` land there, siblings of `apps/fsm-core-example/`.
-Their `-f`/`--folder` also accepts a single `fsm.json` file (instead of only a
-plugin-root directory), in which case `-N`/`--fsm-name` and `-V`/`--fsm-version`
-are required — there's no `<fsmName>/<fsmVersion>/fsm.json` folder structure to
-infer identity from otherwise. `generate-async-logic` additionally refreshes the
-aggregate registry/worker SDK (`async-worker/<lang>/`, see the table above) in
-both `-f`/`--folder` shapes, written once per language at
-`async-worker/<lang>/`, refreshed from the real FSM tree's own walk.
-`generate-all` runs `generate-fsm-json`, then `generate-async-logic`, then
-`generate-sync-logic` in one invocation instead of three — it's the one
-exception that still uses `-o`/`--output` (single-file modes only) rather than
-`Deno.cwd()`. See
+`Deno.cwd()`, never relative to `-f`/`--folder` — run both from **`apps/`** (see
+the table's own `Command` row above), so `sync-worker/`/`async-worker/` land
+there, siblings of `apps/fsm-core-example/`. Their `-f`/`--folder` also accepts
+a single `fsm.json` file (instead of only a plugin-root directory), in which
+case `-N`/`--fsm-name` and `-V`/`--fsm-version` are required — there's no
+`<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from
+otherwise. `generate-async-logic` additionally refreshes the aggregate
+registry/worker SDK (`async-worker/<lang>/`, see the table above) in both
+`-f`/`--folder` shapes, written once per language at `async-worker/<lang>/`,
+refreshed from the real FSM tree's own walk. `generate-all` runs
+`generate-fsm-json`, then `generate-async-logic`, then `generate-sync-logic` in
+one invocation instead of three, and like them writes under `Deno.cwd()`. See
 [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md) for
 details and examples.
 

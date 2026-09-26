@@ -22,10 +22,9 @@ npm install -g @pgfsm/compiler   # for a global `fsm-compiler` command
 ## Usage
 
 Run `npx @pgfsm/compiler --help` for the full flag reference. Every command
-below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
-`generate-fsm-json`/`generate-all` — applies the same rule to that path: it must
-**not** start with `.` (use a bare relative path like `fsm`, or an absolute path
-— not `./fsm`) and must **not** end with `/`.
+below that takes `-f`/`--folder` for a directory applies the same rule to that
+path: it must **not** start with `.` (use a bare relative path like `fsm`, or an
+absolute path — not `./fsm`) and must **not** end with `/`.
 
 ### `generate-fsm-json` — compile `fsm.json` from a state machine definition
 
@@ -37,20 +36,25 @@ below that takes `-f`/`--folder` for a directory — and `-o`/`--output`, for
   folders without a `machine.ts` are skipped, not an error.
 - A **single `.ts` file path** — only its containing directory is read from;
   that directory must contain a file literally named `machine.ts` (the filename
-  you pass is only used to locate the directory). The version name (used when
-  filling in missing `asyncOperationVersion` on invoke actors) is taken from
-  that directory's own name, e.g. `.../creditCheck/v01/machine.ts` → `v01`.
-  Requires `-o`/`--output`, the version folder to write `fsm.json`/
-  `xstate-fsm.json` into: a relative (resolved against the current working
-  directory) or absolute path, unrelated to `--folder`'s own location — it does
-  not need to be, and is not derived from, machine.ts's containing directory.
+  you pass is only used to locate the directory). Requires `-N`/`--fsm-name` and
+  `-V`/`--fsm-version`; neither is guessed from the file's folders. The
+  `machine.ts` is compiled from where it is (so its imports still resolve), and
+  only if compilation succeeds are `fsm.json`/`xstate-fsm.json` written to
+  `{cwd}/fsm/<fsmName>/<fsmVersion>/`. `machine.ts` itself is not copied, so
+  that folder holds build output unless the `machine.ts` already lives there
+  (then it's an in-place compile). `-V` also fills in missing
+  `asyncOperationVersion` on invoke actors. If that folder's existing `fsm.json`
+  belongs to a different machine `id`, the command refuses unless `--force` is
+  passed (only as strong as the ids: machines left at xstate's default
+  `(machine)` id all match). There is no `--output`.
 
 Other flags: `-s`/`--skip-dirs` (comma-separated FSM names to skip, directory
 mode only), `-r`/`--show-recommendation` (also validates the generated
 `fsm.json` against the FSM JSON schema and logs any errors — doesn't change
 what's written).
 
-**Output** — per version folder:
+**Output** — per version folder (in place in directory mode;
+`{cwd}/fsm/<fsmName>/<fsmVersion>/` for a single `.ts` file):
 
 - `xstate-fsm.json` — the machine's raw XState-exported JSON
 - `fsm.json` — that JSON normalized (actions coerced to `{ type }` objects,
@@ -61,7 +65,7 @@ what's written).
 ```bash
 npx @pgfsm/compiler -c generate-fsm-json -f fsm
 npx @pgfsm/compiler -c generate-fsm-json -f fsm --skip-dirs carVitals
-npx @pgfsm/compiler -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+cd my-app && npx @pgfsm/compiler -c generate-fsm-json -f ~/designs/checkout/machine.ts -N checkout -V v01   # → my-app/fsm/checkout/v01/
 ```
 
 The full `fsm.json` spec (states, transitions, guards, actions, actors, delays)
@@ -71,19 +75,17 @@ is documented in
 ### `generate-sync-logic` — scaffold action/guard/delay stubs
 
 Reads a version folder's `fsm.json`, so `generate-fsm-json` must have already
-run. Unlike every other command here, output is never written relative to
-`--folder` or `--output` — it's always anchored at `Deno.cwd()` (wherever the
-CLI is invoked from), so `cd` into the directory you want `sync-worker/` to land
-in before running it.
+run. Output is never written relative to `--folder` — it's always anchored at
+`Deno.cwd()` (wherever the CLI is invoked from), so `cd` into the directory you
+want `sync-worker/` to land in before running it.
 
 **Input** — `-f`/`--folder` accepts either:
 
 - A **plugin-root directory** — every version folder under it is scaffolded.
 - A **single `fsm.json` file path** — only that one version's stubs are
-  scaffolded. Requires `-N`/`--fsm-name` and `-V`/`--fsm-version` (there's no
-  `--output`, so — unlike `generate-async-logic`'s single-file mode — there's no
-  `<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from
-  either; mirrors `validate-sync-operation`'s own single-file-mode flags).
+  scaffolded. Requires `-N`/`--fsm-name` and `-V`/`--fsm-version` — identity is
+  never inferred from the file's folders (mirrors `validate-sync-operation`'s
+  own single-file-mode flags).
 
 `-l`/`--lang`: comma-separated `typescript,python,rust,go` (default
 `typescript`). `-s`/`--skip-dirs`: directory mode only.
@@ -124,19 +126,18 @@ npx @pgfsm/compiler -c generate-sync-logic -f fsm/creditCheck/v01/fsm.json --fsm
 
 Reads a version folder's `fsm.json` (every `invoke` object), so
 `generate-fsm-json` must have already run. Like `generate-sync-logic`, output is
-never written relative to `--folder` or `--output` — it's always anchored at
-`Deno.cwd()` (wherever the CLI is invoked from), so `cd` into the directory you
-want `async-worker/` to land in before running it.
+never written relative to `--folder` — it's always anchored at `Deno.cwd()`
+(wherever the CLI is invoked from), so `cd` into the directory you want
+`async-worker/` to land in before running it.
 
 **Input** — `-f`/`--folder` accepts either:
 
 - A **plugin-root directory** — every version folder under it is scaffolded.
 - A **single `fsm.json` file path** — only that one version's actor
   files/manifest/barrel/registry are scaffolded. Requires `-N`/`--fsm-name` and
-  `-V`/`--fsm-version` (there's no `--output`, so there's no
-  `<fsmName>/<fsmVersion>/fsm.json` folder structure to infer identity from
-  either; mirrors `generate-sync-logic`/`validate-sync-operation`'s own
-  single-file-mode flags).
+  `-V`/`--fsm-version` — identity is never inferred from the file's folders;
+  mirrors `generate-sync-logic`/`validate-sync-operation`'s own single-file-mode
+  flags).
 
 `-s`/`--skip-dirs`: directory mode only.
 
@@ -191,35 +192,35 @@ invocation instead of three. Accepts three input shapes:
   stopping (same as running the three commands separately would); one FSM's
   failure in an earlier step doesn't block the next step from still running for
   whichever FSMs did succeed. The command still exits non-zero if anything
-  failed anywhere. Unlike the standalone `generate-sync-logic`/
-  `generate-async-logic` commands (always `Deno.cwd()`), `generate-all`'s own
-  async-/sync-logic steps write to
-  `<appRoot>/async-worker/typescript/<fsmName>/<fsmVersion>/`/
-  `<appRoot>/sync-worker/typescript/<fsmName>/<fsmVersion>/` — the app root, one
-  level above `--folder`.
+  failed anywhere.
 - **Single `.ts` file** — chains all three steps for just that one FSM version.
-  Requires `-o`/`--output`, which serves `fsm.json`/`xstate-fsm.json`; the actor
-  stubs + aggregate registry and the sync stubs also write under `--output`, but
-  nested `async-worker/typescript/<fsmName>/<fsmVersion>/`/
-  `sync-worker/typescript/<fsmName>/<fsmVersion>/` deep rather than directly
-  into it (`<fsmName>`/`<fsmVersion>` derived from `--output`'s own path). As
-  with `generate-async-logic`'s own aggregate step, `--output` should sit at the
-  conventional `<pluginRoot>/<fsmName>/<version>` depth so both that step and
-  this identity derivation work.
+  `fsm.json`/`xstate-fsm.json` go to `{cwd}/fsm/<fsmName>/<fsmVersion>/`,
+  exactly as `generate-fsm-json` does for a single `.ts` file.
 - **Single `fsm.json` file** — the `fsm.json` already exists, so
-  `generate-fsm-json` is skipped entirely; only `generate-async-logic` and
-  `generate-sync-logic` run against it, same as passing that `fsm.json` to
-  either of those commands individually (`fsm.json`'s own location must sit at
-  the same conventional depth for both commands' identity derivation to work).
-  Also requires `-o`/`--output`.
+  `generate-fsm-json` is skipped; the file is copied to
+  `{cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json` (same machine-`id` guard and
+  `--force`) and `generate-async-logic`/`generate-sync-logic` run against it.
+
+Either way the current directory ends up with `fsm/`, `sync-worker/` and
+`async-worker/`, and a later `generate-all -f fsm` from there rebuilds it all
+without pointing back at the original file.
+
+In every mode, `async-worker/` and `sync-worker/` land under the current working
+directory — the same anchor as `generate-sync-logic`/`generate-async-logic` — so
+run it from your app root. There is no `--output`. Both single-file modes
+require `-N`/`--fsm-name` and `-V`/`--fsm-version`, like the standalone
+commands' single-`fsm.json` mode. They are never guessed from the file's parent
+folders: `-f a/fsm.json` would otherwise silently become `<cwd's name>/a`.
 
 `-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1), and `-l`/`--lang`
 (step 3) all apply, same as the individual commands.
 
 ```bash
-npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm
-npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
-npx @pgfsm/compiler -c generate-all -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --output apps/fsm-core-example/fsm/creditCheck/v01
+cd apps/fsm-core-example
+npx @pgfsm/compiler -c generate-all -f fsm
+npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/machine.ts -N creditCheck -V v01
+npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/fsm.json -N creditCheck -V v01
+npx @pgfsm/compiler -c generate-all -f ~/Downloads/checkout.json -N checkout -V v01
 ```
 
 ### `create-async-logic` — scaffold one actor outside any FSM's `invoke` list
@@ -331,8 +332,8 @@ import type { OperationLang, WorkflowType } from "@pgfsm/compiler";
 `generateAsyncOperationLogicFromFolders`'s 3rd parameter, `writeRootAbsPath`, is
 required — a pure write destination for the aggregate registry/worker SDK (see
 the CLI section above for what it does and doesn't control). The CLI itself has
-no dedicated flag for it: it passes `--folder`'s own value in directory mode, or
-`--output`'s in single-file mode.
+no dedicated flag for it: it always passes `Deno.cwd()`. `generateAll` takes the
+same value as its `writeRootAbsPath` option.
 
 The REST API and workers use these at startup to discover and validate FSM
 plugins before accepting requests.
