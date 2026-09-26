@@ -46,7 +46,7 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   assert(aggregateContent.includes("creditcheck_v01"));
 });
 
-Deno.test("generateAll - single machine.ts file mode writes fsm.json next to machine.ts and stubs + aggregate under writeRootAbsPath", async () => {
+Deno.test("generateAll - single machine.ts file mode writes fsm.json to <writeRoot>/fsm/<N>/<V>/ and stubs + aggregate under writeRootAbsPath", async () => {
   const versionDir = `${FIXTURE_ROOT}/single-machine/fsm/checkout/v02`;
   await Deno.mkdir(versionDir, { recursive: true });
   await copy(
@@ -61,7 +61,12 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json next to mac
     fsmVersion: "v02",
   });
 
-  assert(await pathExists(`${versionDir}/fsm.json`));
+  assert(await pathExists(`${writeRoot}/fsm/checkout/v02/fsm.json`));
+  assert(await pathExists(`${writeRoot}/fsm/checkout/v02/xstate-fsm.json`));
+  assertEquals(
+    await pathExists(`${writeRoot}/fsm/checkout/v02/machine.ts`),
+    false,
+  );
   assert(
     await pathExists(
       `${writeRoot}/async-worker/typescript/checkout/v02/actors/verifyCredentials/verifyCredentials.ts`,
@@ -89,6 +94,7 @@ Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and w
   });
 
   assertEquals(await pathExists(`${writeRoot}/fsm.json`), false);
+  assert(await pathExists(`${writeRoot}/fsm/creditCheck/v01/fsm.json`));
 
   const actorStat = await Deno.stat(
     `${writeRoot}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,

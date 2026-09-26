@@ -307,30 +307,27 @@ export function addMissingAsyncOperationTypeToInvokeActors(
   return { fulljson: clone, childActorsInfo };
 }
 
+interface CompiledMachine {
+  /** Raw `machine.toJSON()` output, written as xstate-fsm.json. */
+  xstateFsmJSON: AnyStateNodeDefinition;
+  /** The fully normalized fsm.json content. */
+  fsmJSON: ReturnType<
+    typeof addMissingAsyncOperationTypeToInvokeActors
+  >["fulljson"];
+}
+
 /**
- * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
- * and writes fsm.json + xstate-fsm.json into absOutputFolderPath (defaults to
- * absFolderPath itself, alongside machine.ts).
- *
- * A missing machine.ts is the one expected, non-fatal outcome — logged and
- * returned normally, since {@linkcode generateFsmJSONFromFolders} calls this
- * for every versioned subdirectory it walks and version folders without a
- * machine.ts are meant to be skipped, not treated as an error. Every other
- * failure (bad/missing export, invalid machine config, import or write
- * failure) throws instead of being logged and swallowed — see #214: a
- * swallowed error here previously let the CLI report "completed
- * successfully" with exit 0 even when nothing was actually written.
- * @param absFolderPath Absolute path to the versioned FSM directory containing machine.ts (e.g. /…/creditCheck/v01)
- * @param version Version string (e.g. "v01") used when filling in missing asyncOperationVersion on invoke actors
- * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
- * @param absOutputFolderPath Where fsm.json/xstate-fsm.json get written — independent of absFolderPath, which is only ever read from. Defaults to absFolderPath.
+ * Imports `<absFolderPath>/machine.ts` and runs the full (pure) compilation
+ * pipeline in memory, writing nothing. Returns `undefined` when machine.ts is
+ * missing — the one expected, non-fatal outcome (see
+ * {@linkcode generateFsmJSONFromMachineFile}); every other failure throws.
+ * Importing from machine.ts's own location (never a copy) is what keeps its
+ * bare/relative imports resolving.
  */
-export async function generateFsmJSONFromMachineFile(
+async function compileMachineFile(
   absFolderPath: string,
   version: string,
-  showRecommendation: boolean = false,
-  absOutputFolderPath: string = absFolderPath,
-) {
+): Promise<CompiledMachine | undefined> {
   const machineTsPath = `${absFolderPath}/machine.ts`;
 
   try {
@@ -338,7 +335,7 @@ export async function generateFsmJSONFromMachineFile(
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       logger.info("machine.ts is missing in {path}", { path: absFolderPath });
-      return;
+      return undefined;
     }
     throw err;
   }
@@ -365,17 +362,8 @@ export async function generateFsmJSONFromMachineFile(
     );
   }
 
-  // absOutputFolderPath can be an arbitrary, possibly-nonexistent path (e.g.
-  // a fresh --output) unlike absFolderPath, which by definition already
-  // exists (machine.ts was just read from it).
-  await Deno.mkdir(absOutputFolderPath, { recursive: true });
-
-  // step 1 — export raw XState JSON and write xstate-fsm.json
+  // step 1 — export raw XState JSON (written as xstate-fsm.json)
   const xstateFsmJSON: AnyStateNodeDefinition = machineConfig.toJSON();
-  writeFileSync(
-    `${absOutputFolderPath}/xstate-fsm.json`,
-    JSON.stringify(xstateFsmJSON, null, 2) + "\n",
-  );
 
   // step 2 — removeNullActions (pure): strip null entries from all action arrays
   const cleanedJSON = removeNullActions(xstateFsmJSON);
@@ -392,13 +380,30 @@ export async function generateFsmJSONFromMachineFile(
     version,
   );
 
-  // step 6 — write fsm.json
+  return { xstateFsmJSON, fsmJSON };
+}
+
+/**
+ * Writes a compiled machine's xstate-fsm.json + fsm.json into
+ * `absOutputFolderPath` (created if missing), then optionally validates
+ * fsm.json against the machine schema.
+ */
+async function writeCompiledMachine(
+  compiled: CompiledMachine,
+  absOutputFolderPath: string,
+  showRecommendation: boolean,
+): Promise<void> {
+  const { xstateFsmJSON, fsmJSON } = compiled;
+  await Deno.mkdir(absOutputFolderPath, { recursive: true });
+  writeFileSync(
+    `${absOutputFolderPath}/xstate-fsm.json`,
+    JSON.stringify(xstateFsmJSON, null, 2) + "\n",
+  );
   writeFileSync(
     `${absOutputFolderPath}/fsm.json`,
     JSON.stringify(fsmJSON, null, 2) + "\n",
   );
 
-  // step 7 — (optional) validate fsm.json against schema and show recommendations
   if (showRecommendation) {
     const ajv = new Ajv({ allErrors: true, strict: true, verbose: true });
     const validate = ajv.compile(machineSchema);
@@ -415,6 +420,182 @@ export async function generateFsmJSONFromMachineFile(
       );
     }
   }
+}
+
+/**
+ * Reads machine.ts from absFolderPath, runs the full FSM compilation pipeline,
+ * and writes fsm.json + xstate-fsm.json into absOutputFolderPath (defaults to
+ * absFolderPath itself, alongside machine.ts). Nothing is written unless the
+ * whole pipeline succeeds.
+ *
+ * A missing machine.ts is the one expected, non-fatal outcome — logged and
+ * returned normally, since {@linkcode generateFsmJSONFromFolders} calls this
+ * for every versioned subdirectory it walks and version folders without a
+ * machine.ts are meant to be skipped, not treated as an error. Every other
+ * failure (bad/missing export, invalid machine config, import or write
+ * failure) throws instead of being logged and swallowed — see #214: a
+ * swallowed error here previously let the CLI report "completed
+ * successfully" with exit 0 even when nothing was actually written.
+ * @param absFolderPath Absolute path to the versioned FSM directory containing machine.ts (e.g. /…/creditCheck/v01)
+ * @param version Version string (e.g. "v01") used when filling in missing asyncOperationVersion on invoke actors
+ * @param showRecommendation When true, validates fsm.json against the machine schema and logs issues
+ * @param absOutputFolderPath Where fsm.json/xstate-fsm.json get written — independent of absFolderPath, which is only ever read from. Defaults to absFolderPath.
+ */
+export async function generateFsmJSONFromMachineFile(
+  absFolderPath: string,
+  version: string,
+  showRecommendation: boolean = false,
+  absOutputFolderPath: string = absFolderPath,
+) {
+  const compiled = await compileMachineFile(absFolderPath, version);
+  if (!compiled) return;
+  await writeCompiledMachine(compiled, absOutputFolderPath, showRecommendation);
+}
+
+/** Name of the plugin-root directory single-file mode writes under (#376). */
+export const FSM_DIR_NAME = "fsm";
+
+/** `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>` — single-file mode's target (#376). */
+export function fsmVersionDirAbsPath(
+  writeRootAbsPath: string,
+  fsmName: string,
+  fsmVersion: string,
+): string {
+  return `${writeRootAbsPath}/${FSM_DIR_NAME}/${fsmName}/${fsmVersion}`;
+}
+
+/**
+ * Refuses to replace `<targetDir>/fsm.json` with one for a different machine
+ * `id`, unless `force` — `-N`/`-V` pointing at another FSM's version folder
+ * is almost certainly a typo. Same-id replacement is the normal "machine.ts
+ * edited, recompile" flow and always allowed. Only as strong as the ids
+ * themselves: machines left at xstate's default id `(machine)` all match.
+ */
+async function assertSameMachineIdOrForce(
+  targetDir: string,
+  newId: unknown,
+  force: boolean,
+): Promise<void> {
+  if (force) return;
+  let existingId: unknown;
+  try {
+    existingId = JSON.parse(
+      await Deno.readTextFile(`${targetDir}/fsm.json`),
+    )?.id;
+  } catch (err) {
+    if (err instanceof Deno.errors.NotFound) return;
+    throw err;
+  }
+  if (existingId !== newId) {
+    throw new Error(
+      `${targetDir}/fsm.json belongs to machine id ${
+        JSON.stringify(existingId)
+      }, not ${
+        JSON.stringify(newId)
+      }. Pick another --fsm-name/--fsm-version, or pass --force to overwrite it.`,
+    );
+  }
+}
+
+export interface GenerateFsmJsonIntoFsmDirOptions {
+  /** Path to a machine.ts file (relative to `Deno.cwd()`, or absolute). */
+  machineTsPath: string;
+  fsmName: string;
+  /** Version folder name (e.g. `v01`); also fills in missing `asyncOperationVersion`. */
+  fsmVersion: string;
+  /** Root `fsm/<fsmName>/<fsmVersion>/` is created under — the CLI passes `Deno.cwd()`. */
+  writeRootAbsPath: string;
+  showRecommendation?: boolean;
+  /** Overwrite a target fsm.json that belongs to a different machine id. */
+  force?: boolean;
+}
+
+/**
+ * Single machine.ts mode of generate-fsm-json (#376): compiles machine.ts
+ * from its own location, and only once the whole pipeline succeeds writes
+ * fsm.json + xstate-fsm.json into
+ * `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/`. machine.ts itself is never
+ * copied — a copy could no longer resolve its imports — so that folder holds
+ * build output unless machine.ts already lives there (then this is simply an
+ * in-place compile). Returns the target folder.
+ */
+export async function generateFsmJSONIntoFsmDir(
+  options: GenerateFsmJsonIntoFsmDirOptions,
+): Promise<string> {
+  const {
+    machineTsPath,
+    fsmName,
+    fsmVersion,
+    writeRootAbsPath,
+    showRecommendation = false,
+    force = false,
+  } = options;
+  const absPath = machineTsPath.startsWith("/")
+    ? machineTsPath
+    : `${Deno.cwd()}/${machineTsPath}`;
+  const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
+
+  const compiled = await compileMachineFile(absDir, fsmVersion);
+  if (!compiled) {
+    throw new Error(`machine.ts not found in ${absDir}`);
+  }
+  const targetDir = fsmVersionDirAbsPath(writeRootAbsPath, fsmName, fsmVersion);
+  await assertSameMachineIdOrForce(targetDir, compiled.fsmJSON.id, force);
+  await writeCompiledMachine(compiled, targetDir, showRecommendation);
+  logger.info("Wrote fsm.json + xstate-fsm.json to {targetDir}", {
+    targetDir,
+  });
+  return targetDir;
+}
+
+export interface CopyFsmJsonIntoFsmDirOptions {
+  /** Path to an existing fsm.json (relative to `Deno.cwd()`, or absolute). */
+  fsmJsonPath: string;
+  fsmName: string;
+  fsmVersion: string;
+  writeRootAbsPath: string;
+  force?: boolean;
+}
+
+/**
+ * Copies an existing fsm.json into `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/fsm.json`
+ * (generate-all's single-fsm.json mode, #376) so a later folder-mode run from
+ * the same root regenerates from it. A no-op when the file already is that
+ * target. Same machine-id guard as {@linkcode generateFsmJSONIntoFsmDir}.
+ * Returns the target fsm.json path.
+ */
+export async function copyFsmJsonIntoFsmDir(
+  options: CopyFsmJsonIntoFsmDirOptions,
+): Promise<string> {
+  const { fsmJsonPath, fsmName, fsmVersion, writeRootAbsPath, force = false } =
+    options;
+  const targetDir = fsmVersionDirAbsPath(writeRootAbsPath, fsmName, fsmVersion);
+  const targetPath = `${targetDir}/fsm.json`;
+
+  const sourceReal = await Deno.realPath(fsmJsonPath);
+  let targetReal: string | undefined;
+  try {
+    targetReal = await Deno.realPath(targetPath);
+  } catch (err) {
+    if (!(err instanceof Deno.errors.NotFound)) throw err;
+  }
+  if (sourceReal === targetReal) return targetPath;
+
+  const content = await Deno.readTextFile(sourceReal);
+  let id: unknown;
+  try {
+    id = JSON.parse(content)?.id;
+  } catch (err) {
+    throw new Error(`${fsmJsonPath} is not valid JSON`, { cause: err });
+  }
+  await assertSameMachineIdOrForce(targetDir, id, force);
+  await Deno.mkdir(targetDir, { recursive: true });
+  await Deno.writeTextFile(targetPath, content);
+  logger.info("Copied {source} to {targetPath}", {
+    source: fsmJsonPath,
+    targetPath,
+  });
+  return targetPath;
 }
 
 async function generateFsmJSONFromFolder(

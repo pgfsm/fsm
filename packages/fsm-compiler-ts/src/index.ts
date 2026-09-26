@@ -2,9 +2,17 @@ export { configureCompilerLogger, type LogLevel } from "./logger.ts";
 export {
   addActionNameFromDelay,
   addMissingAsyncOperationTypeToInvokeActors,
+  copyFsmJsonIntoFsmDir,
+  FSM_DIR_NAME,
+  fsmVersionDirAbsPath,
   generateFsmJSONFromFolders,
   generateFsmJSONFromMachineFile,
+  generateFsmJSONIntoFsmDir,
   normalizeActionsToObjects,
+} from "./generate-fsm-json.ts";
+export type {
+  CopyFsmJsonIntoFsmDirOptions,
+  GenerateFsmJsonIntoFsmDirOptions,
 } from "./generate-fsm-json.ts";
 export {
   generateAsyncOperationLogicFromFolders,

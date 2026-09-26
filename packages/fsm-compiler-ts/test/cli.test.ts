@@ -135,53 +135,161 @@ Deno.test("cli generate-fsm-json with -r shorthand exits 0", async () => {
   assertEquals(code, 0);
 });
 
-// --- generate-fsm-json single-machine.ts-file (--output) mode ---
+// --- generate-fsm-json single-machine.ts-file mode ({cwd}/fsm/<N>/<V>/, #376) ---
 
-Deno.test("cli generate-fsm-json requires --output when --folder is a single machine.ts file", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "generate-fsm-json",
-    "-f",
-    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
-  ]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "requires --output");
+// A machine.ts outside any fsm/ tree, at a path whose folder names are NOT a
+// valid <fsmName>/<fsmVersion> -- guessing identity from it would be wrong.
+const LOOSE_MACHINE_DIR = `${FIXTURE_ROOT}/designs/a`;
+await Deno.mkdir(LOOSE_MACHINE_DIR, { recursive: true });
+await copy(
+  `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
+  `${LOOSE_MACHINE_DIR}/machine.ts`,
+);
+
+Deno.test("cli generate-fsm-json requires --fsm-name and --fsm-version for a single machine.ts", async () => {
+  const cwd = `${FIXTURE_ROOT}/gen-fsm-json-no-identity`;
+  await Deno.mkdir(cwd, { recursive: true });
+  for (const extra of [[], ["-N", "checkout"], ["-V", "v01"]]) {
+    const { code, stderr } = await runCli(
+      [
+        "-c",
+        "generate-fsm-json",
+        "-f",
+        `${LOOSE_MACHINE_DIR}/machine.ts`,
+        ...extra,
+      ],
+      undefined,
+      cwd,
+    );
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "requires --fsm-name and --fsm-version");
+  }
+  assertEquals(await pathExists(`${cwd}/fsm`), false);
 });
 
-Deno.test("cli generate-fsm-json --folder machine.ts + --output creates --output (even nested/nonexistent) and writes fsm.json/xstate-fsm.json into it", async () => {
-  const outDir = `${FIXTURE_ROOT}/generate-single-file-fresh-output/nested/v04`;
-  const { code } = await runCli([
-    "-c",
-    "generate-fsm-json",
-    "-f",
-    `${FSM_FOLDER}/creditCheck/v01/machine.ts`,
-    "--output",
-    outDir,
-  ]);
+Deno.test("cli generate-fsm-json single machine.ts writes fsm.json + xstate-fsm.json to {cwd}/fsm/<N>/<V>/ and leaves machine.ts in place", async () => {
+  const cwd = `${FIXTURE_ROOT}/gen-fsm-json-cwd`;
+  await Deno.mkdir(cwd, { recursive: true });
+  const { code } = await runCli(
+    [
+      "-c",
+      "generate-fsm-json",
+      "-f",
+      `${LOOSE_MACHINE_DIR}/machine.ts`,
+      "-N",
+      "checkout",
+      "-V",
+      "v04",
+    ],
+    undefined,
+    cwd,
+  );
   assertEquals(code, 0);
-  const fsmJsonStat = await Deno.stat(`${outDir}/fsm.json`);
-  assert(fsmJsonStat.isFile);
-  const xstateFsmJsonStat = await Deno.stat(`${outDir}/xstate-fsm.json`);
-  assert(xstateFsmJsonStat.isFile);
+  const target = `${cwd}/fsm/checkout/v04`;
+  assert(await pathExists(`${target}/fsm.json`));
+  assert(await pathExists(`${target}/xstate-fsm.json`));
+  // machine.ts is not copied, and nothing is written next to the source.
+  assertEquals(await pathExists(`${target}/machine.ts`), false);
+  assertEquals(await pathExists(`${LOOSE_MACHINE_DIR}/fsm.json`), false);
+  // -V fills in asyncOperationVersion, not the source folder name "a".
+  const fsmJson = await Deno.readTextFile(`${target}/fsm.json`);
+  assertStringIncludes(fsmJson, `"asyncOperationVersion": "v04"`);
+  assertEquals(fsmJson.includes(`"asyncOperationVersion": "a"`), false);
 });
 
-Deno.test("cli generate-fsm-json exits 1 (not 0) when machine.ts's export is not a valid xstate machine config (#214)", async () => {
+Deno.test("cli generate-fsm-json single machine.ts already inside {cwd}/fsm/<N>/<V>/ compiles in place", async () => {
+  const cwd = `${FIXTURE_ROOT}/gen-fsm-json-in-place`;
+  const versionDir = `${cwd}/fsm/checkout/v01`;
+  await Deno.mkdir(versionDir, { recursive: true });
+  await copy(`${LOOSE_MACHINE_DIR}/machine.ts`, `${versionDir}/machine.ts`);
+  const { code } = await runCli(
+    [
+      "-c",
+      "generate-fsm-json",
+      "-f",
+      "fsm/checkout/v01/machine.ts",
+      "-N",
+      "checkout",
+      "-V",
+      "v01",
+    ],
+    undefined,
+    cwd,
+  );
+  assertEquals(code, 0);
+  assert(await pathExists(`${versionDir}/fsm.json`));
+  assert(await pathExists(`${versionDir}/machine.ts`));
+});
+
+Deno.test("cli generate-fsm-json refuses to overwrite a different machine id's fsm.json unless --force", async () => {
+  const cwd = `${FIXTURE_ROOT}/gen-fsm-json-id-guard`;
+  const target = `${cwd}/fsm/checkout/v01`;
+  await Deno.mkdir(target, { recursive: true });
+  const foreign = JSON.stringify({ id: "someOtherMachine" }) + "\n";
+  await Deno.writeTextFile(`${target}/fsm.json`, foreign);
+  const argv = [
+    "-c",
+    "generate-fsm-json",
+    "-f",
+    `${LOOSE_MACHINE_DIR}/machine.ts`,
+    "-N",
+    "checkout",
+    "-V",
+    "v01",
+  ];
+
+  const refused = await runCli(argv, undefined, cwd);
+  assertEquals(refused.code, 1);
+  assertStringIncludes(refused.stderr, "--force");
+  assertEquals(await Deno.readTextFile(`${target}/fsm.json`), foreign);
+  assertEquals(await pathExists(`${target}/xstate-fsm.json`), false);
+
+  const forced = await runCli([...argv, "--force"], undefined, cwd);
+  assertEquals(forced.code, 0);
+  assert((await Deno.readTextFile(`${target}/fsm.json`)) !== foreign);
+});
+
+Deno.test("cli rejects --output for every command", async () => {
+  for (
+    const argv of [
+      ["-c", "generate-fsm-json", "-f", `${LOOSE_MACHINE_DIR}/machine.ts`],
+      ["-c", "generate-all", "-f", SINGLE_FSM_JSON],
+    ]
+  ) {
+    const out = `${FIXTURE_ROOT}/rejected-output`;
+    const { code, stderr } = await runCli([...argv, "--output", out]);
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "--output is no longer supported");
+    assertEquals(await pathExists(out), false);
+  }
+});
+
+Deno.test("cli generate-fsm-json exits 1 (not 0) and writes nothing when machine.ts's export is not a valid xstate machine config (#214)", async () => {
   const brokenDir = `${FIXTURE_ROOT}/broken-machine-single-file`;
   await Deno.mkdir(brokenDir, { recursive: true });
   await Deno.writeTextFile(
     `${brokenDir}/machine.ts`,
     "export default { notAMachine: true };\n",
   );
-  const { code, stderr } = await runCli([
-    "-c",
-    "generate-fsm-json",
-    "-f",
-    `${brokenDir}/machine.ts`,
-    "--output",
-    `${FIXTURE_ROOT}/broken-machine-single-file-output`,
-  ]);
+  const cwd = `${FIXTURE_ROOT}/broken-machine-single-file-cwd`;
+  await Deno.mkdir(cwd, { recursive: true });
+  const { code, stderr } = await runCli(
+    [
+      "-c",
+      "generate-fsm-json",
+      "-f",
+      `${brokenDir}/machine.ts`,
+      "-N",
+      "broken",
+      "-V",
+      "v01",
+    ],
+    undefined,
+    cwd,
+  );
   assertEquals(code, 1);
   assertStringIncludes(stderr, "not a valid xstate machine config");
+  assertEquals(await pathExists(`${cwd}/fsm`), false);
 });
 
 // --- generate-async-logic / generate-sync-logic ---
@@ -544,24 +652,7 @@ for (
   });
 }
 
-Deno.test("cli generate-all rejects --output", async () => {
-  const { code, stderr } = await runCli([
-    "-c",
-    "generate-all",
-    "-f",
-    SINGLE_FSM_JSON,
-    "--output",
-    `${FIXTURE_ROOT}/generate-all-rejected-output`,
-  ]);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "no longer accepts --output");
-  assertEquals(
-    await pathExists(`${FIXTURE_ROOT}/generate-all-rejected-output`),
-    false,
-  );
-});
-
-Deno.test("cli generate-all machine.ts mode writes fsm.json next to machine.ts and workers under cwd", async () => {
+Deno.test("cli generate-all machine.ts mode writes fsm.json to {cwd}/fsm/<N>/<V>/ and workers under cwd", async () => {
   const versionDir = `${FIXTURE_ROOT}/generate-all-machine-ts/fsm/checkout/v02`;
   await Deno.mkdir(versionDir, { recursive: true });
   await copy(
@@ -586,8 +677,9 @@ Deno.test("cli generate-all machine.ts mode writes fsm.json next to machine.ts a
     cwd,
   );
   assertEquals(code, 0);
-  assert(await pathExists(`${versionDir}/fsm.json`));
-  assert(await pathExists(`${versionDir}/xstate-fsm.json`));
+  assert(await pathExists(`${cwd}/fsm/checkout/v02/fsm.json`));
+  assert(await pathExists(`${cwd}/fsm/checkout/v02/xstate-fsm.json`));
+  assertEquals(await pathExists(`${versionDir}/fsm.json`), false);
   assert(
     await pathExists(
       `${cwd}/async-worker/typescript/checkout/v02/actors/verifyCredentials/verifyCredentials.ts`,
@@ -655,7 +747,12 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
   );
   assertEquals(code, 0);
   assertStringIncludes(stdout, "skipping generate-fsm-json");
-  // The fsm.json at --folder is used as-is -- nothing is written into cwd.
+  // The given fsm.json is copied into {cwd}/fsm/<N>/<V>/ (#376), so a later
+  // `generate-all -f fsm` from cwd rebuilds without the original path.
+  assertEquals(
+    await Deno.readTextFile(`${cwd}/fsm/creditCheck/v01/fsm.json`),
+    await Deno.readTextFile(SINGLE_FSM_JSON),
+  );
   assertEquals(await pathExists(`${cwd}/fsm.json`), false);
 
   assert(
@@ -829,6 +926,25 @@ Deno.test("cli delete runs successfully on example folder", async () => {
   );
   assertEquals(code, 0);
   await runCli(["-c", "generate-fsm-json", "-f", FSM_FOLDER]); // restore generated files
+});
+
+Deno.test("cli delete keeps fsm.json (and its worker folders) in a version folder with no machine.ts", async () => {
+  const cwd = `${FIXTURE_ROOT}/delete-no-machine-ts`;
+  const versionDir = `${cwd}/fsm/checkout/v01`;
+  await Deno.mkdir(versionDir, { recursive: true });
+  await copy(SINGLE_FSM_JSON, `${versionDir}/fsm.json`);
+  const stubDir = `${cwd}/sync-worker/typescript/checkout/v01/actions`;
+  await Deno.mkdir(stubDir, { recursive: true });
+  await Deno.writeTextFile(`${stubDir}/index.ts`, "// user code\n");
+
+  const { code } = await runCli(
+    ["-c", "delete", "-f", "fsm"],
+    undefined,
+    cwd,
+  );
+  assertEquals(code, 0);
+  assert(await pathExists(`${versionDir}/fsm.json`));
+  assert(await pathExists(`${stubDir}/index.ts`));
 });
 
 // --- validate-sync-operation ---

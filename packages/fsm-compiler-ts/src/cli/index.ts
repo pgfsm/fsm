@@ -11,12 +11,11 @@ import {
   generateAsyncOperationLogicFromFolders,
   generateAsyncOperationLogicFromFsmJson,
   generateFsmJSONFromFolders,
-  generateFsmJSONFromMachineFile,
+  generateFsmJSONIntoFsmDir,
   generateSyncOperationLogicFromFolders,
   generateSyncOperationLogicFromFsmJson,
   isOperationLang,
   loadFsmJSONFromFolders,
-  resolvePluginRootAbsPath,
   SUPPORTED_OPERATION_LANGS,
   validateAsyncOperationFromFolders,
   validateSyncOperationFromFolders,
@@ -41,7 +40,7 @@ const args = parseArgs(Deno.args, {
     "function-version",
     "project-name",
   ],
-  boolean: ["help", "version", "show-recommendation"],
+  boolean: ["help", "version", "show-recommendation", "force"],
   alias: {
     h: "help",
     c: "command",
@@ -75,10 +74,10 @@ USAGE
   ${CLI_INVOCATION} -c <command> -f <folder> [options]
 
 COMMANDS
-  generate-fsm-json                   Generate fsm.json from a folder or a single machine.ts file (--output required for a single machine.ts file)
+  generate-fsm-json                   Generate fsm.json + xstate-fsm.json from a plugin-root folder (written in place, next to each machine.ts) or a single machine.ts file (--fsm-name/--fsm-version required; written to {cwd}/fsm/<fsmName>/<fsmVersion>/ only if compilation succeeds — machine.ts itself is not copied)
   generate-async-logic                Scaffold actor stubs (per invoke object's asyncOperationLanguage), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. The aggregate registry/worker SDK (TypeScript: run-async-worker.ts + deno.json importing @pgfsm/async-worker-sdk; Python: run_async_worker.py + pyproject.toml pinning pgfsm-async-worker-sdk; Rust: src/main.rs + Cargo.toml depending on the pgfsm-async-worker-sdk crate; Go: main.go + go.mod requiring the fsm-async-worker-sdk-go module; <lang>-actors-registry.generated.ts, etc.) are written to {cwd}/async-worker/<lang>/
   generate-sync-logic                 Scaffold action/guard/delay stubs in --lang language(s), for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json). Always written to {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/, independent of --folder's own location — --output is not used. Once the aggregate registry exists, also writes a runnable run-sync-worker.ts + deno.json at {cwd}/sync-worker/typescript/ — --project-name sets that deno.json's own name (defaults to a random sync-worker-<8 hex chars> otherwise)
-  generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file. Always writes {cwd}/async-worker/ and {cwd}/sync-worker/ (run it from your app root) — --output is not accepted. A single machine.ts gets its fsm.json written next to it; when --folder is an fsm.json file, generate-fsm-json is skipped (the fsm.json already exists). Either single-file mode requires --fsm-name/--fsm-version. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
+  generate-all                        Run generate-fsm-json, then generate-async-logic, then generate-sync-logic in sequence, for a folder, a single machine.ts file, or a single fsm.json file. Always writes {cwd}/async-worker/ and {cwd}/sync-worker/ (run it from your app root) — --output is not accepted. A single machine.ts compiles into {cwd}/fsm/<fsmName>/<fsmVersion>/ like generate-fsm-json; a single fsm.json skips generate-fsm-json and is copied there. Either single-file mode requires --fsm-name/--fsm-version. In folder mode, one step's partial failure across some FSMs doesn't block the next step from running for the rest
   create-async-logic                  Scaffold a single actor stub in the shared, non-FSM-scoped async-op pool (--function-name/--function-version required; no --folder — always anchored at {cwd}). Always written to {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.ext. Also rewrites that language's registry at {cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.ext (scoped to that function-version's own actors), and refreshes that language's FSM-scoped aggregate registry too ({cwd}/async-worker/<lang>/<lang>-actors-registry.generated.ext, or Go's {cwd}/async-worker/go/go-actors-registry-generated/) — but not the worker SDK (run-async-worker.ts/run_async_worker.py/etc), which still needs a generate-async-logic/generate-all run
   delete                              Delete generated fsm.json / xstate-fsm.json files
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json)
@@ -87,14 +86,14 @@ COMMANDS
 
 OPTIONS
   -c, --command <command>             Command to run (required)
-  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required for every command except create-async-logic, which takes no --folder at all; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --output for generate-fsm-json or --fsm-name/--fsm-version for generate-all; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/generate-all/validate-sync-operation only, and requires --fsm-name/--fsm-version)
+  -f, --folder <folder>               Path to FSM folder, .ts file, or fsm.json file (required for every command except create-async-logic, which takes no --folder at all; a .ts file is accepted for generate-fsm-json/generate-all only, and requires --fsm-name/--fsm-version; a fsm.json file is accepted for generate-sync-logic/generate-async-logic/generate-all/validate-sync-operation only, and requires --fsm-name/--fsm-version)
   -l, --lang <langs>                  Comma-separated language(s): typescript, python, rust, go. For generate-sync-logic/generate-all defaults to typescript; for validate-async-operation defaults to all languages; for create-async-logic a single language is required
-  -o, --output <folder>                Version folder to write fsm.json/xstate-fsm.json into, when --folder is a single machine.ts file (generate-fsm-json only; required there). Not accepted by any other command — generate-sync-logic/generate-async-logic/generate-all always write to {cwd}/<sync|async>-worker/<lang>/<fsmName>/<fsmVersion>/ instead. Relative (resolved against cwd) or absolute; independent of --folder's location
   -n, --function-name <name>           Function name, e.g. checkCreditScore (create-async-logic only, required — these actors have no owning FSM, so this is unrelated to --fsm-name)
   -F, --function-version <version>     Function version folder name, e.g. v01 (create-async-logic only, required — unrelated to --fsm-version)
-  -N, --fsm-name <name>                FSM name, e.g. creditCheck (generate-sync-logic/generate-async-logic/validate-sync-operation/generate-all only, required when --folder is a single fsm.json file — or, for generate-all, a single machine.ts file)
+  -N, --fsm-name <name>                FSM name, e.g. creditCheck (generate-sync-logic/generate-async-logic/validate-sync-operation/generate-all: required when --folder is a single fsm.json file; generate-fsm-json/generate-all: required when --folder is a single machine.ts file)
   -V, --fsm-version <version>          FSM version folder name, e.g. v01 (same commands and cases as --fsm-name; for a machine.ts it also fills in missing asyncOperationVersion)
   --project-name <name>                Name for the generated run-sync-worker.ts's deno.json (generate-sync-logic only, optional — defaults to a random sync-worker-<8 hex chars> when omitted)
+  --force                              Overwrite {cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json even when it belongs to a different machine id (generate-fsm-json/generate-all single-file mode only)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
@@ -107,7 +106,7 @@ ENVIRONMENT
 EXAMPLES
   ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
-  ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
+  cd my-app && ${CLI_INVOCATION} -c generate-fsm-json -f ~/designs/checkout/machine.ts --fsm-name checkout --fsm-version v01
   ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm
   ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
   ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
@@ -254,7 +253,7 @@ const SINGLE_FSM_JSON_FILE_COMMANDS_REQUIRING_FSM_IDENTITY = [
 
 // Commands that accept --folder pointing at a single machine.ts file
 // (single-file mode) instead of only a plugin-root folder — requires
-// --output for the version folder to write into.
+// --fsm-name/--fsm-version, which name the {cwd}/fsm/ folder written into.
 const MACHINE_TS_FILE_COMMANDS = [
   "generate-fsm-json",
 ];
@@ -334,36 +333,31 @@ if (
   Deno.exit(1);
 }
 
-// generate-all dropped --output in #372 -- fail loudly rather than silently
-// ignoring it, so an old invocation doesn't write somewhere unexpected.
-if (command === "generate-all" && args["output"]) {
+// --output is gone from every command (#372 generate-all, #376
+// generate-fsm-json). It's still declared in parseArgs only so an old
+// invocation fails loudly here instead of silently writing somewhere else.
+if (args["output"]) {
   logger.error(
-    "generate-all no longer accepts --output: it writes async-worker/ and sync-worker/ under the current directory (run it from your app root). Single-file mode takes --fsm-name/--fsm-version instead.",
+    "--output is no longer supported: everything is written under the current directory ({cwd}/fsm/<fsmName>/<fsmVersion>/, {cwd}/sync-worker/, {cwd}/async-worker/). Run from your app root and pass --fsm-name/--fsm-version for a single file.",
   );
   printHelp();
   Deno.exit(1);
 }
 
-// generate-all's single-file modes need an explicit identity too, same as
-// SINGLE_FSM_JSON_FILE_COMMANDS_REQUIRING_FSM_IDENTITY -- never guessed from
-// the file's parent folders (#372). generateAll re-checks this for library
-// callers; checking here as well gives the CLI its usual help output.
+// generate-fsm-json/generate-all single-file modes need an explicit
+// identity, same as SINGLE_FSM_JSON_FILE_COMMANDS_REQUIRING_FSM_IDENTITY --
+// never guessed from the file's parent folders (#372/#376). The library
+// functions re-check this; checking here as well gives the CLI its usual
+// help output.
 if (
-  command === "generate-all" && folder &&
-  (folder.endsWith(".json") || folder.endsWith(".ts")) &&
+  (command === "generate-all" && folder &&
+      (folder.endsWith(".json") || folder.endsWith(".ts")) ||
+    folderIsMachineTsFile) &&
   (!args["fsm-name"] || !args["fsm-version"])
 ) {
   logger.error(
-    "generate-all requires --fsm-name and --fsm-version when --folder is a single fsm.json or machine.ts file",
-  );
-  printHelp();
-  Deno.exit(1);
-}
-
-if (folderIsMachineTsFile && !args["output"]) {
-  logger.error(
-    "{command} requires --output <version-folder> when --folder is a single machine.ts file",
-    { command },
+    "{command} requires --fsm-name and --fsm-version when --folder is a single {kind} file",
+    { command, kind: folder!.endsWith(".json") ? "fsm.json" : "machine.ts" },
   );
   printHelp();
   Deno.exit(1);
@@ -389,18 +383,16 @@ try {
   switch (command) {
     case "generate-fsm-json": {
       if (folderIsMachineTsFile) {
-        const absPath = folder!.startsWith("/")
-          ? folder!
-          : `${Deno.cwd()}/${folder!}`;
-        const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
-        const version = absDir.split("/").at(-1) ?? "v01";
-        const versionFolderPath = resolvePluginRootAbsPath(args["output"]!);
-        await generateFsmJSONFromMachineFile(
-          absDir,
-          version,
-          args["show-recommendation"],
-          versionFolderPath,
-        );
+        // {cwd}/fsm/<fsmName>/<fsmVersion>/ (#376), like every other
+        // single-file write in this CLI.
+        await generateFsmJSONIntoFsmDir({
+          machineTsPath: folder!,
+          fsmName: args["fsm-name"]!,
+          fsmVersion: args["fsm-version"]!,
+          writeRootAbsPath: Deno.cwd(),
+          showRecommendation: args["show-recommendation"],
+          force: args["force"],
+        });
       } else {
         await generateFsmJSONFromFolders(
           folder!,
@@ -463,6 +455,7 @@ try {
         writeRootAbsPath: Deno.cwd(),
         fsmName: args["fsm-name"],
         fsmVersion: args["fsm-version"],
+        force: args["force"],
         skipDirs,
         showRecommendation: args["show-recommendation"],
         langs,

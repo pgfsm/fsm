@@ -1,7 +1,8 @@
 import { getLogger } from "@logtape/logtape";
 import {
+  copyFsmJsonIntoFsmDir,
   generateFsmJSONFromFolders,
-  generateFsmJSONFromMachineFile,
+  generateFsmJSONIntoFsmDir,
 } from "./generate-fsm-json.ts";
 import {
   generateAsyncOperationLogicFromFolders,
@@ -48,6 +49,11 @@ export interface GenerateAllOptions {
   showRecommendation?: boolean;
   /** Language(s) to scaffold sync operation logic (actions/guards/delays) in. Defaults to `["typescript"]`. */
   langs?: OperationLang[];
+  /**
+   * Single-file mode: overwrite a `fsm/<fsmName>/<fsmVersion>/fsm.json`
+   * under `writeRootAbsPath` that belongs to a different machine id.
+   */
+  force?: boolean;
 }
 
 /**
@@ -76,14 +82,17 @@ export interface GenerateAllOptions {
  *   `AggregateError` once the run finishes.
  * - **Single machine.ts file mode** (`folder` is a `.ts` file): chains all
  *   three steps for just this one FSM version. `fsm.json`/`xstate-fsm.json`
- *   are written next to the machine.ts itself (use generate-fsm-json's own
- *   `--output` to put them elsewhere) — a step's failure here simply aborts,
- *   since there's only one FSM and nothing left for a later step to still
- *   succeed on.
+ *   are written to `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/`, exactly
+ *   like generate-fsm-json's own single-file mode (#376; machine.ts itself
+ *   stays put) — a step's failure here simply aborts, since there's only one
+ *   FSM and nothing left for a later step to still succeed on.
  * - **Single fsm.json file mode** (`folder` is a `.json` file): the fsm.json
- *   already exists, so generate-fsm-json is skipped entirely and only
- *   generate-async-logic/generate-sync-logic run against it, mirroring
- *   generate-async-logic/generate-sync-logic's own single-fsm.json mode.
+ *   already exists, so generate-fsm-json is skipped; it is copied to
+ *   `<writeRootAbsPath>/fsm/<fsmName>/<fsmVersion>/fsm.json` (#376) and
+ *   generate-async-logic/generate-sync-logic run against that copy.
+ *
+ * Either way, a later folder-mode run on `<writeRootAbsPath>/fsm` rebuilds
+ * the same project without pointing back at the original file.
  *
  * Both single-file modes require `fsmName` and `fsmVersion`, like
  * generate-sync-logic/generate-async-logic's own single-fsm.json mode. They
@@ -125,22 +134,31 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
       );
     }
     const absPath = folder.startsWith("/") ? folder : `${Deno.cwd()}/${folder}`;
-    const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
 
-    let fsmJsonPath = absPath;
+    let fsmJsonPath: string;
     if (folderIsMachineTsFile) {
-      await generateFsmJSONFromMachineFile(
-        absDir,
+      const targetDir = await generateFsmJSONIntoFsmDir({
+        machineTsPath: absPath,
+        fsmName,
         fsmVersion,
+        writeRootAbsPath,
         showRecommendation,
-      );
-      fsmJsonPath = `${absDir}/fsm.json`;
+        force: options.force,
+      });
+      fsmJsonPath = `${targetDir}/fsm.json`;
     } else {
       // fsm.json already exists (folder points straight at it) — skip
-      // generateFsmJSONFromMachineFile entirely.
+      // compiling entirely, just copy it into the fsm/ tree.
       logger.info(
         "--folder is an fsm.json file: skipping generate-fsm-json",
       );
+      fsmJsonPath = await copyFsmJsonIntoFsmDir({
+        fsmJsonPath: absPath,
+        fsmName,
+        fsmVersion,
+        writeRootAbsPath,
+        force: options.force,
+      });
     }
 
     logger.info(
