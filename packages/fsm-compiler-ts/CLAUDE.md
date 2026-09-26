@@ -128,8 +128,10 @@ The gotchas below are for whoever next touches
   (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) — scoped to
   that one language subdirectory, matching Python's `pyproject.toml` (alongside
   `run_async_worker.py`, pinning the published `pgfsm-async-worker-sdk` — #364;
-  `worker-sdk-pyproject.eta`)/Rust's `Cargo.toml`/Go's `go.mod`, all written by
-  this same function for their own language (`worker-sdk-deno-json.eta`). The
+  `worker-sdk-pyproject.eta`)/Rust's `Cargo.toml` (alongside `src/main.rs`,
+  depending on the published `pgfsm-async-worker-sdk` crate — #368;
+  `worker-sdk-cargo-toml.eta`)/Go's `go.mod`, all written by this same function
+  for their own language (`worker-sdk-deno-json.eta`). The
   `--worker-sdk-protocol legacy` variant and its `-legacy` templates were
   removed in #356 — the gateway only speaks the gRPC `SidecarGatewayService`
   protocol. Runs for both {@linkcode generateAsyncOperationLogicFromFolders} and

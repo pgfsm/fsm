@@ -19,9 +19,10 @@
 //
 // grpc-go's generated client stream (SidecarGatewayService_SessionClient)
 // gives a synchronous-looking Send/Recv pair backed by goroutines
-// internally — no push-queue needed the way @pgfsm/async-worker-sdk/pgfsm-async-worker-sdk/sdk.rs each build
-// one, only a mutex around Send (grpc-go client streams don't allow
-// concurrent Send calls; Recv is only ever called from one goroutine here
+// internally — no push-queue needed the way the TypeScript, Python and Rust
+// SDKs (@pgfsm/async-worker-sdk / pgfsm-async-worker-sdk) each build one,
+// only a mutex around Send (grpc-go client streams don't allow concurrent
+// Send calls; Recv is only ever called from one goroutine here
 // too, so it needs no mutex of its own).
 package main
 
