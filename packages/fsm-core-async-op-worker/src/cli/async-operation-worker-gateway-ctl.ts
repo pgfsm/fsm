@@ -50,7 +50,7 @@ DESCRIPTION
   (packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/activitygateway/v1/activity_gateway.proto)
   — connects, calls one RPC, prints the result, and exits. Actor identity
   matches ActorPluginValidationResult /
-  sidecar/protocol.ts's actorKey():
+  sidecar/gateway.ts's actorKey():
   parentFsmName@parentFsmVersion@asyncOperationType@asyncOperationName@asyncOperationVersion@asyncOperationLanguage.
 
 EXAMPLE

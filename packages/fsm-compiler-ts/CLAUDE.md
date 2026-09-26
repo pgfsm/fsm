@@ -77,12 +77,11 @@ The gotchas below are for whoever next touches
   `--folder` itself in directory mode, or derived from the target `fsm.json`'s
   own location three levels up in single-file mode — used only for (a) the real
   app-root directory name (`"fsm-core-example"`) each Go actor's own `go.mod`
-  names itself under, and (b) `writeWorkerSdk`'s
-  `gatewaySidecarProtoGen*`/`gatewaySidecarProtocolImportPath` targets, which
-  point at sibling monorepo packages relative to where the _source_ tree sits, a
-  relationship independent of where output gets written. It is **not** used
-  anymore to locate per-version actor files or registries — those are always
-  reachable from `writeRootAbsPath` alone now.
+  names itself under, and (b) `writeWorkerSdk`'s `gatewaySidecarProtoGen*`
+  targets, which point at a sibling monorepo package relative to where the
+  _source_ tree sits, a relationship independent of where output gets written.
+  It is **not** used anymore to locate per-version actor files or registries —
+  those are always reachable from `writeRootAbsPath` alone now.
 - **The aggregate's relative-import computation is trivial by construction
   now.** `writeAggregateActorsRegistry`/`buildAggregateRegistryContent` no
   longer take a `realPluginRootAbsPath` param at all — since every
@@ -128,15 +127,13 @@ The gotchas below are for whoever next touches
   `sdk.ts`** (`<writeRootAbsPath>/async-worker/typescript/deno.json`, #318) —
   scoped to that one language subdirectory, matching Python's
   `requirements.txt`/Rust's `Cargo.toml`/Go's `go.mod`, all written by this same
-  function for their own language. Two Eta variants
-  (`worker-sdk-deno-json.eta`/`worker-sdk-deno-json-legacy.eta`), selected by
-  `options.protocol` same as every other protocol-conditional pair here —
-  `legacy` drops `@connectrpc/connect`/`@connectrpc/connect-node` since
-  `sdk-legacy.eta` doesn't import them. Runs for both {@linkcode
-  generateAsyncOperationLogicFromFolders} and {@linkcode
-  generateAsyncOperationLogicFromFsmJson} (both share `writeAggregateArtifacts`
-  → `writeWorkerSdk`), so it's kept in sync on every regeneration regardless of
-  which CLI mode wrote it.
+  function for their own language (`worker-sdk-deno-json.eta`). The
+  `--worker-sdk-protocol legacy` variant and its `-legacy` templates were
+  removed in #356 — the gateway only speaks the gRPC `SidecarGatewayService`
+  protocol. Runs for both {@linkcode generateAsyncOperationLogicFromFolders} and
+  {@linkcode generateAsyncOperationLogicFromFsmJson} (both share
+  `writeAggregateArtifacts` → `writeWorkerSdk`), so it's kept in sync on every
+  regeneration regardless of which CLI mode wrote it.
 - **`WrittenActor.filePath` dropped its `<lang>/` prefix** (now
   `actors/<fileBaseName>/<fileBaseName>.<ext>`, not
   `<lang>/actors/<fileBaseName>/<fileBaseName>.<ext>`) — it's informational

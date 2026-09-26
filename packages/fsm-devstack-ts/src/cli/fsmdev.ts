@@ -185,7 +185,6 @@ async function runGenerateAll(): Promise<string> {
     await generateAsyncOperationLogicFromFolders(
       fsmFolder,
       [],
-      "grpc",
       writeRootAbsPath,
     );
   } catch (err) {

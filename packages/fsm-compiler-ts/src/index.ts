@@ -49,7 +49,6 @@ export type {
   FailedMethod,
   FsmPluginValidationResult,
   OperationLang,
-  WorkerSdkProtocol,
   WorkflowType,
 } from "./types/index.ts";
 export {

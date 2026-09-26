@@ -201,9 +201,8 @@ three input types:
   the same conventional depth for both commands' identity derivation to work).
   Also requires `-o`/`--output`.
 
-`-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1),
-`-p`/`--worker-sdk-protocol` (step 2), and `-l`/`--lang` (step 3) all apply,
-same as running the three commands separately.
+`-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1), and `-l`/`--lang`
+(step 3) all apply, same as running the three commands separately.
 
 ```bash
 # Directory mode — every versioned FSM under fsm/

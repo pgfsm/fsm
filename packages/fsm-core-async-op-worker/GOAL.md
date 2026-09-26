@@ -74,9 +74,7 @@ symbols):
 
 | File                                        | Export                                           | What it does                                                                                                                                                                                                                                                        |
 | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sidecar/protocol.ts`                       | `actorKey()`                                     | Builds the `parentFsmName@...@asyncOperationLanguage` routing key from an identity tuple.                                                                                                                                                                           |
-| `sidecar/protocol.ts`                       | `makeEnvelope()`                                 | Wraps a body in the `WireEnvelope` (`v`, `id`, `type`, `ts_unix_ms`, `source`, `target`, `body`).                                                                                                                                                                   |
-| `sidecar/protocol.ts`                       | `writeFrame()` / `readFrame()`                   | Length-prefixed JSON framing over the raw socket.                                                                                                                                                                                                                   |
+| `sidecar/gateway.ts`                        | `actorKey()`                                     | Builds the `parentFsmName@...@asyncOperationLanguage` routing key from an identity tuple.                                                                                                                                                                           |
 | `sidecar/gateway.ts`                        | `class SidecarGateway`                           | Owns the worker-facing Unix socket.                                                                                                                                                                                                                                 |
 | `sidecar/gateway.ts`                        | `SidecarGateway.start()` / `.stop()`             | Opens/closes the Unix listener.                                                                                                                                                                                                                                     |
 | `sidecar/gateway.ts`                        | `SidecarGateway.registerWorker()` _(private)_    | Handles an incoming `register` wire message — adds the worker connection to an in-memory `Map`, keyed by actorKey, and fires `onActorRegistered` (if configured) per actor. Also now logs each `invoke_result`/`invoke_error` response as it arrives from a worker. |
@@ -129,8 +127,9 @@ helpers, callable from anywhere):
 - The **client-facing gRPC/Connect server** (`gatewayServer.ts` / `Invoke` RPC)
   — a whole boundary this goal doesn't mention, used by whatever calls
   `ActivityGatewayClient` directly.
-- **Wire protocol framing** (`protocol.ts`'s envelope/frame read-write) —
-  plumbing this goal takes for granted rather than states as a requirement.
+- **Sidecar wire protocol** (the generated `SidecarGatewayService` gRPC stream,
+  #100) — plumbing this goal takes for granted rather than states as a
+  requirement.
 - **`ActivityGatewayInvokeError`** (typed, code + retriable) — richer error
   shape than "call archive with the response," which this goal doesn't specify
   error handling for.

@@ -72,12 +72,11 @@ package's own `CLAUDE.md` for the exact commands.
    parameter names it was ultimately built to feed). Verify with
    `deno task check` (checks `src/index.ts`).
 5. **`packages/fsm-core-async-op-worker/` is usually _not_ in this chain.** Its
-   `fsmType`/`fsmLanguage`-carrying types (`RegisteredActor` in both
-   `sidecar/protocol.ts` and `sidecar/gateway.ts`, `InvokeBody`,
-   `ActivityInvokeInput`, `ClaimedAsyncOperationEvent`, …) are deliberately
-   `string`, mirroring wire formats — a hand-rolled JSON socket protocol and a
-   `.proto` file (checked directly: `fsm_type`/`fsm_language` are plain `string`
-   in `sidecar_gateway.proto`, no enum) — that cross a Python/Rust/Go language
+   `fsmType`/`fsmLanguage`-carrying types (`RegisteredActor` in
+   `sidecar/gateway.ts`, `ActivityInvokeInput`, `ClaimedAsyncOperationEvent`, …)
+   are deliberately `string`, mirroring the wire format — a `.proto` file
+   (checked directly: `fsm_type`/`fsm_language` are plain `string` in
+   `sidecar_gateway.proto`, no enum) — that cross a Python/Rust/Go language
    boundary before this package ever sees the value. Don't reflexively tie them
    to `InvokeObject`/DB-generated types; that constraint wouldn't actually be
    enforced by the wire protocol or the non-TS workers. Only `fsm-core-db-ts`'s

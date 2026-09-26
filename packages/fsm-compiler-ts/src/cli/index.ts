@@ -22,9 +22,7 @@ import {
   validateSyncOperationFromFolders,
   validateSyncOperationFromFsmJson,
 } from "../index.ts";
-import type { OperationLang, WorkerSdkProtocol } from "../index.ts";
-
-const WORKER_SDK_PROTOCOLS: WorkerSdkProtocol[] = ["grpc", "legacy"];
+import type { OperationLang } from "../index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "cli"]);
 await configureCompilerLogger();
@@ -36,7 +34,6 @@ const args = parseArgs(Deno.args, {
     "skip-dirs",
     "db-url",
     "lang",
-    "worker-sdk-protocol",
     "output",
     "fsm-name",
     "fsm-version",
@@ -53,7 +50,6 @@ const args = parseArgs(Deno.args, {
     s: "skip-dirs",
     d: "db-url",
     l: "lang",
-    p: "worker-sdk-protocol",
     o: "output",
     N: "fsm-name",
     v: "version",
@@ -102,7 +98,6 @@ OPTIONS
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
   -s, --skip-dirs <dirs>              Comma-separated list of subdirectory names to skip
   -d, --db-url <url>                  PostgreSQL connection string (overrides DATABASE_URL env var)
-  -p, --worker-sdk-protocol <proto>   Sidecar wire protocol for generated worker SDKs: grpc (default) or legacy (generate-async-logic/generate-all only)
   -v, --version                       Print @pgfsm/compiler's version and exit
   -h, --help                          Show this help message
 
@@ -114,7 +109,6 @@ EXAMPLES
   ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm --skip-dirs carVitals,taskMachineConfig
   ${CLI_INVOCATION} -c generate-fsm-json -f apps/fsm-core-example/fsm/creditCheck/v01/machine.ts --output apps/fsm-core-example/fsm/creditCheck/v01
   ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm
-  ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm --worker-sdk-protocol legacy
   ${CLI_INVOCATION} -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
   ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm --lang typescript,python
   ${CLI_INVOCATION} -c generate-sync-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
@@ -140,22 +134,6 @@ const folder = args["folder"];
 const skipDirs = args["skip-dirs"]
   ? args["skip-dirs"].split(",").map((s: string) => s.trim())
   : [];
-
-const workerSdkProtocol: WorkerSdkProtocol =
-  (args["worker-sdk-protocol"] ?? "grpc") as WorkerSdkProtocol;
-if (command === "generate-async-logic" || command === "generate-all") {
-  if (!WORKER_SDK_PROTOCOLS.includes(workerSdkProtocol)) {
-    logger.error(
-      "Invalid --worker-sdk-protocol value: {value}. Must be one of: {valid}",
-      {
-        value: args["worker-sdk-protocol"],
-        valid: WORKER_SDK_PROTOCOLS.join(", "),
-      },
-    );
-    printHelp();
-    Deno.exit(1);
-  }
-}
 
 // Languages for generate-sync-logic (comma-separated). Defaults to typescript.
 const langs: OperationLang[] =
@@ -417,13 +395,11 @@ try {
           Deno.cwd(),
           args["fsm-name"]!,
           args["fsm-version"]!,
-          workerSdkProtocol,
         );
       } else {
         await generateAsyncOperationLogicFromFolders(
           folder!,
           skipDirs,
-          workerSdkProtocol,
           Deno.cwd(),
         );
       }
@@ -458,7 +434,6 @@ try {
         output: args["output"],
         skipDirs,
         showRecommendation: args["show-recommendation"],
-        workerSdkProtocol,
         langs,
       });
       break;

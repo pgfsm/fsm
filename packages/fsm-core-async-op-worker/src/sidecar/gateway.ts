@@ -6,7 +6,8 @@
 // separate socket path, since Node's http2 Server binds exactly one path.
 //
 // Replaces the hand-rolled length-prefixed-JSON envelope this class used to
-// speak (sidecar/protocol.ts's readFrame/writeFrame/makeEnvelope) with the
+// speak (the former sidecar/protocol.ts's readFrame/writeFrame/makeEnvelope,
+// deleted along with the compiler's legacy worker SDKs in #356) with the
 // generated pgfsm.sidecargateway.v1.SidecarGatewayService stub, from
 // packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/sidecargateway/v1/sidecar_gateway.proto
 // — see #100. Imported as @pgfsm/proto-codegen (a Deno workspace-linked package, not published —

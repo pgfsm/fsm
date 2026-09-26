@@ -143,7 +143,7 @@ export type WrittenActor = {
  * A {@linkcode WrittenActor} plus the activity-registration identity a
  * worker SDK needs to register with the Activity Gateway (see
  * `actorKey()`/`RegisteredActor` in
- * `packages/fsm-core-async-op-worker/src/sidecar/protocol.ts`) — everything
+ * `packages/fsm-core-async-op-worker/src/sidecar/gateway.ts`) — everything
  * `writeActorsRegistry`/`writeAggregateActorsRegistry`
  * (`operation-logic-scaffold.ts`) need to emit a self-describing
  * registration, not just a name -> callable map. Matches the flattened
@@ -206,22 +206,6 @@ export type SyncOperationRegistration = {
  * `goActorModulePath`.)
  */
 export type ActorsBarrelLang = "typescript" | "python" | "rust";
-
-/**
- * Which sidecar wire protocol the generated worker SDKs speak. `"grpc"`
- * (default) is the proto-defined `SidecarGatewayService` from #100.
- * `"legacy"` restores the pre-#100 hand-rolled length-prefixed-JSON envelope
- * (`sidecar/protocol.ts`, hand-ported per language via
- * `worker-sdk-protocol.eta`) — kept available behind
- * `--worker-sdk-protocol legacy` for anyone not yet ready to move off it; has
- * no schema-drift protection across languages the way `"grpc"` does, which
- * is the whole reason #100 exists.
- */
-export type WorkerSdkProtocol = "grpc" | "legacy";
-
-export interface WriteWorkerSdkOptions {
-  protocol?: WorkerSdkProtocol;
-}
 
 /**
  * Working shape for the compiler's internal transform pipeline (

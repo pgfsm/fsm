@@ -28,7 +28,6 @@ import type {
   FsmMachineJson,
   OperationLang,
   RegisteredActor,
-  WorkerSdkProtocol,
   WorkflowType,
 } from "./types/index.ts";
 
@@ -238,7 +237,6 @@ async function writeAggregateArtifacts(
   writeRootAbsPath: string,
   goModuleAppRoot: string,
   realPluginRootAbsPath: string,
-  workerSdkProtocol: WorkerSdkProtocol,
   tsFiles: string[],
   rustFiles: string[],
   goFiles: string[],
@@ -293,7 +291,6 @@ async function writeAggregateArtifacts(
     goModuleAppRoot,
     realPluginRootAbsPath,
     allRegisteredActors,
-    { protocol: workerSdkProtocol },
   );
   tsFiles.push(...wrote.tsFiles);
   rustFiles.push(...wrote.rustFiles);
@@ -348,10 +345,6 @@ async function writeAggregateArtifacts(
  * language's actors across every FSM, not just one (see
  * {@linkcode writeAggregateActorsRegistry}, {@linkcode writeAggregateGoRegistry}).
  *
- * `workerSdkProtocol` selects which sidecar wire protocol the generated
- * worker SDKs speak — see {@linkcode WorkerSdkProtocol}. Defaults to
- * `"grpc"`.
- *
  * Every `write*` call below only writes — nothing is formatted/tidied
  * per-file as it's written. Instead, every `.ts`/`.rs`/`.go` path and Go
  * module directory produced across the *whole* run is collected and
@@ -362,7 +355,6 @@ async function writeAggregateArtifacts(
 export async function generateAsyncOperationLogicFromFolders(
   folderPath: string,
   skipDirs: string[] = [],
-  workerSdkProtocol: WorkerSdkProtocol = "grpc",
   writeRootAbsPath: string,
 ): Promise<void> {
   logger.info("Scaffolding async operation logic from {path}", {
@@ -409,7 +401,6 @@ export async function generateAsyncOperationLogicFromFolders(
     writeRootAbsPath,
     goModuleAppRoot,
     realPluginRootAbsPath,
-    workerSdkProtocol,
     tsFiles,
     rustFiles,
     goFiles,
@@ -451,7 +442,6 @@ export async function generateAsyncOperationLogicFromFsmJson(
   writeRootAbsPath: string,
   fsmName: string,
   fsmVersion: string,
-  workerSdkProtocol: WorkerSdkProtocol = "grpc",
 ): Promise<void> {
   logger.info(
     "Scaffolding async operation logic from {path} into {writeRootAbsPath}",
@@ -494,7 +484,6 @@ export async function generateAsyncOperationLogicFromFsmJson(
     writeRootAbsPath,
     goModuleAppRoot,
     realPluginRootAbsPath,
-    workerSdkProtocol,
     tsFiles,
     rustFiles,
     goFiles,
