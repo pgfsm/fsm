@@ -33,7 +33,7 @@ await build({
       subPath: "sidecargateway/v1/pb",
     },
   },
-  // The tests start a real SidecarGateway from @pgfsm/async-worker, a
+  // The tests start a real SidecarGateway from @pgfsm/async-worker-gateway, a
   // workspace-only dev dependency (it pulls in pg) — keep them out of the
   // published build and dnt's Node test run.
   test: false,

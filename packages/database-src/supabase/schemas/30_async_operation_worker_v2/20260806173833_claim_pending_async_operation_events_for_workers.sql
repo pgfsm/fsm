@@ -1,4 +1,4 @@
--- fsm-core-async-op-worker's 30-second poll loop calls this with its
+-- fsm-async-worker-gateway-ts's 30-second poll loop calls this with its
 -- currently-registered worker identities:
 --   [{parent_fsm_name, parent_fsm_version, async_operation_type,
 --     async_operation_name, async_operation_version,
@@ -22,7 +22,7 @@
 -- message payload (jsonb *content* consumed directly by TS is camelCase in
 -- this codebase; snake_case is for PG function parameter/column names, a
 -- different thing). This is what
--- fsm-core-async-op-worker/src/asyncOpPollLoop.ts's parseClaimedAsyncOperationEvent
+-- fsm-async-worker-gateway-ts/src/asyncOpPollLoop.ts's parseClaimedAsyncOperationEvent
 -- expects field-for-field -- see that file for the full row shape.
 --
 -- Identity fields (parentFsmName etc.) come from the *worker* being

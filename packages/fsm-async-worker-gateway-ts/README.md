@@ -1,4 +1,4 @@
-# @pgfsm/async-worker
+# @pgfsm/async-worker-gateway
 
 The Activity Gateway for async-operation-type FSM operations across polyglot
 (TypeScript/Python/Rust/Go) actors: a standalone gateway process that accepts
@@ -6,21 +6,26 @@ worker registrations over a Unix socket, polls Postgres for pending work
 matching those registrations, dispatches it to the right worker, and archives
 the result. Optionally exposes a client-facing gRPC/Connect `Invoke` API.
 
+Previously published as `@pgfsm/async-worker` (up to 0.1.6, now deprecated). The
+actor processes that connect to this gateway use
+[`@pgfsm/async-worker-sdk`](https://www.npmjs.com/package/@pgfsm/async-worker-sdk)
+(TypeScript).
+
 ## Install
 
-This package ships two CLI bins, so a plain `npx @pgfsm/async-worker` can't tell
-which one to run — pass `-p`/`--package` and name the bin after `--`:
+This package ships two CLI bins, so a plain `npx @pgfsm/async-worker-gateway`
+can't tell which one to run — pass `-p`/`--package` and name the bin after `--`:
 
 ```bash
-npx -p @pgfsm/async-worker -- async-operation-worker-gateway --help
+npx -p @pgfsm/async-worker-gateway -- async-operation-worker-gateway --help
 ```
 
 or install it as a dependency / global CLI, after which each bin is callable
 directly:
 
 ```bash
-npm install @pgfsm/async-worker
-npm install -g @pgfsm/async-worker   # for global `async-operation-worker-gateway`/`-ctl` commands
+npm install @pgfsm/async-worker-gateway
+npm install -g @pgfsm/async-worker-gateway   # for global `async-operation-worker-gateway`/`-ctl` commands
 ```
 
 No Deno install is required to use the CLIs this way.
@@ -30,7 +35,7 @@ No Deno install is required to use the CLIs this way.
 Two CLIs ship in this package. Run either with `--help` for its full flag
 reference. Examples below assume a global install
 (`async-operation-worker-gateway ...`); via plain `npx` prefix each with
-`npx -p @pgfsm/async-worker --`.
+`npx -p @pgfsm/async-worker-gateway --`.
 
 ### `async-operation-worker-gateway` — start the gateway process
 
@@ -106,7 +111,7 @@ import {
   SidecarGateway, // the sidecar itself — worker registration + dispatch
   startActivityGatewayServer, // sidecar + gRPC/Connect server + poll loop, all in one process
   startAsyncOpPollLoop, // the poll/claim/archive loop, standalone
-} from "@pgfsm/async-worker";
+} from "@pgfsm/async-worker-gateway";
 
 import type {
   ActivityGatewayClientOptions,
@@ -114,7 +119,7 @@ import type {
   GatewayServerOptions,
   InvokeActorRequest,
   InvokeActorResult,
-} from "@pgfsm/async-worker";
+} from "@pgfsm/async-worker-gateway";
 ```
 
 ## License

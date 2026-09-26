@@ -7,7 +7,7 @@ serves the invocations the gateway routes to them over the
 [`@pgfsm/proto-codegen`](https://www.npmjs.com/package/@pgfsm/proto-codegen)).
 
 It never opens a database connection — that stays in the gateway
-(`@pgfsm/async-worker`).
+(`@pgfsm/async-worker-gateway`).
 
 ## Usage
 

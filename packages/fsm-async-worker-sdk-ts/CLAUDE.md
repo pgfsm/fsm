@@ -17,7 +17,7 @@ deno task build:npm   # scripts/build-npm.ts (dnt npm build)
 
 Not to be confused with `packages/fsm-async-worker-ts/` — the deprecated v1
 async-op worker fleet (`@pgfsm/async-worker-old`). This package is the client
-SDK for the current Activity Gateway (`packages/fsm-core-async-op-worker/`).
+SDK for the current Activity Gateway (`packages/fsm-async-worker-gateway-ts/`).
 Named `async-worker-sdk` (not `worker-sdk`) because it only serves async actor
 workers, not the sync side (`@pgfsm/sync-worker`).
 
@@ -38,8 +38,8 @@ moving them to published packages too.
 
 - **No database access, no `pg`.** This runs inside every actor process;
   connections stay in the gateway (root `CLAUDE.md` point 4). Don't import
-  `@pgfsm/async-worker` or `@pgfsm/db` from `src/` — the gateway package is a
-  test-only dependency (`test/actorWorker.test.ts` starts a real in-process
+  `@pgfsm/async-worker-gateway` or `@pgfsm/db` from `src/` — the gateway package
+  is a test-only dependency (`test/actorWorker.test.ts` starts a real in-process
   `SidecarGateway` against it).
 - **Library only calls `getLogger()`.** Logging is configured once by the
   generated entry point (`@pgfsm/logging`'s `configureLogging`), not here.

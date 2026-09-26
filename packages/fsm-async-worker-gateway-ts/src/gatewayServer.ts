@@ -9,7 +9,7 @@
 //
 // Ported from the polygot-lang-ipc-worker prototype's server/src/main.ts,
 // adapted to the ActivityGatewayService proto contract
-// (packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/activitygateway/v1/activity_gateway.proto)
+// (packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/activitygateway/v1/activity_gateway.proto)
 // and to this repo's logger.
 //
 // Built on the compiler-generated Connect-ES stubs (imported as

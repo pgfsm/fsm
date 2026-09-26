@@ -1,11 +1,11 @@
-# fsm-core-async-op-worker — CLI Usage Guide
+# fsm-async-worker-gateway-ts — CLI Usage Guide
 
 ## Core objective
 
-`fsm-core-async-op-worker` (`@pgfsm/async-worker`) is a **standalone alternative
-to `fsm-async-worker-ts`** for async-operation-type async FSM operations across
-polyglot (TypeScript/Python/Rust/Go) actors — not a passive service another
-orchestrator's poll/claim/archive loop calls into.
+`fsm-async-worker-gateway-ts` (`@pgfsm/async-worker-gateway`) is a **standalone
+alternative to `fsm-async-worker-ts`** for async-operation-type async FSM
+operations across polyglot (TypeScript/Python/Rust/Go) actors — not a passive
+service another orchestrator's poll/claim/archive loop calls into.
 
 Concretely, it:
 
@@ -62,7 +62,7 @@ async-op poll loop, all in one process sharing one `SidecarGateway` instance.
 
 ```bash
 # From repo root
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts [options]
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts [options]
 
 # From this package's own directory
 deno task gateway [options]
@@ -79,7 +79,7 @@ deno task gateway [options]
 | `--poll-interval-ms <ms>`    |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                        |
 | `--disable-poll-loop`        |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`) |
 | `--ensure-queue-on-register` |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                          |
-| `--version`                  | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker`'s version and exit                                                     |
+| `--version`                  | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                             |
 | `--help`                     | `-h`  | —                                                         | —                                          | Print help and exit                                                                                |
 
 > **Poll loop is on by default; `--ensure-queue-on-register` is opt-in.** If
@@ -317,7 +317,7 @@ process over its `--bind` target.
 ### Invocation
 
 ```bash
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts <list|invoke> [options]
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts <list|invoke> [options]
 
 # From this package's own directory
 deno task gateway-ctl <list|invoke> [options]
@@ -345,7 +345,7 @@ deno task gateway-ctl <list|invoke> [options]
 | `--instance-id <id>`                | no           | random UUID                             | Correlates the invocation to an FSM instance                  |
 | `--correlation-id <id>`             | no           | random UUID                             | Free-form correlation id                                      |
 | `--timeout-ms <ms>`                 | no           | `5000`                                  | Client-side timeout for this one call                         |
-| `--version`                         | —            | —                                       | Print `@pgfsm/async-worker`'s version and exit                |
+| `--version`                         | —            | —                                       | Print `@pgfsm/async-worker-gateway`'s version and exit        |
 | `--help`                            | —            | —                                       | Print help and exit                                           |
 
 Identity flags match `sidecar/gateway.ts`'s `actorKey()` shape — the exact six
@@ -387,13 +387,13 @@ check with `list` first if unsure. Each command runs once and the process exits
 }
 ```
 
-Run from `packages/fsm-core-async-op-worker/`, each task takes the CLI's own
+Run from `packages/fsm-async-worker-gateway-ts/`, each task takes the CLI's own
 flags after the task name, e.g. `deno task gateway --disable-poll-loop`.
 Equivalent direct invocations from the repo root:
 
 ```bash
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts [options]
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts <list|invoke> [options]
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts [options]
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts <list|invoke> [options]
 ```
 
 ---

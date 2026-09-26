@@ -12,7 +12,7 @@
 > This is the **in-repo development guide** — every command below runs source
 > straight out of this checkout with `deno run`, for anyone developing or
 > debugging `fsm-compiler-ts`, `fsm-sync-worker-ts`, or
-> `fsm-core-async-op-worker` themselves. If you just want to **use** the
+> `fsm-async-worker-gateway-ts` themselves. If you just want to **use** the
 > published `@pgfsm/*` packages to build your own FSM app, see the root
 > [README.md](./README.md) instead — same lifecycle, `npx`-first.
 
@@ -22,7 +22,7 @@ This document is the lifecycle spec for an FSM — **design/generate** →
 ```mermaid
 flowchart LR
     A["<b>1. design / generate</b><br/>fsm.json"] --> B["<b>2. scaffold</b><br/>operation logic"]
-    B --> C["<b>3. run Workers</b><br>3.a Sync Operation Worker <br>[ package : fsm-sync-worker-ts ]<br>( ctl  + scheduler + fsmlet ) <br>3.b Async Operation Worker <br>[ package : fsm-core-async-op-worker ]<br> ( ctl  + startActivityGatewayServer + Different lang ipc workers )"]
+    B --> C["<b>3. run Workers</b><br>3.a Sync Operation Worker <br>[ package : fsm-sync-worker-ts ]<br>( ctl  + scheduler + fsmlet ) <br>3.b Async Operation Worker <br>[ package : fsm-async-worker-gateway-ts ]<br> ( ctl  + startActivityGatewayServer + Different lang ipc workers )"]
 ```
 
 _Every step reads and writes through PostgreSQL as the source of truth._
@@ -166,13 +166,13 @@ its modules, and registers itself, then waits for its companion **scheduler**
 
 The async-operation side does **not** follow that kube-style node-agent /
 scheduler split. It runs as a single long-running
-**`startActivityGatewayServer`** process (`fsm-core-async-op-worker`) that
+**`startActivityGatewayServer`** process (`fsm-async-worker-gateway-ts`) that
 starts a sidecar Unix socket for the per-language **lang ipc workers** to
 register their actors against, then polls Postgres directly on its own interval
 to claim and dispatch work — no separate scheduler process, no `pg_notify`.
 
 The gateway's client-facing gRPC contract
-(`packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/activitygateway/v1/activity_gateway.proto`)
+(`packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/activitygateway/v1/activity_gateway.proto`)
 is compiled to real TypeScript/Python/Rust/Go stubs by
 [`fsm-proto-codegen`](./packages/fsm-proto-codegen/) via `buf generate`,
 committed under `packages/fsm-proto-codegen/gen/<lang>/` — not loaded from the
@@ -180,14 +180,14 @@ committed under `packages/fsm-proto-codegen/gen/<lang>/` — not loaded from the
 package's [README](./packages/fsm-proto-codegen/README.md) for the per-language
 plugin setup.
 
-| Info                        | FSM Async-Operation Worker — `fsm-core-async-op-worker` (current)                                                                                                                                                                                                       | FSM Sync-Operation Worker                                                                                                                                                                                                                                |
+| Info                        | FSM Async-Operation Worker — `fsm-async-worker-gateway-ts` (current)                                                                                                                                                                                                    | FSM Sync-Operation Worker                                                                                                                                                                                                                                |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Drives                      | Async operation logic (`actors`) — dispatches to already-running per-language worker-sdk processes over the sidecar socket, one fire-and-forget dispatch per claimed event (no long-running in-process worker per queue)                                                | State machines — sync operation logic, transitions, and dispatching invokes                                                                                                                                                                              |
 | Runtime language            | Polyglot (multi-language) — driven by `fsmLanguage` (`typescript`/`python`/`go`/`rust`), always dispatched over the sidecar socket, never in-process                                                                                                                    | TypeScript only                                                                                                                                                                                                                                          |
 | Behaviour                   | Runtime dispatch only — the gateway never imports or loads actor code itself; each language's worker-sdk process (run separately) owns its own module loading                                                                                                           | Runtime — TypeScript only, and TypeScript supports dynamic import                                                                                                                                                                                        |
 | Worker Arch components      | `SidecarGateway` (registration + dispatch), per-language **lang ipc workers** (worker-sdk processes)                                                                                                                                                                    | `fsmlet` (kubelet), `fsm Scheduler` (kube Scheduler), `fsmctl` (kubectl)                                                                                                                                                                                 |
 | Worker Arch ADR             | [ADR-003](./docs/adr/adr-003-fsm-async-operation-polyglot-actor-execution-model.md)                                                                                                                                                                                     | [ADR-002](./docs/adr/adr-002-fsm-sync-operation-worker-execution-model.md)                                                                                                                                                                               |
-| CLI entry point             | `packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts`                                                                                                                                                                                           | `packages/fsm-sync-worker-ts/src/cli/fsmlet.ts`                                                                                                                                                                                                          |
+| CLI entry point             | `packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts`                                                                                                                                                                                        | `packages/fsm-sync-worker-ts/src/cli/fsmlet.ts`                                                                                                                                                                                                          |
 | On startup, validates       | None — the gateway itself validates nothing; each per-language worker-sdk process starts, loads/validates its own actor modules, and self-registers over the sidecar socket                                                                                             | `validateSyncOperationFromFolders` — TypeScript only, workflow type hardcoded to `"fsm"`                                                                                                                                                                 |
 | Cross-checks the other side | Not required — doesn't follow `validateAsyncOperationFromFolders`, follows the lang IPC worker path instead                                                                                                                                                             | `validateSyncOperationFromFolders` using the parameter passed from `fsmlet` via the `asyncOperationVerificationMode` argument (`checkRegistry` / `checkRegistryAndWorking`, via `checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) |
 | On startup, loads           | Nothing from folders — the gateway itself just starts the sidecar (and, unless `--disable-poll-loop`, the poll loop) and waits; each per-language worker-sdk process loads/validates its own actor modules and self-registers over the sidecar socket                   | `fsm.json` into PostgreSQL via `loadFsmFromJson` → `load_fsm_from_json_v2`                                                                                                                                                                               |
@@ -209,7 +209,7 @@ plugin setup.
 ```bash
 # Sidecar (worker registration) + gRPC/Connect gateway + 30s poll loop —
 # standalone: no companion scheduler process, no pg_notify
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts \
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts \
   --bind unix:/tmp/pgfsm-activity-gateway.sock \
   --sidecar-socket /tmp/pgfsm-activity-gateway-workers.sock \
   --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres \
@@ -220,7 +220,7 @@ deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-w
 
 Needs at least one per-language worker-sdk process to connect to
 `--sidecar-socket` and register its actors — see
-[`CLI-USAGE.md`](./packages/fsm-core-async-op-worker/docs/guides/CLI-USAGE.md)
+[`CLI-USAGE.md`](./packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md)
 for the full flag reference, startup sequence, and PGMQ message payload shape.
 
 ### Start the worker SDK itself
@@ -314,7 +314,7 @@ active `fsmlet`s, assigns the winner, and notifies it — repeating until the
 queue is empty or no `fsmlet` has capacity. A fallback poll catches any
 notification missed after a `LISTEN` connection drop.
 
-`fsm-core-async-op-worker` (the current async-operation worker) has **no
+`fsm-async-worker-gateway-ts` (the current async-operation worker) has **no
 scheduler** — it polls Postgres directly on its own interval instead (see
 [section 3](#3-start-the-workers)). The Async-Operation Scheduler belonged to
 the superseded `fsm-async-worker-ts` node-agent/scheduler split; see
@@ -380,8 +380,8 @@ and exit; they don't validate, register, or listen for work.
 
 | Info           | `fsmctl`                                                                                                           | `async-operation-worker-gateway-ctl`                                                                                                                                                                |
 | -------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Controls       | FSM instances — the dispatch-queue model driven by the `fsmscheduler`/`fsmlet` pair                                | A running `fsm-core-async-op-worker` gateway, over its gRPC/Connect API                                                                                                                             |
-| CLI            | `packages/fsm-sync-worker-ts/src/cli/fsmctl.ts`                                                                    | `packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts`                                                                                                                   |
+| Controls       | FSM instances — the dispatch-queue model driven by the `fsmscheduler`/`fsmlet` pair                                | A running `fsm-async-worker-gateway-ts` gateway, over its gRPC/Connect API                                                                                                                          |
+| CLI            | `packages/fsm-sync-worker-ts/src/cli/fsmctl.ts`                                                                    | `packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts`                                                                                                                |
 | Commands       | `create`, `resume`, `send`, `stop`                                                                                 | `list`, `invoke`                                                                                                                                                                                    |
 | `create`       | Creates a new FSM instance, its pgmq queue, sends `initialTransition_event`, and enqueues to `fsm_dispatch_queue`  | — (no equivalent — instances/dispatch aren't this ctl's concern)                                                                                                                                    |
 | `resume`       | Re-enqueues an existing FSM instance to the `fsmscheduler` via `resumeEventForFsmWorker`                           | — (no equivalent)                                                                                                                                                                                   |
@@ -400,8 +400,8 @@ deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c send -q <i
 deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c stop -q <instance-uuid>
 
 # async-operation-worker-gateway-ctl
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts list
-deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts invoke \
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts list
+deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts invoke \
   --parent-fsm-name creditCheck --parent-fsm-version v01 \
   --async-operation-type internalAsyncOperation --async-operation-name checkBureau --async-operation-version v01 \
   --async-operation-language typescript \
@@ -410,7 +410,7 @@ deno run --allow-all packages/fsm-core-async-op-worker/src/cli/async-operation-w
 
 See [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
 (fsmctl) and
-[`CLI-USAGE.md`](./packages/fsm-core-async-op-worker/docs/guides/CLI-USAGE.md)
+[`CLI-USAGE.md`](./packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md)
 (async-operation-worker-gateway-ctl) for the full flag reference. The old
 `async-operation-ctl` (for `fsm-async-worker-ts`) is covered in
 [Appendix: superseded `fsm-async-worker-ts`](#appendix-superseded-fsm-async-worker-ts).
@@ -420,7 +420,7 @@ See [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
 ## Appendix: superseded `fsm-async-worker-ts`
 
 `fsm-async-worker-ts` was the original async-operation worker. It's superseded
-by `fsm-core-async-op-worker` (sections
+by `fsm-async-worker-gateway-ts` (sections
 [3](#3-start-the-workers)–[5](#5-control-the-cluster-ctl) above) — kept runnable
 for now, but no new work should target it. Unlike the current gateway, it
 followed the same kube-style node-agent/scheduler split as the FSM
@@ -515,7 +515,7 @@ for the full flag reference.
 Rows marked 🗄️ describe the superseded `fsm-async-worker-ts` path (see
 [Appendix: superseded `fsm-async-worker-ts`](#appendix-superseded-fsm-async-worker-ts))
 — kept for historical mapping, not current guidance. The current async-operation
-worker's terms are the `fsm-core-async-op-worker` rows further down.
+worker's terms are the `fsm-async-worker-gateway-ts` rows further down.
 
 | Design term (this spec)                                  | Today's implementation                                                                                                                                                                                | Status                                                          |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -524,16 +524,16 @@ worker's terms are the `fsm-core-async-op-worker` rows further down.
 | `async_operation_workerlet` (node registry)              | `async_operation_workerlet` table — `registerAsyncOperationWorkerlet` / `asyncOperationWorkerletHeartbeat` / `deregisterAsyncOperationWorkerlet`                                                      | 🗄️ Superseded                                                   |
 | scheduler / dispatch (async operation)                   | `async-operation-scheduler.ts`, `async_operation_schedule_next_pending`, `createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork`, `async_operation_instance_and_async_operation_workerlet` | 🗄️ Superseded                                                   |
 | `async-operation-ctl` (control CLI)                      | `packages/fsm-async-worker-ts/src/cli/async-operation-ctl.ts` — `list-instances` / `list-meta` / `dispatch`                                                                                           | 🗄️ Superseded                                                   |
-| `SidecarGateway` (actor routing)                         | `packages/fsm-core-async-op-worker/src/sidecar/gateway.ts` — in-memory `actorRoutes`, no DB table; registration over `--sidecar-socket`                                                               | ✅ Shipped                                                      |
+| `SidecarGateway` (actor routing)                         | `packages/fsm-async-worker-gateway-ts/src/sidecar/gateway.ts` — in-memory `actorRoutes`, no DB table; registration over `--sidecar-socket`                                                            | ✅ Shipped                                                      |
 | gateway wire protocol (buf-codegenned)                   | `packages/fsm-proto-codegen/` (`buf generate`) → `gen/{typescript,python,rust,go}/`, wired into `gatewayClient.ts`/`gatewayServer.ts`                                                                 | ✅ Shipped                                                      |
-| `async-operation-worker-gateway-ctl` (control/debug CLI) | `packages/fsm-core-async-op-worker/src/cli/async-operation-worker-gateway-ctl.ts` — `list` / `invoke`                                                                                                 | ✅ Shipped                                                      |
+| `async-operation-worker-gateway-ctl` (control/debug CLI) | `packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts` — `list` / `invoke`                                                                                              | ✅ Shipped                                                      |
 | `lang` arg / `fsmLanguage` routing                       | `generate-sync-logic --lang` (typescript only currently); `generate-async-logic` (by `fsmLanguage`, ts/python/rust/go); `validate-async-operation --lang` (ts/python/rust/go)                         | ✅ Shipped (scaffold/validate) — 🔭 Planned (Go/Rust execution) |
 | async op scaffolding (`actors/`)                         | `generate-async-logic` command (`generate-async-operation-logic.ts`)                                                                                                                                  | ✅ Shipped                                                      |
 | sync op scaffolding (actions/…)                          | `generate-sync-logic --lang` command (`generate-sync-operation-logic.ts`)                                                                                                                             | ✅ Shipped                                                      |
 | validate `fsm.json` + operation logic                    | `validate-sync-operation-logic.ts`, `validate-async-operation-logic-v2.ts`                                                                                                                            | ✅ Shipped                                                      |
 | load `fsm.json`                                          | `load-fsm-json.ts` (`loadFsmJSONFromFolders`); `loadFsmFromJson` → `load_fsm_from_json_v2`                                                                                                            | ✅ Shipped                                                      |
 | `fsmlet`, `registerFsmlet`, loop                         | `packages/fsm-sync-worker-ts/src/fsmlet/fsmlet.ts`, `packages/fsm-core-db-ts/src/fsm-workerlet.ts` (`fsm_workerlet` table)                                                                            | ✅ Shipped                                                      |
-| heartbeat (5s)                                           | `fsmletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`); `asyncOperationWorkerletHeartbeat` is the 🗄️ superseded equivalent — `fsm-core-async-op-worker` has no heartbeat yet (see section 3)             | ✅ Shipped (sync) — ⚠️ Not implemented (current async)          |
+| heartbeat (5s)                                           | `fsmletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`); `asyncOperationWorkerletHeartbeat` is the 🗄️ superseded equivalent — `fsm-async-worker-gateway-ts` has no heartbeat yet (see section 3)          | ✅ Shipped (sync) — ⚠️ Not implemented (current async)          |
 | scheduler / dispatch (FSM)                               | `fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                                                                                                           | ✅ Shipped                                                      |
 | fsmlet ↔ async-actor liveness check                      | `asyncOperationVerificationMode` (`checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — library option, not exposed as an `fsmlet` CLI flag                                      | ⚠️ Shipped, not wired to CLI                                    |
 | `fsmctl` (control CLI)                                   | `packages/fsm-sync-worker-ts/src/cli/fsmctl.ts` — `create` / `resume` / `send` / `stop`                                                                                                               | ✅ Shipped                                                      |
@@ -545,7 +545,7 @@ worker's terms are the `fsm-core-async-op-worker` rows further down.
 - Sync worker CLI —
   [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
 - Async-operation worker CLI (current) —
-  [`CLI-USAGE.md`](./packages/fsm-core-async-op-worker/docs/guides/CLI-USAGE.md)
+  [`CLI-USAGE.md`](./packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md)
 - Async-operation worker CLI (old, superseded) —
   [`CLI-USAGE.md`](./packages/fsm-async-worker-ts/docs/guides/CLI-USAGE.md)
 - Proto codegen (gateway wire stubs) —

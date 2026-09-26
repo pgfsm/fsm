@@ -11,6 +11,13 @@
 
 ---
 
+> **Rename note (2026-09-26, #361)**: `packages/fsm-core-async-op-worker` is now
+> `packages/fsm-async-worker-gateway-ts`, published as
+> `@pgfsm/async-worker-gateway` (formerly `@pgfsm/async-worker`). The TypeScript
+> worker SDK it pairs with is `@pgfsm/async-worker-sdk`
+> (`packages/fsm-async-worker-sdk-ts`, #358). References below keep the names in
+> use when each section was written.
+
 > **Revision note (2026-07-26, formalized 2026-08-04)**: the "Decision" section
 > below (Option C, Unix domain socket IPC) was the original 2026-07-22 decision
 > and **is superseded**. Before any Rust/Go actor landed against it, a

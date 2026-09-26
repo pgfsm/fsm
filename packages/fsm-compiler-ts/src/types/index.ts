@@ -143,7 +143,7 @@ export type WrittenActor = {
  * A {@linkcode WrittenActor} plus the activity-registration identity a
  * worker SDK needs to register with the Activity Gateway (see
  * `actorKey()`/`RegisteredActor` in
- * `packages/fsm-core-async-op-worker/src/sidecar/gateway.ts`) — everything
+ * `packages/fsm-async-worker-gateway-ts/src/sidecar/gateway.ts`) — everything
  * `writeActorsRegistry`/`writeAggregateActorsRegistry`
  * (`operation-logic-scaffold.ts`) need to emit a self-describing
  * registration, not just a name -> callable map. Matches the flattened

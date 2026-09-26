@@ -3,7 +3,7 @@
 //! generated pgfsm.sidecargateway.v1.SidecarGatewayService bidi-streaming
 //! client (the pgfsm-proto-codegen crate, a real Cargo path dependency on
 //! packages/fsm-proto-codegen/gen/rust/ — see #106 — generated from
-//! packages/fsm-proto-codegen/proto/fsm-core-async-op-worker/pgfsm/sidecargateway/v1/sidecar_gateway.proto,
+//! packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/sidecargateway/v1/sidecar_gateway.proto,
 //! #100), registers a
 //! compiled-in actor registry, and serves invoke requests.
 //!

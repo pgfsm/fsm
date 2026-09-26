@@ -581,8 +581,8 @@ Deno.errors.NotFound)) throw error; }`
 anywhere this pattern shows up — it recognizes both real Deno's
 `Deno.errors.NotFound` and the shim's unwrapped `ENOENT`.
 `delete-fsm-json-from-folders.ts`'s two non-recursive removes are the current
-consumer; `fsm-core-async-op-worker` has its own copy of the same helper for its
-two socket-cleanup call sites (`gatewayServer.ts`'s `cleanupUnixSocket`,
+consumer; `fsm-async-worker-gateway-ts` has its own copy of the same helper for
+its two socket-cleanup call sites (`gatewayServer.ts`'s `cleanupUnixSocket`,
 `sidecar/gateway.ts`'s `cleanupSocket`) — see that package's own `CLAUDE.md`.
 
 ### Dynamic import of a target FSM file under the npm/npx build (#270)

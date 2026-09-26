@@ -8,7 +8,7 @@ DROP FUNCTION IF EXISTS fsm_core.create_async_op_queue_and_send_event_from_fsm_i
 -- Queue naming delegates to fsm_core.compute_async_operation_queue_name_v2
 -- (30_async_operation_worker_v2/20260806201803_ensure_async_operation_queue_for_worker.sql,
 -- loaded before this file) instead of computing it inline, so this function
--- and fsm-core-async-op-worker's poll loop (claim_pending_async_operation_events_for_workers_v2,
+-- and fsm-async-worker-gateway-ts's poll loop (claim_pending_async_operation_events_for_workers_v2,
 -- same shared helper) can never drift onto different queue names for the
 -- same actor identity again. fsmLanguage is a new parameter this call needs
 -- to pass through -- the compiled FSM's invoke action params already carry

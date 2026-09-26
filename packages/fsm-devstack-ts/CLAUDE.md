@@ -27,7 +27,7 @@ file's: it only documents the currently-publishable library export
 3. `pgcron` registration — one-shot, idempotent. Calls
    `registerScheduleAllPendingCronJob` from `@pgfsm/db` directly, in-process
    (the same function `@pgfsm/sync-worker`'s `pgcron` CLI calls).
-4. The Activity Gateway (`@pgfsm/async-worker`'s
+4. The Activity Gateway (`@pgfsm/async-worker-gateway`'s
    `async-operation-worker-gateway` bin) and `fsmlet` (`@pgfsm/sync-worker`'s
    `fsmlet` bin) — each spawned as that sibling package's own real CLI, each its
    own subprocess, supervised together via `runSupervised`. `Ctrl+C` stops both;
@@ -38,9 +38,10 @@ file's: it only documents the currently-publishable library export
 `@pgfsm/compiler`/`@pgfsm/db`'s functions directly — no subprocess at all. The
 gateway and fsmlet are long-running and need real process isolation (so one
 crashing doesn't take fsmdev down with it, and so `runSupervised`'s fail-fast
-policy has something to supervise), so `fsmdev` spawns `@pgfsm/async-worker`'s
-and `@pgfsm/sync-worker`'s **own real CLIs** — `async-operation-worker-gateway`
-and `fsmlet` — as separate processes, by name, and lets `PATH` resolve them.
+policy has something to supervise), so `fsmdev` spawns
+`@pgfsm/async-worker-gateway`'s and `@pgfsm/sync-worker`'s **own real CLIs** —
+`async-operation-worker-gateway` and `fsmlet` — as separate processes, by name,
+and lets `PATH` resolve them.
 
 An earlier revision (#245) instead shipped two small self-owned wrapper files
 (`src/cli/run-gateway.ts`/`run-fsmlet.ts`) that imported
@@ -52,10 +53,10 @@ with correct `dependencies` of their own (#283/#286–#289), #251 removed the
 wrappers: `fsmdev.ts`'s `toProcessSpec` now spawns the sibling packages' own CLI
 **source files** directly under Deno (path computed relative to `fsmdev.ts` via
 `import.meta.url`, reaching into `../fsm-sync-worker-ts/src/cli/fsmlet.ts` /
-`../fsm-core-async-op-worker/src/cli/async-operation-worker-gateway.ts` — this
-only has to resolve inside this monorepo checkout, since the Deno branch never
-runs from an installed package) or their **real published bin names** under the
-dnt-built Node output:
+`../fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway.ts` —
+this only has to resolve inside this monorepo checkout, since the Deno branch
+never runs from an installed package) or their **real published bin names**
+under the dnt-built Node output:
 
 ```ts
 const isDeno = typeof process !== "undefined" && !!process.versions?.deno;
@@ -63,9 +64,9 @@ const isDeno = typeof process !== "undefined" && !!process.versions?.deno;
 // under Node: cmd = "fsmlet" / "async-operation-worker-gateway" (bare name, resolved via PATH), args = [...]
 ```
 
-`@pgfsm/sync-worker`/`@pgfsm/async-worker` are declared as real `dependencies`
-in `scripts/build-npm.ts` (see "Real dependencies" below) purely so
-`npm install`ing `@pgfsm/devstack` links their `fsmlet`/
+`@pgfsm/sync-worker`/`@pgfsm/async-worker-gateway` are declared as real
+`dependencies` in `scripts/build-npm.ts` (see "Real dependencies" below) purely
+so `npm install`ing `@pgfsm/devstack` links their `fsmlet`/
 `async-operation-worker-gateway` bins into `node_modules/.bin` alongside
 `fsmdev`'s own — the same mechanism `npx -p @pgfsm/sync-worker -- fsmlet`
 already relies on for that package's own bin, verified previously (#245) by
@@ -116,10 +117,11 @@ bin's, and `fsmdev` is registered as a `bin`.
 **The `deno task build:npm` → `npx -p @pgfsm/devstack -- fsmdev` path works end
 to end, verified — with one real remaining gap (below).** `@pgfsm/compiler` and
 `@pgfsm/db` are now real `dependencies` (mapped via `dnt`'s `mappings` option —
-see "Real dependencies" below); `@pgfsm/sync-worker`/ `@pgfsm/async-worker` are
-real `dependencies` too, declared directly since nothing imports their bare
-specifier anymore. Verified: `deno task build:npm` completes,
-`dist/package.json`'s `dependencies` lists all four (not vendored source),
+see "Real dependencies" below); `@pgfsm/sync-worker`/
+`@pgfsm/async-worker-gateway` are real `dependencies` too, declared directly
+since nothing imports their bare specifier anymore. Verified:
+`deno task build:npm` completes, `dist/package.json`'s `dependencies` lists all
+four (not vendored source),
 `node dist/esm/fsm-devstack-ts/src/cli/fsmdev.js --help` runs correctly under
 Node.
 
@@ -196,8 +198,8 @@ this note is just about how it surfaced.
 one `bin` entry — see "What it is" above for why `run-gateway.ts`/
 `run-fsmlet.ts` no longer exist). See "Real dependencies" below for how it
 declares `@pgfsm/compiler`/`@pgfsm/db`/`@pgfsm/sync-worker`/
-`@pgfsm/async-worker`. Sets `test: false` in the dnt `build()` options because
-this package, unlike the sibling dnt-built packages, colocates
+`@pgfsm/async-worker-gateway`. Sets `test: false` in the dnt `build()` options
+because this package, unlike the sibling dnt-built packages, colocates
 `supervisor.test.ts` under `src/`; without that, dnt also transforms/type-checks
 it as a Node test file and pulls in `@std/assert`, which needs a newer `lib`
 target than this package's `compilerOptions` sets. `postBuild()` only copies
@@ -208,9 +210,9 @@ target than this package's `compilerOptions` sets. `postBuild()` only copies
 ## Real dependencies
 
 `@pgfsm/compiler`, `@pgfsm/db`, `@pgfsm/logging`, `@pgfsm/sync-worker`, and
-`@pgfsm/async-worker` are all real npm `dependencies` in `scripts/build-npm.ts`
-now (#251, #294) — but via two different mechanisms, because they relate to this
-package's compiled code in two different ways:
+`@pgfsm/async-worker-gateway` are all real npm `dependencies` in
+`scripts/build-npm.ts` now (#251, #294) — but via two different mechanisms,
+because they relate to this package's compiled code in two different ways:
 
 - **`@pgfsm/compiler`/`@pgfsm/db`/`@pgfsm/logging`** are genuinely imported as
   bare specifiers in `fsmdev.ts`'s own compiled code (`generate-all`/`pgcron`
@@ -221,8 +223,8 @@ package's compiled code in two different ways:
   of letting `dnt` vendor the workspace-resolved source, and declares the
   dependency. Version read from each package's own `deno.json` at build time,
   not hardcoded.
-- **`@pgfsm/sync-worker`/`@pgfsm/async-worker`** are **not** imported by any
-  compiled code here anymore — `fsmdev` only spawns their `fsmlet`/
+- **`@pgfsm/sync-worker`/`@pgfsm/async-worker-gateway`** are **not** imported by
+  any compiled code here anymore — `fsmdev` only spawns their `fsmlet`/
   `async-operation-worker-gateway` bins as separate OS processes (see "What it
   is" above). There's no bare specifier for `mappings` to redirect, so these are
   a plain `package.dependencies` entry instead, declared purely so
@@ -235,13 +237,13 @@ Before #251, none of the five were declared at all: `@pgfsm/sync-worker`/
 those existed and how they were retired), and `@pgfsm/compiler`/`@pgfsm/db`/
 `@pgfsm/logging` were still vendored via `dnt`'s default handling of the Deno
 workspace-linked import — the same shape PR #248 (closing #247) documented for
-`@pgfsm/db` inside `fsm-sync-worker-ts`'s and `fsm-core-async-op-worker`'s own
-builds, one layer deeper (a fix to any of these five needed **two** republish
-steps to reach a `@pgfsm/devstack` install: the vendored package itself, then
-this package). `@pgfsm/logging` stayed vendored the longest, since it wasn't
-published to npm at all until #293. All five are now real npm packages with
-correct `dependencies` of their own (#283, #286–#289, #293), so mapping instead
-of vendoring is safe here the same way it was for the first two.
+`@pgfsm/db` inside `fsm-sync-worker-ts`'s and `fsm-async-worker-gateway-ts`'s
+own builds, one layer deeper (a fix to any of these five needed **two**
+republish steps to reach a `@pgfsm/devstack` install: the vendored package
+itself, then this package). `@pgfsm/logging` stayed vendored the longest, since
+it wasn't published to npm at all until #293. All five are now real npm packages
+with correct `dependencies` of their own (#283, #286–#289, #293), so mapping
+instead of vendoring is safe here the same way it was for the first two.
 
 ## Commands
 

@@ -1,8 +1,8 @@
-# Goal: `fsm-core-async-op-worker`
+# Goal: `fsm-async-worker-gateway-ts`
 
 Not committed. Scoping notes only — no code changes made against this document.
 
-`fsm-core-async-op-worker` is a standalone **alternative** to
+`fsm-async-worker-gateway-ts` is a standalone **alternative** to
 `fsm-async-worker-ts` — not something that integrates with or is invoked by it.
 It owns its own poll/dispatch/archive loop end to end; nothing in this document
 depends on `fsm-async-worker-ts`'s existing implementation.
@@ -69,7 +69,7 @@ the original 8 steps) are listed at the end of §3.
 
 ## 2. Current implementation — function inventory
 
-Scanned `packages/fsm-core-async-op-worker/src/` directly (all exported
+Scanned `packages/fsm-async-worker-gateway-ts/src/` directly (all exported
 symbols):
 
 | File                                        | Export                                           | What it does                                                                                                                                                                                                                                                        |

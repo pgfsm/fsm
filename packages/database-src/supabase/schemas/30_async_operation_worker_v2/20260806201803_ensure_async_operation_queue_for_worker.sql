@@ -77,7 +77,7 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Ensures a PGMQ queue exists for an async-operation-actor identity, called
--- when fsm-core-async-op-worker's SidecarGateway registers a worker (see
+-- when fsm-async-worker-gateway-ts's SidecarGateway registers a worker (see
 -- ensureQueueOnRegister in gatewayServer.ts / GOAL.md).
 --
 -- pgmq.create() is already fully idempotent (CREATE TABLE/INDEX IF NOT
