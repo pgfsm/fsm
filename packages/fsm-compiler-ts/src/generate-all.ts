@@ -11,7 +11,6 @@ import {
   generateSyncOperationLogicFromFolders,
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
-import { fsmIdentityFromVersionFolderPath } from "./operation-logic-scaffold.ts";
 import type { OperationLang } from "./types/index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "generate-all"]);
@@ -30,14 +29,14 @@ export interface GenerateAllOptions {
    */
   writeRootAbsPath: string;
   /**
-   * FSM name for single-file mode. Defaults to the parent-of-version folder
-   * name of the file's own `<fsmName>/<fsmVersion>/` location. Ignored in
+   * FSM name, e.g. `creditCheck`. Required in single-file mode; ignored in
    * folder mode, which derives identity per FSM while walking the tree.
    */
   fsmName?: string;
   /**
-   * FSM version folder name for single-file mode (e.g. `v01`). Defaults to
-   * the file's own parent folder name. Ignored in folder mode.
+   * FSM version folder name, e.g. `v01`. Required in single-file mode (it
+   * also fills in missing `asyncOperationVersion` when compiling a
+   * machine.ts); ignored in folder mode.
    */
   fsmVersion?: string;
   /** Subdirectory names to skip while walking a plugin-root folder. */
@@ -86,9 +85,10 @@ export interface GenerateAllOptions {
  *   generate-async-logic/generate-sync-logic run against it, mirroring
  *   generate-async-logic/generate-sync-logic's own single-fsm.json mode.
  *
- * In both single-file modes `fsmName`/`fsmVersion` default to the file's own
- * `<fsmName>/<fsmVersion>/` location, so a file sitting at the conventional
- * depth needs neither.
+ * Both single-file modes require `fsmName` and `fsmVersion`, like
+ * generate-sync-logic/generate-async-logic's own single-fsm.json mode. They
+ * are never guessed from the file's parent folders: `-f a/fsm.json` would
+ * otherwise silently become `<cwd's name>/a` (#372).
  */
 export async function generateAll(options: GenerateAllOptions): Promise<void> {
   const {
@@ -116,11 +116,16 @@ export async function generateAll(options: GenerateAllOptions): Promise<void> {
   }
 
   if (folderIsFsmJsonFile || folderIsMachineTsFile) {
+    const { fsmName, fsmVersion } = options;
+    if (!fsmName || !fsmVersion) {
+      throw new Error(
+        `generate-all requires --fsm-name and --fsm-version when --folder is a single ${
+          folderIsFsmJsonFile ? "fsm.json" : "machine.ts"
+        } file`,
+      );
+    }
     const absPath = folder.startsWith("/") ? folder : `${Deno.cwd()}/${folder}`;
     const absDir = absPath.substring(0, absPath.lastIndexOf("/"));
-    const derived = fsmIdentityFromVersionFolderPath(absDir);
-    const fsmName = options.fsmName ?? derived.fsmName;
-    const fsmVersion = options.fsmVersion ?? derived.fsmVersion;
 
     let fsmJsonPath = absPath;
     if (folderIsMachineTsFile) {

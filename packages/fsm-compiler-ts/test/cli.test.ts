@@ -513,6 +513,37 @@ Deno.test("cli generate-all folder mode writes under cwd, not one level above --
   );
 });
 
+for (
+  const [label, file] of [["fsm.json", "fsm.json"], [
+    "machine.ts",
+    "machine.ts",
+  ]]
+) {
+  Deno.test(`cli generate-all requires --fsm-name and --fsm-version for a single ${label}, and never guesses from its folders`, async () => {
+    // a/<file> relative to cwd: guessing would silently yield
+    // fsmName = <cwd's own name>, fsmVersion = "a" (#372).
+    const cwd = `${FIXTURE_ROOT}/generate-all-no-identity-${label}`;
+    await Deno.mkdir(`${cwd}/a`, { recursive: true });
+    await copy(
+      `${FSM_FOLDER}/creditCheck/v01/${file}`,
+      `${cwd}/a/${file}`,
+    );
+    for (
+      const extra of [[], ["-N", "checkout"], ["-V", "v01"]]
+    ) {
+      const { code, stderr } = await runCli(
+        ["-c", "generate-all", "-f", `a/${file}`, ...extra],
+        undefined,
+        cwd,
+      );
+      assertEquals(code, 1);
+      assertStringIncludes(stderr, "requires --fsm-name and --fsm-version");
+    }
+    assertEquals(await pathExists(`${cwd}/async-worker`), false);
+    assertEquals(await pathExists(`${cwd}/sync-worker`), false);
+  });
+}
+
 Deno.test("cli generate-all rejects --output", async () => {
   const { code, stderr } = await runCli([
     "-c",
@@ -541,14 +572,22 @@ Deno.test("cli generate-all machine.ts mode writes fsm.json next to machine.ts a
   await Deno.mkdir(cwd, { recursive: true });
 
   const { code } = await runCli(
-    ["-c", "generate-all", "-f", `${versionDir}/machine.ts`],
+    [
+      "-c",
+      "generate-all",
+      "-f",
+      `${versionDir}/machine.ts`,
+      "-N",
+      "checkout",
+      "-V",
+      "v02",
+    ],
     undefined,
     cwd,
   );
   assertEquals(code, 0);
   assert(await pathExists(`${versionDir}/fsm.json`));
   assert(await pathExists(`${versionDir}/xstate-fsm.json`));
-  // fsmName/fsmVersion derived from machine.ts's own folders (checkout/v02).
   assert(
     await pathExists(
       `${cwd}/async-worker/typescript/checkout/v02/actors/verifyCredentials/verifyCredentials.ts`,
@@ -601,7 +640,16 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
   const cwd = `${FIXTURE_ROOT}/generate-all-fsm-json-mode`;
   await Deno.mkdir(cwd, { recursive: true });
   const { code, stdout } = await runCli(
-    ["-c", "generate-all", "-f", SINGLE_FSM_JSON],
+    [
+      "-c",
+      "generate-all",
+      "-f",
+      SINGLE_FSM_JSON,
+      "-N",
+      "creditCheck",
+      "-V",
+      "v01",
+    ],
     undefined,
     cwd,
   );
@@ -610,7 +658,6 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
   // The fsm.json at --folder is used as-is -- nothing is written into cwd.
   assertEquals(await pathExists(`${cwd}/fsm.json`), false);
 
-  // fsmName/fsmVersion derived from SINGLE_FSM_JSON's own path (creditCheck/v01).
   assert(
     await pathExists(
       `${cwd}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,
@@ -627,7 +674,7 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
   assertStringIncludes(aggregateContent, "creditcheck_v01");
 });
 
-Deno.test("cli generate-all fsm.json mode honors --fsm-name/--fsm-version over the file's own folders", async () => {
+Deno.test("cli generate-all fsm.json mode uses --fsm-name/--fsm-version, not the file's own folders", async () => {
   const flat = `${FIXTURE_ROOT}/generate-all-flat/checkout.json`;
   await Deno.mkdir(`${FIXTURE_ROOT}/generate-all-flat`, { recursive: true });
   await copy(SINGLE_FSM_JSON, flat);

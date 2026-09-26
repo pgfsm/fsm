@@ -200,10 +200,10 @@ invocation instead of three. Accepts three input shapes:
 
 In every mode, `async-worker/` and `sync-worker/` land under the current working
 directory — the same anchor as `generate-sync-logic`/`generate-async-logic` — so
-run it from your app root. `-o`/`--output` is not accepted. In either
-single-file mode `-N`/`--fsm-name` and `-V`/`--fsm-version` default to the
-file's own `<fsmName>/<fsmVersion>/` folders; pass them for a file that lives
-anywhere else.
+run it from your app root. `-o`/`--output` is not accepted. Both single-file
+modes require `-N`/`--fsm-name` and `-V`/`--fsm-version`, like the standalone
+commands' single-`fsm.json` mode. They are never guessed from the file's parent
+folders: `-f a/fsm.json` would otherwise silently become `<cwd's name>/a`.
 
 `-s`/`--skip-dirs`, `-r`/`--show-recommendation` (step 1), and `-l`/`--lang`
 (step 3) all apply, same as the individual commands.
@@ -211,8 +211,8 @@ anywhere else.
 ```bash
 cd apps/fsm-core-example
 npx @pgfsm/compiler -c generate-all -f fsm
-npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/machine.ts
-npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/fsm.json
+npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/machine.ts -N creditCheck -V v01
+npx @pgfsm/compiler -c generate-all -f fsm/creditCheck/v01/fsm.json -N creditCheck -V v01
 npx @pgfsm/compiler -c generate-all -f ~/Downloads/checkout.json -N checkout -V v01
 ```
 

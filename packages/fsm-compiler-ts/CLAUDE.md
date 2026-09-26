@@ -58,11 +58,16 @@ before.
 `writeRootAbsPath` option (the CLI passes `Deno.cwd()`), used in every mode, and
 the CLI rejects `--output` for it with an explicit error rather than ignoring
 it. Before #372 folder mode wrote one level above `--folder` and the single-file
-modes wrote under `--output`. In single-file mode `fsmName`/ `fsmVersion`
-default to the file's own `<fsmName>/<fsmVersion>/` folders
-(`fsmIdentityFromVersionFolderPath`) and `-N`/`-V` override them — unlike the
-standalone commands, which require both. machine.ts mode writes `fsm.json` next
-to the machine.ts. fsmdev's own in-process copy of the folder-mode sequence
+modes wrote under `--output`. Single-file mode requires `fsmName`/`fsmVersion`
+(`-N`/`-V`), same as the standalone commands — deliberately never derived via
+`fsmIdentityFromVersionFolderPath`, which just takes the last two path segments
+unvalidated (`-f a/fsm.json` from `/home/dev/proj` would yield `proj`/`a` and
+silently write there, and for machine.ts that bad version would also be baked
+into `asyncOperationVersion`). `generateAll` throws for a library caller; the
+CLI checks up front so it can print help. Guessing identity with a confirmation
+prompt belongs in the project-aware `@pgfsm/cli` (SPEC-004), not here.
+machine.ts mode writes `fsm.json` next to the machine.ts. fsmdev's own
+in-process copy of the folder-mode sequence
 (`fsm-devstack-ts/src/cli/fsmdev.ts`'s `runGenerateAll`) deliberately still
 writes one level above its `--fsm-folder`.
 

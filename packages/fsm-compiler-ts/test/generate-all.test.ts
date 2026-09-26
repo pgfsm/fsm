@@ -57,10 +57,11 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json next to mac
   await generateAll({
     folder: `${versionDir}/machine.ts`,
     writeRootAbsPath: writeRoot,
+    fsmName: "checkout",
+    fsmVersion: "v02",
   });
 
   assert(await pathExists(`${versionDir}/fsm.json`));
-  // fsmName/fsmVersion derived from machine.ts's own folders (checkout/v02).
   assert(
     await pathExists(
       `${writeRoot}/async-worker/typescript/checkout/v02/actors/verifyCredentials/verifyCredentials.ts`,
@@ -80,11 +81,15 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json next to mac
 
 Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and writes actor + sync stubs and the aggregate registry under writeRootAbsPath", async () => {
   const writeRoot = `${FIXTURE_ROOT}/generate-all-fsm-json-mode`;
-  await generateAll({ folder: SINGLE_FSM_JSON, writeRootAbsPath: writeRoot });
+  await generateAll({
+    folder: SINGLE_FSM_JSON,
+    writeRootAbsPath: writeRoot,
+    fsmName: "creditCheck",
+    fsmVersion: "v01",
+  });
 
   assertEquals(await pathExists(`${writeRoot}/fsm.json`), false);
 
-  // fsmName/fsmVersion derived from SINGLE_FSM_JSON's own path (creditCheck/v01).
   const actorStat = await Deno.stat(
     `${writeRoot}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`,
   );
@@ -95,7 +100,37 @@ Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and w
   assert(aggregateContent.includes("creditcheck_v01"));
 });
 
-Deno.test("generateAll - single fsm.json file mode prefers explicit fsmName/fsmVersion", async () => {
+for (
+  const file of [SINGLE_FSM_JSON, `${FSM_FOLDER}/creditCheck/v01/machine.ts`]
+) {
+  Deno.test(
+    `generateAll - single-file mode requires fsmName and fsmVersion (${
+      file.split("/").at(-1)
+    })`,
+    async () => {
+      const writeRoot = `${FIXTURE_ROOT}/generate-all-missing-identity`;
+      for (
+        const identity of [{}, { fsmName: "creditCheck" }, {
+          fsmVersion: "v01",
+        }]
+      ) {
+        await assertRejects(
+          () =>
+            generateAll({
+              folder: file,
+              writeRootAbsPath: writeRoot,
+              ...identity,
+            }),
+          Error,
+          "requires --fsm-name and --fsm-version",
+        );
+      }
+      assertEquals(await pathExists(writeRoot), false);
+    },
+  );
+}
+
+Deno.test("generateAll - single fsm.json file mode uses the given fsmName/fsmVersion, not the file's own folders", async () => {
   const writeRoot = `${FIXTURE_ROOT}/generate-all-explicit-identity`;
   await generateAll({
     folder: SINGLE_FSM_JSON,
