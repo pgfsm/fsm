@@ -185,6 +185,13 @@ Why the others lose on that driver:
    - The gateway sets an HTTP/2 **max connection age**
      (`--max-connection-age-ms`, default 10 min ± 10 % jitter), then sends
      GOAWAY once in-flight invokes drain or a grace period ends.
+   - **Keepalive:** on TCP, the gateway and the SDKs enable HTTP/2 keepalive
+     pings (`--keepalive-interval-ms`, default 30 s; `--keepalive-timeout-ms`,
+     default 10 s). Today's heartbeat only goes from worker to gateway, and the
+     gateway never replies, so a half-open connection (NetworkPolicy blackhole,
+     node loss) would otherwise go unnoticed on both sides. A Unix socket
+     doesn't need this: a crash there shows up immediately as end-of-stream or a
+     reset.
 2. **SDKs** (all 4 languages, consistent flags)
    - `--gateway-socket <path>` stays. It is joined by
      `--gateway-address
@@ -245,8 +252,11 @@ Why the others lose on that driver:
 
 **Migration** (purely additive; each step shippable alone)
 
-1. Land #391 (multi-worker routing) and #392 (SDK reconnect). Both are
-   correctness fixes even in the single-pod topology.
+1. Land #391 (multi-worker routing), #392 (SDK reconnect), #396 (retriable
+   invoke failures re-dispatched instead of archived) and #397
+   (`SidecarGateway.stop()` hang). All are correctness fixes even in the
+   single-pod topology. #396 is what makes gateway rolling restarts lossless,
+   and #397 is what makes them graceful.
 2. Proto `max_concurrency` field + capacity-aware claim function + derived `vt`.
    This lifts the 1-message-per-tick ceiling for the single-pod topology too.
 3. Gateway TCP listener + TLS + token; SDK `--gateway-address`/TLS/token flags.
@@ -294,6 +304,12 @@ Why the others lose on that driver:
       `UNAUTHENTICATED` before registration. A plaintext connection to a TLS
       listener fails. Rotating the token file is picked up without a gateway
       restart. Verified E2E.
+- [ ] **Half-open connections are detected over TCP:** the gateway and the SDKs
+      enable HTTP/2 keepalive pings on the TCP transport (default 30 s interval,
+      10 s timeout, configurable). If the network drops without a clean close,
+      both sides notice within about 40 s. The worker reconnects, and the
+      gateway unregisters the worker and fails its in-flight invokes as
+      retriable (see #396). Verified E2E.
 - [ ] **Unix mode unchanged:** with no new flags, gateway and SDKs behave
       exactly as today (default Unix socket paths, no TLS/token required).
 - [ ] **Flag parity:** all 4 SDKs expose the same `--gateway-address`,
@@ -309,5 +325,10 @@ Why the others lose on that driver:
 
 <!-- Filled in after acceptance: links to implementation issues and PRs. -->
 
-Prerequisite bugs already filed: #391 (multi-worker routing), #392 (SDK
-reconnect).
+Prerequisites:
+
+- #391: multi-worker routing (merged in #395).
+- #392: SDK reconnect with backoff (PR #398).
+- #396: retriable invoke failures are archived as actor errors instead of
+  re-dispatched.
+- #397: `SidecarGateway.stop()` hangs while a worker is connected.
