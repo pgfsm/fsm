@@ -1,11 +1,10 @@
-import { join, relative, SEPARATOR } from "@std/path";
+import { join } from "@std/path";
 import {
   FSM_DIR_NAME,
   generateAll,
   isNotFoundError,
   isVersionFolderName,
 } from "@pgfsm/compiler";
-import { type ProjectConfig, upsertFsm } from "../project.ts";
 import type { WriteReport } from "../report.ts";
 import type { ResolvedSource } from "../source.ts";
 
@@ -62,30 +61,26 @@ async function nextFreeVersion(root: string, name: string): Promise<string> {
   return `v${String(max + 1).padStart(2, "0")}`;
 }
 
-/** Project-relative, POSIX-separated -- pgfsm.config.json is shared across OSes. */
-function toConfigPath(root: string, path: string): string {
-  return relative(root, path).split(SEPARATOR).join("/");
-}
-
 /**
  * Compiles/copies one FSM version into `fsm/<name>/<version>/` and scaffolds
  * its stubs in the worker projects, via the compiler's single-file
  * `generateAll` in `generated-only` mode -- existing stubs and entry files
- * are never overwritten. FSM versions are treated as immutable: an existing
- * `fsm/<name>/<version>/` is refused unless `force`.
+ * are never overwritten. An existing `fsm/<name>/<version>/` is refused
+ * unless `force`, so a typo'd name/version or a clashing design can't replace
+ * a version by accident; `force` is also how a version is regenerated after
+ * its source changes (there's no `sync` yet -- #390).
  */
 export async function addFsm(
   root: string,
-  config: ProjectConfig,
   source: ResolvedSource,
-  opts: { force?: boolean; report: WriteReport; sourceRoot?: string },
+  opts: { force?: boolean; report: WriteReport },
 ): Promise<void> {
   const target = join(root, FSM_DIR_NAME, source.name, source.version);
   const inPlace = source.path === join(target, source.kind);
   if (!opts.force && !inPlace && await exists(join(target, "fsm.json"))) {
     const next = await nextFreeVersion(root, source.name);
     throw new FsmExistsError(
-      `${FSM_DIR_NAME}/${source.name}/${source.version} already exists. FSM versions are immutable: add it as --fsm-version ${next}, or pass --force to replace it.`,
+      `${FSM_DIR_NAME}/${source.name}/${source.version} already exists. To regenerate it from this source (e.g. after editing it), pass --force; your stubs are kept. For a changed design, add it as a new version: --fsm-version ${next}.`,
     );
   }
 
@@ -104,11 +99,4 @@ export async function addFsm(
     if (unresolved) throw new MachineImportError(source.path, unresolved);
     throw err;
   }
-
-  upsertFsm(config, {
-    name: source.name,
-    version: source.version,
-    // In a dry-run sandbox, still record the path relative to the real root.
-    source: toConfigPath(opts.sourceRoot ?? root, source.path),
-  });
 }

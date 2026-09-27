@@ -3,9 +3,10 @@ import type { FileWriteEvent } from "@pgfsm/compiler";
 
 /**
  * Collects the compiler's per-file write events for one command run, one
- * entry per file: a command may write the same file more than once (sync
- * regenerates aggregates per FSM, then re-lays the worker projects). A file
- * created earlier in the run stays "created".
+ * entry per file: a command may write the same file more than once (create
+ * lays down empty aggregates, then add rewrites them; a folder source
+ * regenerates aggregates once per FSM). A file created earlier in the run
+ * stays "created".
  */
 export class WriteReport {
   readonly #byPath = new Map<string, FileWriteEvent>();

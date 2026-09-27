@@ -115,13 +115,12 @@ Deno.test("create lays out the project with all four async-worker languages and 
   assertEquals(pkg.dependencies, undefined);
   assertEquals(pkg.devDependencies, undefined);
   assertStringIncludes(pkg.scripts["fsm:add"], "npx -y @pgfsm/cli@");
+  assertEquals(Object.keys(pkg.scripts), ["fsm:add"]);
 
+  // Just a marker: nothing records FSM sources without sync (#390).
   const config = await readJson(join(APP, "pgfsm.config.json"));
+  assertEquals(Object.keys(config).sort(), ["name", "toolVersion"]);
   assertEquals(config.name, "my-app");
-  assertEquals(config.asyncWorkerLangs, ["typescript", "python", "rust", "go"]);
-  assertEquals(config.fsms, [
-    { name: "creditCheck", version: "v01", source: "../designs/credit.json" },
-  ]);
   assertEquals(
     (await readJson(join(APP, "sync-worker/typescript/deno.json"))).name,
     "my-app",
@@ -209,12 +208,6 @@ Deno.test("add from a subdirectory targets the project root and never touches ex
   for (const [f, content] of before) {
     assertEquals(await Deno.readTextFile(join(APP, f)), content, f);
   }
-  const config = await readJson(join(APP, "pgfsm.config.json"));
-  assert(
-    config.fsms.some((e: { name: string; source: string }) =>
-      e.name === "checkout" && e.source === "../designs/a/machine.ts"
-    ),
-  );
 });
 
 Deno.test("add of an existing name/version is refused with the next version; --force replaces it", async () => {
@@ -228,6 +221,7 @@ Deno.test("add of an existing name/version is refused with the next version; --f
   ];
   const refused = await pgfsm(argv, APP);
   assertEquals(refused.code, 1);
+  assertStringIncludes(refused.out, "--force");
   assertStringIncludes(refused.out, "--fsm-version v02");
 
   const forced = await pgfsm([...argv, "--force"], APP);
@@ -264,30 +258,34 @@ Deno.test("add --dry-run writes nothing, not even pgfsm.config.json", async () =
   );
 });
 
-Deno.test("sync recompiles from recorded sources and keeps an edited stub", async () => {
+Deno.test("add --force regenerates a version after its source changes and keeps an edited stub", async () => {
   const stub = join(APP, "sync-worker/typescript/checkout/v01/guards/index.ts");
   const edited = (await Deno.readTextFile(stub)) + "// mine\n";
   await Deno.writeTextFile(stub, edited);
   const fsmJson = join(APP, "fsm/checkout/v01/fsm.json");
   await Deno.writeTextFile(fsmJson, "{}\n"); // stale compiled output
 
-  const { code, out } = await pgfsm(["sync"], APP);
+  const { code, out } = await pgfsm(
+    [
+      "add",
+      join(DESIGNS, "a", "machine.ts"),
+      "-N",
+      "checkout",
+      "-V",
+      "v01",
+      "--force",
+    ],
+    APP,
+  );
   assertEquals(code, 0, out);
   assertEquals(await Deno.readTextFile(stub), edited);
   assert((await Deno.readTextFile(fsmJson)).length > 10);
 });
 
-Deno.test("sync warns and keeps going when a recorded source is gone", async () => {
-  const moved = join(ROOT, "credit-moved.json");
-  await Deno.rename(join(DESIGNS, "credit.json"), moved);
-  try {
-    const { code, out } = await pgfsm(["sync"], APP);
-    assertEquals(code, 0, out);
-    assertStringIncludes(out, "creditCheck/v01");
-    assertStringIncludes(out, "is gone");
-  } finally {
-    await Deno.rename(moved, join(DESIGNS, "credit.json"));
-  }
+Deno.test("sync is not a command in v1", async () => {
+  const { code, out } = await pgfsm(["sync"], APP);
+  assertEquals(code, 1);
+  assertStringIncludes(out, "Unknown command: sync");
 });
 
 Deno.test("--version and --help", async () => {

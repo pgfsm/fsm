@@ -1,46 +1,22 @@
 import { dirname, join, resolve } from "@std/path";
-import { isNotFoundError, SUPPORTED_OPERATION_LANGS } from "@pgfsm/compiler";
-import type { OperationLang } from "@pgfsm/compiler";
+import { isNotFoundError } from "@pgfsm/compiler";
 
-/** The project marker (SPEC-004). Its presence is what makes a directory a pgfsm project. */
+/**
+ * The project marker (SPEC-004). Its presence is what makes a directory a
+ * pgfsm project: `add` walks up to it, `create` refuses to run where one
+ * exists.
+ */
 export const CONFIG_FILE_NAME = "pgfsm.config.json";
 
-/** One FSM version the project tracks, and where it was added from. */
-export interface FsmEntry {
-  name: string;
-  version: string;
-  /**
-   * The machine.ts or fsm.json it was added from, relative to the project
-   * root (POSIX separators). `sync` recompiles from here: the compiler never
-   * copies a machine.ts into fsm/ (#376), so this is the only record of it.
-   */
-  source: string;
-}
-
+/**
+ * Deliberately minimal: nothing records where each FSM came from, since only
+ * `sync` would read that and it's deferred to #390.
+ */
 export interface ProjectConfig {
-  $schema?: string;
   /** Project name; also sync-worker/typescript/deno.json's `name`. */
   name: string;
   /** @pgfsm/cli version that created the project, for the drift warning. */
   toolVersion: string;
-  fsmDir: string;
-  asyncWorkerLangs: OperationLang[];
-  syncWorkerLangs: OperationLang[];
-  fsms: FsmEntry[];
-}
-
-export function defaultConfig(
-  name: string,
-  toolVersion: string,
-): ProjectConfig {
-  return {
-    name,
-    toolVersion,
-    fsmDir: "fsm",
-    asyncWorkerLangs: [...SUPPORTED_OPERATION_LANGS],
-    syncWorkerLangs: ["typescript"],
-    fsms: [],
-  };
 }
 
 export interface Project {
@@ -94,11 +70,7 @@ export async function readConfig(root: string): Promise<ProjectConfig> {
   if (typeof parsed.name !== "string" || !parsed.name) {
     throw new Error(`${path} has no "name"`);
   }
-  return {
-    ...defaultConfig(parsed.name, parsed.toolVersion ?? "0.0.0"),
-    ...parsed,
-    fsms: parsed.fsms ?? [],
-  } as ProjectConfig;
+  return { name: parsed.name, toolVersion: parsed.toolVersion ?? "0.0.0" };
 }
 
 export async function writeConfig(
@@ -116,18 +88,4 @@ export async function loadProject(from: string): Promise<Project> {
   const root = await findProjectRoot(from);
   if (!root) throw new NoProjectError(resolve(from));
   return { root, config: await readConfig(root) };
-}
-
-/** Adds or replaces the entry for `entry.name`/`entry.version`. */
-export function upsertFsm(config: ProjectConfig, entry: FsmEntry): void {
-  const i = config.fsms.findIndex((f) =>
-    f.name === entry.name && f.version === entry.version
-  );
-  if (i >= 0) config.fsms[i] = entry;
-  else config.fsms.push(entry);
-  config.fsms.sort((a, b) =>
-    a.name === b.name
-      ? a.version.localeCompare(b.version)
-      : a.name.localeCompare(b.name)
-  );
 }

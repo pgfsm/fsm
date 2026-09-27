@@ -11,15 +11,8 @@ import {
   CreateError,
   createProject,
 } from "../commands/create.ts";
-import { syncProject } from "../commands/sync.ts";
 import { goModTidy } from "../go-tidy.ts";
-import {
-  CONFIG_FILE_NAME,
-  loadProject,
-  NoProjectError,
-  type ProjectConfig,
-  writeConfig,
-} from "../project.ts";
+import { loadProject, NoProjectError, type ProjectConfig } from "../project.ts";
 import { formatReport, WriteReport } from "../report.ts";
 import { inSandbox } from "../sandbox.ts";
 import { type Ask, resolveSources, SourceError } from "../source.ts";
@@ -49,7 +42,6 @@ const HELP = `pgfsm ${PACKAGE_VERSION} — create and grow FSM worker projects
 USAGE
   npx @pgfsm/cli create <dir> [<source>] [--name <project>] [--dry-run]
   npx @pgfsm/cli add <source> [-N <fsm-name>] [-V <vNN>] [--force] [--dry-run]
-  npx @pgfsm/cli sync [--dry-run]
 
   <source> is a folder of <fsmName>/<vNN>/{machine.ts|fsm.json}, a single
   machine.ts, or a single fsm.json.
@@ -59,9 +51,8 @@ COMMANDS
            async-worker/{typescript,python,rust,go}, then add <source> if given.
            Run it from the parent directory; refuses an existing project.
   add      Add FSMs to the project around the current directory. Refuses an
-           existing fsm/<name>/<vNN>/ unless --force. Never overwrites stubs.
-  sync     Recompile every FSM from the source recorded in pgfsm.config.json
-           (after you edit a machine.ts or fsm.json).
+           existing fsm/<name>/<vNN>/ unless --force, which is also how you
+           regenerate one after editing its source. Never overwrites stubs.
 
 OPTIONS
   -N, --fsm-name <name>     FSM name, for a single-file <source>
@@ -69,7 +60,7 @@ OPTIONS
       --name <project>      Project name for create (default: <dir>'s name)
   -C <dir>                  Use the project at <dir> instead of searching upward
       --dry-run             Show what would change; write nothing
-      --force               Replace an existing fsm/<name>/<vNN>/
+      --force               Regenerate an existing fsm/<name>/<vNN>/
       --no-input            Never prompt; fail instead (default when not a terminal)
       --verbose             Show the compiler's own progress logs
   -v, --version             Print the version
@@ -94,7 +85,7 @@ function identityFlags() {
 function warnOnDrift(config: ProjectConfig): void {
   if (config.toolVersion !== PACKAGE_VERSION) {
     logger.warn(
-      "This project was created with @pgfsm/cli {created}; you're running {running}. `npm run fsm:add`/`fsm:sync` use the pinned version.",
+      "This project was created with @pgfsm/cli {created}; you're running {running}. `npm run fsm:add` uses the pinned version.",
       { created: config.toolVersion, running: PACKAGE_VERSION },
     );
   }
@@ -149,7 +140,6 @@ async function cmdCreate(): Promise<void> {
       toolVersion: PACKAGE_VERSION,
       sources,
       report,
-      sourceRoot: dir,
     }));
   printResult(dir, report, `Created ${name} at ${dir}`);
   if (!args["dry-run"]) {
@@ -176,56 +166,15 @@ async function cmdAdd(): Promise<void> {
 
   const report = new WriteReport();
   await run(project.root, report, async (target) => {
-    const config = structuredClone(project.config);
     for (const s of sources) {
-      await addFsm(target, config, s, {
-        force: args.force,
-        report,
-        sourceRoot: project.root,
-      });
+      await addFsm(target, s, { force: args.force, report });
     }
-    await writeConfig(target, config);
   });
   printResult(
     project.root,
     report,
     `Added ${sources.map((s) => `${s.name}/${s.version}`).join(", ")}`,
   );
-}
-
-async function cmdSync(): Promise<void> {
-  const project = await loadProject(args.C ? resolve(args.C) : Deno.cwd());
-  console.log(`Using project: ${project.root}`);
-  warnOnDrift(project.config);
-  if (project.config.fsms.length === 0) {
-    console.log(
-      `No FSMs in ${CONFIG_FILE_NAME} yet — add one with \`npx @pgfsm/cli add <source>\`.`,
-    );
-  }
-  const report = new WriteReport();
-  const result = await run(
-    project.root,
-    report,
-    (target) =>
-      syncProject(target, project.config, {
-        report,
-        sourceRoot: project.root,
-      }),
-  );
-  for (const id of result.sourceMissing) {
-    logger.warn(
-      "Source for {id} is gone; regenerated its workers from the existing fsm/{id}/fsm.json.",
-      { id },
-    );
-  }
-  for (const id of result.skipped) {
-    logger.error(
-      "Skipped {id}: neither its recorded source nor fsm/{id}/fsm.json exists.",
-      { id },
-    );
-  }
-  printResult(project.root, report, "Synced");
-  if (result.skipped.length > 0) Deno.exit(1);
 }
 
 const command = args._[0] === undefined ? undefined : String(args._[0]);
@@ -245,9 +194,6 @@ try {
       break;
     case "add":
       await cmdAdd();
-      break;
-    case "sync":
-      await cmdSync();
       break;
     default:
       console.error(`Unknown command: ${command}\n\n${HELP}`);

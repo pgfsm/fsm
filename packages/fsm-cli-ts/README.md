@@ -11,15 +11,15 @@ npx @pgfsm/cli create my-app                                         # empty; ad
 
 cd my-app
 npx @pgfsm/cli add ../designs/payment/machine.ts -N payment -V v01
-npx @pgfsm/cli sync                                                  # after editing a machine.ts/fsm.json
+npx @pgfsm/cli add ../designs/payment/machine.ts -N payment -V v01 --force   # after editing it
 ```
 
 `create` makes one directory holding everything:
 
 ```
 my-app/
-├── pgfsm.config.json       # project marker + where each FSM came from
-├── package.json            # scripts only (fsm:add, fsm:sync pinned via npx)
+├── pgfsm.config.json       # project marker: { name, toolVersion }
+├── package.json            # scripts only (fsm:add, pinned via npx)
 ├── deno.json               # maps xstate, so machine.ts files compile
 ├── fsm/<name>/<vNN>/       # compiled fsm.json (+ xstate-fsm.json)
 ├── sync-worker/typescript/ # actions, guards, delays — a runnable Deno project
@@ -32,11 +32,10 @@ my-app/
 
 ## Commands
 
-| Command                   | What it does                                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `create <dir> [<source>]` | Run from the parent directory. Refuses a directory that is (or is inside) a pgfsm project, or isn't empty. `--name` sets the project name (default: the directory name). |
-| `add <source>`            | Run from anywhere inside the project — it walks up to `pgfsm.config.json`, and prints which project it used. Refuses an existing `fsm/<name>/<vNN>/` unless `--force`.   |
-| `sync`                    | Recompiles every FSM from the source recorded in `pgfsm.config.json`, and makes sure every worker project is present.                                                    |
+| Command                   | What it does                                                                                                                                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create <dir> [<source>]` | Run from the parent directory. Refuses a directory that is (or is inside) a pgfsm project, or isn't empty. `--name` sets the project name (default: the directory name).                                                                 |
+| `add <source>`            | Run from anywhere inside the project — it walks up to `pgfsm.config.json`, and prints which project it used. Refuses an existing `fsm/<name>/<vNN>/` unless `--force`, which is also how you regenerate an FSM after editing its source. |
 
 `<source>` is a folder (`<fsmName>/<vNN>/machine.ts` or `fsm.json` inside it), a
 single `fsm.json`, or a single `machine.ts`. For a single file, the FSM name and
@@ -52,10 +51,10 @@ compiler's own progress.
 ## Your code is never overwritten
 
 Stub files — actions, guards, delays, actors — and each worker's entry file and
-`deno.json`/`pyproject.toml`/`Cargo.toml` are yours once created. `add` and
-`sync` only rewrite compiler-owned files (registries, manifests, `fsm.json`, the
-Go worker module). When an FSM gains an action your existing stub file doesn't
-define, the output lists the names to add.
+`deno.json`/`pyproject.toml`/`Cargo.toml` are yours once created. `add` (with or
+without `--force`) only rewrites compiler-owned files (registries, manifests,
+`fsm.json`, the Go worker module). When an FSM gains an action your existing
+stub file doesn't define, the output lists the names to add.
 
 Every run ends with a summary per area: `+` created, `~` regenerated, `=` kept.
 

@@ -2,7 +2,6 @@ import { basename, join } from "@std/path";
 import { isNotFoundError, scaffoldWorkerProjects } from "@pgfsm/compiler";
 import {
   CONFIG_FILE_NAME,
-  defaultConfig,
   findProjectRoot,
   type ProjectConfig,
   writeConfig,
@@ -74,7 +73,7 @@ async function writeOwnFile(
 
 function packageJson(name: string, toolVersion: string): string {
   // Scripts only -- no dependencies. Pinning the CLI version in the npx
-  // call keeps add/sync on the version that created the project without
+  // call keeps add on the version that created the project without
   // installing it (SPEC-004 "Version pinning without a dependency").
   const cli = `npx -y @pgfsm/cli@${toolVersion}`;
   return JSON.stringify(
@@ -83,7 +82,6 @@ function packageJson(name: string, toolVersion: string): string {
       private: true,
       scripts: {
         "fsm:add": `${cli} add`,
-        "fsm:sync": `${cli} sync`,
       },
     },
     null,
@@ -123,7 +121,7 @@ A pgfsm project, created by \`@pgfsm/cli\`.
 - \`async-worker/{typescript,python,rust,go}/\`: actors, one project per language.
 
 Stub files under the worker folders are yours to implement. Re-running
-\`add\`/\`sync\` never overwrites them.
+\`add\` never overwrites them.
 
 ## Add an FSM
 
@@ -133,7 +131,12 @@ npm run fsm:add -- path/to/fsm.json
 npm run fsm:add -- path/to/folder/   # <fsmName>/<vNN>/{machine.ts|fsm.json}
 \`\`\`
 
-After editing a \`machine.ts\` or \`fsm.json\`, run \`npm run fsm:sync\`.
+After editing a \`machine.ts\` or \`fsm.json\`, regenerate that FSM with the
+same command plus \`--force\` (your stubs are kept):
+
+\`\`\`bash
+npm run fsm:add -- path/to/machine.ts --fsm-name checkout --fsm-version v01 --force
+\`\`\`
 
 ## Run the workers
 
@@ -154,8 +157,6 @@ export interface CreateOptions {
   toolVersion: string;
   sources: ResolvedSource[];
   report: WriteReport;
-  /** Real project dir when `dir` is a dry-run sandbox. */
-  sourceRoot?: string;
 }
 
 /**
@@ -170,7 +171,7 @@ export async function createProject(
   const { dir, name, toolVersion, report } = opts;
   await Deno.mkdir(dir, { recursive: true });
 
-  const config = defaultConfig(name, toolVersion);
+  const config: ProjectConfig = { name, toolVersion };
   await writeConfig(dir, config);
   report.ownFiles.push({
     path: join(dir, CONFIG_FILE_NAME),
@@ -192,19 +193,14 @@ export async function createProject(
   await scaffoldWorkerProjects({
     writeRootAbsPath: dir,
     goModuleAppRoot: basename(dir),
-    asyncLangs: config.asyncWorkerLangs,
     projectName: name,
     overwrite: "generated-only",
     onFileWrite: report.onFileWrite,
   });
 
   for (const source of opts.sources) {
-    await addFsm(dir, config, source, {
-      report,
-      sourceRoot: opts.sourceRoot,
-    });
+    await addFsm(dir, source, { report });
   }
-  await writeConfig(dir, config);
   return config;
 }
 

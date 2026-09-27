@@ -8,19 +8,15 @@ export {
   createProject,
 } from "./commands/create.ts";
 export type { CreateOptions } from "./commands/create.ts";
-export { syncProject } from "./commands/sync.ts";
-export type { SyncResult } from "./commands/sync.ts";
 export {
   CONFIG_FILE_NAME,
-  defaultConfig,
   findProjectRoot,
   loadProject,
   NoProjectError,
   readConfig,
-  upsertFsm,
   writeConfig,
 } from "./project.ts";
-export type { FsmEntry, Project, ProjectConfig } from "./project.ts";
+export type { Project, ProjectConfig } from "./project.ts";
 export { formatReport, WriteReport } from "./report.ts";
 export { resolveSources, SourceError } from "./source.ts";
 export type {

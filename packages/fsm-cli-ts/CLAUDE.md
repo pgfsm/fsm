@@ -1,8 +1,9 @@
 # CLAUDE.md — `@pgfsm/cli` (`packages/fsm-cli-ts/`)
 
 Project-aware CLI (bin `pgfsm`) that implements SPEC-004
-(`docs/specs/spec-004-pgfsm-cli-create-add.md`): `create`, `add`, `sync`.
-`README.md` is the npm-facing document; keep source-only detail here.
+(`docs/specs/spec-004-pgfsm-cli-create-add.md`): `create` and `add`. `sync` is
+deferred to #390 (its implementation lived in #389's first commit). `README.md`
+is the npm-facing document; keep source-only detail here.
 
 ## Commands
 
@@ -22,7 +23,7 @@ it), like `fsm-compiler-ts`'s.
   next steps are printed with `console.log` (they're the UI); `@pgfsm/logging`
   is configured once here (ADR-001) for diagnostics, with `@pgfsm/compiler`'s
   own categories at `warning` unless `--verbose`.
-- `src/commands/{create,add,sync}.ts` — the operations, as library functions.
+- `src/commands/{create,add}.ts` — the operations, as library functions.
 - `src/project.ts` — `pgfsm.config.json` read/write and upward discovery.
 - `src/source.ts` — `<source>` → FSM versions with resolved identity.
 - `src/report.ts` — collects `@pgfsm/compiler`'s `FileWriteEvent`s (one per
@@ -33,7 +34,7 @@ it), like `fsm-compiler-ts`'s.
 ## Design points
 
 - **All generation goes through `@pgfsm/compiler`'s library**, never its CLI:
-  `generateAll` (single-file mode, one call per FSM version) for `add`/`sync`,
+  `generateAll` (single-file mode, one call per FSM version) for `add`,
   `scaffoldWorkerProjects` for the empty per-language projects `create` lays
   down, always with `overwrite: "generated-only"` (#381) so stubs and entry
   files are never rewritten.
@@ -43,10 +44,12 @@ it), like `fsm-compiler-ts`'s.
   `(machine)`), then a prompt — or an error naming the flags when not
   interactive. `--name`/`--version` from the spec's draft became `-N`/`-V`
   because `--version` prints the CLI version.
-- **`pgfsm.config.json`'s `fsms[].source`** is how `sync` finds each machine.ts:
-  the compiler compiles it in place and never copies it (#376). Paths are
-  project-relative with `/` separators. A missing source falls back to the
-  existing `fsm/<n>/<v>/fsm.json` with a warning.
+- **`pgfsm.config.json` is only a marker** (`{ name, toolVersion }`): `add`
+  finds the project by walking up to it, `create` refuses where one exists.
+  Nothing records where each FSM came from — only `sync` would read that (#390)
+  — so regenerating after a source edit is `add <source> -N -V --force`.
+  `--force` skips the "version exists" refusal, whose job is catching a typo'd
+  name/version or a clashing design.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)
   into a temp dir named like the real root (the Go module root is derived from
