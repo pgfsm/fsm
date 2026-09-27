@@ -47,3 +47,26 @@ Deno.test("runActorWorkerCli - start with an empty registry exits 1", async () =
     1,
   );
 });
+
+Deno.test({
+  name: "runActorWorkerCli - start exits 1 after --reconnect-max-attempts",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn: async () => {
+    assertEquals(
+      await runActorWorkerCli({
+        registrations: REGISTRATIONS,
+        args: [
+          "start",
+          "--gateway-socket",
+          "/nonexistent/sidecar.sock",
+          "--reconnect-initial-delay-ms",
+          "5",
+          "--reconnect-max-attempts",
+          "2",
+        ],
+      }),
+      1,
+    );
+  },
+});

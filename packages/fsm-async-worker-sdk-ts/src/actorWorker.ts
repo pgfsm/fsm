@@ -23,7 +23,7 @@
 // (e.g. Rust) to follow — see ADR-003's Activity Gateway revision.
 
 import { getLogger } from "@logtape/logtape";
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import {
   createGrpcTransport,
   Http2SessionManager,
@@ -97,12 +97,72 @@ export type ActorRegistration = RegisteredActor & {
 };
 
 const DEFAULT_HEARTBEAT_MS = 5_000;
+export const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
+export const DEFAULT_RECONNECT_MAX_DELAY_MS = 30_000;
+/**
+ * A session must stay up this long before the reconnect backoff resets, so a
+ * gateway that accepts and immediately drops (flapping) still backs off
+ * instead of being hammered in a tight loop.
+ */
+export const STABLE_SESSION_MS = 10_000;
+
+/**
+ * gRPC codes that reconnecting can't fix (bad credentials, wrong server or
+ * protocol) — `run()` fails fast on these rather than retrying forever and
+ * hiding a misconfiguration behind warnings. Same list in all four SDKs.
+ */
+const FATAL_CODES = new Set<Code>([
+  Code.Unauthenticated,
+  Code.PermissionDenied,
+  Code.Unimplemented,
+  Code.InvalidArgument,
+]);
+
+function isFatal(error: unknown): boolean {
+  return error instanceof RegistrationRejectedError ||
+    (error instanceof ConnectError && FATAL_CODES.has(error.code));
+}
 
 export interface ActorWorkerOptions {
   workerId: string;
   language: string;
   gatewaySocketPath: string;
   heartbeatMs?: number;
+  /** First reconnect backoff step (default 250 ms). */
+  reconnectInitialDelayMs?: number;
+  /** Backoff cap (default 30 s). */
+  reconnectMaxDelayMs?: number;
+  /**
+   * Give up after this many consecutive failed attempts; 0 (the default)
+   * retries forever. A session that fails to register, or registers but ends
+   * within STABLE_SESSION_MS, counts as a failed attempt; a longer one resets
+   * the count.
+   */
+  reconnectMaxAttempts?: number;
+}
+
+/**
+ * The gateway explicitly refused this worker's registration — not retried,
+ * since reconnecting would just be refused again.
+ */
+export class RegistrationRejectedError extends Error {
+  constructor() {
+    super("gateway rejected registration");
+    this.name = "RegistrationRejectedError";
+  }
+}
+
+/**
+ * Full-jitter exponential backoff (#392): a random delay in
+ * [0, min(maxMs, initialMs * 2^(attempt-1))]. Same formula in all four SDKs.
+ */
+export function reconnectDelayMs(
+  attempt: number,
+  initialMs: number,
+  maxMs: number,
+): number {
+  const ceiling = Math.min(maxMs, initialMs * 2 ** Math.max(0, attempt - 1));
+  return Math.floor(Math.random() * ceiling);
 }
 
 function actorKey(reg: RegisteredActor): string {
@@ -118,7 +178,7 @@ function parseInputJson(json: string): unknown {
 
 /**
  * Minimal async push queue feeding this worker's outgoing SessionRequest
- * stream — `run()`/`heartbeatLoop()`/`handleInvoke()` push register,
+ * stream — `runSession()`/its heartbeat timer/`handleInvoke()` push register,
  * heartbeat, invoke_result, and invoke_error messages onto it; the transport
  * drains it as the actual HTTP/2 request stream. Mirrors
  * fsm-async-worker-gateway-ts's sidecar/gateway.ts's identically-shaped queue on
@@ -130,6 +190,10 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   private readonly buffered: T[] = [];
   private readonly waiting: Array<(result: IteratorResult<T>) => void> = [];
   private closed = false;
+
+  get isClosed(): boolean {
+    return this.closed;
+  }
 
   push(item: T): void {
     if (this.closed) return;
@@ -183,12 +247,14 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 
 /**
  * Connects to the gateway's sidecar socket, registers `registrations`, and
- * serves invoke requests until the gateway ends the stream or `stop()` is
- * called.
+ * serves invoke requests until `stop()` is called. If the gateway isn't up
+ * yet, or a session ends (gateway restart, dropped connection), it
+ * reconnects with backoff and re-registers (#392).
  */
 export class ActorWorker {
   private outbox: AsyncQueue<SessionRequestMessage> | null = null;
   private stopped = false;
+  private wakeBackoff: (() => void) | null = null;
   private readonly handlers = new Map<string, ActorHandler>();
 
   constructor(
@@ -196,6 +262,12 @@ export class ActorWorker {
     private readonly registrations: ActorRegistration[],
   ) {}
 
+  /**
+   * Serves until `stop()`. Rejects only on something reconnecting can't fix:
+   * an empty registry, an explicit registration rejection, a fatal gRPC code
+   * (UNAUTHENTICATED, PERMISSION_DENIED, UNIMPLEMENTED, INVALID_ARGUMENT), or
+   * `reconnectMaxAttempts` consecutive failed attempts.
+   */
   async run(): Promise<void> {
     if (this.registrations.length === 0) {
       throw new Error("no actors to register, refusing to start worker");
@@ -214,6 +286,94 @@ export class ActorWorker {
       });
     }
 
+    const initialDelayMs = this.options.reconnectInitialDelayMs ??
+      DEFAULT_RECONNECT_INITIAL_DELAY_MS;
+    const maxDelayMs = this.options.reconnectMaxDelayMs ??
+      DEFAULT_RECONNECT_MAX_DELAY_MS;
+    const maxAttempts = this.options.reconnectMaxAttempts ?? 0;
+    let failures = 0;
+
+    while (!this.stopped) {
+      const session = { registered: false };
+      let lastError: unknown = null;
+      const started = Date.now();
+      try {
+        await this.runSession(registeredActors, session);
+      } catch (error) {
+        if (isFatal(error)) {
+          throw error;
+        }
+        lastError = error;
+      }
+      if (this.stopped) {
+        break;
+      }
+
+      const stable = session.registered &&
+        Date.now() - started >= STABLE_SESSION_MS;
+      failures = stable ? 0 : failures + 1;
+      if (maxAttempts > 0 && failures >= maxAttempts) {
+        throw new Error(
+          `giving up after ${failures} consecutive failed attempt(s) to connect to the gateway: ${
+            describe(lastError)
+          }`,
+        );
+      }
+
+      const delayMs = reconnectDelayMs(
+        Math.max(failures, 1),
+        initialDelayMs,
+        maxDelayMs,
+      );
+      logger.warn(
+        session.registered
+          ? "Gateway session ended ({error}); reconnecting in {delayMs}ms"
+          : "Could not connect to the gateway ({error}); retrying in {delayMs}ms",
+        { error: describe(lastError ?? "stream closed"), delayMs },
+      );
+      await this.backoff(delayMs);
+    }
+  }
+
+  stop(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.outbox?.push(
+      new SessionRequest({
+        payload: {
+          case: "unregister",
+          value: new Unregister({ workerId: this.options.workerId }),
+        },
+      }),
+    );
+    this.outbox?.close();
+    this.wakeBackoff?.();
+  }
+
+  /** Sleeps `ms`, returning early if `stop()` is called. */
+  private backoff(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(done, ms);
+      function done() {
+        clearTimeout(timer);
+        resolve();
+      }
+      this.wakeBackoff = () => {
+        this.wakeBackoff = null;
+        done();
+      };
+    });
+  }
+
+  /**
+   * One connect → register → serve cycle. Sets `session.registered` once the
+   * gateway acks; `run()` resets the backoff only if a registered session
+   * also lasted STABLE_SESSION_MS.
+   */
+  private async runSession(
+    registeredActors: RegisteredActor[],
+    session: { registered: boolean },
+  ): Promise<void> {
     const sessionManager = new Http2SessionManager(
       "http://localhost",
       undefined,
@@ -250,6 +410,7 @@ export class ActorWorker {
 
     const responses = client.session(outbox);
     const iterator = responses[Symbol.asyncIterator]();
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
 
     try {
       const first = await iterator.next();
@@ -261,70 +422,48 @@ export class ActorWorker {
         );
       }
       if (!first.value.payload.value.accepted) {
-        throw new Error("gateway rejected registration");
+        throw new RegistrationRejectedError();
       }
+      session.registered = true;
 
       logger.info(
         "Worker {workerId} registered {count} actor(s) with the gateway",
         { workerId: this.options.workerId, count: registeredActors.length },
       );
 
-      const heartbeat = this.heartbeatLoop();
-
-      try {
-        await this.serveLoop(iterator);
-      } finally {
-        this.stopped = true;
-        await heartbeat.catch(() => {});
+      heartbeat = setInterval(() => {
         outbox.push(
           new SessionRequest({
             payload: {
-              case: "unregister",
-              value: new Unregister({ workerId: this.options.workerId }),
+              case: "heartbeat",
+              value: new Heartbeat({ workerId: this.options.workerId }),
             },
           }),
         );
-        outbox.close();
-      }
+      }, this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
+
+      await this.serveLoop(iterator, outbox);
     } finally {
-      sessionManager.abort();
-    }
-  }
-
-  stop(): void {
-    if (this.stopped) return;
-    this.stopped = true;
-    this.outbox?.push(
-      new SessionRequest({
-        payload: {
-          case: "unregister",
-          value: new Unregister({ workerId: this.options.workerId }),
-        },
-      }),
-    );
-    this.outbox?.close();
-  }
-
-  private async heartbeatLoop(): Promise<void> {
-    const intervalMs = this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
-    while (!this.stopped) {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-      if (this.stopped) {
-        break;
-      }
-      this.outbox?.push(
+      clearInterval(heartbeat);
+      outbox.push(
         new SessionRequest({
           payload: {
-            case: "heartbeat",
-            value: new Heartbeat({ workerId: this.options.workerId }),
+            case: "unregister",
+            value: new Unregister({ workerId: this.options.workerId }),
           },
         }),
       );
+      outbox.close();
+      if (this.outbox === outbox) {
+        this.outbox = null;
+      }
+      sessionManager.abort();
     }
   }
 
   private async serveLoop(
     iterator: AsyncIterator<SessionResponseMessage>,
+    outbox: AsyncQueue<SessionRequestMessage>,
   ): Promise<void> {
     while (!this.stopped) {
       const { value, done } = await iterator.next();
@@ -337,11 +476,14 @@ export class ActorWorker {
       if (value.payload.case !== "invoke") {
         continue;
       }
-      await this.handleInvoke(value.payload.value);
+      await this.handleInvoke(value.payload.value, outbox);
     }
   }
 
-  private async handleInvoke(body: InvokeMessage): Promise<void> {
+  private async handleInvoke(
+    body: InvokeMessage,
+    outbox: AsyncQueue<SessionRequestMessage>,
+  ): Promise<void> {
     const key = actorKey({
       parentFsmName: body.parentFsmName,
       parentFsmVersion: body.parentFsmVersion,
@@ -354,7 +496,12 @@ export class ActorWorker {
     const started = performance.now();
 
     if (!handler) {
-      this.sendError(body.invokeId, "NOT_FOUND", `actor not found: ${key}`);
+      sendError(
+        outbox,
+        body.invokeId,
+        "NOT_FOUND",
+        `actor not found: ${key}`,
+      );
       return;
     }
 
@@ -363,7 +510,8 @@ export class ActorWorker {
         handler(parseInputJson(body.inputJson)),
       );
       const durationMs = Math.max(0, Math.round(performance.now() - started));
-      this.outbox?.push(
+      if (warnIfSessionGone(outbox, body.invokeId, key)) return;
+      outbox.push(
         new SessionRequest({
           payload: {
             case: "invokeResult",
@@ -376,25 +524,55 @@ export class ActorWorker {
         }),
       );
     } catch (error) {
-      this.sendError(
+      if (warnIfSessionGone(outbox, body.invokeId, key)) return;
+      sendError(
+        outbox,
         body.invokeId,
         "INTERNAL",
         error instanceof Error ? error.message : "unknown worker error",
       );
     }
   }
+}
 
-  private sendError(invokeId: string, code: string, message: string): void {
-    this.outbox?.push(
-      new SessionRequest({
-        payload: {
-          case: "invokeError",
-          value: new InvokeError({
-            invokeId,
-            error: new InvokeErrorDetail({ code, message, retriable: false }),
-          }),
-        },
-      }),
-    );
-  }
+function sendError(
+  outbox: AsyncQueue<SessionRequestMessage>,
+  invokeId: string,
+  code: string,
+  message: string,
+): void {
+  outbox.push(
+    new SessionRequest({
+      payload: {
+        case: "invokeError",
+        value: new InvokeError({
+          invokeId,
+          error: new InvokeErrorDetail({ code, message, retriable: false }),
+        }),
+      },
+    }),
+  );
+}
+
+/**
+ * An invoke outlived the session it arrived on: its result can't go out on a
+ * later session (the gateway matches results to the connection it sent the
+ * invoke on, and has already failed it as WORKER_DISCONNECTED). Log instead of
+ * dropping it silently.
+ */
+function warnIfSessionGone(
+  outbox: AsyncQueue<SessionRequestMessage>,
+  invokeId: string,
+  key: string,
+): boolean {
+  if (!outbox.isClosed) return false;
+  logger.warn(
+    "Dropping result of invoke {invokeId} for {actor}: its gateway session ended",
+    { invokeId, actor: key },
+  );
+  return true;
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

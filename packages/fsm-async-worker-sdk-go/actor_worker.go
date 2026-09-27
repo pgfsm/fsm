@@ -35,17 +35,66 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	sidecargatewayv1 "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 // DefaultHeartbeatMs is the default heartbeat interval, in milliseconds.
 const DefaultHeartbeatMs = 5000
+
+// Reconnect backoff defaults, in milliseconds (#392).
+const (
+	DefaultReconnectInitialDelayMs = 250
+	DefaultReconnectMaxDelayMs     = 30000
+)
+
+// StableSessionMs is how long a session must stay up before the reconnect
+// backoff resets, so a gateway that accepts and immediately drops (flapping)
+// still backs off instead of being hammered in a tight loop.
+const StableSessionMs = 10000
+
+// fatalCodes are gRPC codes that reconnecting can't fix (bad credentials,
+// wrong server or protocol): Run fails fast on these rather than retrying
+// forever and hiding a misconfiguration behind warnings. Same list in all
+// four SDKs.
+var fatalCodes = map[codes.Code]bool{
+	codes.Unauthenticated:  true,
+	codes.PermissionDenied: true,
+	codes.Unimplemented:    true,
+	codes.InvalidArgument:  true,
+}
+
+func isFatal(err error) bool {
+	if errors.Is(err, ErrRegistrationRejected) {
+		return true
+	}
+	s, ok := status.FromError(err)
+	return ok && fatalCodes[s.Code()]
+}
+
+// ErrRegistrationRejected means the gateway explicitly refused this worker's
+// registration. [ActorWorker.Run] returns it instead of retrying, since
+// reconnecting would just be refused again.
+var ErrRegistrationRejected = errors.New("gateway rejected registration")
+
+// ReconnectDelayMs is full-jitter exponential backoff: a random delay in
+// [0, min(maxMs, initialMs * 2^(attempt-1))]. Same formula in all four SDKs.
+func ReconnectDelayMs(attempt, initialMs, maxMs int) int {
+	if attempt < 1 {
+		attempt = 1
+	}
+	ceiling := math.Min(float64(maxMs), float64(initialMs)*math.Pow(2, float64(attempt-1)))
+	return int(rand.Float64() * ceiling)
+}
 
 // RegisteredActor is the generated pgfsm.sidecargateway.v1.RegisteredActor
 // message: an actor's identity as the gateway sees it.
@@ -90,6 +139,17 @@ type ActorWorkerOptions struct {
 	GatewaySocketPath string
 	// HeartbeatMs is the heartbeat interval; zero means DefaultHeartbeatMs.
 	HeartbeatMs int
+	// ReconnectInitialDelayMs is the first reconnect backoff step; zero means
+	// DefaultReconnectInitialDelayMs.
+	ReconnectInitialDelayMs int
+	// ReconnectMaxDelayMs caps the backoff; zero means
+	// DefaultReconnectMaxDelayMs.
+	ReconnectMaxDelayMs int
+	// ReconnectMaxAttempts makes Run give up after this many consecutive
+	// failed attempts; zero retries forever. A session that fails to
+	// register, or registers but ends within StableSessionMs, counts as a
+	// failed attempt; a longer one resets the count.
+	ReconnectMaxAttempts int
 }
 
 // ActorKey is the key the gateway's invoke fields are matched against: all six
@@ -107,7 +167,10 @@ type ActorWorker struct {
 	logger     *slog.Logger
 
 	stopped atomic.Bool
-	// mu guards stream and every Send on it.
+	// stopCh is closed by Stop, waking a reconnect backoff early.
+	stopCh chan struct{}
+	// mu guards stream (the current session's, nil between sessions) and
+	// every Send on it.
 	mu     sync.Mutex
 	stream sidecargatewayv1.SidecarGatewayService_SessionClient
 }
@@ -117,6 +180,12 @@ type ActorWorker struct {
 func NewActorWorker(options ActorWorkerOptions, registrations []ActorRegistration) *ActorWorker {
 	if options.HeartbeatMs <= 0 {
 		options.HeartbeatMs = DefaultHeartbeatMs
+	}
+	if options.ReconnectInitialDelayMs <= 0 {
+		options.ReconnectInitialDelayMs = DefaultReconnectInitialDelayMs
+	}
+	if options.ReconnectMaxDelayMs <= 0 {
+		options.ReconnectMaxDelayMs = DefaultReconnectMaxDelayMs
 	}
 	handlers := make(map[string]ActorHandler, len(registrations))
 	registered := make([]*RegisteredActor, 0, len(registrations))
@@ -130,6 +199,7 @@ func NewActorWorker(options ActorWorkerOptions, registrations []ActorRegistratio
 		handlers:   handlers,
 		registered: registered,
 		logger:     slog.Default().With("component", "pgfsm.async_worker_sdk"),
+		stopCh:     make(chan struct{}),
 	}
 }
 
@@ -139,29 +209,88 @@ func (w *ActorWorker) RegisteredActors() []*RegisteredActor {
 }
 
 // Run registers every actor and serves invocations until [ActorWorker.Stop] is
-// called or the gateway ends the stream, then closes its connection. A
-// shutdown via Stop returns nil.
+// called. If the gateway isn't up yet, or a session ends (gateway restart,
+// dropped connection), it reconnects with backoff and re-registers (#392). A
+// shutdown via Stop returns nil; Run only returns an error for what
+// reconnecting can't fix: an empty registry, [ErrRegistrationRejected], a
+// fatal gRPC code (Unauthenticated, PermissionDenied, Unimplemented,
+// InvalidArgument), or ReconnectMaxAttempts consecutive failed attempts.
 func (w *ActorWorker) Run() error {
 	if len(w.registered) == 0 {
 		return errors.New("no actors to register, refusing to start worker")
 	}
-	if w.stopped.Load() {
-		return nil
-	}
 
+	failures := 0
+	for !w.stopped.Load() {
+		started := time.Now()
+		registered, err := w.runSession()
+		if isFatal(err) {
+			return err
+		}
+		if w.stopped.Load() {
+			return nil
+		}
+
+		if registered && time.Since(started) >= StableSessionMs*time.Millisecond {
+			failures = 0
+		} else {
+			failures++
+		}
+		if err == nil {
+			err = errors.New("stream closed")
+		}
+		if w.options.ReconnectMaxAttempts > 0 && failures >= w.options.ReconnectMaxAttempts {
+			return fmt.Errorf("giving up after %d consecutive failed attempt(s) to connect to the gateway: %w", failures, err)
+		}
+
+		delay := time.Duration(ReconnectDelayMs(max(failures, 1), w.options.ReconnectInitialDelayMs, w.options.ReconnectMaxDelayMs)) * time.Millisecond
+		if registered {
+			w.logger.Warn("gateway session ended; reconnecting", "error", err, "delay", delay)
+		} else {
+			w.logger.Warn("could not connect to the gateway; retrying", "error", err, "delay", delay)
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-w.stopCh:
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+	}
+	return nil
+}
+
+// runSession is one connect -> register -> serve cycle. registered reports
+// whether the gateway acked; Run resets the backoff only if a registered
+// session also lasted StableSessionMs.
+func (w *ActorWorker) runSession() (registered bool, err error) {
 	conn, err := grpc.NewClient("unix://"+w.options.GatewaySocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer conn.Close()
 
-	stream, err := sidecargatewayv1.NewSidecarGatewayServiceClient(conn).Session(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := sidecargatewayv1.NewSidecarGatewayServiceClient(conn).Session(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	w.mu.Lock()
 	w.stream = stream
 	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		if w.stream == stream {
+			w.stream = nil
+		}
+		w.mu.Unlock()
+	}()
+	// Stop may have run between the loop's check and the stream being
+	// published above, in which case it had no stream to unregister on.
+	if w.stopped.Load() {
+		return false, nil
+	}
 
 	if err := w.send(&sidecargatewayv1.SessionRequest{
 		Payload: &sidecargatewayv1.SessionRequest_Register{
@@ -173,21 +302,20 @@ func (w *ActorWorker) Run() error {
 			},
 		},
 	}); err != nil {
-		return fmt.Errorf("sending register: %w", err)
+		return false, fmt.Errorf("sending register: %w", err)
 	}
 
 	first, err := stream.Recv()
 	if err != nil {
-		return fmt.Errorf("waiting for register_ack: %w", err)
+		return false, fmt.Errorf("waiting for register_ack: %w", err)
 	}
 	ack, ok := first.GetPayload().(*sidecargatewayv1.SessionResponse_RegisterAck)
 	if !ok {
-		return fmt.Errorf("expected register_ack but got %T", first.GetPayload())
+		return false, fmt.Errorf("expected register_ack but got %T", first.GetPayload())
 	}
 	if !ack.RegisterAck.GetAccepted() {
-		w.stopped.Store(true)
-		w.closeSend()
-		return errors.New("gateway rejected registration")
+		_ = stream.CloseSend()
+		return false, ErrRegistrationRejected
 	}
 
 	w.logger.Info("worker registered actors with the gateway", "worker_id", w.options.WorkerID, "actors", len(w.registered))
@@ -203,9 +331,6 @@ func (w *ActorWorker) Run() error {
 			case <-stopHeartbeat:
 				return
 			case <-ticker.C:
-				if w.stopped.Load() {
-					return
-				}
 				_ = w.send(&sidecargatewayv1.SessionRequest{
 					Payload: &sidecargatewayv1.SessionRequest_Heartbeat{
 						Heartbeat: &sidecargatewayv1.Heartbeat{WorkerId: w.options.WorkerID},
@@ -216,11 +341,10 @@ func (w *ActorWorker) Run() error {
 	}()
 
 	err = w.serveLoop(stream)
-	w.stopped.Store(true)
 	close(stopHeartbeat)
 	<-heartbeatDone
-	w.closeSend()
-	return err
+	_ = stream.CloseSend()
+	return true, err
 }
 
 // Stop asks the gateway to unregister this worker and ends the session. Safe
@@ -230,6 +354,7 @@ func (w *ActorWorker) Stop() {
 	if w.stopped.Swap(true) {
 		return
 	}
+	close(w.stopCh)
 	_ = w.send(&sidecargatewayv1.SessionRequest{
 		Payload: &sidecargatewayv1.SessionRequest_Unregister{
 			Unregister: &sidecargatewayv1.Unregister{WorkerId: w.options.WorkerID},
@@ -237,6 +362,7 @@ func (w *ActorWorker) Stop() {
 	})
 	// Half-close rather than closing the connection: the gateway sees the
 	// unregister and end of stream, ends its side, and Run returns cleanly.
+	// Between sessions there's no stream; stopCh wakes Run's backoff instead.
 	w.closeSend()
 }
 
@@ -308,7 +434,7 @@ func (w *ActorWorker) handleInvoke(body *sidecargatewayv1.Invoke) {
 		return
 	}
 
-	_ = w.send(&sidecargatewayv1.SessionRequest{
+	err = w.send(&sidecargatewayv1.SessionRequest{
 		Payload: &sidecargatewayv1.SessionRequest_InvokeResult{
 			InvokeResult: &sidecargatewayv1.InvokeResult{
 				InvokeId:   body.GetInvokeId(),
@@ -317,6 +443,17 @@ func (w *ActorWorker) handleInvoke(body *sidecargatewayv1.Invoke) {
 			},
 		},
 	})
+	w.warnIfDropped(err, body.GetInvokeId(), key)
+}
+
+// warnIfDropped logs a result that couldn't be sent because the invoke
+// outlived its session: it can't go out on a later session (the gateway
+// matches results to the connection it sent the invoke on, and has already
+// failed it as WORKER_DISCONNECTED).
+func (w *ActorWorker) warnIfDropped(err error, invokeID, key string) {
+	if err != nil {
+		w.logger.Warn("dropping invoke result: its gateway session ended", "invoke_id", invokeID, "actor", key, "error", err)
+	}
 }
 
 func safeInvoke(handler ActorHandler, input any) (output any, err error) {
@@ -329,7 +466,7 @@ func safeInvoke(handler ActorHandler, input any) (output any, err error) {
 }
 
 func (w *ActorWorker) sendError(invokeID, code, message string) {
-	_ = w.send(&sidecargatewayv1.SessionRequest{
+	err := w.send(&sidecargatewayv1.SessionRequest{
 		Payload: &sidecargatewayv1.SessionRequest_InvokeError{
 			InvokeError: &sidecargatewayv1.InvokeError{
 				InvokeId: invokeID,
@@ -341,4 +478,5 @@ func (w *ActorWorker) sendError(invokeID, code, message string) {
 			},
 		},
 	})
+	w.warnIfDropped(err, invokeID, "")
 }

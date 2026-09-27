@@ -32,6 +32,16 @@ def test_start_with_empty_registry_exits_1() -> None:
     assert run_actor_worker_cli([], ["start"]) == 1
 
 
-def test_start_against_missing_socket_exits_1() -> None:
-    # grpc surfaces the connection failure from the first read of the stream.
-    assert run_actor_worker_cli(REGISTRATIONS, ["start", "--gateway-socket", "/nonexistent/gw.sock"]) == 1
+def test_start_against_missing_socket_exits_1_after_max_reconnect_attempts() -> None:
+    # Without --reconnect-max-attempts the worker would wait for the gateway
+    # forever (#392).
+    args = [
+        "start",
+        "--gateway-socket",
+        "/nonexistent/gw.sock",
+        "--reconnect-initial-delay-ms",
+        "5",
+        "--reconnect-max-attempts",
+        "2",
+    ]
+    assert run_actor_worker_cli(REGISTRATIONS, args) == 1

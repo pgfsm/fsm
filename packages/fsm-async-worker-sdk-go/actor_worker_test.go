@@ -15,11 +15,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	sidecargatewayv1 "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const testTimeout = 5 * time.Second
@@ -30,9 +33,17 @@ type fakeGateway struct {
 	closeAfterAck bool
 	toWorker      chan *sidecargatewayv1.SessionResponse
 	fromWorker    chan *sidecargatewayv1.SessionRequest
+	server        *grpc.Server
+	// abortWith, when set, fails every session with this code.
+	abortWith codes.Code
+	sessions  atomic.Int32
 }
 
 func (g *fakeGateway) Session(stream sidecargatewayv1.SidecarGatewayService_SessionServer) error {
+	g.sessions.Add(1)
+	if g.abortWith != codes.OK {
+		return status.Error(g.abortWith, "refused by test gateway")
+	}
 	recvDone := make(chan struct{})
 	registered := make(chan struct{}, 1)
 	go func() {
@@ -83,6 +94,13 @@ func startGateway(t *testing.T, accept, closeAfterAck bool) (*fakeGateway, strin
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	socket := filepath.Join(dir, "gw.sock")
+	return serveGateway(t, socket, accept, closeAfterAck), socket
+}
+
+// serveGateway serves a fresh fake gateway on socket (e.g. to restart one).
+func serveGateway(t *testing.T, socket string, accept, closeAfterAck bool) *fakeGateway {
+	t.Helper()
+	_ = os.Remove(socket)
 	lis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)
@@ -93,11 +111,11 @@ func startGateway(t *testing.T, accept, closeAfterAck bool) (*fakeGateway, strin
 		toWorker:      make(chan *sidecargatewayv1.SessionResponse, 16),
 		fromWorker:    make(chan *sidecargatewayv1.SessionRequest, 64),
 	}
-	server := grpc.NewServer()
-	sidecargatewayv1.RegisterSidecarGatewayServiceServer(server, g)
-	go server.Serve(lis)
-	t.Cleanup(server.Stop)
-	return g, socket
+	g.server = grpc.NewServer()
+	sidecargatewayv1.RegisterSidecarGatewayServiceServer(g.server, g)
+	go g.server.Serve(lis)
+	t.Cleanup(g.server.Stop)
+	return g
 }
 
 // nextOf returns the next message from the worker matching want, skipping
@@ -201,7 +219,7 @@ func TestRejectedRegistrationIsAnError(t *testing.T) {
 	_, socket := startGateway(t, false, false)
 	worker := NewActorWorker(ActorWorkerOptions{WorkerID: "w-rejected", GatewaySocketPath: socket}, testRegistrations())
 	err := worker.Run()
-	if err == nil || !strings.Contains(err.Error(), "rejected") {
+	if !errors.Is(err, ErrRegistrationRejected) {
 		t.Fatalf("Run() = %v, want a rejection error", err)
 	}
 }
@@ -221,23 +239,159 @@ func TestStopBeforeRunIsSafe(t *testing.T) {
 	}
 }
 
-// The gateway ends the stream right after acking, so start returns on its own.
-func TestCLIStartServesUntilTheGatewayEndsTheStream(t *testing.T) {
+// The gateway ending the stream isn't the end of the worker: it reconnects and
+// registers again. With the gateway then gone for good,
+// --reconnect-max-attempts bounds how long start keeps trying.
+func TestCLIStartReconnectsThenExitsAfterMaxReconnectAttempts(t *testing.T) {
 	g, socket := startGateway(t, true, true)
 	code := make(chan int, 1)
 	go func() {
-		code <- runCLI(testRegistrations(), []string{"start", "--gateway-socket", socket, "--worker-id=w-cli"}, "", io.Discard)
+		code <- runCLI(testRegistrations(), []string{
+			"start", "--gateway-socket", socket, "--worker-id=w-cli",
+			"--reconnect-initial-delay-ms", "10", "--reconnect-max-attempts", "2",
+		}, "", io.Discard)
 	}()
-	register := g.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetRegister() != nil }).GetRegister()
-	if register.GetWorkerId() != "w-cli" {
-		t.Fatalf("unexpected worker id %q", register.GetWorkerId())
+	isRegister := func(r *sidecargatewayv1.SessionRequest) bool { return r.GetRegister() != nil }
+	if id := g.nextOf(t, isRegister).GetRegister().GetWorkerId(); id != "w-cli" {
+		t.Fatalf("unexpected worker id %q", id)
 	}
+	g.nextOf(t, isRegister) // re-registered after the gateway ended the stream
+	g.server.Stop()
 	select {
 	case c := <-code:
-		if c != 0 {
-			t.Fatalf("start exit code = %d, want 0", c)
+		if c != 1 {
+			t.Fatalf("start exit code = %d, want 1", c)
 		}
 	case <-time.After(testTimeout):
 		t.Fatal("CLI didn't return")
+	}
+}
+
+// Reconnect (#392): the worker waits for a gateway that isn't up yet,
+// re-registers after the gateway restarts, and only gives up when told to.
+
+func fastReconnect(workerID, socket string) ActorWorkerOptions {
+	return ActorWorkerOptions{
+		WorkerID:                workerID,
+		GatewaySocketPath:       socket,
+		HeartbeatMs:             50,
+		ReconnectInitialDelayMs: 10,
+		ReconnectMaxDelayMs:     50,
+	}
+}
+
+func runInBackground(worker *ActorWorker) chan error {
+	done := make(chan error, 1)
+	go func() { done <- worker.Run() }()
+	return done
+}
+
+func stopAndWait(t *testing.T, worker *ActorWorker, done chan error) {
+	t.Helper()
+	worker.Stop()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() = %v, want nil", err)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("Run() didn't return after Stop()")
+	}
+}
+
+func TestWaitsForAGatewayThatStartsAfterIt(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "pgfsm-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "gw.sock")
+
+	worker := NewActorWorker(fastReconnect("w-early", socket), testRegistrations())
+	done := runInBackground(worker)
+	time.Sleep(100 * time.Millisecond) // a few attempts fail against the missing socket
+
+	g := serveGateway(t, socket, true, false)
+	g.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetRegister() != nil })
+	g.invoke("inv-early", "checkBureau", map[string]any{"n": 1})
+	g.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetInvokeResult() != nil })
+	stopAndWait(t, worker, done)
+}
+
+func TestReRegistersAfterTheGatewayRestarts(t *testing.T) {
+	first, socket := startGateway(t, true, false)
+	worker := NewActorWorker(fastReconnect("w-restart", socket), testRegistrations())
+	done := runInBackground(worker)
+	first.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetRegister() != nil })
+	first.server.Stop() // drops the live session, like a crash
+
+	second := serveGateway(t, socket, true, false)
+	if id := second.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetRegister() != nil }).GetRegister().GetWorkerId(); id != "w-restart" {
+		t.Fatalf("unexpected worker id %q", id)
+	}
+	second.invoke("inv-restart", "checkBureau", map[string]any{"n": 2})
+	result := second.nextOf(t, func(r *sidecargatewayv1.SessionRequest) bool { return r.GetInvokeResult() != nil }).GetInvokeResult()
+	if result.GetInvokeId() != "inv-restart" {
+		t.Fatalf("unexpected invoke id %q", result.GetInvokeId())
+	}
+	stopAndWait(t, worker, done)
+}
+
+func TestGivesUpAfterMaxReconnectAttempts(t *testing.T) {
+	options := fastReconnect("w-none", "/nonexistent/gw.sock")
+	options.ReconnectMaxAttempts = 3
+	err := NewActorWorker(options, testRegistrations()).Run()
+	if err == nil || !strings.Contains(err.Error(), "giving up after 3 consecutive failed attempt") {
+		t.Fatalf("Run() = %v, want a giving-up error", err)
+	}
+}
+
+func TestStopInterruptsTheReconnectBackoff(t *testing.T) {
+	options := fastReconnect("w-stop", "/nonexistent/gw.sock")
+	options.ReconnectInitialDelayMs = 60_000
+	options.ReconnectMaxDelayMs = 60_000
+	worker := NewActorWorker(options, testRegistrations())
+	done := runInBackground(worker)
+	time.Sleep(200 * time.Millisecond)
+	started := time.Now()
+	stopAndWait(t, worker, done)
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Stop() took %v to end the backoff", elapsed)
+	}
+}
+
+func TestReconnectDelayIsFullJitterUnderTheCappedExponential(t *testing.T) {
+	for attempt := 1; attempt <= 12; attempt++ {
+		ceiling := min(30_000, 250*(1<<(attempt-1)))
+		for range 50 {
+			if d := ReconnectDelayMs(attempt, 250, 30_000); d < 0 || d >= ceiling {
+				t.Fatalf("attempt %d: delay %d outside [0, %d)", attempt, d, ceiling)
+			}
+		}
+	}
+}
+
+func TestFailsFastOnUnauthenticated(t *testing.T) {
+	g, socket := startGateway(t, true, false)
+	g.abortWith = codes.Unauthenticated
+	err := NewActorWorker(fastReconnect("w-unauth", socket), testRegistrations()).Run()
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("Run() = %v, want Unauthenticated", err)
+	}
+	if n := g.sessions.Load(); n != 1 {
+		t.Fatalf("sessions = %d, want 1 (no retry)", n)
+	}
+}
+
+func TestFlappingGatewayCountsTowardReconnectMaxAttempts(t *testing.T) {
+	g, socket := startGateway(t, true, true)
+	options := fastReconnect("w-flap", socket)
+	options.ReconnectMaxAttempts = 3
+	err := NewActorWorker(options, testRegistrations()).Run()
+	if err == nil || !strings.Contains(err.Error(), "giving up after 3 consecutive failed attempt") {
+		t.Fatalf("Run() = %v, want a giving-up error", err)
+	}
+	if n := g.sessions.Load(); n != 3 {
+		t.Fatalf("sessions = %d, want 3", n)
 	}
 }

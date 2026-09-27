@@ -1,4 +1,11 @@
-export { ActorWorker } from "./actorWorker.ts";
+export {
+  ActorWorker,
+  DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+  DEFAULT_RECONNECT_MAX_DELAY_MS,
+  reconnectDelayMs,
+  RegistrationRejectedError,
+  STABLE_SESSION_MS,
+} from "./actorWorker.ts";
 export type {
   ActorHandler,
   ActorRegistration,

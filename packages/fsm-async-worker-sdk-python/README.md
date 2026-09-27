@@ -46,18 +46,40 @@ or with pip: `python3 -m pip install pgfsm-async-worker-sdk`, then
 -g, --gateway-socket <path>   Sidecar socket to connect to (default: /tmp/pgfsm-activity-gateway-workers.sock)
 -i, --worker-id <id>          Stable worker identity (default: python-<random>)
     --heartbeat-ms <ms>       Heartbeat interval (default: 5000)
+    --reconnect-initial-delay-ms <ms>
+                              First reconnect backoff step (default: 250)
+    --reconnect-max-delay-ms <ms>
+                              Reconnect backoff cap (default: 30000)
+    --reconnect-max-attempts <n>
+                              Exit after n consecutive failed attempts (default: 0 = retry forever)
 -h, --help                    Show this help message
 ```
 
 SIGINT/SIGTERM stop the worker gracefully (it unregisters from the gateway).
 
+`start` doesn't need the gateway to be up first: it retries the connection with
+exponential backoff (full jitter, 250 ms doubling up to 30 s), and if a session
+drops (e.g. the gateway restarts) it reconnects and re-registers on its own. A
+session only resets the backoff once it has stayed up for 10 s, so a gateway
+that accepts and immediately drops still gets backed off from. `start` ends with
+exit code 1 only on what reconnecting can't fix: an explicit registration
+rejection; a gRPC `UNAUTHENTICATED`, `PERMISSION_DENIED`, `UNIMPLEMENTED` or
+`INVALID_ARGUMENT` (a misconfiguration, so it fails fast instead of retrying);
+or `--reconnect-max-attempts` consecutive failed attempts. An invoke result that
+can't be sent because its session ended is logged and dropped; the gateway has
+already failed that invoke.
+
 ## API
 
 - `run_actor_worker_cli(registrations, args, invocation=None) -> int` — the
   `list`/`start` CLI. Returns the process exit code instead of exiting.
-- `ActorWorker(worker_id, gateway_socket_path, registrations, heartbeat_ms=5000)`
+- `ActorWorker(worker_id, gateway_socket_path, registrations, heartbeat_ms=5000,
+  reconnect_initial_delay_ms=250, reconnect_max_delay_ms=30000,
+  reconnect_max_attempts=0)`
   — `run()` registers every actor and serves invocations until `stop()` is
-  called or the gateway ends the stream.
+  called, reconnecting and re-registering whenever a session drops. It raises
+  `RegistrationRejectedError` on an explicit rejection, or `ConnectionError`
+  after `reconnect_max_attempts` consecutive failed attempts.
 
 A registration is a dict:
 

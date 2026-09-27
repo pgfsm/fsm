@@ -10,7 +10,12 @@
 
 import { parseArgs } from "@std/cli/parse-args";
 import { getLogger } from "@logtape/logtape";
-import { type ActorRegistration, ActorWorker } from "./actorWorker.ts";
+import {
+  type ActorRegistration,
+  ActorWorker,
+  DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+  DEFAULT_RECONNECT_MAX_DELAY_MS,
+} from "./actorWorker.ts";
 
 const logger = getLogger([
   "@pgfsm/worker",
@@ -45,11 +50,19 @@ OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: ${DEFAULT_GATEWAY_SOCKET_PATH})
   -i, --worker-id <id>          Stable worker identity (default: typescript-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: 5000)
+      --reconnect-initial-delay-ms <ms>
+                                First reconnect backoff step (default: ${DEFAULT_RECONNECT_INITIAL_DELAY_MS})
+      --reconnect-max-delay-ms <ms>
+                                Reconnect backoff cap (default: ${DEFAULT_RECONNECT_MAX_DELAY_MS})
+      --reconnect-max-attempts <n>
+                                Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
 
 COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
+          Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
+          session drops (e.g. the gateway restarts).
 
 DESCRIPTION
   Actors come from a compiler-generated registry (see
@@ -76,7 +89,14 @@ export async function runActorWorkerCli(
     "deno run --allow-all run-async-worker.ts";
 
   const args = parseArgs(options.args, {
-    string: ["gateway-socket", "worker-id", "heartbeat-ms"],
+    string: [
+      "gateway-socket",
+      "worker-id",
+      "heartbeat-ms",
+      "reconnect-initial-delay-ms",
+      "reconnect-max-delay-ms",
+      "reconnect-max-attempts",
+    ],
     boolean: ["help"],
     alias: {
       h: "help",
@@ -106,6 +126,15 @@ export async function runActorWorkerCli(
   const heartbeatMs = args["heartbeat-ms"]
     ? Number(args["heartbeat-ms"])
     : undefined;
+  const reconnectInitialDelayMs = args["reconnect-initial-delay-ms"]
+    ? Number(args["reconnect-initial-delay-ms"])
+    : undefined;
+  const reconnectMaxDelayMs = args["reconnect-max-delay-ms"]
+    ? Number(args["reconnect-max-delay-ms"])
+    : undefined;
+  const reconnectMaxAttempts = args["reconnect-max-attempts"]
+    ? Number(args["reconnect-max-attempts"])
+    : undefined;
 
   logger.info("{count} actor(s) compiled into this registry", {
     count: registrations.length,
@@ -132,7 +161,15 @@ export async function runActorWorkerCli(
   }
 
   const worker = new ActorWorker(
-    { workerId, language: "typescript", gatewaySocketPath, heartbeatMs },
+    {
+      workerId,
+      language: "typescript",
+      gatewaySocketPath,
+      heartbeatMs,
+      reconnectInitialDelayMs,
+      reconnectMaxDelayMs,
+      reconnectMaxAttempts,
+    },
     registrations,
   );
 

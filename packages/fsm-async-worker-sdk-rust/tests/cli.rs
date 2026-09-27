@@ -41,10 +41,20 @@ fn start_with_empty_registry_exits_1() {
     assert_eq!(run_actor_worker_cli(Vec::new(), ["start"], None), 1);
 }
 
+// Without --reconnect-max-attempts the worker would wait for the gateway
+// forever (#392).
 #[test]
-fn start_against_missing_socket_exits_1() {
+fn start_against_missing_socket_exits_1_after_max_reconnect_attempts() {
     assert_eq!(
-        run(&["start", "--gateway-socket", "/nonexistent/gw.sock"]),
+        run(&[
+            "start",
+            "--gateway-socket",
+            "/nonexistent/gw.sock",
+            "--reconnect-initial-delay-ms",
+            "5",
+            "--reconnect-max-attempts",
+            "2",
+        ]),
         1
     );
 }

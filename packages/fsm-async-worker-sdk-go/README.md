@@ -64,20 +64,41 @@ To add it to your own module:
 -g, --gateway-socket <path>   Sidecar socket to connect to (default: /tmp/pgfsm-activity-gateway-workers.sock)
 -i, --worker-id <id>          Stable worker identity (default: go-<random>)
     --heartbeat-ms <ms>       Heartbeat interval (default: 5000)
+    --reconnect-initial-delay-ms <ms>
+                              First reconnect backoff step (default: 250)
+    --reconnect-max-delay-ms <ms>
+                              Reconnect backoff cap (default: 30000)
+    --reconnect-max-attempts <n>
+                              Exit after n consecutive failed attempts (default: 0 = retry forever)
 -h, --help                    Show this help message
 ```
 
 SIGINT/SIGTERM stop the worker gracefully (it unregisters from the gateway).
+
+`start` doesn't need the gateway to be up first: it retries the connection with
+exponential backoff (full jitter, 250 ms doubling up to 30 s), and if a session
+drops (e.g. the gateway restarts) it reconnects and re-registers on its own. A
+session only resets the backoff once it has stayed up for 10 s, so a gateway
+that accepts and immediately drops still gets backed off from. `start` ends with
+exit code 1 only on what reconnecting can't fix: an explicit registration
+rejection; a gRPC `UNAUTHENTICATED`, `PERMISSION_DENIED`, `UNIMPLEMENTED` or
+`INVALID_ARGUMENT` (a misconfiguration, so it fails fast instead of retrying);
+or `--reconnect-max-attempts` consecutive failed attempts. An invoke result that
+can't be sent because its session ended is logged and dropped; the gateway has
+already failed that invoke.
 
 ## API
 
 - `RunActorWorkerCLI(registrations, args, invocation) int`: the `list`/`start`
   CLI. Returns the process exit code instead of exiting. `invocation` is shown
   in `--help`; `""` means `go run .`.
-- `NewActorWorker(ActorWorkerOptions{WorkerID, GatewaySocketPath, HeartbeatMs}, registrations)`:
+- `NewActorWorker(ActorWorkerOptions{WorkerID, GatewaySocketPath, HeartbeatMs, ReconnectInitialDelayMs, ReconnectMaxDelayMs, ReconnectMaxAttempts}, registrations)`:
   `Run()` registers every actor and serves invocations until `Stop()` is called
-  (returns `nil`) or the gateway ends the stream. `Stop()` is safe from any
-  goroutine and before `Run()` connects.
+  (returns `nil`), reconnecting and re-registering whenever a session drops. It
+  returns `ErrRegistrationRejected` on an explicit rejection, or an error after
+  `ReconnectMaxAttempts` consecutive failed attempts (zero values mean the
+  defaults: 250 ms, 30 s, retry forever). `Stop()` is safe from any goroutine,
+  before `Run()` connects, and during a reconnect backoff.
 - `NewActorRegistration(parentFsmName, parentFsmVersion, asyncOperationType, asyncOperationName, asyncOperationVersion, asyncOperationLanguage, handler)`,
   where `handler` is a `func(input any) (any, error)`.
 
