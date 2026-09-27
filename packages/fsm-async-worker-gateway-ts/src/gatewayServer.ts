@@ -36,7 +36,11 @@ import {
 } from "./sidecar/gateway.ts";
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
-import { isNotFoundError } from "./util.ts";
+import {
+  closeHttp2Server,
+  isNotFoundError,
+  trackHttp2Sessions,
+} from "./util.ts";
 
 const logger = getLogger(["@pgfsm/worker", "async-op-worker-gateway"]);
 
@@ -76,6 +80,11 @@ export interface GatewayServerOptions {
   /** Default per-invoke timeout if the caller doesn't set one. */
   defaultInvokeTimeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * On shutdown, how long each server (client-facing, then sidecar) lets
+   * open connections finish before destroying them (default 5 s).
+   */
+  shutdownGraceMs?: number;
   /**
    * When set, also starts the async-op poll loop (asyncOpPollLoop.ts)
    * against this server's own SidecarGateway instance — same process, same
@@ -190,6 +199,7 @@ export async function startActivityGatewayServer(
   const sidecar = new SidecarGateway({
     socketPath: options.sidecarSocketPath,
     onActorRegistered,
+    shutdownGraceMs: options.shutdownGraceMs,
   });
   await sidecar.start();
   logger.info("Sidecar worker gateway listening on unix:{path}", {
@@ -263,28 +273,33 @@ export async function startActivityGatewayServer(
   cleanupUnixSocket(options.bindTarget);
 
   const server = http2.createServer(connectNodeAdapter({ routes }));
+  const sessions = trackHttp2Sessions(server);
   await bindHttp2Server(server, options.bindTarget);
   logger.info("Activity gateway gRPC server listening on {target}", {
     target: options.bindTarget,
   });
 
   await new Promise<void>((resolve) => {
-    const shutdown = () => {
+    // Client-facing server first, so in-flight invokes get the grace
+    // period to finish against still-connected workers; then the sidecar.
+    // Both are bounded, so a client or worker holding its connection open
+    // can't hang shutdown (#397).
+    const shutdown = async () => {
       logger.info("Activity gateway shutting down...");
-      server.close(() => {
-        sidecar.stop().then(() => {
-          cleanupUnixSocket(options.bindTarget);
-          resolve();
-        });
-      });
+      await closeHttp2Server(server, sessions, options.shutdownGraceMs);
+      await sidecar.stop();
+      cleanupUnixSocket(options.bindTarget);
+      resolve();
     };
 
     if (options.signal) {
       if (options.signal.aborted) {
-        shutdown();
+        void shutdown();
         return;
       }
-      options.signal.addEventListener("abort", shutdown, { once: true });
+      options.signal.addEventListener("abort", () => void shutdown(), {
+        once: true,
+      });
     }
   });
 }
