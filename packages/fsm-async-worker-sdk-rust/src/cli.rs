@@ -9,6 +9,7 @@
 
 use crate::actor_worker::{
     ActorRegistration, ActorWorker, ActorWorkerOptions, DEFAULT_HEARTBEAT_MS,
+    DEFAULT_RECONNECT_INITIAL_DELAY_MS, DEFAULT_RECONNECT_MAX_DELAY_MS,
 };
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
@@ -31,6 +32,9 @@ struct ParsedArgs {
     gateway_socket_path: String,
     worker_id: Option<String>,
     heartbeat_ms: u64,
+    reconnect_initial_delay_ms: u64,
+    reconnect_max_delay_ms: u64,
+    reconnect_max_attempts: u32,
     help: bool,
 }
 
@@ -44,11 +48,19 @@ USAGE
 COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
+          Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
+          session drops (e.g. the gateway restarts).
 
 OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: {DEFAULT_GATEWAY_SOCKET_PATH})
   -i, --worker-id <id>          Stable worker identity (default: rust-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: {DEFAULT_HEARTBEAT_MS})
+      --reconnect-initial-delay-ms <ms>
+                                First reconnect backoff step (default: {DEFAULT_RECONNECT_INITIAL_DELAY_MS})
+      --reconnect-max-delay-ms <ms>
+                                Reconnect backoff cap (default: {DEFAULT_RECONNECT_MAX_DELAY_MS})
+      --reconnect-max-attempts <n>
+                                Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
 
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
@@ -65,6 +77,9 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
         gateway_socket_path: DEFAULT_GATEWAY_SOCKET_PATH.to_string(),
         worker_id: None,
         heartbeat_ms: DEFAULT_HEARTBEAT_MS,
+        reconnect_initial_delay_ms: DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+        reconnect_max_delay_ms: DEFAULT_RECONNECT_MAX_DELAY_MS,
+        reconnect_max_attempts: 0,
         help: false,
     };
 
@@ -101,6 +116,24 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
                     }
                 };
             }
+            "--reconnect-initial-delay-ms" => {
+                let value = value_for("--reconnect-initial-delay-ms")?;
+                parsed.reconnect_initial_delay_ms =
+                    parse_positive(&value, "--reconnect-initial-delay-ms")?;
+            }
+            "--reconnect-max-delay-ms" => {
+                let value = value_for("--reconnect-max-delay-ms")?;
+                parsed.reconnect_max_delay_ms = parse_positive(&value, "--reconnect-max-delay-ms")?;
+            }
+            "--reconnect-max-attempts" => {
+                let value = value_for("--reconnect-max-attempts")?;
+                parsed.reconnect_max_attempts = value.parse::<u32>().map_err(|_| {
+                    format!(
+                        "--reconnect-max-attempts must be a non-negative integer, got: {}",
+                        value
+                    )
+                })?;
+            }
             "list" | "start" if parsed.command.is_none() => {
                 parsed.command = Some(if flag == "list" {
                     Command::List
@@ -118,6 +151,16 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
         }
     }
     Ok(parsed)
+}
+
+fn parse_positive(value: &str, flag: &str) -> Result<u64, String> {
+    match value.parse::<u64>() {
+        Ok(n) if n > 0 => Ok(n),
+        _ => Err(format!(
+            "{} must be a positive integer, got: {}",
+            flag, value
+        )),
+    }
 }
 
 fn random_worker_id() -> String {
@@ -213,6 +256,9 @@ where
             worker_id: worker_id.clone(),
             gateway_socket_path: parsed.gateway_socket_path.clone(),
             heartbeat_ms: parsed.heartbeat_ms,
+            reconnect_initial_delay_ms: parsed.reconnect_initial_delay_ms,
+            reconnect_max_delay_ms: parsed.reconnect_max_delay_ms,
+            reconnect_max_attempts: parsed.reconnect_max_attempts,
         },
         registrations,
     ));
@@ -317,6 +363,30 @@ mod tests {
         assert_eq!(p.gateway_socket_path, DEFAULT_GATEWAY_SOCKET_PATH);
         assert_eq!(p.heartbeat_ms, DEFAULT_HEARTBEAT_MS);
         assert!(p.worker_id.is_none());
+        assert_eq!(
+            p.reconnect_initial_delay_ms,
+            DEFAULT_RECONNECT_INITIAL_DELAY_MS
+        );
+        assert_eq!(p.reconnect_max_delay_ms, DEFAULT_RECONNECT_MAX_DELAY_MS);
+        assert_eq!(p.reconnect_max_attempts, 0);
+    }
+
+    #[test]
+    fn parses_reconnect_options() {
+        let p = parse(&[
+            "start",
+            "--reconnect-initial-delay-ms=5",
+            "--reconnect-max-delay-ms",
+            "100",
+            "--reconnect-max-attempts",
+            "3",
+        ])
+        .unwrap();
+        assert_eq!(p.reconnect_initial_delay_ms, 5);
+        assert_eq!(p.reconnect_max_delay_ms, 100);
+        assert_eq!(p.reconnect_max_attempts, 3);
+        assert!(parse(&["start", "--reconnect-initial-delay-ms", "0"]).is_err());
+        assert!(parse(&["start", "--reconnect-max-attempts", "-1"]).is_err());
     }
 
     #[test]

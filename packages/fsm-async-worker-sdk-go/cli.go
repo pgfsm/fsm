@@ -29,11 +29,14 @@ const DefaultGatewaySocketPath = "/tmp/pgfsm-activity-gateway-workers.sock"
 const defaultInvocation = "go run ."
 
 type parsedArgs struct {
-	command           string
-	gatewaySocketPath string
-	workerID          string
-	heartbeatMs       int
-	help              bool
+	command              string
+	gatewaySocketPath    string
+	workerID             string
+	heartbeatMs          int
+	reconnectInitial     int
+	reconnectMax         int
+	reconnectMaxAttempts int
+	help                 bool
 }
 
 func helpText(invocation string) string {
@@ -45,11 +48,19 @@ USAGE
 COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
+          Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
+          session drops (e.g. the gateway restarts).
 
 OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: %[2]s)
   -i, --worker-id <id>          Stable worker identity (default: go-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: %[3]d)
+      --reconnect-initial-delay-ms <ms>
+                                First reconnect backoff step (default: %[4]d)
+      --reconnect-max-delay-ms <ms>
+                                Reconnect backoff cap (default: %[5]d)
+      --reconnect-max-attempts <n>
+                                Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
 
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
@@ -57,13 +68,18 @@ writeAggregateGoRegistry), linked into the binary at compile time.
 
 EXAMPLE
   %[1]s start --gateway-socket %[2]s
-`, invocation, DefaultGatewaySocketPath, DefaultHeartbeatMs)
+`, invocation, DefaultGatewaySocketPath, DefaultHeartbeatMs, DefaultReconnectInitialDelayMs, DefaultReconnectMaxDelayMs)
 }
 
 // parseArgs accepts the command and flags in any order, and both
 // "--flag value" and "--flag=value".
 func parseArgs(args []string) (parsedArgs, error) {
-	parsed := parsedArgs{gatewaySocketPath: DefaultGatewaySocketPath, heartbeatMs: DefaultHeartbeatMs}
+	parsed := parsedArgs{
+		gatewaySocketPath: DefaultGatewaySocketPath,
+		heartbeatMs:       DefaultHeartbeatMs,
+		reconnectInitial:  DefaultReconnectInitialDelayMs,
+		reconnectMax:      DefaultReconnectMaxDelayMs,
+	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		flag, inline, hasInline := arg, "", false
@@ -108,6 +124,27 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, fmt.Errorf("--heartbeat-ms must be a positive integer, got: %s", v)
 			}
 			parsed.heartbeatMs = ms
+		case "--reconnect-initial-delay-ms", "--reconnect-max-delay-ms", "--reconnect-max-attempts":
+			v, err := value(flag)
+			if err != nil {
+				return parsed, err
+			}
+			n, convErr := strconv.Atoi(v)
+			minimum := 1
+			if flag == "--reconnect-max-attempts" {
+				minimum = 0
+			}
+			if convErr != nil || n < minimum {
+				return parsed, fmt.Errorf("%s must be an integer >= %d, got: %s", flag, minimum, v)
+			}
+			switch flag {
+			case "--reconnect-initial-delay-ms":
+				parsed.reconnectInitial = n
+			case "--reconnect-max-delay-ms":
+				parsed.reconnectMax = n
+			default:
+				parsed.reconnectMaxAttempts = n
+			}
 		default:
 			switch {
 			case strings.HasPrefix(flag, "-"):
@@ -189,6 +226,10 @@ func runCLI(registrations []ActorRegistration, args []string, invocation string,
 		WorkerID:          workerID,
 		GatewaySocketPath: parsed.gatewaySocketPath,
 		HeartbeatMs:       parsed.heartbeatMs,
+
+		ReconnectInitialDelayMs: parsed.reconnectInitial,
+		ReconnectMaxDelayMs:     parsed.reconnectMax,
+		ReconnectMaxAttempts:    parsed.reconnectMaxAttempts,
 	}, registrations)
 
 	signals := make(chan os.Signal, 1)

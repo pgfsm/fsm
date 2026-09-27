@@ -44,8 +44,10 @@ func TestStartWithEmptyRegistryExits1(t *testing.T) {
 	}
 }
 
-func TestStartAgainstMissingSocketExits1(t *testing.T) {
-	if code := run("start", "--gateway-socket", "/nonexistent/gw.sock"); code != 1 {
+// Without --reconnect-max-attempts the worker would wait for the gateway
+// forever (#392).
+func TestStartAgainstMissingSocketExits1AfterMaxReconnectAttempts(t *testing.T) {
+	if code := run("start", "--gateway-socket", "/nonexistent/gw.sock", "--reconnect-initial-delay-ms=5", "--reconnect-max-attempts=2"); code != 1 {
 		t.Fatalf("exit code %d", code)
 	}
 }
@@ -61,6 +63,16 @@ func TestParseArgs(t *testing.T) {
 	p, _ = parseArgs([]string{"list"})
 	if p.gatewaySocketPath != DefaultGatewaySocketPath || p.heartbeatMs != DefaultHeartbeatMs || p.workerID != "" {
 		t.Fatalf("unexpected defaults: %+v", p)
+	}
+	if p.reconnectInitial != DefaultReconnectInitialDelayMs || p.reconnectMax != DefaultReconnectMaxDelayMs || p.reconnectMaxAttempts != 0 {
+		t.Fatalf("unexpected reconnect defaults: %+v", p)
+	}
+	p, err = parseArgs([]string{"start", "--reconnect-initial-delay-ms=5", "--reconnect-max-delay-ms", "100", "--reconnect-max-attempts", "3"})
+	if err != nil || p.reconnectInitial != 5 || p.reconnectMax != 100 || p.reconnectMaxAttempts != 3 {
+		t.Fatalf("unexpected reconnect parse: %+v, %v", p, err)
+	}
+	if _, err := parseArgs([]string{"start", "--reconnect-max-attempts", "-1"}); err == nil {
+		t.Fatal("negative --reconnect-max-attempts should be rejected")
 	}
 	if id := randomWorkerID(); !strings.HasPrefix(id, "go-") || len(id) != 11 {
 		t.Fatalf("unexpected worker id %q", id)

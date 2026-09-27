@@ -17,7 +17,13 @@ import threading
 import uuid
 from typing import List, Optional, Sequence
 
-from .actor_worker import DEFAULT_HEARTBEAT_MS, ActorRegistration, ActorWorker
+from .actor_worker import (
+    DEFAULT_HEARTBEAT_MS,
+    DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+    DEFAULT_RECONNECT_MAX_DELAY_MS,
+    ActorRegistration,
+    ActorWorker,
+)
 
 logger = logging.getLogger("pgfsm.async_worker_sdk.cli")
 
@@ -29,6 +35,8 @@ pgfsm-async-worker-sdk — Python worker for the Activity Gateway
 commands:
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
+          Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
+          session drops (e.g. the gateway restarts).
 
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateActorsRegistry) -- statically imported, not scanned or
@@ -74,6 +82,24 @@ def _build_parser(invocation: str) -> _ArgumentParser:
         type=int,
         default=DEFAULT_HEARTBEAT_MS,
         help=f"Heartbeat interval (default: {DEFAULT_HEARTBEAT_MS})",
+    )
+    parser.add_argument(
+        "--reconnect-initial-delay-ms",
+        type=int,
+        default=DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+        help=f"First reconnect backoff step (default: {DEFAULT_RECONNECT_INITIAL_DELAY_MS})",
+    )
+    parser.add_argument(
+        "--reconnect-max-delay-ms",
+        type=int,
+        default=DEFAULT_RECONNECT_MAX_DELAY_MS,
+        help=f"Reconnect backoff cap (default: {DEFAULT_RECONNECT_MAX_DELAY_MS})",
+    )
+    parser.add_argument(
+        "--reconnect-max-attempts",
+        type=int,
+        default=0,
+        help="Exit after n consecutive failed attempts (default: 0 = retry forever)",
     )
     parser.add_argument(
         "-h", "--help", action="store_true", help="Show this help message"
@@ -138,6 +164,9 @@ def run_actor_worker_cli(
         gateway_socket_path=gateway_socket_path,
         registrations=registrations,
         heartbeat_ms=parsed.heartbeat_ms,
+        reconnect_initial_delay_ms=parsed.reconnect_initial_delay_ms,
+        reconnect_max_delay_ms=parsed.reconnect_max_delay_ms,
+        reconnect_max_attempts=parsed.reconnect_max_attempts,
     )
 
     def _on_signal(signum: int, frame: object) -> None:
