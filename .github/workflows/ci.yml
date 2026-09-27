@@ -37,7 +37,7 @@ jobs:
       # packages/fsm-compiler-ts/test/cli.test.ts are currently red — remove
       # `continue-on-error` once they're fixed so tests gate merges again.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts apps/fsm-core-ts-hono-deno/stoker-src
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
         continue-on-error: true
 
   python-async-worker-sdk:
