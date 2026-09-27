@@ -1,5 +1,9 @@
-import { assertEquals } from "@std/assert";
-import { findMergedImportMap } from "../src/cli/loader.node.ts";
+import { assertEquals, assertRejects } from "@std/assert";
+import {
+  findMergedImportMap,
+  initialize,
+  resolve,
+} from "../src/cli/loader.node.ts";
 
 // findMergedImportMap only reads/parses config files off disk (node:fs) —
 // it never dynamically imports anything, so unlike test-helpers.ts's
@@ -90,4 +94,41 @@ Deno.test("findMergedImportMap - a config declaring its own workspace stops the 
 
   const map = await findMergedImportMap(dir);
   assertEquals(map, { xstate: "npm:xstate@^5.28.0" });
+});
+
+// --- resolve(): fallback to this package's own dependencies (#382) ---
+
+const LOADER_URL = new URL("../src/cli/loader.node.ts", import.meta.url).href;
+initialize({ ownResolveBase: LOADER_URL });
+
+Deno.test("resolve - a bare specifier nothing maps resolves from the compiler's own dependencies", async () => {
+  const dir = await makeFixtureDir(); // no deno.json anywhere near it
+  const parentURL = `file://${dir}/machine.ts`;
+  const calls: (string | undefined)[] = [];
+  const result = await resolve(
+    "xstate",
+    { parentURL },
+    (_specifier, context) => {
+      calls.push(context.parentURL);
+      if (context.parentURL === LOADER_URL) {
+        return Promise.resolve({ url: "file:///fake/xstate/index.js" });
+      }
+      return Promise.reject(new Error("ERR_MODULE_NOT_FOUND from machine.ts"));
+    },
+  );
+  assertEquals(result.url, "file:///fake/xstate/index.js");
+  assertEquals(calls, [parentURL, LOADER_URL]);
+});
+
+Deno.test("resolve - relative specifiers are never redirected, and a miss rethrows the original error", async () => {
+  const dir = await makeFixtureDir();
+  const parentURL = `file://${dir}/machine.ts`;
+  const original = new Error("original");
+  const fail = () => Promise.reject(original);
+  for (const specifier of ["./helpers.ts", "node:fs", "no-such-package"]) {
+    const err = await assertRejects(() =>
+      resolve(specifier, { parentURL }, fail)
+    );
+    assertEquals(err, original);
+  }
 });

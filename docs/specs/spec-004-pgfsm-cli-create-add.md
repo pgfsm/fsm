@@ -364,11 +364,23 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
 
 ## Implementation
 
-<!-- Filled in after acceptance. Proposed breakdown:
-1. compiler: `overwrite: "generated-only"` ownership option + do-not-edit headers (prereq)
-2. compiler: single-FSM-version generation with explicit identity into {cwd}/fsm (done: #372/#374, #376/#378)
-Issues: #381 (1), #382 (3), #383 (4), #384 (5), #385 (`pgfsm init`, deferred), #390 (`sync`, deferred)
-3. new packages/fsm-cli-ts: create/add, project discovery, plan printer
-4. npm-publish.yml matrix entry + README/docs; point compiler README at @pgfsm/cli
-5. (optional) @pgfsm/create shim
--->
+| Step | What                                                                            | Issue / PR               |
+| ---- | ------------------------------------------------------------------------------- | ------------------------ |
+| 1    | Compiler: file ownership, `overwrite: "generated-only"`                         | #381 / #387              |
+| 2    | Compiler: single-FSM-version generation with explicit identity into `{cwd}/fsm` | #372 / #374, #376 / #378 |
+| 3    | New `packages/fsm-cli-ts`: `create`, `add`, project discovery, plan printer     | #382 / #389              |
+| 4    | Publish `@pgfsm/cli`, compiler release, docs                                    | #383                     |
+| —    | Deferred: `sync` (#390), `@pgfsm/create` shim (#384), `pgfsm init` (#385)       |                          |
+
+Differences from the text above, found while implementing #382:
+
+- FSM identity flags are `-N`/`--fsm-name` and `-V`/`--fsm-version` (not
+  `--name`/`--version`: `--version` prints the CLI version); `--name` is the
+  project name on `create`.
+- The project `deno.json` also sets `"nodeModulesDir": "auto"`: Deno resolves a
+  machine.ts through the working directory's config, and `package.json`'s
+  presence would otherwise switch Deno to an uninstalled `node_modules`.
+- Under Node, a machine.ts's bare imports fall back to `@pgfsm/compiler`'s own
+  dependencies, so a machine.ts importing only `xstate` needs no config at all.
+- The CLI runs `go mod tidy` itself: the compiler's npm build can't spawn
+  processes, so an npx-created project would otherwise lack `go.sum`.

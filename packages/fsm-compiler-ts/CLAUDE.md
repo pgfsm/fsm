@@ -143,6 +143,23 @@ Gotchas:
   Rust, `worker-sdk-cargo-toml.eta`, `worker-sdk-pyproject.eta`).
   `removeStaleGeneratedFile`'s `AUTO-GENERATED` match only targets pre-#358
   legacy files, so the new header never makes them removable.
+- **`scaffoldWorkerProjects`** (`scaffold-worker-projects.ts`, #382) lays down
+  `sync-worker/typescript` and each requested `async-worker/<lang>` before any
+  FSM uses it — what `@pgfsm/cli create` calls. It relies on opt-in `allowEmpty`
+  params on `writeAggregateActorsRegistry`/
+  `writeAggregateGoRegistry`/`writeAggregateSyncOperationRegistry` and
+  `ensureLangs` on `writeWorkerSdk`; every normal `generate-*` path leaves them
+  off, so a language with no actors is still skipped there (and an empty project
+  scaffolded earlier survives untouched). Verified: all five empty projects
+  build (`deno check`, `uv run ... list`, `cargo check`, `go build`).
+- **The Node resolve hook falls back to this package's own dependencies**
+  (`loader.node.ts`'s `resolveFromOwnDependencies`, #382): a bare specifier that
+  neither Node nor the nearest `deno.json` resolves is retried as if the
+  compiler imported it, so a user's machine.ts gets our `xstate` with zero
+  config. The loader's own URL comes in via `register()`'s `data` →
+  `initialize()`, not `import.meta.url`: dnt rewrites `import.meta` into a
+  ponyfill that only exists on the main thread, and hooks run on Node's loader
+  thread (reading it there throws, silently disabling the fallback).
 - **Under npx, check missing paths with `isNotFoundError`**, never
   `instanceof Deno.errors.NotFound` — the shim's `realPath` throws Node's raw
   ENOENT too (#386, like #278's `remove`).
