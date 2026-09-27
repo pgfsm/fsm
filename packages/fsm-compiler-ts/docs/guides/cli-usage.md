@@ -36,6 +36,7 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c <command> -f <
 | `--version`               | `-v`  | Print `@pgfsm/compiler`'s own version and exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `--show-recommendation`   | `-r`  | Validate generated `fsm.json` against schema and print issues (`generate-fsm-json`/`generate-all` only)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `--force`                 |       | Overwrite `{cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json` even when it belongs to a different machine `id` (`generate-fsm-json`/`generate-all` single-file mode only)                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--overwrite <mode>`      |       | `all` (default) rewrites every file; `generated-only` keeps existing scaffolded files (stubs, worker entry files, their manifests) and warns about stub exports they're missing — see "Re-running without losing your code"                                                                                                                                                                                                                                                                                                                        |
 | `--include-workers`       |       | `delete` only: also remove each deleted FSM version's `{cwd}/sync-worker/` and `{cwd}/async-worker/` folders, including implemented stubs                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `--help`                  | `-h`  | Show help message                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
@@ -237,6 +238,29 @@ deno run --allow-all ../../packages/fsm-compiler-ts/src/cli/index.ts \
 ```
 
 ---
+
+### Re-running without losing your code — `--overwrite generated-only`
+
+By default (`--overwrite all`) every command rewrites every file it produces.
+`--overwrite generated-only` (on `generate-sync-logic`, `generate-async-logic`,
+`generate-all` and `create-async-logic`) instead keeps files that are yours once
+created, and rewrites only compiler-owned ones:
+
+| Class      | Files                                                                                                                                                                                                                                        | With `generated-only`   |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Generated  | `fsm.json`/`xstate-fsm.json`, every registry and aggregate registry, `actors-manifest.json`, actor barrels, `go-actors-registry-generated/`, and the Go worker's `go.mod` + `main.go`                                                        | Always rewritten        |
+| Scaffolded | `actions`/`guards`/`delays` `index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s | Written only if missing |
+
+The Go worker module is generated because its `go.mod` lists every actor module
+and must match `main.go`'s SDK pin; add a Go actor's own dependencies to that
+actor's `go.mod`. When a kept stub module doesn't define an export the FSM now
+needs (e.g. a new action), the command warns with the missing names instead of
+rewriting the file. Kept files are never reformatted, and the run ends with a
+`created / regenerated / kept` count. This is the mode `@pgfsm/cli` uses.
+
+```bash
+npx @pgfsm/compiler -c generate-all -f fsm --overwrite generated-only
+```
 
 ### `create-async-logic`
 

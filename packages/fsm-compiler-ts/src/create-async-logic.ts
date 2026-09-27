@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { writeOwnedFile } from "./write-policy.ts";
 import { isNotFoundError, isVersionFolderName } from "./util.ts";
 import {
   ASYNC_WORKER_DIR_NAME,
@@ -316,9 +317,10 @@ async function rewriteSharedAsyncOpRegistry(
     `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}/${functionVersion}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${SHARED_ASYNC_OP_REGISTRY_FILE_NAME[lang]}`;
-  await Deno.writeTextFile(
+  await writeOwnedFile(
     file,
     buildSharedAsyncOpRegistryContent(entries, lang),
+    "generated",
   );
   return file;
 }
@@ -468,7 +470,7 @@ async function rewriteSharedAsyncOpGoRegistry(
       target: relativeImportDir(dir, a.actorDir),
     })),
   });
-  await Deno.writeTextFile(`${dir}/go.mod`, goModContent);
+  await writeOwnedFile(`${dir}/go.mod`, goModContent, "generated");
 
   const registryContent = renderGoActorsRegistryAggregate({
     imports: withMeta.map((a) => ({
@@ -478,7 +480,7 @@ async function rewriteSharedAsyncOpGoRegistry(
     actors: withMeta,
   });
   const registryFile = `${dir}/registry.go`;
-  await Deno.writeTextFile(registryFile, registryContent);
+  await writeOwnedFile(registryFile, registryContent, "generated");
 
   return { registryFile, goModDir: dir };
 }

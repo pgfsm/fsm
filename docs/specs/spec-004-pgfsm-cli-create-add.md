@@ -1,4 +1,4 @@
-# SPEC-004: `@pgfsm/cli` — npx `create` / `add` / `sync` for FSM Worker Projects
+# SPEC-004: `@pgfsm/cli` — npx `create` / `add` for FSM Worker Projects
 
 | Field   | Value                                                                         |
 | ------- | ----------------------------------------------------------------------------- |
@@ -7,6 +7,12 @@
 | Authors | Niraj, Claude                                                                 |
 | Issue   | #373                                                                          |
 | Affects | new `packages/fsm-cli-ts` (`@pgfsm/cli`), `packages/fsm-compiler-ts`, `docs/` |
+
+> **Amended 2026-09-27 (#390):** `sync` is dropped from v1. Without it, nothing
+> reads a list of FSMs and their sources, so `pgfsm.config.json` shrinks to a
+> project marker (`name`, `toolVersion`), and `add --force` is how a version is
+> regenerated after its source changes. `sync` and the `fsms[]` list move to
+> #390. The sections below reflect the amended design.
 
 ---
 
@@ -140,7 +146,6 @@ Decision drivers:
 ```bash
 npx @pgfsm/cli create <dir> [<source>] [--name <n>] [--dry-run]
 npx @pgfsm/cli add <source> [--name <fsmName>] [--version <vNN>] [--force] [--dry-run]
-npx @pgfsm/cli sync [--dry-run]
 # optional shim: npm create @pgfsm <dir> -- [<source>]
 ```
 
@@ -174,44 +179,31 @@ Go for the first time needs no new project setup.
 
 ```json
 {
-  "$schema": "https://…/pgfsm.config.schema.json",
   "name": "my-app",
-  "toolVersion": "0.1.0",
-  "fsmDir": "fsm",
-  "asyncWorkerLangs": ["typescript", "python", "rust", "go"],
-  "syncWorkerLangs": ["typescript"],
-  "fsms": [
-    {
-      "name": "checkout",
-      "version": "v01",
-      "source": "../designs/checkout/machine.ts"
-    },
-    {
-      "name": "payment",
-      "version": "v01",
-      "source": "fsm/payment/v01/fsm.json"
-    }
-  ]
+  "toolVersion": "0.1.0"
 }
 ```
 
-`name` replaces the random `sync-worker-<hex>` name. `toolVersion` is used for
-the version-drift warning. `fsms[].source` (relative to the project root)
-records where each FSM came from. Because the compiler compiles `machine.ts`
-where it is rather than copying it, this list is how `sync` finds the source to
-recompile. `fsm.json` doesn't record its origin, and the compiler stays unaware
-of it.
+Its existence is what makes a directory a project: `add` finds the project by
+walking up to it, and `create` refuses to run where one already exists. `name`
+becomes `sync-worker/typescript/deno.json`'s name (replacing the random
+`sync-worker-<hex>`). `toolVersion` is used for the version-drift warning.
+
+The project does not record where each FSM came from. With no `sync` to read it,
+such a list would be written and never checked, and would silently go stale when
+a design file moves. #390 brings it back together with `sync`; projects created
+before then can fall back to the existing `fsm/<name>/<vNN>/fsm.json`.
 
 ### Where commands run
 
 - **`create`** runs from the parent directory and creates `<dir>`. `create .` is
   allowed only if the directory is empty or contains just `.git` or a README. It
   refuses if a `pgfsm.config.json` is already there, and points to `add`.
-- **`add` and `sync`** can run from anywhere inside the project. They search
-  upward for `pgfsm.config.json` (the way git finds `.git`), and the first line
-  of output names the project root they found. If none is found, they refuse:
-  "No pgfsm project found. Run `npx @pgfsm/cli create` first." `-C <dir>`
-  overrides the search.
+- **`add`** can run from anywhere inside the project. It searches upward for
+  `pgfsm.config.json` (the way git finds `.git`), and the first line of output
+  names the project root it found. If none is found, it refuses: "No pgfsm
+  project found. Run `npx @pgfsm/cli create` first." `-C <dir>` overrides the
+  search.
 - **`<source>` paths** resolve against the directory the command was run from.
   **Output paths** always resolve against the project root.
 
@@ -221,34 +213,39 @@ of it.
 2. Work out `fsmName`/`vNN`: flags first, then the `<fsmName>/<vNN>/` path, then
    the fsm.json `id` for the name. If still unknown, prompt in a terminal or
    fail in CI.
-3. If `fsm/<fsmName>/<vNN>/` already exists, refuse and suggest the next free
-   version, unless `--force` is given. FSM versions are treated as immutable.
+3. If `fsm/<fsmName>/<vNN>/` already exists, refuse, unless `--force` is given.
+   The error offers both ways forward: `--force` to regenerate that version
+   (e.g. after editing its source), or the next free version for a changed
+   design. `add` never replaces an existing version by accident.
 4. Call the compiler's `generateAll` in single-file mode for **only this FSM
    version**, with `writeRootAbsPath = projectRoot` and the
    `fsmName`/`fsmVersion` from step 2, in create-only mode (see the ownership
    rule). Since #376 this one call compiles a `machine.ts` in place (or copies a
    `fsm.json`) into `fsm/<fsmName>/<vNN>/` and scaffolds both workers. Nothing
    is written if compilation fails.
-5. Append `{ name, version, source }` to `pgfsm.config.json`'s `fsms`.
-6. Print the plan or result grouped by worker, with `+` created, `~`
-   regenerated, and `=` kept, and end with next steps. If the source
-   `machine.ts` lives outside the project, add a one-line hint: move it to
-   `fsm/<fsmName>/<vNN>/machine.ts` to make the project self-contained (the
-   project `deno.json` makes its `xstate` import resolve there).
+5. Print the plan or result grouped by worker, with `+` created, `~`
+   regenerated, and `=` kept, and end with next steps.
 
-`sync` repeats step 4 for every `fsms` entry. For a `machine.ts` source it
-recompiles from the recorded path. If that path is gone, it warns and keeps the
-existing `fsm/<fsmName>/<vNN>/fsm.json`. For a `fsm.json` source it regenerates
-the workers. It is for after the developer edits a `machine.ts` or `fsm.json`.
+**Updating an FSM after editing its source** is
+`add <source> -N <name> -V <vNN>
+--force`: the same generation as a first `add`,
+in the same `generated-only` mode, so stubs and entry files are kept and missing
+exports are reported.
 
 ### File ownership rule (compiler change, prerequisite)
 
 Every file the compiler writes falls into one of two classes:
 
-| Class                                      | Files                                                                                                                                                                                                                                                                                                 | On re-run               |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels                                                                                                 | Always rewritten        |
-| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, `main.go`, and `deno.json`, `pyproject.toml`, `Cargo.toml`, `go.mod` (for both the worker projects and the individual Go actor modules) | Written only if missing |
+| Class                                      | Files                                                                                                                                                                                                                                                                  | On re-run               |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`) | Always rewritten        |
+| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s         | Written only if missing |
+
+Implemented in #381, with one change from the original table: the Go worker's
+`go.mod` lists a `require`/`replace` for every Go actor module, so it can't be
+left untouched once a Go actor is added, and `main.go` must match the SDK
+version that `go.mod` pins. Both are generated; a Go actor's own dependencies go
+in that actor's `go.mod`.
 
 Generated files carry a do-not-edit header. Stub modules need one more step:
 when an FSM gains a new action, the existing `actions/index.ts` is kept and the
@@ -268,8 +265,7 @@ defaults to `"all"`, so today's compiler CLI behaviour doesn't change.
 ```json
 {
   "scripts": {
-    "fsm:add": "npx -y @pgfsm/cli@<toolVersion> add",
-    "fsm:sync": "npx -y @pgfsm/cli@<toolVersion> sync"
+    "fsm:add": "npx -y @pgfsm/cli@<toolVersion> add"
   }
 }
 ```
@@ -295,9 +291,11 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
 - **Harder:** one more npm package to publish and version.
   `.github/workflows/npm-publish.yml` needs a new matrix entry, built with dnt
   for the `bin`, like the compiler.
-- **Harder:** a `machine.ts` left outside the project makes the project depend
-  on that path, since `sync` recompiles from `fsms[].source`. Moving it under
-  `fsm/<N>/<V>/` fixes that; `add` suggests it, but it's the developer's choice.
+- **Harder:** without `sync`, the developer has to remember each FSM's source
+  path, name and version to regenerate it (`add ... --force`), since the project
+  doesn't record them. Keeping a `machine.ts` under `fsm/<N>/<V>/` (which the
+  project `deno.json` lets compile in place) makes that path predictable. #390
+  removes this cost.
 - **Harder:** stubs aren't merged, so new action or actor names are reported
   rather than written for existing modules.
 - **Migration:** existing hand-assembled projects (built with `generate-all`)
@@ -328,19 +326,17 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
       correct language projects, and updated registries, and changes no
       scaffolded file that already exists (verified by content hash before and
       after).
-- [ ] After a developer edits a stub, `add` of a different FSM and `sync` leave
-      that edit byte-identical.
-- [ ] `add` of an existing `<name>/<vNN>` exits non-zero and suggests the next
-      version. `--force` overwrites only that version's source and generated
-      files.
+- [ ] After a developer edits a stub, `add` of a different FSM and `add --force`
+      of the same FSM leave that edit byte-identical.
+- [ ] `add` of an existing `<name>/<vNN>` exits non-zero, suggesting `--force`
+      and the next version. `--force` regenerates only that version's `fsm.json`
+      and generated files.
 - [ ] `add` of a `machine.ts` outside the project writes `fsm/<name>/<vNN>/`
-      `fsm.json` + `xstate-fsm.json` (no `machine.ts` copy) and records the
-      source in `pgfsm.config.json`. After the source changes, `sync` recompiles
-      from it. If the source is gone, `sync` warns and keeps the existing
-      `fsm.json`.
+      `fsm.json` + `xstate-fsm.json` (no `machine.ts` copy).
+- [ ] `pgfsm.config.json` is `{ name, toolVersion }` only.
 - [ ] A `machine.ts` moved into `fsm/<name>/<vNN>/` compiles in place via the
       project `deno.json`, with no other setup.
-- [ ] `--dry-run` on `create`, `add`, and `sync` writes nothing and prints the
+- [ ] `--dry-run` on `create` and `add` writes nothing and prints the
       `+`/`~`/`=` plan.
 - [ ] Missing name or version fails in non-interactive mode, naming the flag,
       and prompts in a terminal.
@@ -371,7 +367,8 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
 <!-- Filled in after acceptance. Proposed breakdown:
 1. compiler: `overwrite: "generated-only"` ownership option + do-not-edit headers (prereq)
 2. compiler: single-FSM-version generation with explicit identity into {cwd}/fsm (done: #372/#374, #376/#378)
-3. new packages/fsm-cli-ts: create/add/sync, project discovery, plan printer, config schema
+Issues: #381 (1), #382 (3), #383 (4), #384 (5), #385 (`pgfsm init`, deferred), #390 (`sync`, deferred)
+3. new packages/fsm-cli-ts: create/add, project discovery, plan printer
 4. npm-publish.yml matrix entry + README/docs; point compiler README at @pgfsm/cli
 5. (optional) @pgfsm/create shim
 -->

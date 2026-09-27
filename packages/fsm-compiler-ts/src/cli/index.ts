@@ -20,8 +20,14 @@ import {
   validateAsyncOperationFromFolders,
   validateSyncOperationFromFolders,
   validateSyncOperationFromFsmJson,
+  withWritePolicy,
 } from "../index.ts";
-import type { OperationLang } from "../index.ts";
+import type {
+  FileWriteEvent,
+  OperationLang,
+  OverwriteMode,
+  WritePolicyOptions,
+} from "../index.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "cli"]);
 await configureCompilerLogger();
@@ -39,6 +45,7 @@ const args = parseArgs(Deno.args, {
     "function-name",
     "function-version",
     "project-name",
+    "overwrite",
   ],
   boolean: [
     "help",
@@ -99,6 +106,7 @@ OPTIONS
   -N, --fsm-name <name>                FSM name, e.g. creditCheck (generate-sync-logic/generate-async-logic/validate-sync-operation/generate-all: required when --folder is a single fsm.json file; generate-fsm-json/generate-all: required when --folder is a single machine.ts file)
   -V, --fsm-version <version>          FSM version folder name, e.g. v01 (same commands and cases as --fsm-name; for a machine.ts it also fills in missing asyncOperationVersion)
   --project-name <name>                Name for the generated run-sync-worker.ts's deno.json (generate-sync-logic only, optional — defaults to a random sync-worker-<8 hex chars> when omitted)
+  --overwrite <mode>                   all (default) rewrites every file; generated-only keeps existing scaffolded files — action/guard/delay and actor stubs, per-actor go.mod, the TS/Python/Rust worker entry files and their deno.json/pyproject.toml/Cargo.toml, .gitignore — and reports stub exports they're missing. Registries, manifests, fsm.json and the Go worker module are always rewritten
   --force                              Overwrite {cwd}/fsm/<fsmName>/<fsmVersion>/fsm.json even when it belongs to a different machine id (generate-fsm-json/generate-all single-file mode only)
   --include-workers                    Also remove each FSM version's {cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/ and {cwd}/async-worker/<lang>/<fsmName>/<fsmVersion>/ folders, including implemented stubs (delete only)
   -r, --show-recommendation           Validate generated fsm.json against schema and show errors (generate-fsm-json/generate-all only)
@@ -370,6 +378,38 @@ if (
   Deno.exit(1);
 }
 
+const OVERWRITE_MODES: OverwriteMode[] = ["all", "generated-only"];
+const overwriteArg = args["overwrite"] ?? "all";
+if (!(OVERWRITE_MODES as string[]).includes(overwriteArg)) {
+  logger.error("Invalid --overwrite value: {value}. Must be one of: {valid}", {
+    value: overwriteArg,
+    valid: OVERWRITE_MODES.join(", "),
+  });
+  printHelp();
+  Deno.exit(1);
+}
+
+// #381: --overwrite generated-only leaves existing scaffolded files (stubs,
+// worker entry files, manifests developers add dependencies to) untouched.
+// Kept files are always reported, since a kept stub module may now be
+// missing exports the FSM needs.
+const writeCounts = { created: 0, regenerated: 0, kept: 0 };
+const writePolicy: WritePolicyOptions = {
+  overwrite: overwriteArg as OverwriteMode,
+  onFileWrite: (event: FileWriteEvent) => {
+    writeCounts[event.action]++;
+    if (event.action !== "kept") return;
+    if (event.missingNames) {
+      logger.warn(
+        "Kept {path} (yours), but it doesn't define {missing} -- add them by hand",
+        { path: event.path, missing: event.missingNames.join(", ") },
+      );
+    } else {
+      logger.info("Kept {path} (yours)", { path: event.path });
+    }
+  },
+};
+
 async function buildDeps(connectionString?: string) {
   const dbUrl = connectionString ?? (() => {
     dotenv.config({ path: ".env" });
@@ -387,139 +427,147 @@ async function buildDeps(connectionString?: string) {
 }
 
 try {
-  switch (command) {
-    case "generate-fsm-json": {
-      if (folderIsMachineTsFile) {
-        // {cwd}/fsm/<fsmName>/<fsmVersion>/ (#376), like every other
-        // single-file write in this CLI.
-        await generateFsmJSONIntoFsmDir({
-          machineTsPath: folder!,
-          fsmName: args["fsm-name"]!,
-          fsmVersion: args["fsm-version"]!,
+  await withWritePolicy(writePolicy, async () => {
+    switch (command) {
+      case "generate-fsm-json": {
+        if (folderIsMachineTsFile) {
+          // {cwd}/fsm/<fsmName>/<fsmVersion>/ (#376), like every other
+          // single-file write in this CLI.
+          await generateFsmJSONIntoFsmDir({
+            machineTsPath: folder!,
+            fsmName: args["fsm-name"]!,
+            fsmVersion: args["fsm-version"]!,
+            writeRootAbsPath: Deno.cwd(),
+            showRecommendation: args["show-recommendation"],
+            force: args["force"],
+          });
+        } else {
+          await generateFsmJSONFromFolders(
+            folder!,
+            skipDirs,
+            args["show-recommendation"],
+          );
+        }
+        break;
+      }
+      case "generate-async-logic": {
+        // Always anchored at Deno.cwd() -- {cwd}/async-worker/<lang>/
+        // <fsmName>/<fsmVersion>/ -- independent of --folder's own location, in
+        // both modes (the actor set to aggregate still always comes from the
+        // real FSM tree: --folder in folder mode, fsm.json's own location in
+        // single-file mode -- never from writeRootAbsPath).
+        if (folderIsFsmJsonFile) {
+          await generateAsyncOperationLogicFromFsmJson(
+            folder!,
+            Deno.cwd(),
+            args["fsm-name"]!,
+            args["fsm-version"]!,
+          );
+        } else {
+          await generateAsyncOperationLogicFromFolders(
+            folder!,
+            skipDirs,
+            Deno.cwd(),
+          );
+        }
+        break;
+      }
+      case "generate-sync-logic":
+        // Always anchored at Deno.cwd() -- {cwd}/sync-worker/typescript/
+        // <fsmName>/<fsmVersion>/ -- independent of --folder's own location, in
+        // both modes.
+        if (folderIsFsmJsonFile) {
+          await generateSyncOperationLogicFromFsmJson(
+            folder!,
+            Deno.cwd(),
+            args["fsm-name"]!,
+            args["fsm-version"]!,
+            langs,
+            args["project-name"],
+          );
+        } else {
+          await generateSyncOperationLogicFromFolders(
+            folder!,
+            langs,
+            skipDirs,
+            Deno.cwd(),
+            args["project-name"],
+          );
+        }
+        break;
+      case "generate-all": {
+        // Always anchored at Deno.cwd() in every mode, like
+        // generate-sync-logic/generate-async-logic (#372).
+        await generateAll({
+          folder: folder!,
           writeRootAbsPath: Deno.cwd(),
-          showRecommendation: args["show-recommendation"],
+          fsmName: args["fsm-name"],
+          fsmVersion: args["fsm-version"],
           force: args["force"],
+          skipDirs,
+          showRecommendation: args["show-recommendation"],
+          langs,
         });
-      } else {
-        await generateFsmJSONFromFolders(
+        break;
+      }
+      case "create-async-logic":
+        await createAsyncOperationLogic(
+          Deno.cwd(),
+          createAsyncLogicLang!,
+          args["function-version"]!,
+          args["function-name"]!,
+        );
+        break;
+      case "delete":
+        await deleteFsmJSONFromFolders(folder!, skipDirs, {
+          includeWorkers: args["include-workers"],
+        });
+        break;
+      case "validate-sync-operation": {
+        if (folderIsFsmJsonFile) {
+          await validateSyncOperationFromFsmJson(
+            folder!,
+            args["fsm-name"]!,
+            args["fsm-version"]!,
+          );
+        } else {
+          await validateSyncOperationFromFolders(
+            folder!,
+            skipDirs,
+          );
+        }
+        break;
+      }
+      case "validate-async-operation": {
+        logger.warn(
+          "validate-async-operation is deprecated: it shells out to each actor's own language runtime and only works under the Deno-native CLI, never via the npm/npx build.",
+        );
+        await validateAsyncOperationFromFolders(
           folder!,
           skipDirs,
-          args["show-recommendation"],
+          [],
+          validateLangs,
         );
+        break;
       }
-      break;
-    }
-    case "generate-async-logic": {
-      // Always anchored at Deno.cwd() -- {cwd}/async-worker/<lang>/
-      // <fsmName>/<fsmVersion>/ -- independent of --folder's own location, in
-      // both modes (the actor set to aggregate still always comes from the
-      // real FSM tree: --folder in folder mode, fsm.json's own location in
-      // single-file mode -- never from writeRootAbsPath).
-      if (folderIsFsmJsonFile) {
-        await generateAsyncOperationLogicFromFsmJson(
-          folder!,
-          Deno.cwd(),
-          args["fsm-name"]!,
-          args["fsm-version"]!,
-        );
-      } else {
-        await generateAsyncOperationLogicFromFolders(
-          folder!,
-          skipDirs,
-          Deno.cwd(),
-        );
+      case "load": {
+        const deps = await buildDeps(args["db-url"]);
+        await loadFsmJSONFromFolders(folder!, skipDirs, deps);
+        break;
       }
-      break;
+      default:
+        logger.error("Unknown command: {command}", { command });
+        printHelp();
+        Deno.exit(1);
     }
-    case "generate-sync-logic":
-      // Always anchored at Deno.cwd() -- {cwd}/sync-worker/typescript/
-      // <fsmName>/<fsmVersion>/ -- independent of --folder's own location, in
-      // both modes.
-      if (folderIsFsmJsonFile) {
-        await generateSyncOperationLogicFromFsmJson(
-          folder!,
-          Deno.cwd(),
-          args["fsm-name"]!,
-          args["fsm-version"]!,
-          langs,
-          args["project-name"],
-        );
-      } else {
-        await generateSyncOperationLogicFromFolders(
-          folder!,
-          langs,
-          skipDirs,
-          Deno.cwd(),
-          args["project-name"],
-        );
-      }
-      break;
-    case "generate-all": {
-      // Always anchored at Deno.cwd() in every mode, like
-      // generate-sync-logic/generate-async-logic (#372).
-      await generateAll({
-        folder: folder!,
-        writeRootAbsPath: Deno.cwd(),
-        fsmName: args["fsm-name"],
-        fsmVersion: args["fsm-version"],
-        force: args["force"],
-        skipDirs,
-        showRecommendation: args["show-recommendation"],
-        langs,
-      });
-      break;
-    }
-    case "create-async-logic":
-      await createAsyncOperationLogic(
-        Deno.cwd(),
-        createAsyncLogicLang!,
-        args["function-version"]!,
-        args["function-name"]!,
-      );
-      break;
-    case "delete":
-      await deleteFsmJSONFromFolders(folder!, skipDirs, {
-        includeWorkers: args["include-workers"],
-      });
-      break;
-    case "validate-sync-operation": {
-      if (folderIsFsmJsonFile) {
-        await validateSyncOperationFromFsmJson(
-          folder!,
-          args["fsm-name"]!,
-          args["fsm-version"]!,
-        );
-      } else {
-        await validateSyncOperationFromFolders(
-          folder!,
-          skipDirs,
-        );
-      }
-      break;
-    }
-    case "validate-async-operation": {
-      logger.warn(
-        "validate-async-operation is deprecated: it shells out to each actor's own language runtime and only works under the Deno-native CLI, never via the npm/npx build.",
-      );
-      await validateAsyncOperationFromFolders(
-        folder!,
-        skipDirs,
-        [],
-        validateLangs,
-      );
-      break;
-    }
-    case "load": {
-      const deps = await buildDeps(args["db-url"]);
-      await loadFsmJSONFromFolders(folder!, skipDirs, deps);
-      break;
-    }
-    default:
-      logger.error("Unknown command: {command}", { command });
-      printHelp();
-      Deno.exit(1);
-  }
+  });
 
+  if (writeCounts.kept > 0) {
+    logger.info(
+      "Files: {created} created, {regenerated} regenerated, {kept} kept.",
+      writeCounts,
+    );
+  }
   logger.info("Command {command} completed successfully.", { command });
 } catch (err) {
   logger.error("Command {command} failed: {error}", { command, error: err });

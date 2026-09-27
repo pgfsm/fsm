@@ -1,5 +1,5 @@
 import { getLogger } from "@logtape/logtape";
-import { writeFileSync } from "node:fs";
+import { writeOwnedFile } from "./write-policy.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "generate"]);
 import { Ajv } from "ajv";
@@ -8,6 +8,7 @@ import machineSchema from "../../database-src/fsm.machine.schema.v3.json" with {
 };
 import {
   DELAY_ACTION_NAME_PREFIX,
+  isNotFoundError,
   isVersionFolderName,
   RAISE_CANCEL,
 } from "./util.ts";
@@ -333,7 +334,7 @@ async function compileMachineFile(
   try {
     await Deno.stat(machineTsPath);
   } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
+    if (isNotFoundError(err)) {
       logger.info("machine.ts is missing in {path}", { path: absFolderPath });
       return undefined;
     }
@@ -395,13 +396,15 @@ async function writeCompiledMachine(
 ): Promise<void> {
   const { xstateFsmJSON, fsmJSON } = compiled;
   await Deno.mkdir(absOutputFolderPath, { recursive: true });
-  writeFileSync(
+  await writeOwnedFile(
     `${absOutputFolderPath}/xstate-fsm.json`,
     JSON.stringify(xstateFsmJSON, null, 2) + "\n",
+    "generated",
   );
-  writeFileSync(
+  await writeOwnedFile(
     `${absOutputFolderPath}/fsm.json`,
     JSON.stringify(fsmJSON, null, 2) + "\n",
+    "generated",
   );
 
   if (showRecommendation) {
@@ -483,7 +486,7 @@ async function assertSameMachineIdOrForce(
       await Deno.readTextFile(`${targetDir}/fsm.json`),
     )?.id;
   } catch (err) {
-    if (err instanceof Deno.errors.NotFound) return;
+    if (isNotFoundError(err)) return;
     throw err;
   }
   if (existingId !== newId) {
@@ -577,7 +580,9 @@ export async function copyFsmJsonIntoFsmDir(
   try {
     targetReal = await Deno.realPath(targetPath);
   } catch (err) {
-    if (!(err instanceof Deno.errors.NotFound)) throw err;
+    // Not `instanceof Deno.errors.NotFound`: under the npm/npx build the
+    // shim's realPath rethrows Node's raw ENOENT (#386, same as #278).
+    if (!isNotFoundError(err)) throw err;
   }
   if (sourceReal === targetReal) return targetPath;
 
@@ -590,7 +595,7 @@ export async function copyFsmJsonIntoFsmDir(
   }
   await assertSameMachineIdOrForce(targetDir, id, force);
   await Deno.mkdir(targetDir, { recursive: true });
-  await Deno.writeTextFile(targetPath, content);
+  await writeOwnedFile(targetPath, content, "generated");
   logger.info("Copied {source} to {targetPath}", {
     source: fsmJsonPath,
     targetPath,

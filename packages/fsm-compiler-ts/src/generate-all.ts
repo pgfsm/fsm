@@ -13,10 +13,12 @@ import {
   generateSyncOperationLogicFromFsmJson,
 } from "./generate-sync-operation-logic.ts";
 import type { OperationLang } from "./types/index.ts";
+import { withWritePolicy } from "./write-policy.ts";
+import type { WritePolicyOptions } from "./write-policy.ts";
 
 const logger = getLogger(["@pgfsm/compiler", "generate-all"]);
 
-export interface GenerateAllOptions {
+export interface GenerateAllOptions extends WritePolicyOptions {
   /**
    * Path to a plugin-root folder, a single machine.ts file, or a single
    * fsm.json file. Relative paths are resolved against `Deno.cwd()`.
@@ -99,7 +101,13 @@ export interface GenerateAllOptions {
  * are never guessed from the file's parent folders: `-f a/fsm.json` would
  * otherwise silently become `<cwd's name>/a` (#372).
  */
-export async function generateAll(options: GenerateAllOptions): Promise<void> {
+export function generateAll(options: GenerateAllOptions): Promise<void> {
+  // overwrite/onFileWrite (#381) apply to every write below, including the
+  // nested generate-* calls.
+  return withWritePolicy(options, () => generateAllInner(options));
+}
+
+async function generateAllInner(options: GenerateAllOptions): Promise<void> {
   const {
     folder,
     writeRootAbsPath,
