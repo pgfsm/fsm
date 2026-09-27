@@ -26,6 +26,7 @@ scoping record (target behavior, comparison table, known gaps) is
 deno task gateway      # async-operation-worker-gateway — start the gateway
 deno task gateway-ctl  # async-operation-worker-gateway-ctl — debug/test client
 deno task check        # deno check src/index.ts
+deno task test         # deno test --allow-all test/ (also run by CI)
 deno task build:npm    # scripts/build-npm.ts (dnt npm build)
 ```
 
@@ -95,4 +96,10 @@ Install section, which documents this. Same issue applies to
 - `gatewayClient.ts` — client for the gRPC/Connect API (`ActivityGatewayClient`)
 - `sidecar/` — worker registration + dispatch over the Unix socket
   (`SidecarGateway`)
+  - Routing is one actor key → a **set** of workers (#391). Several replicas may
+    register the same actor. `invoke()` picks the one with the fewest in-flight
+    invokes, rotating on ties. Unregister removes only that worker, and only if
+    it is still the current registration for its `workerId` (a stale session
+    closing must not tear down a newer re-registration). Covered by
+    `test/sidecar_gateway_routing_test.ts`.
 - `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop

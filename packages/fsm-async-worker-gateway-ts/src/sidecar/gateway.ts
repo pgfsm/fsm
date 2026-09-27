@@ -211,9 +211,18 @@ interface WorkerState {
   alive: boolean;
 }
 
+// Every worker currently serving one actor key. Several workers (replicas of
+// the same language worker) may register the same actor; invoke() spreads
+// calls across them and unregistering one leaves the others routable (#391).
 interface ActorRoute {
-  workerId: string;
+  workerIds: Set<string>;
+  // Identity of the most recent registration — every worker registering this
+  // key sends the same identity fields, so any one of them serves as the
+  // poll loop's claim input.
   meta: RegisteredActor;
+  // Rotating start offset so ties on in-flight count don't always land on the
+  // same worker.
+  cursor: number;
 }
 
 export interface SidecarGatewayOptions {
@@ -316,8 +325,8 @@ export class SidecarGateway {
       );
     }
 
-    const worker = this.workers.get(route.workerId);
-    if (!worker || !worker.alive) {
+    const worker = this.pickWorker(route);
+    if (!worker) {
       throw new ActivityInvokeError(
         `worker unavailable for actor: ${key}`,
         "WORKER_UNAVAILABLE",
@@ -371,6 +380,33 @@ export class SidecarGateway {
   }
 
   /**
+   * Picks the alive worker with the fewest in-flight invokes for this route,
+   * scanning from a rotating offset so equally-loaded workers take turns.
+   */
+  private pickWorker(route: ActorRoute): WorkerState | undefined {
+    const candidates: WorkerState[] = [];
+    for (const workerId of route.workerIds) {
+      const worker = this.workers.get(workerId);
+      if (worker?.alive) {
+        candidates.push(worker);
+      }
+    }
+    if (candidates.length === 0) {
+      return undefined;
+    }
+
+    const start = route.cursor++ % candidates.length;
+    let best = candidates[start];
+    for (let i = 1; i < candidates.length; i++) {
+      const candidate = candidates[(start + i) % candidates.length];
+      if (candidate.pendingByInvokeId.size < best.pendingByInvokeId.size) {
+        best = candidate;
+      }
+    }
+    return best;
+  }
+
+  /**
    * The Session bidi-streaming handler: one call per worker process. Reads
    * `register` as the required first message, acks it, then concurrently
    * drains `requests` (heartbeat/invoke_result/invoke_error/unregister,
@@ -417,7 +453,10 @@ export class SidecarGateway {
           },
         );
       } finally {
-        this.unregisterWorker(worker.workerId);
+        // Only tear down this session's own registration — if the same
+        // workerId has since re-registered on a new session, that newer
+        // registration must survive this stream closing (#391).
+        this.unregisterWorker(worker);
       }
     })();
 
@@ -502,7 +541,7 @@ export class SidecarGateway {
   private registerWorker(register: RegisterMessage): WorkerState {
     const existing = this.workers.get(register.workerId);
     if (existing) {
-      this.unregisterWorker(register.workerId);
+      this.unregisterWorker(existing);
     }
 
     const worker: WorkerState = {
@@ -525,7 +564,17 @@ export class SidecarGateway {
         meta.asyncOperationVersion,
         meta.asyncOperationLanguage,
       );
-      this.actorRoutes.set(key, { workerId: register.workerId, meta });
+      const route = this.actorRoutes.get(key);
+      if (route) {
+        route.workerIds.add(register.workerId);
+        route.meta = meta;
+      } else {
+        this.actorRoutes.set(key, {
+          workerIds: new Set([register.workerId]),
+          meta,
+          cursor: 0,
+        });
+      }
       worker.actors.add(key);
       this.onActorRegistered?.(meta);
     }
@@ -542,16 +591,25 @@ export class SidecarGateway {
     return worker;
   }
 
-  private unregisterWorker(workerId: string): void {
-    const worker = this.workers.get(workerId);
-    if (!worker) {
+  private unregisterWorker(worker: WorkerState): void {
+    // Already superseded (same workerId re-registered on a newer session) or
+    // already unregistered — nothing of ours left in the routing tables.
+    if (this.workers.get(worker.workerId) !== worker) {
       return;
     }
+    const workerId = worker.workerId;
 
     worker.alive = false;
 
+    // Remove only this worker from each route; the key disappears only once
+    // no other worker still serves it.
     for (const key of worker.actors) {
-      this.actorRoutes.delete(key);
+      const route = this.actorRoutes.get(key);
+      if (!route) continue;
+      route.workerIds.delete(workerId);
+      if (route.workerIds.size === 0) {
+        this.actorRoutes.delete(key);
+      }
     }
 
     for (const pending of worker.pendingByInvokeId.values()) {
