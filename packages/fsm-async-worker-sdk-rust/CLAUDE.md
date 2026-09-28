@@ -143,7 +143,7 @@ Patch releases need none of this.
 [`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) is the
 in-repo worker project. To build its Rust worker against this directory, add a
 `[patch.crates-io]` path entry to its `async-worker/rust/Cargo.toml` (see that
-README's local-SDK overrides), or for one command without editing any file:
+README's "Using local SDK source"), or for one command without editing any file:
 
 ```bash
 cd test-apps/debug-only/async-worker/rust

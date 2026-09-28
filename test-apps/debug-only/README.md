@@ -1,9 +1,10 @@
 # debug-only
 
 A pgfsm project created by `@pgfsm/cli` (run from source), for debugging and
-testing the platform. Unlike a user's project, its workers run against the SDK
-**source in this repo**, not the published packages, so unreleased SDK,
-sync-worker and CLI changes can be exercised without publishing anything.
+testing the platform. Its async workers use the published SDKs by default, the
+same as a user's project. Any of them can be switched to the SDK **source in
+this repo** by hand (see below), so unreleased changes can be exercised without
+publishing anything.
 
 - `fsm/<name>/<version>/`: compiled FSM definitions, from
   `apps/fsm-core-example/fsm/`.
@@ -19,24 +20,28 @@ deno run --allow-all packages/fsm-cli-ts/src/cli/pgfsm.ts create test-apps/debug
 `sharedAsyncOperation/` (the `create-async-logic` pool) is not part of this
 project: the CLI doesn't generate it (#405).
 
-## Local-SDK overrides
+## Using local SDK source
 
-Hand-edited after `create`. These live only here; they are deliberately not a
-CLI flag, so users never see them. Each sits in a file `add` never rewrites, so
-regenerating an FSM keeps them.
+These are hand edits, deliberately not a CLI flag, so users never see them. Each
+goes in a file `add` never rewrites, so regenerating an FSM keeps it.
 
-| Worker                    | File             | Override                                                                    |
-| ------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| `sync-worker/typescript`  | `deno.json`      | `@pgfsm/sync-worker`, `@pgfsm/logging` → `packages/*/src/index.ts`          |
-| `async-worker/typescript` | `deno.json`      | `@pgfsm/async-worker-sdk`, `@pgfsm/logging` → `packages/*/src/index.ts`     |
-| `async-worker/python`     | `pyproject.toml` | `[tool.uv.sources]` editable path to `packages/fsm-async-worker-sdk-python` |
-| `async-worker/rust`       | `Cargo.toml`     | `[patch.crates-io]` path to `packages/fsm-async-worker-sdk-rust`            |
-| `async-worker/go`         | `go.work`        | `replace` to `packages/fsm-async-worker-sdk-go`                             |
+Applied and committed:
 
-Go uses `go.work` rather than a `replace` in `go.mod` because `go.mod` is
-compiler-owned and rewritten by `add`. If you recreate this project, re-apply
-the table above. After changing Python dependencies, run `uv sync` in
-`async-worker/python/` and commit `uv.lock`.
+| Worker                   | File        | Override                                                           |
+| ------------------------ | ----------- | ------------------------------------------------------------------ |
+| `sync-worker/typescript` | `deno.json` | `@pgfsm/sync-worker`, `@pgfsm/logging` → `packages/*/src/index.ts` |
+
+Apply when debugging an async-worker SDK (the rest use the published 0.2):
+
+| Worker                    | File             | Edit                                                                                                                                  |
+| ------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `async-worker/typescript` | `deno.json`      | `@pgfsm/async-worker-sdk`, `@pgfsm/logging` → `../../../../packages/<pkg>/src/index.ts`                                               |
+| `async-worker/python`     | `pyproject.toml` | `[tool.uv.sources]` `pgfsm-async-worker-sdk = { path = "../../../../packages/fsm-async-worker-sdk-python", editable = true }`         |
+| `async-worker/rust`       | `Cargo.toml`     | `[patch.crates-io]` `pgfsm-async-worker-sdk = { path = "../../../../packages/fsm-async-worker-sdk-rust" }`                            |
+| `async-worker/go`         | `go.work`        | `go 1.25.0`, `use .`, `replace github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go => ../../../../packages/fsm-async-worker-sdk-go` |
+
+For Go, use a new `go.work` rather than a `replace` in `go.mod`: `go.mod` is
+compiler-owned and rewritten by `add`.
 
 ## Add or regenerate an FSM
 
@@ -48,7 +53,7 @@ npm run fsm:add -- ../../apps/fsm-core-example/fsm/creditCheck/v01/fsm.json -N c
 ```
 
 After editing a `machine.ts` or `fsm.json`, regenerate that FSM with the same
-command plus `--force` (stubs and the overrides above are kept).
+command plus `--force` (stubs and the edits above are kept).
 
 ## Run the workers
 

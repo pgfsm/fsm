@@ -1,8 +1,0 @@
-// test-apps only: build against the SDK source in this repo, not the Go
-// module proxy. A go.work instead of a go.mod replace, because go.mod is
-// compiler-owned and rewritten by `pgfsm add`.
-go 1.25.0
-
-use .
-
-replace github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go => ../../../../packages/fsm-async-worker-sdk-go

@@ -141,11 +141,12 @@ Patch releases need none of this: the existing `<0.2` range already allows them.
 
 ### Using the SDK from source
 
-[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) runs its
-Python worker against this package's source: its `pyproject.toml` has a
-`[tool.uv.sources]` editable path to this directory, so
-`uv run run_async_worker.py start` there picks up local changes without a
-release.
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) is the
+in-repo worker project. Its Python worker uses the published package; to run it
+against this directory, add a `[tool.uv.sources]` editable path to its
+`async-worker/python/pyproject.toml` (see that README's "Using local SDK
+source"). `uv run run_async_worker.py start` there then picks up local changes
+without a release.
 
 ## Known behaviour
 

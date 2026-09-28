@@ -227,9 +227,9 @@ for the full flag reference, startup sequence, and PGMQ message payload shape.
 
 One process per language that has actors. In this repo they live in
 [`test-apps/debug-only/`](./test-apps/debug-only/README.md), a project created
-by `@pgfsm/cli` from `apps/fsm-core-example/fsm` whose workers are wired to the
-SDK **source** in `packages/` (not the published packages) — see that README for
-the local-SDK overrides and how to regenerate an FSM. Each connects to the
+by `@pgfsm/cli` from `apps/fsm-core-example/fsm`. Its async workers use the
+published SDKs; that README shows how to switch one to the SDK source in
+`packages/` when debugging, and how to regenerate an FSM. Each connects to the
 gateway's `--sidecar-socket` above and serves invocations for every actor
 compiled into its registry until stopped.
 
@@ -242,17 +242,17 @@ deno run --allow-all run-async-worker.ts start --gateway-socket /tmp/pgfsm-activ
 ```
 
 ```bash
-cd test-apps/debug-only/async-worker/python   # uv installs the local SDK (editable) on first run
+cd test-apps/debug-only/async-worker/python   # uv installs pgfsm-async-worker-sdk on first run
 uv run run_async_worker.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash
-cd test-apps/debug-only/async-worker/go       # go.work points the SDK at packages/
+cd test-apps/debug-only/async-worker/go
 go run . start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 
 ```bash
-cd test-apps/debug-only/async-worker/rust     # [patch.crates-io] points the SDK at packages/
+cd test-apps/debug-only/async-worker/rust
 cargo run --release -- start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
 ```
 

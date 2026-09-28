@@ -136,8 +136,9 @@ versions, unlike the other languages' ranges). It lives in:
 
 ## Using the module from source
 
-[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) builds
-its Go worker against this directory through a `go.work` next to its `go.mod`
-(`use .` plus a `replace` of this module). `go.mod` itself is compiler-owned and
-rewritten by `pgfsm add`, so the override lives in `go.work`, which nothing
-regenerates. `go run . start` there picks up local changes without a release.
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) is the
+in-repo worker project. Its Go worker requires the published module; to build it
+against this directory, add a `go.work` next to its `go.mod` (`use .` plus a
+`replace` of this module — see that README's "Using local SDK source"). Use
+`go.work`, not a `replace` in `go.mod`: `go.mod` is compiler-owned and rewritten
+by `pgfsm add`.

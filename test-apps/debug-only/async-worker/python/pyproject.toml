@@ -21,7 +21,3 @@ dependencies = [
 [tool.uv]
 # An app, not an installable package: uv only manages its environment.
 package = false
-
-# test-apps only: run against the SDK source in this repo, not PyPI.
-[tool.uv.sources]
-pgfsm-async-worker-sdk = { path = "../../../../packages/fsm-async-worker-sdk-python", editable = true }
