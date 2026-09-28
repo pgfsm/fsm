@@ -113,8 +113,8 @@ follow-up once the release is on PyPI. It lives in:
   so without the `deno fmt` every `*.generated.ts` shows a formatting-only diff.
 - `packages/fsm-compiler-ts/test/operation-logic-scaffold.test.ts`, which
   asserts the pin string.
-- `apps/async-worker/python/pyproject.toml`, the committed generated copy (the
-  `dependencies` pin and its pip comment).
+- `test-apps/debug-only/async-worker/python/pyproject.toml`, the committed
+  generated copy (the `dependencies` pin and its pip comment).
 - `DEVELOPER.md`'s pip install example.
 
 Patch releases need none of this: the existing `<0.2` range already allows them.
@@ -139,14 +139,13 @@ Patch releases need none of this: the existing `<0.2` range already allows them.
   the workflow file or the environment breaks publishing until this is updated
   to match.
 
-### Using the SDK from `apps/async-worker/python` before a release
+### Using the SDK from source
 
-Inside this repo, the committed `apps/async-worker/python/pyproject.toml` uses
-that same pin, so `uv run run_async_worker.py` there only works once the
-matching version is published (same as the TypeScript worker with
-`@pgfsm/async-worker-sdk`). Before then, run it with this package's own
-environment:
-`.venv/bin/python ../../apps/async-worker/python/run_async_worker.py start`.
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) runs its
+Python worker against this package's source: its `pyproject.toml` has a
+`[tool.uv.sources]` editable path to this directory, so
+`uv run run_async_worker.py start` there picks up local changes without a
+release.
 
 ## Known behaviour
 

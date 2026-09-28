@@ -71,11 +71,12 @@ The compiler's `worker-sdk-deno-json.eta` pins
 `npm:@pgfsm/async-worker-sdk@^0.2.0`. Bump that pin by hand when this package's
 API changes in a way `run-async-worker.eta`'s call depends on.
 
-Inside this repo, the committed `apps/async-worker/typescript/deno.json` uses
-that same `npm:` pin, so `run-async-worker.ts` there only runs once the matching
-version is published (same as `apps/sync-worker/` with `@pgfsm/sync-worker`).
-Workspace code that needs the SDK directly (e.g. the example journey test)
-imports `@pgfsm/async-worker-sdk` by its workspace name instead.
+Inside this repo, the worker project is
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405). Its
+`async-worker/typescript/deno.json` maps `@pgfsm/async-worker-sdk` to this
+package's `src/index.ts` so it runs against local source (see that README's
+local-SDK overrides). Workspace code that needs the SDK directly (e.g. the
+example journey test) imports `@pgfsm/async-worker-sdk` by its workspace name.
 
 ## Known behaviour
 

@@ -101,13 +101,13 @@ Instead, `fsmlet.ts` statically imports the compiler-generated aggregate
 registry directly:
 
 ```ts
-import { SYNC_OPERATION_REGISTRATIONS } from "../../../../apps/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+import { SYNC_OPERATION_REGISTRATIONS } from "../../../../test-apps/debug-only/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
 ```
 
 (`SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[]` — see
 fsm-compiler-ts #338; the import path is a hardcoded relative reference into
-`apps/fsm-core-example`'s own generated output — there's no per-project config
-for this yet) and derives everything from it:
+`test-apps/debug-only/`'s generated output (#405; `apps/sync-worker/` before) —
+there's no per-project config for this yet) and derives everything from it:
 
 - `startFsmlet` builds `registeredFsmModules` (`{fsm_name, fsm_version}[]`,
   deduped from every `SYNC_OPERATION_REGISTRATIONS` entry) and passes it
