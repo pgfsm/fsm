@@ -1,4 +1,4 @@
-import { SYNC_OPERATION_REGISTRATIONS } from "../../apps/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+import { SYNC_OPERATION_REGISTRATIONS } from "../../test-apps/debug-only/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
 import { runFsmlet } from "./src/fsmlet/fsmlet.ts";
 
 await runFsmlet(

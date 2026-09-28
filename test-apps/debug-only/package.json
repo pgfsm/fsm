@@ -1,0 +1,7 @@
+{
+  "name": "debug-only",
+  "private": true,
+  "scripts": {
+    "fsm:add": "deno run --allow-all --config ../../deno.json ../../packages/fsm-cli-ts/src/cli/pgfsm.ts add"
+  }
+}

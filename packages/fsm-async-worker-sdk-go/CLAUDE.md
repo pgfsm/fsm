@@ -122,8 +122,8 @@ versions, unlike the other languages' ranges). It lives in:
   `packages/fsm-compiler-ts/src/operation-logic-scaffold.ts`.
 - `packages/fsm-compiler-ts/test/operation-logic-scaffold.test.ts`, which
   asserts the generated `go.mod`.
-- `apps/async-worker/go/go.mod` + `go.sum`, the committed generated copy (run
-  `go mod tidy` there after the release is on the proxy).
+- `test-apps/debug-only/async-worker/go/go.mod` + `go.sum`, the committed
+  generated copy (run `go mod tidy` there after the release is on the proxy).
 
 ### If something goes wrong
 
@@ -134,17 +134,11 @@ versions, unlike the other languages' ranges). It lives in:
   checksum database has already recorded it. Release the next patch with
   `retract v<bad> // reason` added to `go.mod`.
 
-## Using the module from `apps/async-worker/go` before a release
+## Using the module from source
 
-The committed `apps/async-worker/go/go.mod` requires the published module, so
-`go run .` there only works once a matching version is on the proxy (same as the
-other languages' workers). Before then, build against this directory through a
-scratch copy of `go.mod`, without editing any committed file:
-
-```bash
-cd apps/async-worker/go
-cp go.mod /tmp/local.mod && cp go.sum /tmp/local.sum
-go mod edit -modfile=/tmp/local.mod \
-  -replace github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go=../../../packages/fsm-async-worker-sdk-go
-go run -modfile=/tmp/local.mod . list
-```
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) is the
+in-repo worker project. Its Go worker requires the published module; to build it
+against this directory, add a `go.work` next to its `go.mod` (`use .` plus a
+`replace` of this module — see that README's "Using local SDK source"). Use
+`go.work`, not a `replace` in `go.mod`: `go.mod` is compiler-owned and rewritten
+by `pgfsm add`.

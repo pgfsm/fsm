@@ -29,31 +29,9 @@ apps/fsm-core-example/fsm/<asyncOperationName>/
   v02/                    ← new version; v01 is untouched
     ...
 
-# At the apps/ level (siblings of fsm-core-example/, not of this app's own fsm/ — see below):
-apps/sync-worker/
-  typescript/
-    <asyncOperationName>/
-      v01/
-        actions/index.ts                     ← action implementations
-        guards/index.ts                      ← guard implementations
-        delays/index.ts                      ← delay implementations
-        generated-sync-operation-registry.ts ← combined registry (generate-sync-logic output)
-        fsm.json                             ← copy of that version's fsm.json
-      v02/
-        ...
-apps/async-worker/
-  <lang>/                 ← one subtree per language actually used (typescript/python/rust/go)
-    run-async-worker.ts (ts) / run_async_worker.py (py) / src/main.rs (rust) / main.go (go) , <lang>-actors-registry.generated.ts  ← aggregate worker SDK
-    deno.json              ← (typescript only) scoped import map pinning @pgfsm/async-worker-sdk — see CLAUDE.md
-    pyproject.toml         ← (python only) uv project pinning pgfsm-async-worker-sdk — see CLAUDE.md
-    Cargo.toml             ← (rust only) cargo project depending on the pgfsm-async-worker-sdk crate
-    go.mod                 ← (go only) requires the fsm-async-worker-sdk-go module; replaces the local actor modules
-    <asyncOperationName>/
-      v01/
-        actors/index.ts   ← actor implementations
-        actors-manifest.json
-      v02/
-        ...
+# In test-apps/debug-only/ (a @pgfsm/cli project generated from this fsm/ — see its README):
+sync-worker/typescript/<fsmName>/<vNN>/{actions,guards,delays}/index.ts
+async-worker/<lang>/<fsmName>/<vNN>/actors/          ← one subtree per language used
 ```
 
 Version folders (`v01`, `v02`, …) are immutable once deployed. Increment to
@@ -61,12 +39,9 @@ create a new version; existing FSM instances keep running against their original
 version.
 
 Neither sync operation logic (actions/guards/delays) nor actor implementations
-are colocated with their FSM's own version folder — `generate-sync-logic` and
-`generate-async-logic` both always write to `Deno.cwd()`. As of #316, run both
-from **`apps/`** (not this app's own directory) — `sync-worker/` and
-`async-worker/` land there, siblings of `apps/fsm-core-example/`, not of this
-app's own `fsm/`. This also matches what `fsmlet` resolves at runtime — see the
-root `DEVELOPER.md`.
+live in this app. They're in
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md), generated from
+this `fsm/` by `@pgfsm/cli`.
 
 ## How to run the example server
 
@@ -98,14 +73,10 @@ from DB calls and fail on unrelated-looking assertions.
 
 1. Create `fsm/<yourAsyncOperationName>/v01/fsm.json` (see
    [FSM definition format](../../packages/fsm-compiler-ts/docs/fsm-definition-format.md))
-2. Run the compiler to generate the TypeScript scaffold:
+2. Generate its stubs into `test-apps/debug-only/` (from that directory):
    ```bash
-   cd packages/fsm-compiler-ts && deno run --allow-all src/main.ts
+   npm run fsm:add -- ../../apps/fsm-core-example/fsm/<yourAsyncOperationName>/v01/fsm.json -N <yourAsyncOperationName> -V v01
    ```
-3. Implement the generated stubs in
-   `../sync-worker/typescript/<yourAsyncOperationName>/v01/actions/`, `guards/`,
-   `delays/` and
-   `../async-worker/typescript/<yourAsyncOperationName>/v01/actors/` (run
-   `generate-sync-logic`/`generate-async-logic` from `apps/`, not this
-   directory, so they land there)
+3. Implement the generated stubs under `test-apps/debug-only/sync-worker/` and
+   `test-apps/debug-only/async-worker/`
 4. Restart the server — it picks up the new FSM at startup

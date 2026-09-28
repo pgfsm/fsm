@@ -39,7 +39,9 @@ or in workflows.
 ```
 apps/
   fsm-core-ts-hono-deno/   # Main REST API (Hono + Deno) — see CLAUDE.md
-  fsm-core-example/        # Example FSM definitions, polyglot actors (TS/Python/Rust/Go) — see CLAUDE.md
+  fsm-core-example/        # Example FSM definitions (sources for test-apps/debug-only) — see CLAUDE.md
+test-apps/
+  debug-only/              # @pgfsm/cli-generated worker project (sync + TS/Python/Rust/Go async), for debugging — see README.md
 packages/
   database-src/           # PostgreSQL migrations + Supabase config — see CLAUDE.md
   database-src-extension/ # Rust PostgreSQL extension (pgrx) using ltree + pgmq
