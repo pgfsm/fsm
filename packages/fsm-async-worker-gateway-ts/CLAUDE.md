@@ -102,4 +102,12 @@ Install section, which documents this. Same issue applies to
     it is still the current registration for its `workerId` (a stale session
     closing must not tear down a newer re-registration). Covered by
     `test/sidecar_gateway_routing_test.ts`.
+  - `stop()` must not wait on workers (#397). The `Session` handler doesn't
+    await its request-reader loop once the outbox ends. A worker only ends its
+    request stream after it sees the response end, so awaiting it deadlocked
+    `stop()` with any worker connected. Both HTTP/2 servers close via
+    `util.ts`'s `closeHttp2Server`, which sends GOAWAY and then destroys
+    sessions still open after `shutdownGraceMs` (default 5 s). Plain
+    `server.close()` waits forever on a client that keeps its connection.
+    Covered by `test/sidecar_gateway_stop_test.ts`.
 - `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop

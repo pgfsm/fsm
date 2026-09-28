@@ -40,7 +40,12 @@ import {
   type SessionRequest,
   SessionResponse,
 } from "@pgfsm/proto-codegen/sidecargateway/v1/pb";
-import { isNotFoundError } from "../util.ts";
+import {
+  closeHttp2Server,
+  DEFAULT_SHUTDOWN_GRACE_MS,
+  isNotFoundError,
+  trackHttp2Sessions,
+} from "../util.ts";
 
 const logger = getLogger([
   "@pgfsm/worker",
@@ -235,18 +240,27 @@ export interface SidecarGatewayOptions {
    * should handle them inside the callback itself.
    */
   onActorRegistered?: (actor: RegisteredActor) => void;
+  /**
+   * How long `stop()` lets open worker connections finish before destroying
+   * them (default 5 s).
+   */
+  shutdownGraceMs?: number;
 }
 
 export class SidecarGateway {
   private readonly socketPath: string;
   private readonly onActorRegistered?: (actor: RegisteredActor) => void;
+  private readonly shutdownGraceMs: number;
   private server: http2.Http2Server | null = null;
+  private sessions = new Set<http2.ServerHttp2Session>();
   private readonly workers = new Map<string, WorkerState>();
   private readonly actorRoutes = new Map<string, ActorRoute>();
 
   constructor(options: SidecarGatewayOptions) {
     this.socketPath = options.socketPath;
     this.onActorRegistered = options.onActorRegistered;
+    this.shutdownGraceMs = options.shutdownGraceMs ??
+      DEFAULT_SHUTDOWN_GRACE_MS;
   }
 
   async start(): Promise<void> {
@@ -263,6 +277,7 @@ export class SidecarGateway {
 
     const server = http2.createServer(connectNodeAdapter({ routes }));
     this.server = server;
+    this.sessions = trackHttp2Sessions(server);
 
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => reject(err);
@@ -274,18 +289,22 @@ export class SidecarGateway {
     });
   }
 
+  /**
+   * Unregisters every worker — failing their in-flight invokes as
+   * WORKER_DISCONNECTED (retriable) rather than leaving callers to wait out
+   * the invoke timeout — ends each Session stream so workers see EOF and go
+   * reconnect, then closes the server (#397).
+   */
   async stop(): Promise<void> {
-    for (const worker of this.workers.values()) {
-      worker.alive = false;
-      worker.outbox.close();
+    for (const worker of [...this.workers.values()]) {
+      this.unregisterWorker(worker);
     }
-    this.workers.clear();
     this.actorRoutes.clear();
 
     const server = this.server;
     this.server = null;
     if (server) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await closeHttp2Server(server, this.sessions, this.shutdownGraceMs);
     }
 
     this.cleanupSocket();
@@ -460,13 +479,16 @@ export class SidecarGateway {
       }
     })();
 
-    try {
-      for await (const response of worker.outbox) {
-        yield response;
-      }
-    } finally {
-      await readerLoop.catch(() => {});
+    // Not awaited once the outbox ends: if the gateway closed it (stop(), or
+    // a same-workerId re-registration), the worker only ends its request
+    // stream after it sees this response stream end — waiting for the reader
+    // here deadlocked stop() while any worker was connected (#397). The
+    // reader finishes on its own when the worker closes its side (or the
+    // connection is destroyed), and it never throws.
+    for await (const response of worker.outbox) {
+      yield response;
     }
+    void readerLoop;
   }
 
   private buildRegisterAck(register: RegisterMessage): RegisterAckMessage {
