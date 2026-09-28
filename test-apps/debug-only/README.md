@@ -1,59 +1,28 @@
 # debug-only
 
-A pgfsm project created by `@pgfsm/cli` (run from source), for debugging and
-testing the platform. Its async workers use the published SDKs by default, the
-same as a user's project. Any of them can be switched to the SDK **source in
-this repo** by hand (see below), so unreleased changes can be exercised without
-publishing anything.
+A pgfsm project, created by `@pgfsm/cli`.
 
-- `fsm/<name>/<version>/`: compiled FSM definitions, from
-  `apps/fsm-core-example/fsm/`.
+- `fsm/<name>/<version>/`: compiled FSM definitions (`fsm.json`).
 - `sync-worker/typescript/`: actions, guards and delays.
 - `async-worker/{typescript,python,rust,go}/`: actors, one project per language.
 
-Created with (from the repo root):
+Stub files under the worker folders are yours to implement. Re-running `add`
+never overwrites them.
+
+## Add an FSM
 
 ```bash
-deno run --allow-all packages/fsm-cli-ts/src/cli/pgfsm.ts create test-apps/debug-only apps/fsm-core-example/fsm
-```
-
-`sharedAsyncOperation/` (the `create-async-logic` pool) is not part of this
-project: the CLI doesn't generate it (#405).
-
-## Using local SDK source
-
-These are hand edits, deliberately not a CLI flag, so users never see them. Each
-goes in a file `add` never rewrites, so regenerating an FSM keeps it.
-
-Applied and committed:
-
-| Worker                   | File        | Override                                                           |
-| ------------------------ | ----------- | ------------------------------------------------------------------ |
-| `sync-worker/typescript` | `deno.json` | `@pgfsm/sync-worker`, `@pgfsm/logging` → `packages/*/src/index.ts` |
-
-Apply when debugging an async-worker SDK (the rest use the published 0.2):
-
-| Worker                    | File             | Edit                                                                                                                                  |
-| ------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `async-worker/typescript` | `deno.json`      | `@pgfsm/async-worker-sdk`, `@pgfsm/logging` → `../../../../packages/<pkg>/src/index.ts`                                               |
-| `async-worker/python`     | `pyproject.toml` | `[tool.uv.sources]` `pgfsm-async-worker-sdk = { path = "../../../../packages/fsm-async-worker-sdk-python", editable = true }`         |
-| `async-worker/rust`       | `Cargo.toml`     | `[patch.crates-io]` `pgfsm-async-worker-sdk = { path = "../../../../packages/fsm-async-worker-sdk-rust" }`                            |
-| `async-worker/go`         | `go.work`        | `go 1.25.0`, `use .`, `replace github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go => ../../../../packages/fsm-async-worker-sdk-go` |
-
-For Go, use a new `go.work` rather than a `replace` in `go.mod`: `go.mod` is
-compiler-owned and rewritten by `add`.
-
-## Add or regenerate an FSM
-
-`npm run fsm:add` runs the CLI from source (`packages/fsm-cli-ts/`), not the
-published package:
-
-```bash
-npm run fsm:add -- ../../apps/fsm-core-example/fsm/creditCheck/v01/fsm.json -N creditCheck -V v01
+npm run fsm:add -- path/to/machine.ts --fsm-name checkout --fsm-version v01
+npm run fsm:add -- path/to/fsm.json
+npm run fsm:add -- path/to/folder/   # <fsmName>/<vNN>/{machine.ts|fsm.json}
 ```
 
 After editing a `machine.ts` or `fsm.json`, regenerate that FSM with the same
-command plus `--force` (stubs and the edits above are kept).
+command plus `--force` (your stubs are kept):
+
+```bash
+npm run fsm:add -- path/to/machine.ts --fsm-name checkout --fsm-version v01 --force
+```
 
 ## Run the workers
 
@@ -64,7 +33,3 @@ cd async-worker/python && uv run run_async_worker.py start
 cd async-worker/rust && cargo run --release -- start
 cd async-worker/go && go run . start
 ```
-
-Replace `start` with `list` to print an async worker's registry without
-connecting. The sync worker and `start` need local Supabase and the Activity
-Gateway running; see the root `DEVELOPER.md`.
