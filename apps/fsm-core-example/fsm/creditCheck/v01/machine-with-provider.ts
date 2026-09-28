@@ -1,9 +1,9 @@
 import { fromPromise, setup } from "xstate";
-import { checkBureau } from "../../../../async-worker/typescript/creditCheck/v01/actors/checkBureau/checkBureau.ts";
-import { checkReportsTable } from "../../../../async-worker/typescript/creditCheck/v01/actors/checkReportsTable/checkReportsTable.ts";
-import { determineMiddleScore } from "../../../../async-worker/typescript/creditCheck/v01/actors/determineMiddleScore/determineMiddleScore.ts";
-import { generateInterestRates } from "../../../../async-worker/typescript/creditCheck/v01/actors/generateInterestRates/generateInterestRates.ts";
-import { verifyCredentials } from "../../../../async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts";
+import { checkBureau } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/checkBureau/checkBureau.ts";
+import { checkReportsTable } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/checkReportsTable/checkReportsTable.ts";
+import { determineMiddleScore } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/determineMiddleScore/determineMiddleScore.ts";
+import { generateInterestRates } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/generateInterestRates/generateInterestRates.ts";
+import { verifyCredentials } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts";
 
 import {
   assignEquiGavinScore,
@@ -25,14 +25,14 @@ import {
   saveReportGavperian,
   saveReportGavUnion,
   // assignCreditScoreError,
-} from "../../../../sync-worker/typescript/creditCheck/v01/actions/index.ts";
+} from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/index.ts";
 
 import {
   allSucceeded,
   equiGavinReportFound,
   gavperianReportFound,
   gavUnionReportFound,
-} from "../../../../sync-worker/typescript/creditCheck/v01/guards/index.ts";
+} from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/index.ts";
 import { machine } from "./machine.ts";
 export const machineWithProvider = machine.provide({
   // types: {
@@ -65,7 +65,7 @@ export const machineWithProvider = machine.provide({
     // gavUnionDBActor's invoke src was renamed to "CheckReportsTable" in
     // machine.ts (the go-language variant of this same actor, exported so
     // worker-sdk/go can link it — see
-    // apps/async-worker/go/creditCheck/v01/actors/CheckReportsTable/CheckReportsTable.go).
+    // test-apps/debug-only/async-worker/go/creditCheck/v01/actors/CheckReportsTable/CheckReportsTable.go).
     // This harness only ever runs the typescript implementation regardless
     // of asyncOperationLanguage, so it still resolves to the same checkReportsTable.ts
     // function under the new key.
@@ -79,7 +79,7 @@ export const machineWithProvider = machine.provide({
     ),
     // equiGavinFetchActor's invoke src was renamed to "checkBureauRust" in
     // machine.ts (the rust-language variant of this same actor — see
-    // apps/async-worker/rust/creditCheck/v01/actors/checkBureauRust/checkBureauRust.rs).
+    // test-apps/debug-only/async-worker/rust/creditCheck/v01/actors/checkBureauRust/checkBureauRust.rs).
     // This harness only ever runs the typescript implementation regardless
     // of asyncOperationLanguage, so it still resolves to the same checkBureau.ts
     // function under the new key.

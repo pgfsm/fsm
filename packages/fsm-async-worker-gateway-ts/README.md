@@ -99,9 +99,9 @@ async-operation-worker-gateway-ctl invoke \
   `--ensure-queue-on-register` (omit both to run the gateway/sidecar only)
 - **At least one worker-sdk process** connected to the sidecar socket, to
   register actors and actually serve invocations — generate one from an FSM's
-  compiled actors (see `@pgfsm/compiler`'s `generate-async-logic`), or see
-  `apps/async-worker/<lang>/` (a sibling of `apps/fsm-core-example/` — see #316)
-  in the [repo](https://github.com/pgfsm/fsm) for a worked example
+  compiled actors (`npx @pgfsm/cli create`), or see
+  `test-apps/debug-only/async-worker/<lang>/` in the
+  [repo](https://github.com/pgfsm/fsm) for a worked example
 
 ## Programmatic usage
 

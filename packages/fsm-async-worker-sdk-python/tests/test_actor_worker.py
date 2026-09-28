@@ -13,6 +13,7 @@ import os
 import queue
 import tempfile
 import threading
+import time
 from concurrent import futures
 from typing import Iterator, List
 
@@ -21,7 +22,12 @@ import pytest
 from pgfsm.sidecargateway.v1 import sidecar_gateway_pb2 as pb
 from pgfsm.sidecargateway.v1 import sidecar_gateway_pb2_grpc as pb_grpc
 
-from pgfsm.async_worker_sdk import ActorWorker, ProtocolError, run_actor_worker_cli
+from pgfsm.async_worker_sdk import (
+    ActorWorker,
+    ProtocolError,
+    reconnect_delay_ms,
+    run_actor_worker_cli,
+)
 
 ACTOR = {
     "parent_fsm_name": "creditCheck",
@@ -43,15 +49,34 @@ def _failing(_input_value):
 
 class FakeGateway(pb_grpc.SidecarGatewayServiceServicer):
     """Acks the registration, then sends whatever is queued on `to_worker`
-    and records every message the worker sends in `from_worker`."""
+    and records every message the worker sends in `from_worker`. With
+    `abort_with`, fails every session with that status code instead; with
+    `close_after_ack`, ends every session right after the ack."""
 
-    def __init__(self, accept: bool = True) -> None:
+    def __init__(
+        self,
+        accept: bool = True,
+        abort_with: "grpc.StatusCode | None" = None,
+        close_after_ack: bool = False,
+    ) -> None:
         self.accept = accept
+        self.abort_with = abort_with
+        self.close_after_ack = close_after_ack
+        self.sessions = 0
         self.to_worker: "queue.Queue[pb.SessionResponse | None]" = queue.Queue()
         self.from_worker: "queue.Queue[pb.SessionRequest]" = queue.Queue()
         self.registered = threading.Event()
 
     def Session(self, request_iterator, context) -> Iterator[pb.SessionResponse]:
+        self.sessions += 1
+        if self.abort_with is not None:
+            context.abort(self.abort_with, "refused by test gateway")
+        if self.close_after_ack:
+            first = next(request_iterator)
+            self.from_worker.put(first)
+            yield pb.SessionResponse(register_ack=pb.RegisterAck(accepted=True))
+            return
+
         def reader() -> None:
             try:
                 for req in request_iterator:
@@ -183,7 +208,9 @@ def test_empty_registry_refuses_to_start() -> None:
         worker.run()
 
 
-def test_cli_start_serves_until_stopped(socket_path: str) -> None:
+def test_cli_start_reconnects_then_exits_after_max_reconnect_attempts(
+    socket_path: str,
+) -> None:
     gateway = FakeGateway()
     server = _serve(gateway, socket_path)
     exit_codes: List[int] = []
@@ -191,7 +218,17 @@ def test_cli_start_serves_until_stopped(socket_path: str) -> None:
         target=lambda: exit_codes.append(
             run_actor_worker_cli(
                 [{**ACTOR, "handler": _check_bureau}],
-                ["start", "--gateway-socket", socket_path, "--worker-id", "python-cli"],
+                [
+                    "start",
+                    "--gateway-socket",
+                    socket_path,
+                    "--worker-id",
+                    "python-cli",
+                    "--reconnect-initial-delay-ms",
+                    "10",
+                    "--reconnect-max-attempts",
+                    "2",
+                ],
             )
         ),
         daemon=True,
@@ -199,9 +236,139 @@ def test_cli_start_serves_until_stopped(socket_path: str) -> None:
     thread.start()
     try:
         assert gateway.next_of("register").register.worker_id == "python-cli"
-        # The gateway ending the stream ends the worker cleanly.
+        # The gateway ending the stream is not the end of the worker: it
+        # reconnects and registers again.
         gateway.to_worker.put(None)
+        assert gateway.next_of("register").register.worker_id == "python-cli"
+    finally:
+        server.stop(None)
+    # With the gateway gone for good, --reconnect-max-attempts bounds it.
+    thread.join(10)
+    assert exit_codes == [1]
+
+
+# Reconnect (#392): the worker waits for a gateway that isn't up yet,
+# re-registers after the gateway restarts, and only gives up when told to.
+
+FAST_RECONNECT = {"heartbeat_ms": 50, "reconnect_initial_delay_ms": 10, "reconnect_max_delay_ms": 50}
+
+
+def test_waits_for_a_gateway_that_starts_after_it(socket_path: str) -> None:
+    worker = ActorWorker(
+        worker_id="python-early",
+        gateway_socket_path=socket_path,
+        registrations=[{**ACTOR, "handler": _check_bureau}],
+        **FAST_RECONNECT,
+    )
+    thread, errors = _start(worker)
+    time.sleep(0.1)  # a few attempts fail against the missing socket
+    gateway = FakeGateway()
+    server = _serve(gateway, socket_path)
+    try:
+        assert gateway.next_of("register").register.worker_id == "python-early"
+        gateway.to_worker.put(_invoke("inv-1", "checkBureau", {"n": 1}))
+        assert gateway.next_of("invoke_result").invoke_result.invoke_id == "inv-1"
+    finally:
+        worker.stop()
         thread.join(5)
-        assert exit_codes == [0]
+        server.stop(None)
+    assert errors == []
+
+
+def test_re_registers_after_the_gateway_restarts(socket_path: str) -> None:
+    first = FakeGateway()
+    server = _serve(first, socket_path)
+    worker = ActorWorker(
+        worker_id="python-restart",
+        gateway_socket_path=socket_path,
+        registrations=[{**ACTOR, "handler": _check_bureau}],
+        **FAST_RECONNECT,
+    )
+    thread, errors = _start(worker)
+    try:
+        first.next_of("register")
+        server.stop(None).wait()  # drops the live session, like a crash
+
+        second = FakeGateway()
+        server = _serve(second, socket_path)
+        assert second.next_of("register").register.worker_id == "python-restart"
+        second.to_worker.put(_invoke("inv-2", "checkBureau", {"n": 2}))
+        assert second.next_of("invoke_result").invoke_result.invoke_id == "inv-2"
+    finally:
+        worker.stop()
+        thread.join(5)
+        server.stop(None)
+    assert errors == []
+
+
+def test_gives_up_after_max_reconnect_attempts() -> None:
+    worker = ActorWorker(
+        worker_id="python-none",
+        gateway_socket_path="/nonexistent/gw.sock",
+        registrations=[{**ACTOR, "handler": _check_bureau}],
+        reconnect_max_attempts=3,
+        **FAST_RECONNECT,
+    )
+    with pytest.raises(ConnectionError, match="giving up after 3 consecutive failed attempt"):
+        worker.run()
+
+
+def test_stop_interrupts_the_reconnect_backoff() -> None:
+    worker = ActorWorker(
+        worker_id="python-stop",
+        gateway_socket_path="/nonexistent/gw.sock",
+        registrations=[{**ACTOR, "handler": _check_bureau}],
+        reconnect_initial_delay_ms=60_000,
+        reconnect_max_delay_ms=60_000,
+    )
+    thread, errors = _start(worker)
+    time.sleep(0.2)
+    started = time.monotonic()
+    worker.stop()
+    thread.join(5)
+    assert not thread.is_alive()
+    assert time.monotonic() - started < 1
+    assert errors == []
+
+
+def test_reconnect_delay_is_full_jitter_under_the_capped_exponential() -> None:
+    for attempt in range(1, 13):
+        ceiling = min(30_000, 250 * 2 ** (attempt - 1))
+        for _ in range(50):
+            assert 0 <= reconnect_delay_ms(attempt, 250, 30_000) < ceiling
+
+
+def test_fails_fast_on_unauthenticated(socket_path: str) -> None:
+    gateway = FakeGateway(abort_with=grpc.StatusCode.UNAUTHENTICATED)
+    server = _serve(gateway, socket_path)
+    try:
+        worker = ActorWorker(
+            worker_id="python-unauth",
+            gateway_socket_path=socket_path,
+            registrations=[{**ACTOR, "handler": _check_bureau}],
+            **FAST_RECONNECT,
+        )
+        with pytest.raises(grpc.RpcError) as info:
+            worker.run()
+        assert info.value.code() == grpc.StatusCode.UNAUTHENTICATED
+        assert gateway.sessions == 1
+    finally:
+        server.stop(None)
+
+
+def test_flapping_gateway_counts_toward_reconnect_max_attempts(socket_path: str) -> None:
+    gateway = FakeGateway(close_after_ack=True)
+    server = _serve(gateway, socket_path)
+    try:
+        worker = ActorWorker(
+            worker_id="python-flap",
+            gateway_socket_path=socket_path,
+            registrations=[{**ACTOR, "handler": _check_bureau}],
+            reconnect_max_attempts=3,
+            **FAST_RECONNECT,
+        )
+        with pytest.raises(ConnectionError, match="giving up after 3 consecutive failed attempt"):
+            worker.run()
+        assert gateway.sessions == 3
     finally:
         server.stop(None)

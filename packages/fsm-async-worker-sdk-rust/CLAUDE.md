@@ -115,15 +115,16 @@ from `proto-publish.yml` on `proto-v*` tags.
 
 ### Letting generated projects use a new minor version
 
-Generated projects depend on `pgfsm-async-worker-sdk = "0.1"` (Cargo's
-`>=0.1.0, <0.2.0`), so they won't pick up `0.2.0` until that moves. It lives in:
+Generated projects depend on `pgfsm-async-worker-sdk = "0.2"` (Cargo's
+`>=0.2.0, <0.3.0`), so they won't pick up `0.3.0` until that moves. It lives in:
 
 - `packages/fsm-compiler-ts/src/scaffold-templates/eta/rust/worker-sdk-cargo-toml.eta`,
   then, in `packages/fsm-compiler-ts`, run
   `deno task generate:templates && deno fmt src/scaffold-templates`.
 - `packages/fsm-compiler-ts/test/operation-logic-scaffold.test.ts`, which
   asserts the dependency line.
-- `apps/async-worker/rust/Cargo.toml`, the committed generated copy.
+- `test-apps/debug-only/async-worker/rust/Cargo.toml`, the committed generated
+  copy.
 
 Patch releases need none of this.
 
@@ -137,16 +138,14 @@ Patch releases need none of this.
   Release the next patch, then
   `cargo yank --version <bad> pgfsm-async-worker-sdk`.
 
-## Using the crate from `apps/async-worker/rust` before a release
+## Using the crate from source
 
-The committed `apps/async-worker/rust/Cargo.toml` depends on the published
-crate, so `cargo run` there only works once a matching version is on crates.io
-(same as the Python and TypeScript workers). Before then, point Cargo at this
-directory for one command, without editing any file:
+[`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405) is the
+in-repo worker project. To build its Rust worker against this directory, add a
+`[patch.crates-io]` path entry to its `async-worker/rust/Cargo.toml` (see that
+README's "Using local SDK source"), or for one command without editing any file:
 
 ```bash
-cd apps/async-worker/rust
-cargo run --config "patch.crates-io.pgfsm-async-worker-sdk.path='../../../packages/fsm-async-worker-sdk-rust'" -- list
+cd test-apps/debug-only/async-worker/rust
+cargo run --config "patch.crates-io.pgfsm-async-worker-sdk.path='../../../../packages/fsm-async-worker-sdk-rust'" -- list
 ```
-
-Don't commit the `Cargo.lock` that creates in `apps/async-worker/rust`.

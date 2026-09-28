@@ -39,7 +39,9 @@ or in workflows.
 ```
 apps/
   fsm-core-ts-hono-deno/   # Main REST API (Hono + Deno) — see CLAUDE.md
-  fsm-core-example/        # Example FSM definitions, polyglot actors (TS/Python/Rust/Go) — see CLAUDE.md
+  fsm-core-example/        # Example FSM definitions (sources for test-apps/debug-only) — see CLAUDE.md
+test-apps/
+  debug-only/              # @pgfsm/cli-generated worker project (sync + TS/Python/Rust/Go async), for debugging — see README.md
 packages/
   database-src/           # PostgreSQL migrations + Supabase config — see CLAUDE.md
   database-src-extension/ # Rust PostgreSQL extension (pgrx) using ltree + pgmq
@@ -73,3 +75,10 @@ scope there) `fsm-async-worker-gateway-ts`. Follow
 [`docs/schema-change-propagation.md`](docs/schema-change-propagation.md)
 whenever a session touches `fsm.machine.schema.v3.json` or a SQL file under
 `packages/database-src/supabase/schemas/`.
+
+## Releasing
+
+Each package's README has its own release steps (bump → PR → tag). When
+releasing several packages together, push **at most three tags per `git push`**:
+GitHub skips `push` events entirely when more than three tags arrive at once, so
+the publish workflows silently never run (#400).

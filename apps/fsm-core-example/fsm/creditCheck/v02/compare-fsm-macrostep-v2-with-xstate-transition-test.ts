@@ -30,19 +30,19 @@ async function loadModule(path: string, label: string): Promise<any> {
 
 const fsmModuleDefinition = {
   actions: await loadModule(
-    `../../../../sync-worker/typescript/creditCheck/v02/actions/index.ts`,
+    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v02/actions/index.ts`,
     "actions",
   ),
   guards: await loadModule(
-    `../../../../sync-worker/typescript/creditCheck/v02/guards/index.ts`,
+    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v02/guards/index.ts`,
     "guards",
   ),
   delays: await loadModule(
-    `../../../../sync-worker/typescript/creditCheck/v02/delays/index.ts`,
+    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v02/delays/index.ts`,
     "delays",
   ),
   actors: await loadModule(
-    `../../../../async-worker/typescript/creditCheck/v02/actors/index.ts`,
+    `../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v02/actors/index.ts`,
     "actors",
   ),
 };

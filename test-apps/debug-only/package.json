@@ -1,0 +1,7 @@
+{
+  "name": "debug-only",
+  "private": true,
+  "scripts": {
+    "fsm:add": "npx -y @pgfsm/cli@0.1.0 add"
+  }
+}

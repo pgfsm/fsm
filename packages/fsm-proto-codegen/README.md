@@ -35,9 +35,9 @@ codegen pipeline works and produces correct, runnable output.
   different plugin sources: see [Regenerating](#regenerating) for which to use.
   `inputs:` lists one entry per service directory above.
 - `gen/{typescript,python,rust,go}/` — generated output, committed (same
-  convention as this monorepo's own `apps/async-worker/`, see #316) so consumers
-  don't need Buf installed just to build against it. Each carries its own
-  hand-written package manifest giving the generated stubs a real package
+  convention as this monorepo's own `test-apps/debug-only/async-worker/`) so
+  consumers don't need Buf installed just to build against it. Each carries its
+  own hand-written package manifest giving the generated stubs a real package
   identity for that language's toolchain — `gen/typescript/deno.json` (`exports`
   map + the `imports` map generated code needs to resolve `@bufbuild/protobuf`
   at runtime), `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`,

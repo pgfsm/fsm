@@ -45,15 +45,30 @@ deno run --allow-all run-async-worker.ts start \
 
 ### CLI options (`runActorWorkerCli`)
 
-| Flag                          | Default                                    | Meaning                      |
-| ----------------------------- | ------------------------------------------ | ---------------------------- |
-| `-g, --gateway-socket <path>` | `/tmp/pgfsm-activity-gateway-workers.sock` | Sidecar socket to connect to |
-| `-i, --worker-id <id>`        | `typescript-<random>`                      | Stable worker identity       |
-| `--heartbeat-ms <ms>`         | `5000`                                     | Heartbeat interval           |
-| `-h, --help`                  |                                            | Show help                    |
+| Flag                                | Default                                    | Meaning                                    |
+| ----------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `-g, --gateway-socket <path>`       | `/tmp/pgfsm-activity-gateway-workers.sock` | Sidecar socket to connect to               |
+| `-i, --worker-id <id>`              | `typescript-<random>`                      | Stable worker identity                     |
+| `--heartbeat-ms <ms>`               | `5000`                                     | Heartbeat interval                         |
+| `--reconnect-initial-delay-ms <ms>` | `250`                                      | First reconnect backoff step               |
+| `--reconnect-max-delay-ms <ms>`     | `30000`                                    | Reconnect backoff cap                      |
+| `--reconnect-max-attempts <n>`      | `0` (retry forever)                        | Exit after `n` consecutive failed attempts |
+| `-h, --help`                        |                                            | Show help                                  |
 
 `runActorWorkerCli` resolves to an exit code (0 or 1) rather than exiting, and
 stops the worker gracefully on SIGINT/SIGTERM.
+
+`start` doesn't need the gateway to be up first: it retries the connection with
+exponential backoff (full jitter, 250 ms doubling up to 30 s), and if a session
+drops (e.g. the gateway restarts) it reconnects and re-registers on its own. A
+session only resets the backoff once it has stayed up for 10 s, so a gateway
+that accepts and immediately drops still gets backed off from. `start` ends with
+exit code 1 only on what reconnecting can't fix: an explicit registration
+rejection; a gRPC `UNAUTHENTICATED`, `PERMISSION_DENIED`, `UNIMPLEMENTED` or
+`INVALID_ARGUMENT` (a misconfiguration, so it fails fast instead of retrying);
+or `--reconnect-max-attempts` consecutive failed attempts. An invoke result that
+can't be sent because its session ended is logged and dropped; the gateway has
+already failed that invoke.
 
 ### Using `ActorWorker` directly
 
@@ -78,7 +93,9 @@ const worker = new ActorWorker(
   },
   registrations,
 );
-await worker.run(); // resolves when the stream ends or worker.stop() is called
+// Reconnects and re-registers until worker.stop(); rejects only on a
+// registration rejection or `reconnectMaxAttempts` failed attempts.
+await worker.run();
 ```
 
 A handler that throws is reported to the gateway as an `INTERNAL` invoke error;

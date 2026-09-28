@@ -1,0 +1,186 @@
+{
+  "id": "vitalscheck",
+  "key": "vitalscheck",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#vitalscheck.CheckVitals"
+    ],
+    "source": "#vitalscheck",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "CheckVitals": {
+      "id": "vitalscheck.CheckVitals",
+      "key": "CheckVitals",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#vitalscheck.CheckVitals",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              {
+                "type": "assignTirePressure"
+              }
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.1.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              {
+                "type": "assignOilPressure"
+              }
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.2.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              {
+                "type": "assignCoolantLevel"
+              }
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
+          }
+        ],
+        "xstate.done.actor.3.vitalscheck.CheckVitals": [
+          {
+            "actions": [
+              {
+                "type": "assignBattery"
+              }
+            ],
+            "source": "#vitalscheck.CheckVitals",
+            "reenter": false,
+            "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "actions": [
+            {
+              "type": "assignTirePressure"
+            }
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            {
+              "type": "assignOilPressure"
+            }
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.1.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            {
+              "type": "assignCoolantLevel"
+            }
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.2.vitalscheck.CheckVitals"
+        },
+        {
+          "actions": [
+            {
+              "type": "assignBattery"
+            }
+          ],
+          "source": "#vitalscheck.CheckVitals",
+          "reenter": false,
+          "eventType": "xstate.done.actor.3.vitalscheck.CheckVitals"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [
+        {
+          "src": "checkTirePressure",
+          "type": "xstate.invoke",
+          "id": "0.vitalscheck.CheckVitals",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v02",
+          "asyncOperationLanguage": "typescript"
+        },
+        {
+          "src": "checkOilPressure",
+          "type": "xstate.invoke",
+          "id": "1.vitalscheck.CheckVitals",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v02",
+          "asyncOperationLanguage": "typescript"
+        },
+        {
+          "src": "checkCoolantLevel",
+          "type": "xstate.invoke",
+          "id": "2.vitalscheck.CheckVitals",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v02",
+          "asyncOperationLanguage": "typescript"
+        },
+        {
+          "src": "checkBattery",
+          "type": "xstate.invoke",
+          "id": "3.vitalscheck.CheckVitals",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v02",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "VitalsChecked": {
+      "id": "vitalscheck.VitalsChecked",
+      "key": "VitalsChecked",
+      "type": "final",
+      "initial": {
+        "target": [],
+        "source": "#vitalscheck.VitalsChecked",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

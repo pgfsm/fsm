@@ -30,8 +30,10 @@ mod actor_worker;
 mod cli;
 
 pub use actor_worker::{
-    actor_key, ActorHandler, ActorRegistration, ActorWorker, ActorWorkerOptions, BoxError,
-    DEFAULT_HEARTBEAT_MS,
+    actor_key, reconnect_delay_ms, ActorHandler, ActorRegistration, ActorWorker,
+    ActorWorkerOptions, BoxError, RegistrationRejectedError, DEFAULT_HEARTBEAT_MS,
+    DEFAULT_RECONNECT_INITIAL_DELAY_MS, DEFAULT_RECONNECT_MAX_DELAY_MS, FATAL_CODES,
+    STABLE_SESSION_MS,
 };
 pub use cli::{run_actor_worker_cli, DEFAULT_GATEWAY_SOCKET_PATH};
 /// The generated protocol message an [`ActorRegistration`]'s `meta` is.

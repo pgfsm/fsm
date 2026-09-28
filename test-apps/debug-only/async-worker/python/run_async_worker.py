@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+# Scaffolded by fsm-compiler-ts, yours to edit: `--overwrite generated-only`
+# (what @pgfsm/cli uses) never rewrites it once it exists.
+"""Python worker for the Activity Gateway: wires this project's
+compiler-generated actor registry into pgfsm-async-worker-sdk's
+run_actor_worker_cli (see pyproject.toml for the pinned version).
+
+USAGE
+  uv run run_async_worker.py <list|start> [options]
+
+EXAMPLE
+  uv run run_async_worker.py start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+"""
+
+import logging
+import sys
+
+from pgfsm.async_worker_sdk import run_actor_worker_cli
+
+# Fixed, compiler-generated registry -- see fsm-compiler-ts's
+# writeAggregateActorsRegistry. Regenerate with
+# `npx @pgfsm/compiler -c generate-async-logic -f <plugin-root>` after actors
+# change; this import is a build-time coupling to that one app's FSM
+# definitions by design (see #84 for why). A plain static import works
+# because this module is always a sibling of run_async_worker.py, which
+# Python puts on sys.path automatically for the running script.
+from python_actors_registry_generated import ACTOR_REGISTRATIONS
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG if sys.stderr.isatty() else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    raise SystemExit(run_actor_worker_cli(ACTOR_REGISTRATIONS, sys.argv[1:]))

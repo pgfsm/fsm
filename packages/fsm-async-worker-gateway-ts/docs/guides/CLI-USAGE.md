@@ -47,8 +47,8 @@ This package provides two CLIs:
    - `--db-url` / `-d` flag passed directly (takes precedence over `.env`)
 3. **At least one worker-sdk process** to register actors and actually serve
    invocations — see `packages/fsm-proto-codegen/`'s generated stubs, or
-   `apps/async-worker/<lang>/` (a sibling of `apps/fsm-core-example/` — see
-   #316) if `fsm-compiler-ts`'s `generate-async-logic` has been run.
+   `test-apps/debug-only/async-worker/<lang>/` (a `@pgfsm/cli`-generated
+   project, #405).
 
 ---
 
@@ -294,10 +294,10 @@ SELECT pgmq.send('creditCheck_v01_i_checkBureau_t', jsonb_build_object(
 
 ### Graceful shutdown
 
-| Signal                             | Behaviour                                                                                                                       |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections, closes the sidecar and its Unix socket, closes the DB pool (if the poll loop was running) |
-| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                     |
+| Signal                             | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections and gives open ones up to 5 s to finish. Then it closes the sidecar: in-flight invokes fail as `WORKER_DISCONNECTED`, every worker's session ends (so it reconnects to the next gateway), and any worker connection still open after another 5 s is dropped. Finally it removes the Unix sockets and closes the DB pool (if the poll loop was running). Shutdown no longer waits indefinitely on connected workers (#397). |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Environment variables
 
