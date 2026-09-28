@@ -1159,7 +1159,7 @@ const LEGACY_GO_WORKER_SDK_FILES = ["sdk.go"];
  */
 const GO_ASYNC_WORKER_SDK_MODULE_PATH =
   "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go";
-const GO_ASYNC_WORKER_SDK_VERSION = "v0.1.0";
+const GO_ASYNC_WORKER_SDK_VERSION = "v0.2.0";
 /** The generated worker `go.mod`'s `go` line: the SDK module's own minimum. */
 const GO_WORKER_GO_VERSION = "1.25.0";
 
