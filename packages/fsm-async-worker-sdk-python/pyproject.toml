@@ -4,7 +4,7 @@
 # `async-worker-sdk-py-v<version>` tag.
 [project]
 name = "pgfsm-async-worker-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python worker SDK for the pgfsm Activity Gateway: registers actors and serves invocations over the sidecar gRPC stream."
 readme = "README.md"
 license = "Apache-2.0"
