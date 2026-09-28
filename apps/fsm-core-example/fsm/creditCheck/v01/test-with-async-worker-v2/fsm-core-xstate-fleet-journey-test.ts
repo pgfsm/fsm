@@ -4,7 +4,8 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import { machineWithProvider } from "../machine-with-provider.ts";
-import { runFsmScheduler, startFsmlet } from "@pgfsm/sync-worker";
+import { runFsmScheduler } from "@pgfsm/ctl";
+import { startFsmlet } from "@pgfsm/sync-worker";
 import type { FsmletHandle } from "@pgfsm/sync-worker";
 import { startActivityGatewayServer } from "@pgfsm/async-worker-gateway";
 import { ActorWorker } from "@pgfsm/async-worker-sdk";

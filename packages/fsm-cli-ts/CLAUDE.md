@@ -50,6 +50,12 @@ it), like `fsm-compiler-ts`'s.
   — so regenerating after a source edit is `add <source> -N -V --force`.
   `--force` skips the "version exists" refusal, whose job is catching a typo'd
   name/version or a clashing design.
+- **Generated `package.json` pins its tools, never depends on them.** `fsm:add`
+  pins this CLI (`toolVersion`); `db:pgcron` pins `@pgfsm/ctl` and `gateway`
+  pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the versions in
+  `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this build was
+  made from. The gateway is config, not a project directory: it has no user
+  code.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)
   into a temp dir named like the real root (the Go module root is derived from
@@ -76,3 +82,5 @@ versions. `@pgfsm/cli` needs a compiler release containing #376/#381/#382's
 compiler changes (tracked by #383). Before that exists, build the compiler first
 and set `PGFSM_LOCAL_COMPILER=1` to depend on its local `dist/` instead.
 `src/version.node.ts` is generated per build and gitignored.
+`src/tool-versions.node.ts` (the ctl/gateway pins for generated scripts) is
+generated the same way and gitignored.

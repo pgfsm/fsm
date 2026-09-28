@@ -22,7 +22,7 @@ This document is the lifecycle spec for an FSM — **design/generate** →
 ```mermaid
 flowchart LR
     A["<b>1. design / generate</b><br/>fsm.json"] --> B["<b>2. scaffold</b><br/>operation logic"]
-    B --> C["<b>3. run Workers</b><br>3.a Sync Operation Worker <br>[ package : fsm-sync-worker-ts ]<br>( ctl  + scheduler + fsmlet ) <br>3.b Async Operation Worker <br>[ package : fsm-async-worker-gateway-ts ]<br> ( ctl  + startActivityGatewayServer + Different lang ipc workers )"]
+    B --> C["<b>3. run Workers</b><br>3.a Sync Operation Worker <br>[ package : fsm-sync-worker-ts ]<br>( fsmlet ) <br>3.c Ops <br>[ package : fsm-ctl-ts ]<br>( pgcron + instance ctl ) <br>3.b Async Operation Worker <br>[ package : fsm-async-worker-gateway-ts ]<br> ( ctl  + startActivityGatewayServer + Different lang ipc workers )"]
 ```
 
 _Every step reads and writes through PostgreSQL as the source of truth._
@@ -272,22 +272,34 @@ cd test-apps/debug-only/sync-worker/typescript
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres deno task dev
 ```
 
-This node agent needs its companion **FSM scheduler** running somewhere in the
-cluster to ever receive claimed work — see [section 4](#4-start-the-schedulers).
-See [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
-(fsmlet) for the startup sequence.
+This node agent only receives claimed work once the **FSM scheduler** (the
+`pg_cron` job) is registered in the database — see
+[section 4](#4-start-the-schedulers).
 
 ---
 
 ## 4. Start the schedulers
 
-The FSM Sync-Operation Worker has a companion **scheduler** — a control-plane
-routing process (kube-scheduler equivalent) run once per cluster, never on a
-worker node. It listens for a `pg_notify` wake-up, then loops a single PG
-function that atomically claims the next pending dispatch entry, filters/scores
-active `fsmlet`s, assigns the winner, and notifies it — repeating until the
-queue is empty or no `fsmlet` has capacity. A fallback poll catches any
-notification missed after a `LISTEN` connection drop.
+The FSM Sync-Operation Worker needs a **scheduler**: something that repeatedly
+calls `schedule_next_pending()`, a single PG function that atomically claims the
+next pending dispatch entry, filters/scores active `fsmlet`s, assigns the
+winner, and notifies it — until the queue is empty or no `fsmlet` has capacity.
+
+The scheduler is a **`pg_cron` job** (`fsm_core.schedule_all_pending()` on a
+timer — see
+[`docs/specs/spec-003-pgcron-fsm-scheduler.md`](docs/specs/spec-003-pgcron-fsm-scheduler.md)).
+Register it once per database, after migrations apply — `supabase db reset`
+doesn't do it for you:
+
+```bash
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts pgcron register
+  # -d <db-url>    # overrides DATABASE_URL
+  # -s <schedule>  # pg_cron schedule expression (default "5 seconds")
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts pgcron status
+```
+
+`register` is idempotent — it calls PostgreSQL's `cron.schedule()` and exits;
+re-run it to change the schedule. `unregister` removes the job.
 
 `fsm-async-worker-gateway-ts` (the current async-operation worker) has **no
 scheduler** — it polls Postgres directly on its own interval instead (see
@@ -296,53 +308,33 @@ the superseded `fsm-async-worker-ts` node-agent/scheduler split; see
 [Appendix: superseded `fsm-async-worker-ts`](#appendix-superseded-fsm-async-worker-ts)
 if you're still running that older worker.
 
-| Info                    | FSM Scheduler                                                                |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| CLI                     | `packages/fsm-sync-worker-ts/src/cli/fsmscheduler.ts`                        |
-| Routes work for         | `fsmlet` node agents                                                         |
-| Listens on              | `fsm_scheduler_work`                                                         |
-| Dispatch table          | `fsm_dispatch_queue`                                                         |
-| Scheduling function     | `schedule_next_pending()`                                                    |
-| Notifies the winner via | `fsm_fsmlet_work_<id>` (channel the fsmlet is listening on — see section 3)  |
-| `--stale-threshold`     | Seconds before a fsmlet with no heartbeat is treated as dead (default `30`)  |
-| `--poll-interval`       | Fallback poll interval in ms, catches missed notifications (default `30000`) |
-| Deployment              | Control plane, alongside the API server — **not** on worker nodes            |
+### Fallback: a standing scheduler process
 
-### Start the FSM scheduler
+The pre-`pg_cron` scheduler process (kube-scheduler equivalent) is kept as a
+fallback safety net until `pg_cron` is trusted as the sole mechanism. Running
+both is safe (`SELECT FOR UPDATE SKIP LOCKED`), just redundant.
+
+| Info                    | Fallback scheduler (`pgfsmctl scheduler run`)                               |
+| ----------------------- | --------------------------------------------------------------------------- |
+| Code                    | `packages/fsm-ctl-ts/src/scheduler/fsmscheduler.ts` (`runFsmScheduler`)     |
+| Routes work for         | `fsmlet` node agents                                                        |
+| Dispatch table          | `fsm_dispatch_queue`                                                        |
+| Scheduling function     | `schedule_next_pending()`                                                   |
+| Notifies the winner via | `fsm_fsmlet_work_<id>` (channel the fsmlet is listening on — see section 3) |
+| `--stale-threshold`     | Seconds before a fsmlet with no heartbeat is treated as dead (default `30`) |
+| `--poll-interval`       | Poll interval in ms (default `30000`)                                       |
+| Deployment              | Control plane, alongside the API server — **not** on worker nodes           |
 
 ```bash
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmscheduler.ts
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts scheduler run
   # -d <db-url>             # overrides DATABASE_URL
-  # -p <poll-interval-ms>   # fallback poll interval (default 30000)
+  # -p <poll-interval-ms>   # poll interval (default 30000)
   # -s <stale-threshold-s>  # seconds before a fsmlet is considered dead (default 30)
 ```
 
-### Alternative: `pg_cron` instead of a standing scheduler process
-
-If you'd rather not run `fsmscheduler` as a standing process at all, `pgcron` is
-a one-shot CLI that registers a `pg_cron` job to do the same scheduling work —
-`schedule_next_pending()` in a loop — on a periodic in-database timer instead of
-a `LISTEN`/poll loop. See
-[`docs/specs/spec-003-pgcron-fsm-scheduler.md`](docs/specs/spec-003-pgcron-fsm-scheduler.md).
-
-```bash
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/pgcron.ts
-  # -d <db-url>    # overrides DATABASE_URL
-  # -s <schedule>  # pg_cron schedule expression (default "5 seconds")
-```
-
-Run it once to register (or update) the job — it doesn't run as a standing
-process itself, it just calls PostgreSQL's `cron.schedule()` and exits.
-
-> **Optional:** with `pg_cron` handling scheduling, the standing `fsmscheduler`
-> CLI is no longer needed. If you want to fully retire it, also remove the
-> `PERFORM pg_notify('fsm_scheduler_work', input_instance_id::text);` call from
-> `fsm_core.enqueue_fsm_dispatch_v2` (defined in
-> `packages/database-src/supabase/schemas/35_fsm_sync_operation_worker_v1/20250119124637_fsm_scheduler_dispatch.sql`)
-> — that notify is what wakes `fsmscheduler`'s `LISTEN` connection, so removing
-> it breaks that link. Only do this once you've confirmed the `pg_cron` job is
-> registered and running; otherwise dispatch entries will have no scheduling
-> trigger at all.
+It still LISTENs on `fsm_scheduler_work`, but nothing notifies that channel
+since SPEC-003 removed the `pg_notify` from `enqueue_fsm_dispatch_v2`, so it
+effectively runs on its poll loop.
 
 ---
 
@@ -353,26 +345,26 @@ the node agents and schedulers in sections 3–4, these issue a single command
 against PostgreSQL (or, for the async-operation gateway, the gateway's gRPC API)
 and exit; they don't validate, register, or listen for work.
 
-| Info           | `fsmctl`                                                                                                           | `async-operation-worker-gateway-ctl`                                                                                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Controls       | FSM instances — the dispatch-queue model driven by the `fsmscheduler`/`fsmlet` pair                                | A running `fsm-async-worker-gateway-ts` gateway, over its gRPC/Connect API                                                                                                                          |
-| CLI            | `packages/fsm-sync-worker-ts/src/cli/fsmctl.ts`                                                                    | `packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts`                                                                                                                |
-| Commands       | `create`, `resume`, `send`, `stop`                                                                                 | `list`, `invoke`                                                                                                                                                                                    |
-| `create`       | Creates a new FSM instance, its pgmq queue, sends `initialTransition_event`, and enqueues to `fsm_dispatch_queue`  | — (no equivalent — instances/dispatch aren't this ctl's concern)                                                                                                                                    |
-| `resume`       | Re-enqueues an existing FSM instance to the `fsmscheduler` via `resumeEventForFsmWorker`                           | — (no equivalent)                                                                                                                                                                                   |
-| `send`         | Sends an event to a running FSM instance via `sendEventToFsmQueueWithEventLogs`                                    | — (no equivalent)                                                                                                                                                                                   |
-| `stop`         | Sends a stop signal to a running `fsmlet` worker via `pg_notify` (`stopFSMWorker`)                                 | — (no equivalent)                                                                                                                                                                                   |
-| `list`         | — (no equivalent)                                                                                                  | Calls `ListRegisteredActors` and prints the actor keys currently registered with the gateway                                                                                                        |
-| `invoke`       | — (no equivalent)                                                                                                  | Calls `Invoke` for a given actor identity against the gateway and prints the result — debug/test only                                                                                               |
-| Required flags | `-c/--command`, plus per-command: `create` needs `-n/-v`; `resume`/`send`/`stop` need `-q`; `send` also needs `-e` | none for `list`; `invoke` needs `--parent-fsm-name`, `--parent-fsm-version`, `--async-operation-type`, `--async-operation-name`, `--async-operation-version`, `--async-operation-language`          |
-| Depends on     | `fsmscheduler` + `fsmlet` running to pick up the dispatched/resumed/sent work                                      | A running `async-operation-worker-gateway` process (`--target`, default `unix:/tmp/pgfsm-activity-gateway.sock`) — talks only to the gateway, never touches Postgres or the sidecar socket directly |
+| Info           | `pgfsmctl instance`                                                                                               | `async-operation-worker-gateway-ctl`                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Controls       | FSM instances — the dispatch-queue model driven by the scheduler/`fsmlet` pair                                    | A running `fsm-async-worker-gateway-ts` gateway, over its gRPC/Connect API                                                                                                                          |
+| CLI            | `packages/fsm-ctl-ts/src/commands/instance.ts` (bin `pgfsmctl`)                                                   | `packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts`                                                                                                                |
+| Commands       | `instance create`, `instance resume`, `instance send`, `instance stop`                                            | `list`, `invoke`                                                                                                                                                                                    |
+| `create`       | Creates a new FSM instance, its pgmq queue, sends `initialTransition_event`, and enqueues to `fsm_dispatch_queue` | — (no equivalent — instances/dispatch aren't this ctl's concern)                                                                                                                                    |
+| `resume`       | Re-enqueues an existing FSM instance to `fsm_dispatch_queue` via `resumeEventForFsmWorker`                        | — (no equivalent)                                                                                                                                                                                   |
+| `send`         | Sends an event to a running FSM instance via `sendEventToFsmQueueWithEventLogs`                                   | — (no equivalent)                                                                                                                                                                                   |
+| `stop`         | Sends a stop signal to a running `fsmlet` worker via `pg_notify` (`stopFSMWorker`)                                | — (no equivalent)                                                                                                                                                                                   |
+| `list`         | — (no equivalent)                                                                                                 | Calls `ListRegisteredActors` and prints the actor keys currently registered with the gateway                                                                                                        |
+| `invoke`       | — (no equivalent)                                                                                                 | Calls `Invoke` for a given actor identity against the gateway and prints the result — debug/test only                                                                                               |
+| Required flags | Per verb: `create` needs `-n/-V`; `resume`/`send`/`stop` need `-q`; `send` also needs `-e`                        | none for `list`; `invoke` needs `--parent-fsm-name`, `--parent-fsm-version`, `--async-operation-type`, `--async-operation-name`, `--async-operation-version`, `--async-operation-language`          |
+| Depends on     | The scheduler (section 4) + an `fsmlet` running to pick up the dispatched/resumed/sent work                       | A running `async-operation-worker-gateway` process (`--target`, default `unix:/tmp/pgfsm-activity-gateway.sock`) — talks only to the gateway, never touches Postgres or the sidecar socket directly |
 
 ```bash
-# fsmctl
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c create -n creditCheck -v 1
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c resume -q <instance-uuid>
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c send -q <instance-uuid> -e APPROVE
-deno run --allow-all packages/fsm-sync-worker-ts/src/cli/fsmctl.ts -c stop -q <instance-uuid>
+# pgfsmctl instance
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts instance create -n creditCheck -V v01
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts instance resume -q <instance-uuid>
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts instance send -q <instance-uuid> -e APPROVE
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts instance stop -q <instance-uuid>
 
 # async-operation-worker-gateway-ctl
 deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operation-worker-gateway-ctl.ts list
@@ -383,8 +375,8 @@ deno run --allow-all packages/fsm-async-worker-gateway-ts/src/cli/async-operatio
   --input '{"ssn":"123"}'
 ```
 
-See [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
-(fsmctl) and
+See [`CLI-USAGE.md`](./packages/fsm-ctl-ts/docs/guides/CLI-USAGE.md)
+(`pgfsmctl`) and
 [`CLI-USAGE.md`](./packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md)
 (async-operation-worker-gateway-ctl) for the full flag reference. The old
 `async-operation-ctl` (for `fsm-async-worker-ts`) is covered in
@@ -509,16 +501,16 @@ worker's terms are the `fsm-async-worker-gateway-ts` rows further down.
 | load `fsm.json`                                          | `load-fsm-json.ts` (`loadFsmJSONFromFolders`); `loadFsmFromJson` → `load_fsm_from_json_v2`                                                                                                            | ✅ Shipped                                                      |
 | `fsmlet`, `registerFsmlet`, loop                         | `packages/fsm-sync-worker-ts/src/fsmlet/fsmlet.ts`, `packages/fsm-core-db-ts/src/fsm-workerlet.ts` (`fsm_workerlet` table)                                                                            | ✅ Shipped                                                      |
 | heartbeat (5s)                                           | `fsmletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`); `asyncOperationWorkerletHeartbeat` is the 🗄️ superseded equivalent — `fsm-async-worker-gateway-ts` has no heartbeat yet (see section 3)          | ✅ Shipped (sync) — ⚠️ Not implemented (current async)          |
-| scheduler / dispatch (FSM)                               | `fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                                                                                                           | ✅ Shipped                                                      |
+| scheduler / dispatch (FSM)                               | `fsm_schedule_all_pending` pg_cron job (`pgfsmctl pgcron register`), fallback `fsm-ctl-ts/src/scheduler/fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`    | ✅ Shipped                                                      |
 | fsmlet ↔ async-actor liveness check                      | `asyncOperationVerificationMode` (`checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — library option, not exposed as an `fsmlet` CLI flag                                      | ⚠️ Shipped, not wired to CLI                                    |
-| `fsmctl` (control CLI)                                   | `packages/fsm-sync-worker-ts/src/cli/fsmctl.ts` — `create` / `resume` / `send` / `stop`                                                                                                               | ✅ Shipped                                                      |
+| `fsmctl` (control CLI)                                   | `pgfsmctl instance` — `packages/fsm-ctl-ts/src/commands/instance.ts` — `create` / `resume` / `send` / `stop`                                                                                          | ✅ Shipped                                                      |
 
 ## References
 
 - Compiler CLI —
   [`cli-usage.md`](./packages/fsm-compiler-ts/docs/guides/cli-usage.md)
-- Sync worker CLI —
-  [`CLI-USAGE.md`](./packages/fsm-sync-worker-ts/docs/guides/CLI-USAGE.md)
+- Ops CLI (`pgfsmctl`: pgcron, instance, fallback scheduler) —
+  [`CLI-USAGE.md`](./packages/fsm-ctl-ts/docs/guides/CLI-USAGE.md)
 - Async-operation worker CLI (current) —
   [`CLI-USAGE.md`](./packages/fsm-async-worker-gateway-ts/docs/guides/CLI-USAGE.md)
 - Async-operation worker CLI (old, superseded) —

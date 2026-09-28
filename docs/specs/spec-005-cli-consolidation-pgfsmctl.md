@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                  |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status  | Draft                                                                                                                                                  |
+| Status  | Accepted                                                                                                                                               |
 | Date    | 2026-09-29                                                                                                                                             |
 | Authors | Niraj, Claude                                                                                                                                          |
 | Issue   | #409                                                                                                                                                   |
@@ -326,4 +326,6 @@ whichever step changes the thing it documents.
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+All five migration steps are implemented together in #411. Not yet done:
+releasing to npm (`@pgfsm/db`, then `@pgfsm/ctl` 0.1.0 and `@pgfsm/sync-worker`
+0.3.0, following each package's README).

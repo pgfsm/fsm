@@ -47,14 +47,14 @@ packages/
   database-src-extension/ # Rust PostgreSQL extension (pgrx) using ltree + pgmq
   fsm-compiler-ts/        # JSON → database object compiler (TypeScript) — see CLAUDE.md
   fsm-core-db-ts/         # Raw pg client helpers (TypeScript) — see CLAUDE.md
-  fsm-sync-worker-ts/     # Worker fleet: fsmlet/fsmscheduler dispatch-queue CLIs — see CLAUDE.md
+  fsm-sync-worker-ts/     # fsmlet worker runtime library (no bins), @pgfsm/sync-worker — see CLAUDE.md
+  fsm-ctl-ts/             # pgfsmctl ops CLI: pgcron register, instance create/resume/send/stop, scheduler fallback (SPEC-005), @pgfsm/ctl — see CLAUDE.md
   fsm-async-worker-gateway-ts/ # Activity Gateway: async-op worker-registration/dispatch CLIs (@pgfsm/async-worker-gateway) — see CLAUDE.md
   fsm-async-worker-sdk-ts/ # Async actor worker SDK (TypeScript) — connects to the Activity Gateway, @pgfsm/async-worker-sdk; not the deprecated fsm-async-worker-ts — see CLAUDE.md
   fsm-async-worker-sdk-python/ # Async actor worker SDK (Python, uv) — PyPI pgfsm-async-worker-sdk, imports pgfsm.async_worker_sdk — see CLAUDE.md
   fsm-async-worker-sdk-rust/ # Async actor worker SDK (Rust) — crates.io pgfsm-async-worker-sdk, `use pgfsm_async_worker_sdk` — see CLAUDE.md
   fsm-async-worker-sdk-go/ # Async actor worker SDK (Go) — module github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go, package asyncworkersdk — see CLAUDE.md
   fsm-async-worker-ts/    # Deprecated v1 async-op worker fleet (@pgfsm/async-worker-old); superseded by fsm-async-worker-gateway-ts — see CLAUDE.md
-  fsm-devstack-ts/        # fsmdev CLI: local dev-stack orchestration across compiler/sync-worker/async-worker, @pgfsm/devstack — see CLAUDE.md
   fsm-cli-ts/             # pgfsm CLI: npx create/add for FSM worker projects (SPEC-004), @pgfsm/cli — see CLAUDE.md
   fsm-logging-ts/         # Shared LogTape logging config, @pgfsm/logging — see CLAUDE.md
   fsm-proto-codegen/      # Buf-driven multi-language proto stub generation — see CLAUDE.md

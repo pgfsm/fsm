@@ -8,8 +8,9 @@ This package provides three CLIs:
 | **async-operation-scheduler** | `src/cli/async-operation-scheduler.ts` | Control-plane routing process (kube-scheduler equivalent) for `async-operation-workerlet` node agents. Run once per cluster, not on worker nodes                                     |
 | **async-operation-ctl**       | `src/cli/async-operation-ctl.ts`       | One-shot control CLI (kubectl equivalent) — list-instances/list-meta/dispatch against the async-operation dispatch tables, then exits                                                |
 
-For the FSM-side CLIs (`fsmlet`, `fsmscheduler`, `fsmctl`), see
-[`fsm-sync-worker-ts/docs/guides/CLI-USAGE.md`](../../../fsm-sync-worker-ts/docs/guides/CLI-USAGE.md).
+For the FSM-side ops CLI (`pgfsmctl`: pg_cron scheduler, instance control,
+fallback scheduler), see
+[`fsm-ctl-ts/docs/guides/CLI-USAGE.md`](../../../fsm-ctl-ts/docs/guides/CLI-USAGE.md).
 
 ---
 

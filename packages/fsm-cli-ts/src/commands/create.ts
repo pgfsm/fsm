@@ -8,6 +8,7 @@ import {
 } from "../project.ts";
 import type { WriteReport } from "../report.ts";
 import type { ResolvedSource } from "../source.ts";
+import { CTL_VERSION, GATEWAY_VERSION } from "../tool-versions.ts";
 import { addFsm } from "./add.ts";
 
 export class CreateError extends Error {}
@@ -74,7 +75,10 @@ async function writeOwnFile(
 function packageJson(name: string, toolVersion: string): string {
   // Scripts only -- no dependencies. Pinning the CLI version in the npx
   // call keeps add on the version that created the project without
-  // installing it (SPEC-004 "Version pinning without a dependency").
+  // installing it (SPEC-004 "Version pinning without a dependency"). The
+  // gateway and pg_cron registration are pinned the same way (SPEC-005):
+  // neither has user code, so they're config here, not project directories.
+  // The gateway package ships two bins, hence its `-p ... --` form.
   const cli = `npx -y @pgfsm/cli@${toolVersion}`;
   return JSON.stringify(
     {
@@ -82,6 +86,9 @@ function packageJson(name: string, toolVersion: string): string {
       private: true,
       scripts: {
         "fsm:add": `${cli} add`,
+        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} pgcron register`,
+        "gateway":
+          `npx -y -p @pgfsm/async-worker-gateway@${GATEWAY_VERSION} -- async-operation-worker-gateway --ensure-queue-on-register`,
       },
     },
     null,
@@ -138,9 +145,15 @@ same command plus \`--force\` (your stubs are kept):
 npm run fsm:add -- path/to/machine.ts --fsm-name checkout --fsm-version v01 --force
 \`\`\`
 
-## Run the workers
+## Run the stack
+
+Every command below reads \`DATABASE_URL\` from the environment or from a
+\`.env\` in the directory it runs in. Start them in this order, one terminal
+each:
 
 \`\`\`bash
+npm run db:pgcron    # once per database: registers the pg_cron scheduler job
+npm run gateway      # Activity Gateway; async workers connect to it
 cd sync-worker/typescript && deno task dev
 cd async-worker/typescript && deno task start
 cd async-worker/python && uv run run_async_worker.py start

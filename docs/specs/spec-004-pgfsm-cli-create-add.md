@@ -360,7 +360,11 @@ the library API that `@pgfsm/cli` is built on. Its README points newcomers to
 3. **Ship the `@pgfsm/create` shim in v1?** It's a nice-to-have, since
    `npx @pgfsm/cli create` already works.
 4. **`fsmdev` convergence:** should #245 land as `pgfsm dev` inside this package
-   instead of making `@pgfsm/devstack` npx-runnable on its own?
+   instead of making `@pgfsm/devstack` npx-runnable on its own? **Resolved by
+   [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md):** neither.
+   `fsm-devstack-ts` is removed; `pgfsm` stays scaffolding-only, and a generated
+   project pins `db:pgcron` (`@pgfsm/ctl`) and `gateway` npm scripts instead of
+   one orchestrating command.
 
 ## Implementation
 

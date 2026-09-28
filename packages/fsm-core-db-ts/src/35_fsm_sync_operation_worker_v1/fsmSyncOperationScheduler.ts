@@ -41,7 +41,7 @@ export async function scheduleNextPending(
  * scripts under supabase/migrations/) only picks up DDL — cron.schedule()
  * is a data-level side effect (a row insert into cron.job), so it can't be
  * captured there. This is the deploy-time step that performs it instead: run
- * once via `src/cli/pgcron.ts` (in @pgfsm/sync-worker) after applying
+ * once via `pgfsmctl pgcron register` (@pgfsm/ctl) after applying
  * migrations, or whenever the schedule needs to change.
  *
  * Unschedules any pre-existing job with the same name first (cron.schedule()
@@ -72,4 +72,49 @@ export async function registerScheduleAllPendingCronJob(
       schedule: cronSchedule,
     },
   );
+}
+
+/**
+ * Removes the fsm_schedule_all_pending pg_cron job if it exists
+ * (`pgfsmctl pgcron unregister`). Returns whether a job was removed, so
+ * callers can tell "removed" from "wasn't registered" -- both succeed.
+ */
+export async function unregisterScheduleAllPendingCronJob(
+  deps: DBDeps,
+): Promise<boolean> {
+  const res = await deps.db.query<{ removed: boolean }>(
+    `SELECT cron.unschedule(jobname) AS removed
+       FROM cron.job WHERE jobname = $1`,
+    [CRON_JOB_NAME],
+  );
+  const removed = res.rows.some((r) => r.removed);
+  logger.info("unregisterScheduleAllPendingCronJob: {jobName} {outcome}", {
+    jobName: CRON_JOB_NAME,
+    outcome: removed ? "removed" : "was not registered",
+  });
+  return removed;
+}
+
+/** A row of pg_cron's `cron.job` table, as far as pgfsm reports it. */
+export interface ScheduleAllPendingCronJob {
+  jobid: number;
+  jobname: string;
+  schedule: string;
+  command: string;
+  active: boolean;
+}
+
+/**
+ * The registered fsm_schedule_all_pending pg_cron job, or null when none is
+ * registered (`pgfsmctl pgcron status`).
+ */
+export async function getScheduleAllPendingCronJob(
+  deps: DBDeps,
+): Promise<ScheduleAllPendingCronJob | null> {
+  const res = await deps.db.query<ScheduleAllPendingCronJob>(
+    `SELECT jobid::int AS jobid, jobname, schedule, command, active
+       FROM cron.job WHERE jobname = $1`,
+    [CRON_JOB_NAME],
+  );
+  return res.rows[0] ?? null;
 }

@@ -28,7 +28,7 @@ body:
         - Logging (@pgfsm/logging)
         - Proto contracts / multi-language codegen (packages/fsm-proto-codegen)
         - Example FSM definitions (apps/fsm-core-example)
-        - Dev tooling / CLI orchestration (packages/fsm-devstack-ts et al.)
+        - Dev tooling / CLIs (packages/fsm-cli-ts, packages/fsm-ctl-ts)
         - Documentation
         - Other / unsure
     validations:
