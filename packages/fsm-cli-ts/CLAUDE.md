@@ -84,3 +84,9 @@ and set `PGFSM_LOCAL_COMPILER=1` to depend on its local `dist/` instead.
 `src/version.node.ts` is generated per build and gitignored.
 `src/tool-versions.node.ts` (the ctl/gateway pins for generated scripts) is
 generated the same way and gitignored.
+
+Published by `.github/workflows/npm-publish.yml`'s `cli` matrix entry on a
+`cli-v<version>` tag (dnt path, `--copy-readme`). Tag only after the compiler
+release it depends on is on npm (#383): the build maps `@pgfsm/compiler` to
+`^<its deno.json version>`, so against an older published compiler the dnt
+type-check fails and nothing is published.
