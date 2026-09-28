@@ -7,6 +7,10 @@ const packageVersion = Deno.args[0]?.replace(/^v/, "") ?? "0.0.0";
 await build({
   entryPoints: ["./src/index.ts"],
   outDir: "./dist",
+  // Tests stay out of the npm build: dnt would otherwise type-check them
+  // against lib ES2022, and the floating jsr:@std/assert@1 now uses ES2025
+  // Set methods (#400).
+  test: false,
   shims: {
     deno: true,
   },
