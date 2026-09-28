@@ -9,6 +9,7 @@ on:
   push:
     tags:
       - "compiler-v[0-9]*"
+      - "cli-v[0-9]*"
       - "db-v[0-9]*"
       - "sync-worker-v[0-9]*"
       - "async-worker-gateway-v[0-9]*"
@@ -23,6 +24,7 @@ on:
         type: choice
         options:
           - compiler
+          - cli
           - db
           - sync-worker
           - async-worker-gateway
@@ -65,6 +67,12 @@ jobs:
           - id: compiler
             path: packages/fsm-compiler-ts
             tag_prefix: compiler-v
+            dnt: true
+          # bin `pgfsm` (SPEC-004). Depends on a published @pgfsm/compiler with
+          # the create/add library API (#383), mapped from its deno.json version.
+          - id: cli
+            path: packages/fsm-cli-ts
+            tag_prefix: cli-v
             dnt: true
           - id: db
             path: packages/fsm-core-db-ts
