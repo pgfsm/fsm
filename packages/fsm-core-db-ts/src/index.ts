@@ -41,9 +41,12 @@ export type {
 } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationWorkerlet.ts";
 
 export {
+  getScheduleAllPendingCronJob,
   registerScheduleAllPendingCronJob,
   scheduleNextPending,
+  unregisterScheduleAllPendingCronJob,
 } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts";
+export type { ScheduleAllPendingCronJob } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts";
 
 export {
   createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork,

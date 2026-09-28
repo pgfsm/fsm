@@ -1,6 +1,6 @@
 {
-  "name": "@pgfsm/devstack",
-  "version": "0.1.0-alpha.1",
+  "name": "@pgfsm/ctl",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"
@@ -10,16 +10,14 @@
     "@logtape/logtape": "npm:@logtape/logtape@^2.2",
     "@std/assert": "jsr:@std/assert@1",
     "@std/cli": "jsr:@std/cli@1",
-    "@std/path": "jsr:@std/path@1",
     "@types/pg": "npm:@types/pg@^8.18.0",
     "dotenv": "npm:dotenv@^16.5.0",
     "pg": "npm:pg@^8.20.0"
   },
   "tasks": {
-    "fsmdev": "deno run --allow-all src/cli/fsmdev.ts",
-    "test": "deno test --allow-all src/",
-    "test:watch": "deno test --allow-all --watch src/",
-    "check": "deno check src/index.ts src/cli/fsmdev.ts",
+    "pgfsmctl": "deno run --allow-all src/cli/pgfsmctl.ts",
+    "test": "deno test --allow-all test/",
+    "check": "deno check src/index.ts src/cli/pgfsmctl.ts",
     "build:npm": "deno run --allow-all scripts/build-npm.ts"
   }
 }

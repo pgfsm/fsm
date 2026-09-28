@@ -15,6 +15,7 @@ on:
       - "async-worker-gateway-v[0-9]*"
       - "async-worker-sdk-v[0-9]*"
       - "logging-v[0-9]*"
+      - "ctl-v[0-9]*"
   workflow_dispatch:
     inputs:
       package:
@@ -29,6 +30,7 @@ on:
           - async-worker-gateway
           - async-worker-sdk
           - logging
+          - ctl
           - all
 
 jobs:
@@ -94,6 +96,10 @@ jobs:
           - id: logging
             path: packages/fsm-logging-ts
             tag_prefix: logging-v
+            dnt: true
+          - id: ctl
+            path: packages/fsm-ctl-ts
+            tag_prefix: ctl-v
             dnt: true
 
     steps:
