@@ -76,3 +76,9 @@ versions. `@pgfsm/cli` needs a compiler release containing #376/#381/#382's
 compiler changes (tracked by #383). Before that exists, build the compiler first
 and set `PGFSM_LOCAL_COMPILER=1` to depend on its local `dist/` instead.
 `src/version.node.ts` is generated per build and gitignored.
+
+Published by `.github/workflows/npm-publish.yml`'s `cli` matrix entry on a
+`cli-v<version>` tag (dnt path, `--copy-readme`). Tag only after the compiler
+release it depends on is on npm (#383): the build maps `@pgfsm/compiler` to
+`^<its deno.json version>`, so against an older published compiler the dnt
+type-check fails and nothing is published.
