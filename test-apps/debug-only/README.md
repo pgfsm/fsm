@@ -24,9 +24,14 @@ command plus `--force` (your stubs are kept):
 npm run fsm:add -- path/to/machine.ts --fsm-name checkout --fsm-version v01 --force
 ```
 
-## Run the workers
+## Run the stack
+
+Every command below reads `DATABASE_URL` from the environment or from a `.env`
+in the directory it runs in. Start them in this order, one terminal each:
 
 ```bash
+npm run db:pgcron    # once per database: registers the pg_cron scheduler job
+npm run gateway      # Activity Gateway; async workers connect to it
 cd sync-worker/typescript && deno task dev
 cd async-worker/typescript && deno task start
 cd async-worker/python && uv run run_async_worker.py start

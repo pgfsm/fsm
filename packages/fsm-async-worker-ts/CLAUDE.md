@@ -6,9 +6,9 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 ## What it is
 
 The out-of-band worker fleet that drives promise/callback-based async operations
-forward — the equivalent of `packages/fsm-sync-worker-ts/`'s
-fsmlet/fsmscheduler/fsmctl trio, but for `async_operation_*` dispatch tables
-instead of `fsm_dispatch_queue`. Kubernetes-style split:
+forward — the equivalent of the fsmlet (`packages/fsm-sync-worker-ts/`) /
+fsmscheduler / fsmctl (`packages/fsm-ctl-ts/`) trio, but for `async_operation_*`
+dispatch tables instead of `fsm_dispatch_queue`. Kubernetes-style split:
 `async-operation-workerlet` (kubelet — long-running node agent) is routed work
 by `async-operation-scheduler` (kube-scheduler — control plane, run once per
 cluster), driven one-shot by `async-operation-ctl`.

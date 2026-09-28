@@ -12,10 +12,12 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   `fsm_workerlet` table ops for the fsmlet node-agent (dispatch-queue worker
   model)
 - `35_fsm_sync_operation_worker_v1/fsmctl.ts` — FSM instance lifecycle (list,
-  create, get, stop), archive/send events, and dispatch enqueue/resume ops for
-  `fsmscheduler`
+  create, get, stop), archive/send events, and dispatch enqueue/resume ops
+  (behind `pgfsmctl instance …`, `@pgfsm/ctl`)
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts` —
-  dispatch-queue scheduling op (`schedule_next_pending`)
+  dispatch-queue scheduling op (`schedule_next_pending`) and the
+  `fsm_schedule_all_pending` pg_cron job's register/unregister/get helpers
+  (behind `pgfsmctl pgcron …`)
 - `25_async_operation_worker_v1/asyncOperationWorkerCtl.ts` — async-operation
   dispatch-table ops (promise/callback workflows)
 - `25_async_operation_worker_v1/asyncOperationMeta.ts` — `async_operation_meta`

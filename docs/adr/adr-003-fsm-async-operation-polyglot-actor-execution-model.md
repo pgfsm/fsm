@@ -156,7 +156,10 @@ compiled-language actors are dispatched.
 
 ### Connection accounting
 
-- `fsmscheduler` (1 dedicated LISTEN connection, control plane)
+- `fsmscheduler` (1 dedicated LISTEN connection, control plane) — since SPEC-003
+  a fallback only (`pgfsmctl scheduler run`, `@pgfsm/ctl` per SPEC-005); the
+  primary scheduler is a `pg_cron` job inside PostgreSQL, which holds no
+  application connection
 - `asyncOperationScheduler` (1 dedicated LISTEN connection, control plane)
 - Each `fsmlet` (1 pool + 1 dedicated LISTEN connection for
   `fsm_fsmlet_work_<id>`/`fsm_worker_stop`)

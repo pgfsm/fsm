@@ -19,7 +19,7 @@ npx @pgfsm/cli add ../designs/payment/machine.ts -N payment -V v01 --force   # a
 ```
 my-app/
 ├── pgfsm.config.json       # project marker: { name, toolVersion }
-├── package.json            # scripts only (fsm:add, pinned via npx)
+├── package.json            # scripts only, pinned via npx: fsm:add, db:pgcron, gateway
 ├── deno.json               # maps xstate, so machine.ts files compile
 ├── fsm/<name>/<vNN>/       # compiled fsm.json (+ xstate-fsm.json)
 ├── sync-worker/typescript/ # actions, guards, delays — a runnable Deno project
