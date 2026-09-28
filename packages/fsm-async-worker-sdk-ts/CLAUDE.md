@@ -68,7 +68,7 @@ inlined. `test: false` keeps the gateway-backed tests out of dnt's Node test
 run.
 
 The compiler's `worker-sdk-deno-json.eta` pins
-`npm:@pgfsm/async-worker-sdk@^0.1.0`. Bump that pin by hand when this package's
+`npm:@pgfsm/async-worker-sdk@^0.2.0`. Bump that pin by hand when this package's
 API changes in a way `run-async-worker.eta`'s call depends on.
 
 Inside this repo, the committed `apps/async-worker/typescript/deno.json` uses
