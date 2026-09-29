@@ -6,6 +6,7 @@ export * from "./const.ts";
 export * from "./custom.types.ts";
 export * from "./queue.ts";
 export * from "./fsm-helper.ts";
+export * from "./fsm-definition.ts";
 export * from "./fsm-instance-lock.ts";
 
 export type { Json } from "./database.types.ts";

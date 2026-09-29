@@ -8,6 +8,7 @@
   },
   "tasks": {
     "dev": "deno run --watch main.ts",
+    "test": "deno test --allow-all test/",
     "build:npm": "deno run --allow-all scripts/build-npm.ts"
   },
   "imports": {

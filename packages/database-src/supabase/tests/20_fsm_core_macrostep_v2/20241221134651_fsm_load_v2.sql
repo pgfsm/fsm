@@ -1,5 +1,5 @@
 begin;
-select plan(13);
+select plan(17);
 
 select has_function('fsm_core', 'load_fsm_state_from_json_v2', ARRAY['jsonb', 'text', 'text', 'text'],
   'load_fsm_state_from_json_v2(jsonb, text, text, text) exists');
@@ -103,6 +103,48 @@ select lives_ok(
          "invoke":[{"type":"child","id":"childInst","src":"testFsm","fsmType":"fsm","fsmVersion":"v9"}]}'::jsonb,
        NULL, 'invokeTestFsm2', 'v1') $$,
   'an invoke referencing an existing (fsm_name, fsm_version) pair does not raise'
+);
+
+-- load_fsm_from_json_v2 is idempotent per name/version (SPEC-006): identical
+-- content comes back cached without a second fsm_json row; different content
+-- under the same name/version is refused.
+delete from fsm_core.fsm_json where fsm_name = 'loadV2Fsm' and fsm_version = 'v1';
+select results_eq(
+  $$ select (fsm_core.load_fsm_from_json_v2(
+       '{"id":"light","key":"light","type":"compound","order":-1,"states":{
+          "red":{"id":"light.red","key":"red","type":"atomic","order":1,
+            "transitions":[{"source":"#light.red","target":["#light.green"],"eventType":"NEXT","actions":[]}]},
+          "green":{"id":"light.green","key":"green","type":"atomic","order":2,
+            "transitions":[{"source":"#light.green","target":["#light.red"],"eventType":"NEXT","actions":[]}]}
+        }}'::jsonb,
+       NULL, 'loadV2Fsm', 'v1')->>'cached')::boolean $$,
+  $$ values (false) $$,
+  'the first load_fsm_from_json_v2 of a name/version is not cached'
+);
+select results_eq(
+  $$ select (fsm_core.load_fsm_from_json_v2(
+       '{"id":"light","key":"light","type":"compound","order":-1,"states":{
+          "red":{"id":"light.red","key":"red","type":"atomic","order":1,
+            "transitions":[{"source":"#light.red","target":["#light.green"],"eventType":"NEXT","actions":[]}]},
+          "green":{"id":"light.green","key":"green","type":"atomic","order":2,
+            "transitions":[{"source":"#light.green","target":["#light.red"],"eventType":"NEXT","actions":[]}]}
+        }}'::jsonb,
+       NULL, 'loadV2Fsm', 'v1')->>'cached')::boolean $$,
+  $$ values (true) $$,
+  'loading identical content again returns cached'
+);
+select results_eq(
+  $$ select count(*) from fsm_core.fsm_json where fsm_name = 'loadV2Fsm' and fsm_version = 'v1' $$,
+  $$ values (1::bigint) $$,
+  'the repeated load leaves exactly one fsm_json row'
+);
+select throws_ok(
+  $$ select fsm_core.load_fsm_from_json_v2(
+       '{"id":"light","key":"light","type":"atomic","order":-1}'::jsonb,
+       NULL, 'loadV2Fsm', 'v1') $$,
+  'P0001',
+  'FSM loadV2Fsm version v1 already loaded with different JSON content',
+  'loading different content under the same name/version raises'
 );
 
 select * from finish();
