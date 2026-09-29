@@ -47,7 +47,10 @@ export type FsmStartupConfig = {
 export type ActiveWorker = { controller: AbortController };
 
 // Used in: fsmlet.ts, index.ts (direct import)
-export type FsmletOptions = {
+export type FsmletOptions = FsmletBaseOptions & FsmDefinitionCheckOptions;
+
+/** Every fsmlet option except the startup FSM definition check's. */
+export type FsmletBaseOptions = {
   signal?: AbortSignal;
   maxConcurrency?: number;
   asyncOperationVerificationMode?: string; // "none" | "checkReistry" | "checkRegistryAndWorking" default: "checkRegistryAndWorking"
@@ -59,20 +62,31 @@ export type FsmletOptions = {
    * scheduler recognises restarts as the same node.
    */
   fsmletId?: string;
-  /**
-   * The compiler-generated `FSM_DEFINITIONS` (aggregate sync-operation
-   * registry): one digest per served fsm.json. When given, startup also
-   * refuses FSM versions whose loaded definition differs from the one this
-   * worker was compiled from (SPEC-006). Omitted, only "loaded exactly once"
-   * is checked and a warning is logged.
-   */
-  fsmDefinitions?: FsmDefinitionDigest[];
-  /**
-   * Skip the startup FSM definition check entirely (tests, debugging). Logs a
-   * warning when set. Default `false`.
-   */
-  skipFsmDefinitionCheck?: boolean;
 };
+
+/**
+ * The startup FSM definition check (SPEC-006) is mandatory: either pass
+ * `fsmDefinitions`, or opt out explicitly with `skipFsmDefinitionCheck: true`.
+ */
+export type FsmDefinitionCheckOptions =
+  | {
+    /**
+     * The compiler-generated `FSM_DEFINITIONS` (aggregate sync-operation
+     * registry): one digest per served fsm.json. Startup refuses any served
+     * FSM version that isn't loaded exactly once with this content, or that
+     * has no digest here.
+     */
+    fsmDefinitions: FsmDefinitionDigest[];
+    skipFsmDefinitionCheck?: false;
+  }
+  | {
+    fsmDefinitions?: FsmDefinitionDigest[];
+    /**
+     * Skip the startup check entirely: an escape hatch if the check itself
+     * misfires. Logs a warning at every start.
+     */
+    skipFsmDefinitionCheck: true;
+  };
 
 // Used in: fsmlet.ts, index.ts (direct import)
 export type FsmletHandle = {

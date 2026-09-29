@@ -17,7 +17,7 @@ import {
 export type FsmDefinitionProblem = {
   fsm_name: string;
   fsm_version: string;
-  reason: "missing" | "ambiguous" | "drifted";
+  reason: "missing" | "ambiguous" | "drifted" | "undigested";
   detail: string;
 };
 
@@ -40,12 +40,13 @@ export class FsmDefinitionCheckError extends Error {
 
 /**
  * Classifies each served module against the `fsm_core.fsm_json` rows read
- * for it. Drift is only checked for modules that have a compiled digest.
+ * for it and its compiled digest. A served module with no digest is itself a
+ * problem (`undigested`): drift can't be ruled out for it.
  */
 export async function classifyFsmDefinitions(
   modules: FsmModule[],
   rows: FsmJsonRow[],
-  digests?: FsmDefinitionDigest[],
+  digests: FsmDefinitionDigest[],
 ): Promise<FsmDefinitionProblem[]> {
   const problems: FsmDefinitionProblem[] = [];
   for (const m of modules) {
@@ -71,10 +72,17 @@ export async function classifyFsmDefinitions(
       });
       continue;
     }
-    const compiled = digests?.find((d) =>
+    const compiled = digests.find((d) =>
       d.fsmName === m.fsm_name && d.fsmVersion === m.fsm_version
     );
-    if (!compiled) continue;
+    if (!compiled) {
+      problems.push({
+        ...m,
+        reason: "undigested",
+        detail: "no entry in fsmDefinitions; regenerate the sync worker",
+      });
+      continue;
+    }
     const loaded = await fsmJsonDigest(matching[0].fsm_json);
     if (loaded !== compiled.fsmJsonSha256) {
       problems.push({
@@ -97,7 +105,7 @@ export async function classifyFsmDefinitions(
 export async function checkFsmDefinitions(
   deps: DBDeps,
   modules: FsmModule[],
-  digests?: FsmDefinitionDigest[],
+  digests: FsmDefinitionDigest[],
 ): Promise<void> {
   const rows = await getFsmJsonForFsmModules(deps, modules);
   const problems = await classifyFsmDefinitions(modules, rows, digests);

@@ -41,13 +41,18 @@ FSM version it serves is:
 - **missing**: not loaded; run `npx @pgfsm/ctl fsm load fsm` first;
 - **ambiguous**: loaded more than once with different content;
 - **drifted**: loaded with different content than the `fsm.json` this worker was
-  generated from (checked only when `fsmDefinitions` is passed). A loaded
-  version can't be changed: give the edited `fsm.json` a new version.
+  generated from. A loaded version can't be changed: give the edited `fsm.json`
+  a new version;
+- **undigested**: missing from `fsmDefinitions`; regenerate the sync worker.
 
-| Option                   | Default | What it does                                                         |
-| ------------------------ | ------- | -------------------------------------------------------------------- |
-| `fsmDefinitions`         | —       | Compiled `FSM_DEFINITIONS`; enables the drift check (warns if unset) |
-| `skipFsmDefinitionCheck` | `false` | Skip the startup check entirely (tests, debugging); logs a warning   |
+| Option                   | Default  | What it does                                                                                                   |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `fsmDefinitions`         | required | Compiled `FSM_DEFINITIONS`, one digest per served `fsm.json`                                                   |
+| `skipFsmDefinitionCheck` | `false`  | `true` skips the startup check entirely (the only way to omit `fsmDefinitions`); logs a warning at every start |
+
+Upgrading from 0.2: `runFsmlet`/`startFsmlet` now require `fsmDefinitions`. Add
+`FSM_DEFINITIONS` to the import from
+`aggregate-generated-sync-operation-registry.ts` and pass it as above.
 
 Other exports:
 

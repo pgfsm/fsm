@@ -12,7 +12,9 @@ export {
 } from "./fsmlet/fsmworker-helper.ts";
 export type {
   DbConfig,
+  FsmDefinitionCheckOptions,
   FsmFolderConfig,
+  FsmletBaseOptions,
   FsmletHandle,
   FsmletOptions,
   FsmStartupConfig,

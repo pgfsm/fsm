@@ -7,13 +7,22 @@ import {
   FsmDefinitionCheckError,
 } from "../src/fsmlet/fsm-definition-check.ts";
 import { startFsmlet } from "../src/fsmlet/fsmlet.ts";
-import type { SyncOperationRegistration } from "../src/fsmlet/type.ts";
+import type {
+  FsmletOptions,
+  SyncOperationRegistration,
+} from "../src/fsmlet/type.ts";
 
 const mod = (fsm_name: string) => ({ fsm_name, fsm_version: "v1" });
 const row = (fsm_name: string, fsm_json: Json) => ({
   fsm_name,
   fsm_version: "v1",
   fsm_json,
+});
+
+const digest = async (fsmName: string, json: Json) => ({
+  fsmName,
+  fsmVersion: "v1",
+  fsmJsonSha256: await fsmJsonDigest(json),
 });
 
 Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
@@ -27,6 +36,12 @@ Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
       row("sameTwice", { id: "s", x: 1 }),
       row("sameTwice", { x: 1, id: "s" }),
     ],
+    [
+      await digest("ok", { id: "ok" }),
+      await digest("gone", { id: "gone" }),
+      await digest("twice", { id: "a" }),
+      await digest("sameTwice", { x: 1, id: "s" }),
+    ],
   );
   assertEquals(problems.map((p) => [p.fsm_name, p.reason]), [
     ["gone", "missing"],
@@ -34,7 +49,7 @@ Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
   ]);
 });
 
-Deno.test("classifyFsmDefinitions: drift only where a digest is compiled in", async () => {
+Deno.test("classifyFsmDefinitions: drifted, and undigested when no digest is compiled in", async () => {
   const loaded = { id: "m", states: { a: { type: "atomic" } } };
   const compiledSame = await fsmJsonDigest(
     JSON.parse('{ "states": {"a": {"type": "atomic"}}, "id": "m" }'),
@@ -50,7 +65,29 @@ Deno.test("classifyFsmDefinitions: drift only where a digest is compiled in", as
   );
   assertEquals(problems.map((p) => [p.fsm_name, p.reason]), [
     ["other", "drifted"],
+    ["unknown", "undigested"],
   ]);
+});
+
+Deno.test("startFsmlet requires fsmDefinitions before opening a connection", async () => {
+  await assertRejects(
+    () =>
+      startFsmlet(
+        // Unreachable on purpose: the guard must throw before connecting.
+        { connectionString: "postgresql://nobody@127.0.0.1:1/none" },
+        [{
+          fsmName: "m",
+          fsmVersion: "v1",
+          syncOperationType: "action",
+          syncOperationName: "noop",
+          syncOperationLanguage: "typescript",
+          handler: () => undefined,
+        }],
+        {} as FsmletOptions,
+      ),
+    TypeError,
+    "options.fsmDefinitions is required",
+  );
 });
 
 // --- Integration: needs a pgfsm database (DATABASE_URL), e.g. local Supabase.
@@ -84,6 +121,7 @@ Deno.test(
       () =>
         startFsmlet({ connectionString: DATABASE_URL! }, [registration(name)], {
           fsmletId,
+          fsmDefinitions: [],
         }),
       FsmDefinitionCheckError,
     );

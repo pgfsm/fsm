@@ -87,10 +87,10 @@ class Semaphore {
  *
  * On startup:
  *   0. Checks, in one read of fsm_core.fsm_json, that every FSM module it
- *      serves is loaded exactly once and (when `options.fsmDefinitions` is
- *      given) matches the fsm.json it was compiled from; throws before
- *      registering otherwise (SPEC-006). `options.skipFsmDefinitionCheck`
- *      turns this off.
+ *      serves is loaded exactly once and matches the fsm.json it was
+ *      compiled from (`options.fsmDefinitions`, required); throws before
+ *      registering otherwise (SPEC-006). Only an explicit
+ *      `options.skipFsmDefinitionCheck: true` turns this off.
  *   1. Registers itself with every FSM module in `syncOperationRegistrations`
  *      in fsm_workerlet.
  *   2. Opens a dedicated LISTEN connection for two channels:
@@ -109,11 +109,21 @@ class Semaphore {
 export async function startFsmlet(
   dbConfig: DbConfig,
   syncOperationRegistrations: SyncOperationRegistration[],
-  options?: FsmletOptions,
+  options: FsmletOptions,
 ): Promise<FsmletHandle> {
   const signal = options?.signal;
   const maxConcurrency = options?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   const fsmletId = options?.fsmletId ?? crypto.randomUUID();
+
+  // The type requires this; JavaScript callers get told before any
+  // connection is opened (SPEC-006).
+  if (
+    !options?.skipFsmDefinitionCheck && !Array.isArray(options?.fsmDefinitions)
+  ) {
+    throw new TypeError(
+      "startFsmlet/runFsmlet: options.fsmDefinitions is required. Import FSM_DEFINITIONS from the generated aggregate-generated-sync-operation-registry.ts and pass { fsmDefinitions: FSM_DEFINITIONS }.",
+    );
+  }
 
   const activeWorkers = new Map<string, ActiveWorker>();
   logger.info(
@@ -141,17 +151,11 @@ export async function startFsmlet(
       { fsmletId },
     );
   } else {
-    if (!options?.fsmDefinitions) {
-      logger.warn(
-        "Fsmlet {fsmletId}: no fsmDefinitions given, so FSM definition drift isn't checked. Pass FSM_DEFINITIONS from the generated aggregate registry to runFsmlet/startFsmlet to enable it.",
-        { fsmletId },
-      );
-    }
     try {
       await checkFsmDefinitions(
         deps,
         registeredFsmModules,
-        options?.fsmDefinitions,
+        options.fsmDefinitions!,
       );
     } catch (err) {
       await pool.end();
@@ -357,7 +361,7 @@ export async function startFsmlet(
 export async function runFsmlet(
   dbConfig: DbConfig,
   syncOperationRegistrations: SyncOperationRegistration[],
-  options?: FsmletOptions,
+  options: FsmletOptions,
 ): Promise<void> {
   const { pool, daemon } = await startFsmlet(
     dbConfig,

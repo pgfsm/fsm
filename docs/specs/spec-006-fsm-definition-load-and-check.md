@@ -183,18 +183,23 @@ In `startFsmlet`, after the pool connects and **before** `registerFsmlet`:
   - **missing**: no row;
   - **ambiguous**: more than one row with different content (leftovers from the
     race in Problem 3);
-  - **drifted**: the digest differs from the compiled `fsmJsonSha256`.
+  - **drifted**: the digest differs from the compiled `fsmJsonSha256`;
+  - **undigested**: no compiled digest was given for it, so drift can't be ruled
+    out.
 - If anything isn't `ok`, `startFsmlet` throws **one** error that lists every
   failing module with its reason and ends with the fix
   (`run pgfsmctl fsm load <fsm-folder> against this database`). The fsmlet never
   registers in that case, so the scheduler never routes work to it.
-- New `FsmletOptions` fields:
-  - `fsmDefinitions?: FsmDefinitionDigest[]`. When given, the drift check runs.
-    When omitted (projects whose user-owned `run-sync-worker.ts` predates this
-    spec), only the existence and ambiguity checks run, and the fsmlet logs one
-    warning saying drift isn't being checked and how to enable it.
-  - `skipFsmDefinitionCheck?: boolean` (default `false`) skips the whole check,
-    for tests and debugging. When set, the fsmlet logs a warning at startup.
+- New `FsmletOptions` fields (amended in #422, see Implementation):
+  - `fsmDefinitions: FsmDefinitionDigest[]` is **required**, and `options`
+    itself is no longer optional. The type only allows omitting it together with
+    `skipFsmDefinitionCheck: true`, and `startFsmlet` also throws a `TypeError`
+    before connecting when a JavaScript caller leaves it out. There is no
+    existence-only mode: it would let a worker run against a different
+    `fsm.json` than it was built from, the failure this spec exists to stop.
+  - `skipFsmDefinitionCheck: true` skips the whole check: the escape hatch if
+    the check itself misfires (e.g. a canonicalization mismatch). The fsmlet
+    logs a warning at every start while it's set.
 - The check runs once per process start and never per dispatch (see driver 2).
 
 ### D4 — `pgfsmctl fsm load <folder>` (`@pgfsm/ctl` + `@pgfsm/db`)
@@ -273,16 +278,16 @@ because readiness has to aggregate across gateway replicas.
    constraint, following `docs/schema-change-propagation.md`.
 2. `@pgfsm/compiler`: emit `FSM_DEFINITION` / `FSM_DEFINITIONS`; `-c load`
    becomes a deprecated wrapper.
-3. `@pgfsm/sync-worker`: the startup check plus the two new options. Existing
-   callers keep working and get existence checking with a "drift not checked"
-   warning.
+3. `@pgfsm/sync-worker`: the startup check plus the two new options. This is a
+   breaking change (0.2 → 0.3): existing callers must pass `fsmDefinitions` (or
+   opt out explicitly), and are told so at startup.
 4. `@pgfsm/ctl`: `fsm load`.
 5. `@pgfsm/cli`: the `db:load` script, the `run-sync-worker.ts` scaffold passes
    `FSM_DEFINITIONS`, README deploy order. Regenerate `test-apps/debug-only`.
 
 Existing projects add `FSM_DEFINITIONS` to their own `run-sync-worker.ts` by
-hand to get drift checking. The release notes and the fsmlet warning both say
-how.
+hand (an import and one option) before upgrading `@pgfsm/sync-worker`; the
+startup `TypeError` and the release notes both say exactly what to add.
 
 **Rollback**
 
@@ -300,13 +305,16 @@ how.
       `fsm_name`/`fsm_version` and the `pgfsmctl fsm load` fix, and no
       `fsm_workerlet` row is written.
 - [ ] With several failing modules, the single error lists all of them, each
-      with its reason (missing / ambiguous / drifted).
+      with its reason (missing / ambiguous / drifted / undigested).
 - [ ] With `fsmDefinitions` passed and the DB `fsm_json` for a served version
       differing from the compiled `fsm.json`, `startFsmlet` throws a `drifted`
       error. Reordering keys or whitespace in `fsm.json` does **not** trigger
       it.
-- [ ] With `fsmDefinitions` omitted, existence and ambiguity are still checked
-      and exactly one "drift not checked" warning is logged.
+- [ ] `fsmDefinitions` is required: omitting it is a type error unless
+      `skipFsmDefinitionCheck: true`, and at runtime `startFsmlet` throws a
+      `TypeError` naming `FSM_DEFINITIONS` before opening any connection.
+- [ ] A served module with no entry in `fsmDefinitions` is reported
+      `undigested`.
 - [ ] `skipFsmDefinitionCheck: true` skips the check and logs a warning.
 - [ ] The check uses the fsmlet's existing pool and issues exactly one query.
 - [ ] The compiler's generated per-FSM registry exports `FSM_DEFINITION` and the
@@ -347,3 +355,7 @@ Accepted in #418. Implemented in one issue, #421:
   `fsm-definition-check.ts`; compiler `FSM_DEFINITION`/`FSM_DEFINITIONS`;
   `pgfsmctl fsm load`; `@pgfsm/cli` `db:load`.
 - D1: `fsmJsonDigest` is async (`Promise<string>`), since it uses Web Crypto.
+- D3 amended during review of #422: `fsmDefinitions` is required rather than
+  optional-with-a-warning, and a served module without a digest is a new
+  `undigested` problem. `skipFsmDefinitionCheck: true` stays as the only
+  opt-out.
