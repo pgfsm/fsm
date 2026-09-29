@@ -135,16 +135,19 @@ Before `registerFsmlet`, `startFsmlet` calls `checkFsmDefinitions`
 (`src/fsmlet/fsm-definition-check.ts`): one `@pgfsm/db`
 `getFsmJsonForFsmModules` read for every served `{fsm_name, fsm_version}`,
 classified by `classifyFsmDefinitions` as `missing`, `ambiguous` (several rows
-with different content, from loads that raced before the unique constraint) or
+with different content, from loads that raced before the unique constraint),
 `drifted` (the loaded JSONB's `fsmJsonDigest` differs from the compiled
-`FSM_DEFINITIONS` digest). Any problem throws one `FsmDefinitionCheckError`
-listing them all, after ending the pool, so the fsmlet never registers and the
-scheduler never routes work to it.
+`FSM_DEFINITIONS` digest) or `undigested` (no digest given for a served module).
+Any problem throws one `FsmDefinitionCheckError` listing them all, after ending
+the pool, so the fsmlet never registers and the scheduler never routes work to
+it.
 
-- Drift is only checked for modules with a digest in `options.fsmDefinitions`.
-  Callers that don't pass it (projects whose user-owned `run-sync-worker.ts`
-  predates `FSM_DEFINITIONS`) get existence/ambiguity checks plus one warning.
-- `options.skipFsmDefinitionCheck` skips the whole check and logs a warning.
+- `fsmDefinitions` is `startFsmlet`/`runFsmlet`'s required third argument
+  (#422), after the registrations it's checked against. For JavaScript callers,
+  and 0.2-style calls that pass options third, `startFsmlet` also throws a
+  `TypeError` before creating the pool.
+- The check is mandatory: no existence-only mode, no opt-out flag. A false
+  refusal can only be fixed with a release.
 - It runs once per start, never per dispatch: definitions are immutable per
   version, so a passing check stays valid for the process's lifetime.
 - Async actors are deliberately not checked here; see SPEC-008.

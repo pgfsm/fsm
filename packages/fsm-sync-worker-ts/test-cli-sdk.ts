@@ -7,5 +7,5 @@ import { runFsmlet } from "./src/fsmlet/fsmlet.ts";
 await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
-  { fsmDefinitions: FSM_DEFINITIONS },
+  FSM_DEFINITIONS,
 );

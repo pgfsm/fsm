@@ -1,6 +1,10 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Pool } from "pg";
-import { fsmJsonDigest, loadFsmDefinitions } from "@pgfsm/db";
+import {
+  type FsmDefinitionDigest,
+  fsmJsonDigest,
+  loadFsmDefinitions,
+} from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
 import {
   classifyFsmDefinitions,
@@ -16,6 +20,12 @@ const row = (fsm_name: string, fsm_json: Json) => ({
   fsm_json,
 });
 
+const digest = async (fsmName: string, json: Json) => ({
+  fsmName,
+  fsmVersion: "v1",
+  fsmJsonSha256: await fsmJsonDigest(json),
+});
+
 Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
   const problems = await classifyFsmDefinitions(
     [mod("ok"), mod("gone"), mod("twice"), mod("sameTwice")],
@@ -27,6 +37,12 @@ Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
       row("sameTwice", { id: "s", x: 1 }),
       row("sameTwice", { x: 1, id: "s" }),
     ],
+    [
+      await digest("ok", { id: "ok" }),
+      await digest("gone", { id: "gone" }),
+      await digest("twice", { id: "a" }),
+      await digest("sameTwice", { x: 1, id: "s" }),
+    ],
   );
   assertEquals(problems.map((p) => [p.fsm_name, p.reason]), [
     ["gone", "missing"],
@@ -34,7 +50,7 @@ Deno.test("classifyFsmDefinitions: ok, missing and ambiguous", async () => {
   ]);
 });
 
-Deno.test("classifyFsmDefinitions: drift only where a digest is compiled in", async () => {
+Deno.test("classifyFsmDefinitions: drifted, and undigested when no digest is compiled in", async () => {
   const loaded = { id: "m", states: { a: { type: "atomic" } } };
   const compiledSame = await fsmJsonDigest(
     JSON.parse('{ "states": {"a": {"type": "atomic"}}, "id": "m" }'),
@@ -50,7 +66,30 @@ Deno.test("classifyFsmDefinitions: drift only where a digest is compiled in", as
   );
   assertEquals(problems.map((p) => [p.fsm_name, p.reason]), [
     ["other", "drifted"],
+    ["unknown", "undigested"],
   ]);
+});
+
+Deno.test("startFsmlet requires fsmDefinitions before opening a connection", async () => {
+  await assertRejects(
+    () =>
+      startFsmlet(
+        // Unreachable on purpose: the guard must throw before connecting.
+        { connectionString: "postgresql://nobody@127.0.0.1:1/none" },
+        [{
+          fsmName: "m",
+          fsmVersion: "v1",
+          syncOperationType: "action",
+          syncOperationName: "noop",
+          syncOperationLanguage: "typescript",
+          handler: () => undefined,
+        }],
+        // A 0.2-style call: options where fsmDefinitions now goes.
+        {} as unknown as FsmDefinitionDigest[],
+      ),
+    TypeError,
+    "the third argument, fsmDefinitions, is required",
+  );
 });
 
 // --- Integration: needs a pgfsm database (DATABASE_URL), e.g. local Supabase.
@@ -82,9 +121,12 @@ Deno.test(
     const fsmletId = crypto.randomUUID();
     const err = await assertRejects(
       () =>
-        startFsmlet({ connectionString: DATABASE_URL! }, [registration(name)], {
-          fsmletId,
-        }),
+        startFsmlet(
+          { connectionString: DATABASE_URL! },
+          [registration(name)],
+          [],
+          { fsmletId },
+        ),
       FsmDefinitionCheckError,
     );
     assert(err.message.includes(`${name}/v1: missing`));
@@ -122,13 +164,7 @@ Deno.test(
           startFsmlet(
             { connectionString: DATABASE_URL! },
             [registration(name)],
-            {
-              fsmDefinitions: [{
-                fsmName: name,
-                fsmVersion: "v1",
-                fsmJsonSha256,
-              }],
-            },
+            [{ fsmName: name, fsmVersion: "v1", fsmJsonSha256 }],
           ),
         FsmDefinitionCheckError,
         `${name}/v1: drifted`,
@@ -160,14 +196,12 @@ Deno.test(
       const handle = await startFsmlet(
         { connectionString: DATABASE_URL! },
         [registration(name)],
-        {
-          signal: controller.signal,
-          fsmDefinitions: [{
-            fsmName: name,
-            fsmVersion: "v1",
-            fsmJsonSha256: await fsmJsonDigest(machine(name)),
-          }],
-        },
+        [{
+          fsmName: name,
+          fsmVersion: "v1",
+          fsmJsonSha256: await fsmJsonDigest(machine(name)),
+        }],
+        { signal: controller.signal },
       );
       assertEquals(handle.registeredFsmModules, [mod(name)]);
       controller.abort();
