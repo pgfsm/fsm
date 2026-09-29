@@ -369,6 +369,14 @@ DECLARE
     schema_errors TEXT[];
     existing_fsm_json JSONB;
 BEGIN
+    -- Serialize concurrent loads of the same name/version (SPEC-006): without
+    -- it two callers can both miss the existence check below and both insert.
+    -- Two-key form keeps this out of the single-bigint advisory key space.
+    PERFORM pg_advisory_xact_lock(
+        hashtext('fsm_core.load_fsm_from_json_v2'),
+        hashtext(input_fsm_name || '.' || input_fsm_version)
+    );
+
     SELECT fsm_json
     INTO existing_fsm_json
     FROM fsm_core.fsm_json

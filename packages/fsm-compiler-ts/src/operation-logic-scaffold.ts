@@ -187,6 +187,10 @@ type SyncOperationGroup = {
  * it — since it imports from all three. TypeScript only for now, matching
  * `generate-sync-logic`'s own current scope (the CLI rejects every other
  * `OperationLang` for this command).
+ *
+ * Also exports `FSM_DEFINITION`, carrying `fsmJsonSha256` (`@pgfsm/db`'s
+ * `fsmJsonDigest` of the fsm.json these stubs came from), which the fsmlet
+ * compares against the loaded definition at startup (SPEC-006).
  */
 export async function writeSyncOperationRegistry(
   absSyncWorkerLangFolderPath: string,
@@ -196,6 +200,7 @@ export async function writeSyncOperationRegistry(
   actions: string[],
   guards: string[],
   delays: string[],
+  fsmJsonSha256: string,
 ): Promise<string> {
   const groups: SyncOperationGroup[] = [
     {
@@ -223,7 +228,13 @@ export async function writeSyncOperationRegistry(
     `${absSyncWorkerLangFolderPath}/${SYNC_OPERATION_REGISTRY_FILE_NAME}`;
   await writeOwnedFile(
     file,
-    renderTsSyncOperationRegistry({ fsmName, fsmVersion, lang, groups }),
+    renderTsSyncOperationRegistry({
+      fsmName,
+      fsmVersion,
+      lang,
+      groups,
+      fsmJsonSha256,
+    }),
     "generated",
   );
   return file;

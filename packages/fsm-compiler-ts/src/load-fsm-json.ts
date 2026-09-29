@@ -1,86 +1,30 @@
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["@pgfsm/compiler", "load"]);
-import { extractFsmPluginRefs, isVersionFolderName } from "./util.ts";
-import { type DBDeps, loadFsmFromJson } from "@pgfsm/db";
+import { isVersionFolderName } from "./util.ts";
+import {
+  type DBDeps,
+  type FsmDefinition,
+  type LoadFsmDefinitionResult,
+  loadFsmDefinitions,
+} from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
-import type { FsmMachineJson } from "./types/index.ts";
-
-async function loadFsmJSONFromFolder(
-  dirEntryName: string,
-  dirEntryNameVersion: string,
-  _folderPath: string,
-  absFolderPath: string,
-  _parentSource: string,
-  deps: DBDeps,
-) {
-  const fsmJson = `${absFolderPath}/fsm.json`;
-  try {
-    await Deno.stat(fsmJson);
-    // 1. Load fsm.json file
-    const fsmData: FsmMachineJson = JSON.parse(
-      await Deno.readTextFile(fsmJson),
-    );
-
-    // 1.1 get dependent_children by filtering actors where asyncOperationType is "fsm"
-    const allActors = extractFsmPluginRefs(fsmData).actors;
-
-    const dependentChildren = allActors.filter((actor) =>
-      actor.asyncOperationType === "fsm"
-    ).map((actor) => ({
-      fsm_name: actor.src,
-      fsm_version: actor.asyncOperationVersion,
-      fsm_type: actor.asyncOperationType,
-      src: actor.src,
-    }));
-
-    if (dependentChildren.length > 0) {
-      logger.info("Found dependent children for {fsm}: {children}", {
-        fsm: `${dirEntryName}/${dirEntryNameVersion}`,
-        children: dependentChildren,
-      });
-    }
-
-    // 2. Process fsmData and insert into database using helper functions
-    // Call loadFsmStateFromJsonV2 and loadFsmTransitionFromJsonV2 with fsmData
-    const fsmName = dirEntryName;
-    const fsmVersion = dirEntryNameVersion;
-    const fsmResult = await loadFsmFromJson(
-      deps,
-      fsmData,
-      null,
-      fsmName,
-      fsmVersion,
-      dependentChildren,
-    );
-    // logger.info("Successfully loaded FSM from {path}: {result}", {
-    //   path: fsmJson,
-    //   result: fsmResult,
-    // });
-    return fsmResult;
-  } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
-      logger.info("fsm.json is missing in {path}", {
-        path: `${absFolderPath}/${dirEntryName}`,
-      });
-    } else {
-      logger.error("Failed to import or process {path}: {error}", {
-        path: fsmJson,
-        error: err,
-      });
-    }
-  }
-}
 
 /**
- * Loads all FSM JSON files in a folder and processes them.
+ * Loads every `<folderPath>/<fsmName>/<version>/fsm.json` into the database,
+ * as one batch through `@pgfsm/db`'s `loadFsmDefinitions`: validated first,
+ * child FSMs before the parents that invoke them, all in one transaction, and
+ * throwing (nothing loaded) on any failure.
+ *
+ * @deprecated Loading moved to `pgfsmctl fsm load <folder>` (@pgfsm/ctl,
+ * SPEC-006); this and the CLI's `-c load` go away in a later release.
  * @param folderPath Absolute or relative path to the folder containing FSM JSON files
  */
 export async function loadFsmJSONFromFolders(
   folderPath: string,
   skipDirs: string[] = [],
   deps: DBDeps,
-): Promise<Json[]> {
+): Promise<LoadFsmDefinitionResult[]> {
   if (folderPath.startsWith(".")) {
     throw new Error(
       `Invalid folder path: ${folderPath}. Folder paths cannot start with '.'`,
@@ -91,50 +35,51 @@ export async function loadFsmJSONFromFolders(
       `Invalid folder path: ${folderPath}. Folder paths cannot end with '/'`,
     );
   }
-  if (folderPath.startsWith("/")) {
-    logger.info("Importing workflows from absolute path: {path}", {
-      path: folderPath,
-    });
-  } else {
-    logger.info("Importing workflows from relative path: {path} to {cwd}", {
-      path: folderPath,
-      cwd: Deno.cwd(),
-    });
-  }
   const absFolderPath = folderPath.startsWith("/")
     ? folderPath
     : `${Deno.cwd()}/${folderPath}`;
-  const folderResults: Json[] = [];
+  logger.info("Importing workflows from {path}", { path: absFolderPath });
+
+  const definitions: FsmDefinition[] = [];
   for await (const dirEntry of Deno.readDir(absFolderPath)) {
-    if (dirEntry.isDirectory) {
-      if (skipDirs.includes(dirEntry.name)) {
+    if (!dirEntry.isDirectory || skipDirs.includes(dirEntry.name)) continue;
+    const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
+    for await (const subEntry of Deno.readDir(fsmDirPath)) {
+      if (!subEntry.isDirectory) continue;
+      if (!isVersionFolderName(subEntry.name)) {
+        logger.info("Skipping non-versioned folder: {name} in {dir}", {
+          name: subEntry.name,
+          dir: fsmDirPath,
+        });
         continue;
       }
-      const fsmDirPath = `${absFolderPath}/${dirEntry.name}`;
-      for await (const subEntry of Deno.readDir(fsmDirPath)) {
-        if (subEntry.isDirectory) {
-          if (isVersionFolderName(subEntry.name)) {
-            const folderResult = await loadFsmJSONFromFolder(
-              dirEntry.name,
-              subEntry.name,
-              folderPath,
-              `${fsmDirPath}/${subEntry.name}`,
-              dirEntry.name,
-              deps,
-            );
-            folderResults.push(folderResult);
-            logger.info("Successfully loaded FSM from {path}", {
-              path: `${fsmDirPath}/${subEntry.name}`,
-            });
-          } else {
-            logger.info("Skipping non-versioned folder: {name} in {dir}", {
-              name: subEntry.name,
-              dir: fsmDirPath,
-            });
-          }
+      const fsmJsonPath = `${fsmDirPath}/${subEntry.name}/fsm.json`;
+      let text: string;
+      try {
+        text = await Deno.readTextFile(fsmJsonPath);
+      } catch (err) {
+        if (err instanceof Deno.errors.NotFound) {
+          logger.info("fsm.json is missing in {path}", {
+            path: `${fsmDirPath}/${subEntry.name}`,
+          });
+          continue;
         }
+        throw err;
       }
+      definitions.push({
+        fsmName: dirEntry.name,
+        fsmVersion: subEntry.name,
+        fsmJson: JSON.parse(text) as Json,
+      });
     }
   }
-  return folderResults;
+
+  const results = await loadFsmDefinitions(deps, definitions);
+  for (const r of results) {
+    logger.info("{fsm}: {status}", {
+      fsm: `${r.fsmName}/${r.fsmVersion}`,
+      status: r.status,
+    });
+  }
+  return results;
 }

@@ -5,6 +5,7 @@ running pgfsm database (SPEC-005). Commands are `<noun> <verb>`:
 
 | Command                                     | Kind     | Role                                                                                       | Replaces (`@pgfsm/sync-worker` ≤ 0.2) |
 | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `fsm load <folder>`                         | one-shot | Load FSM definitions (`fsm.json`) into the database — a deploy step (SPEC-006)             | `@pgfsm/compiler -c load`             |
 | `pgcron register \| unregister \| status`   | one-shot | Manage the `pg_cron` job that drains the dispatch queue — the primary scheduler (SPEC-003) | `pgcron`                              |
 | `instance create \| resume \| send \| stop` | one-shot | Instance control (kubectl equivalent) against the dispatch-queue model, straight to the DB | `fsmctl -c <command>`                 |
 | `scheduler run`                             | long-run | The standing fsmscheduler process (kube-scheduler equivalent) — **fallback only**          | `fsmscheduler`                        |
@@ -24,7 +25,7 @@ No command needs a pgfsm project (`pgfsm.config.json`) — only a database.
   environment or a `.env` in the directory you run from.
 - **Installed** (Node): `npx @pgfsm/ctl <noun> <verb> [options]` — the package
   has a single bin, so no `-p … --` form is needed. A pgfsm project pins it as
-  `npm run db:pgcron`.
+  `npm run db:load` and `npm run db:pgcron`.
 - **From this repo** (Deno, see `.prototools`): from `packages/fsm-ctl-ts/`,
   `deno task pgfsmctl <noun> <verb> [options]`; or from the repo root,
   `deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts …`.
@@ -33,6 +34,41 @@ Examples below use `pgfsmctl` for whichever of these you use.
 
 `pgfsmctl --version` prints the bare version; `pgfsmctl --help` and
 `pgfsmctl <noun> --help` print usage.
+
+---
+
+## `fsm load` — FSM definitions
+
+```bash
+pgfsmctl fsm load <folder>   # e.g. `fsm` in a pgfsm project
+```
+
+Loads every `<folder>/<fsmName>/<version>/fsm.json` (version folders are `v01`,
+`v02`, …) into `fsm_core.fsm_json` and the state/transition tables, as one batch
+(SPEC-006):
+
+1. **Validated before anything is written.** A child FSM that a definition
+   invokes (`asyncOperationType: "fsm"`) must be in the folder or already
+   loaded, and the batch must have no dependency cycle.
+2. **Children first.** A definition is loaded after every child FSM it invokes,
+   whatever order the folders sort in.
+3. **One transaction.** Any failure rolls back the whole batch; the command
+   prints every problem and exits `1`.
+
+Re-running it is safe: a definition already loaded with identical content is
+reported `unchanged`. A definition is immutable per version, so changed content
+under a loaded version is refused; give the changed `fsm.json` a new version.
+Concurrent runs are serialized per name/version in the database.
+
+Run it on every deploy, after migrations and **before** starting sync workers: a
+worker refuses to start while an FSM version it serves is missing from the
+database, or differs from the `fsm.json` it was compiled from. It replaces
+`@pgfsm/compiler`'s deprecated `-c load`.
+
+| Flag             | Alias | Description                                                         |
+| ---------------- | ----- | ------------------------------------------------------------------- |
+| `--db-url <url>` | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`) |
+| `--help`         | `-h`  | Print help and exit                                                 |
 
 ---
 
@@ -149,7 +185,7 @@ and a running fsmlet to pick the work up.
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                  |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Command completed (or `scheduler run` stopped cleanly)                                                                                   |
-| `1`  | Unknown command/verb, missing or invalid arguments, no database URL, instance not found, `pgcron status` with no job, or a runtime error |
+| Code | Meaning                                                                                                                                                                     |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Command completed (or `scheduler run` stopped cleanly)                                                                                                                      |
+| `1`  | Unknown command/verb, missing or invalid arguments, no database URL, instance not found, `pgcron status` with no job, an `fsm load` that loaded nothing, or a runtime error |

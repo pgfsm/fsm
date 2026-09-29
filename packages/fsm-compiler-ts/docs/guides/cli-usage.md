@@ -423,9 +423,13 @@ deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts \
 
 ---
 
-### `load`
+### `load` (deprecated)
 
-Load `fsm.json` files into the database.
+Load `fsm.json` files into the database. **Deprecated** in favour of
+`pgfsmctl fsm load <folder>` (`@pgfsm/ctl`, SPEC-006), which does the same
+thing; `load` warns and will be removed in a later release. Both load the whole
+folder in one transaction, child FSMs first, and load nothing (non-zero exit) if
+any definition fails.
 
 ```bash
 # Pass connection string directly
@@ -477,7 +481,7 @@ cd ..
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm
 
 # 4. Load into DB once validation passes
-deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c load -f apps/fsm-core-example/fsm --db-url postgresql://user:pass@localhost:5432/db
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts fsm load apps/fsm-core-example/fsm --db-url postgresql://user:pass@localhost:5432/db
 ```
 
 ---

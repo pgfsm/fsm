@@ -6,6 +6,12 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 ## Structure (`src/`)
 
 - `fsm-helper.ts` — load states/transitions from JSON, DB queries
+- `fsm-definition.ts` — FSM definitions as a deploy artifact (SPEC-006):
+  `fsmJsonDigest`/`canonicalizeFsmJson` (RFC 8785 + SHA-256, shared by the
+  compiler and the fsmlet), `getFsmJsonForFsmModules`,
+  `extractFsmDependentChildren`, and `loadFsmDefinitions` (validate, children
+  first, one transaction; behind `pgfsmctl fsm load`). Tests in
+  `test/fsm-definition.test.ts` (`deno task test`; DB tests need `DATABASE_URL`)
 - `fsm-instance-lock.ts` — advisory lock concurrency control
 - `queue.ts` — pgmq-based event queue management
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationWorkerlet.ts` —

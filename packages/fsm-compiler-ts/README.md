@@ -329,7 +329,12 @@ per method.
 npx @pgfsm/compiler -c validate-sync-operation -f fsm
 ```
 
-### `load` — load a compiled `fsm.json` into the database
+### `load` — load a compiled `fsm.json` into the database (deprecated)
+
+> **Deprecated:** use
+> [`pgfsmctl fsm load <folder>`](https://www.npmjs.com/package/@pgfsm/ctl) from
+> `@pgfsm/ctl` instead (SPEC-006). `load` still works for now, with the same
+> behaviour, and prints a warning; it will be removed in a later release.
 
 **Input** — `-f`/`--folder`: plugin-root directory (each version folder's
 `fsm.json` must already exist). `-d`/`--db-url` (or the `DATABASE_URL` env var).
@@ -337,7 +342,9 @@ npx @pgfsm/compiler -c validate-sync-operation -f fsm
 
 **Output/side effect** — inserts each FSM's states/transitions into the
 `fsm_core` PostgreSQL schema, resolving `dependent_children` from any invoke
-actors whose `asyncOperationType` is `"fsm"`. No local files are written.
+actors whose `asyncOperationType` is `"fsm"`, as one transaction with child FSMs
+loaded before their parents. Identical re-loads are no-ops; any failure loads
+nothing and exits non-zero. No local files are written.
 
 ```bash
 npx @pgfsm/compiler -c load -f fsm -d "$DATABASE_URL"
@@ -350,7 +357,7 @@ import {
   generateAsyncOperationLogicFromFolders, // scaffold actor stubs
   generateFsmJSONFromFolders, // generate fsm.json for every FSM under a folder tree
   generateSyncOperationLogicFromFolders, // scaffold action/guard/delay stubs
-  loadFsmJSONFromFolders, // load compiled fsm.json into the database
+  loadFsmJSONFromFolders, // deprecated: load fsm.json into the database (use @pgfsm/db's loadFsmDefinitions)
   validateSyncOperationFromFolders, // check action/guard/delay stubs are implemented
 } from "@pgfsm/compiler";
 

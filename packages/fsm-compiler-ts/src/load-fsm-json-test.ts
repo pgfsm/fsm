@@ -15,22 +15,11 @@ const pool = new Pool({ connectionString: Deno.env.get("DATABASE_URL") });
 
   const deps = {
     db: pool,
+    useSupabase: false,
   };
 
-  // vitalsWorkflow is a reusable sub-workflow invoked by carVitals
-  // (asyncOperationType "fsm"). load_fsm_from_json_v2 requires a referenced
-  // child FSM to already
-  // exist in fsm_core.fsm_states, so it must be loaded first, in its own
-  // pass, before the rest of the folders (which include its invoker).
-  await loadFsmJSONFromFolders(
-    fsmfolderPath,
-    ["carVitals", "creditCheck", "taskMachineConfig"],
-    deps,
-  );
-  await loadFsmJSONFromFolders(
-    fsmfolderPath,
-    ["vitalsWorkflow"],
-    deps,
-  );
+  // One pass: the loader orders vitalsWorkflow (a child FSM that carVitals
+  // invokes) before carVitals itself.
+  await loadFsmJSONFromFolders(fsmfolderPath, [], deps);
   logger.info("All workflows inserted successfully");
 })();

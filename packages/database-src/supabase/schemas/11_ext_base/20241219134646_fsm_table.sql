@@ -5,7 +5,10 @@ CREATE TABLE fsm_core.fsm_json (
     fsm_name TEXT,
     fsm_type TEXT, -- childFSM | FSM
     fsm_version TEXT,
-    fsm_json JSONB
+    fsm_json JSONB,
+    -- One definition per name/version (SPEC-006): backstop for the advisory
+    -- lock load_fsm_from_json_v2 takes, so concurrent loads can't duplicate.
+    CONSTRAINT fsm_json_fsm_name_fsm_version_key UNIQUE (fsm_name, fsm_version)
 );
 
 
