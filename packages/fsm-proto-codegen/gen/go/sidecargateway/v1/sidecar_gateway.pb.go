@@ -37,8 +37,13 @@ type RegisteredActor struct {
 	AsyncOperationLanguage string                 `protobuf:"bytes,6,opt,name=async_operation_language,json=asyncOperationLanguage,proto3" json:"async_operation_language,omitempty"`
 	TimeoutMs              uint32                 `protobuf:"varint,7,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	Description            string                 `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// How many invokes of this actor the registering worker runs at once. The
+	// gateway claims at most (sum over its workers - in-flight) messages per
+	// actor per poll, and routes each invoke to the worker with the most free
+	// slots (SPEC-007). 0 (unset, e.g. an older SDK) means 1.
+	MaxConcurrency uint32 `protobuf:"varint,9,opt,name=max_concurrency,json=maxConcurrency,proto3" json:"max_concurrency,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *RegisteredActor) Reset() {
@@ -125,6 +130,13 @@ func (x *RegisteredActor) GetDescription() string {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *RegisteredActor) GetMaxConcurrency() uint32 {
+	if x != nil {
+		return x.MaxConcurrency
+	}
+	return 0
 }
 
 // First message a worker sends on a new Session stream.
@@ -956,7 +968,7 @@ var File_pgfsm_sidecargateway_v1_sidecar_gateway_proto protoreflect.FileDescript
 
 const file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc = "" +
 	"\n" +
-	"-pgfsm/sidecargateway/v1/sidecar_gateway.proto\x12\x17pgfsm.sidecargateway.v1\"\xfe\x02\n" +
+	"-pgfsm/sidecargateway/v1/sidecar_gateway.proto\x12\x17pgfsm.sidecargateway.v1\"\xa7\x03\n" +
 	"\x0fRegisteredActor\x12&\n" +
 	"\x0fparent_fsm_name\x18\x01 \x01(\tR\rparentFsmName\x12,\n" +
 	"\x12parent_fsm_version\x18\x02 \x01(\tR\x10parentFsmVersion\x120\n" +
@@ -966,7 +978,8 @@ const file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc = "" +
 	"\x18async_operation_language\x18\x06 \x01(\tR\x16asyncOperationLanguage\x12\x1d\n" +
 	"\n" +
 	"timeout_ms\x18\a \x01(\rR\ttimeoutMs\x12 \n" +
-	"\vdescription\x18\b \x01(\tR\vdescription\"\xb0\x01\n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\x12'\n" +
+	"\x0fmax_concurrency\x18\t \x01(\rR\x0emaxConcurrency\"\xb0\x01\n" +
 	"\bRegister\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x12)\n" +
