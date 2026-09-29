@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import type { PoolConfig } from "pg";
 import type { Database, Json } from "@pgfsm/db/database.types";
-import type { FsmModule } from "@pgfsm/db";
+import type { FsmDefinitionDigest, FsmModule } from "@pgfsm/db";
 
 /**
  * The PG-generated Args shape for `fsm_core.archive_event_from_fsm_type_worker_v2`
@@ -59,6 +59,19 @@ export type FsmletOptions = {
    * scheduler recognises restarts as the same node.
    */
   fsmletId?: string;
+  /**
+   * The compiler-generated `FSM_DEFINITIONS` (aggregate sync-operation
+   * registry): one digest per served fsm.json. When given, startup also
+   * refuses FSM versions whose loaded definition differs from the one this
+   * worker was compiled from (SPEC-006). Omitted, only "loaded exactly once"
+   * is checked and a warning is logged.
+   */
+  fsmDefinitions?: FsmDefinitionDigest[];
+  /**
+   * Skip the startup FSM definition check entirely (tests, debugging). Logs a
+   * warning when set. Default `false`.
+   */
+  skipFsmDefinitionCheck?: boolean;
 };
 
 // Used in: fsmlet.ts, index.ts (direct import)

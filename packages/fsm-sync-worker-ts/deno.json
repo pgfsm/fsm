@@ -8,11 +8,13 @@
   "imports": {
     "@deno/dnt": "jsr:@deno/dnt@^0.43.0",
     "@logtape/logtape": "npm:@logtape/logtape@^2.2",
+    "@std/assert": "jsr:@std/assert@1",
     "@types/pg": "npm:@types/pg@^8.18.0",
     "pg": "npm:pg@^8.20.0"
   },
   "tasks": {
     "build:npm": "deno run --allow-all scripts/build-npm.ts",
-    "check": "deno check src/index.ts"
+    "check": "deno check src/index.ts",
+    "test": "deno test --allow-all test/"
   }
 }

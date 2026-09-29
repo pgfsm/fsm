@@ -16,6 +16,7 @@ import {
   registerFsmlet,
 } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
+import { checkFsmDefinitions } from "./fsm-definition-check.ts";
 
 const logger = getLogger(["@pgfsm/fsmlet"]);
 
@@ -81,9 +82,15 @@ class Semaphore {
  * registry verification (assumed unnecessary for now — a project's FSMs and
  * their actors are trusted once compiled), and no per-fsmlet
  * `loadFsmFromJson` call — FSMs must already be loaded into the database by
- * whatever separately ran that step (see fsm-sync-worker-ts #340).
+ * a separate deploy step, `pgfsmctl fsm load` (see fsm-sync-worker-ts #340,
+ * SPEC-006).
  *
  * On startup:
+ *   0. Checks, in one read of fsm_core.fsm_json, that every FSM module it
+ *      serves is loaded exactly once and (when `options.fsmDefinitions` is
+ *      given) matches the fsm.json it was compiled from; throws before
+ *      registering otherwise (SPEC-006). `options.skipFsmDefinitionCheck`
+ *      turns this off.
  *   1. Registers itself with every FSM module in `syncOperationRegistrations`
  *      in fsm_workerlet.
  *   2. Opens a dedicated LISTEN connection for two channels:
@@ -125,6 +132,32 @@ export async function startFsmlet(
   const client = await pool.connect();
   client.release();
   const deps = { db: pool, useSupabase: false };
+
+  // Step 0: every served FSM version must be loaded, once, with the content
+  // this worker was compiled from (SPEC-006).
+  if (options?.skipFsmDefinitionCheck) {
+    logger.warn(
+      "Fsmlet {fsmletId}: skipFsmDefinitionCheck is set; not checking that its FSM definitions are loaded.",
+      { fsmletId },
+    );
+  } else {
+    if (!options?.fsmDefinitions) {
+      logger.warn(
+        "Fsmlet {fsmletId}: no fsmDefinitions given, so FSM definition drift isn't checked. Pass FSM_DEFINITIONS from the generated aggregate registry to runFsmlet/startFsmlet to enable it.",
+        { fsmletId },
+      );
+    }
+    try {
+      await checkFsmDefinitions(
+        deps,
+        registeredFsmModules,
+        options?.fsmDefinitions,
+      );
+    } catch (err) {
+      await pool.end();
+      throw err;
+    }
+  }
 
   // Step 1: Registers itself with every FSM module in fsm_workerlet.
   await registerFsmlet(deps, fsmletId, registeredFsmModules, maxConcurrency);

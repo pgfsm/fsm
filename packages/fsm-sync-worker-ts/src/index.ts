@@ -19,6 +19,13 @@ export type {
   SyncOperationRegistration,
 } from "./fsmlet/type.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
+export {
+  checkFsmDefinitions,
+  classifyFsmDefinitions,
+  FsmDefinitionCheckError,
+} from "./fsmlet/fsm-definition-check.ts";
+export type { FsmDefinitionProblem } from "./fsmlet/fsm-definition-check.ts";
+export type { FsmDefinitionDigest } from "@pgfsm/db";
 export { claimScheduledForFsmlet, fsmletNotifyChannel } from "@pgfsm/db";
 export type { FsmDispatchEntry } from "@pgfsm/db";
 export {
