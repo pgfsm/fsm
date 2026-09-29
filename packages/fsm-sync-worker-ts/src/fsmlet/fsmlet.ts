@@ -7,7 +7,7 @@ import type {
   FsmletOptions,
   SyncOperationRegistration,
 } from "./type.ts";
-import type { FsmModule } from "@pgfsm/db";
+import type { FsmDefinitionDigest, FsmModule } from "@pgfsm/db";
 import {
   claimScheduledForFsmlet,
   deregisterFsmlet,
@@ -88,9 +88,9 @@ class Semaphore {
  * On startup:
  *   0. Checks, in one read of fsm_core.fsm_json, that every FSM module it
  *      serves is loaded exactly once and matches the fsm.json it was
- *      compiled from (`options.fsmDefinitions`, required); throws before
- *      registering otherwise (SPEC-006). Only an explicit
- *      `options.skipFsmDefinitionCheck: true` turns this off.
+ *      compiled from (`fsmDefinitions`, the compiler-generated
+ *      `FSM_DEFINITIONS`); throws before registering otherwise (SPEC-006).
+ *      The check is mandatory: there is no way to turn it off.
  *   1. Registers itself with every FSM module in `syncOperationRegistrations`
  *      in fsm_workerlet.
  *   2. Opens a dedicated LISTEN connection for two channels:
@@ -109,19 +109,18 @@ class Semaphore {
 export async function startFsmlet(
   dbConfig: DbConfig,
   syncOperationRegistrations: SyncOperationRegistration[],
-  options: FsmletOptions,
+  fsmDefinitions: FsmDefinitionDigest[],
+  options?: FsmletOptions,
 ): Promise<FsmletHandle> {
   const signal = options?.signal;
   const maxConcurrency = options?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
   const fsmletId = options?.fsmletId ?? crypto.randomUUID();
 
-  // The type requires this; JavaScript callers get told before any
-  // connection is opened (SPEC-006).
-  if (
-    !options?.skipFsmDefinitionCheck && !Array.isArray(options?.fsmDefinitions)
-  ) {
+  // The type requires this; JavaScript callers (and 0.2-style calls that
+  // pass options third) get told before any connection is opened (SPEC-006).
+  if (!Array.isArray(fsmDefinitions)) {
     throw new TypeError(
-      "startFsmlet/runFsmlet: options.fsmDefinitions is required. Import FSM_DEFINITIONS from the generated aggregate-generated-sync-operation-registry.ts and pass { fsmDefinitions: FSM_DEFINITIONS }.",
+      "startFsmlet/runFsmlet: the third argument, fsmDefinitions, is required. Import FSM_DEFINITIONS from the generated aggregate-generated-sync-operation-registry.ts and call runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, options).",
     );
   }
 
@@ -145,22 +144,11 @@ export async function startFsmlet(
 
   // Step 0: every served FSM version must be loaded, once, with the content
   // this worker was compiled from (SPEC-006).
-  if (options?.skipFsmDefinitionCheck) {
-    logger.warn(
-      "Fsmlet {fsmletId}: skipFsmDefinitionCheck is set; not checking that its FSM definitions are loaded.",
-      { fsmletId },
-    );
-  } else {
-    try {
-      await checkFsmDefinitions(
-        deps,
-        registeredFsmModules,
-        options.fsmDefinitions!,
-      );
-    } catch (err) {
-      await pool.end();
-      throw err;
-    }
+  try {
+    await checkFsmDefinitions(deps, registeredFsmModules, fsmDefinitions);
+  } catch (err) {
+    await pool.end();
+    throw err;
   }
 
   // Step 1: Registers itself with every FSM module in fsm_workerlet.
@@ -361,11 +349,13 @@ export async function startFsmlet(
 export async function runFsmlet(
   dbConfig: DbConfig,
   syncOperationRegistrations: SyncOperationRegistration[],
-  options: FsmletOptions,
+  fsmDefinitions: FsmDefinitionDigest[],
+  options?: FsmletOptions,
 ): Promise<void> {
   const { pool, daemon } = await startFsmlet(
     dbConfig,
     syncOperationRegistrations,
+    fsmDefinitions,
     options,
   );
   await daemon;

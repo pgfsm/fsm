@@ -142,13 +142,12 @@ Any problem throws one `FsmDefinitionCheckError` listing them all, after ending
 the pool, so the fsmlet never registers and the scheduler never routes work to
 it.
 
-- `options` and `options.fsmDefinitions` are required (#422). The type
-  (`FsmDefinitionCheckOptions`, a union) only allows leaving it out with
-  `skipFsmDefinitionCheck: true`; for JavaScript callers `startFsmlet` also
-  throws a `TypeError` before creating the pool. There's deliberately no
-  existence-only mode.
-- `skipFsmDefinitionCheck: true` skips the whole check and logs a warning at
-  every start: the escape hatch if the check itself misfires.
+- `fsmDefinitions` is `startFsmlet`/`runFsmlet`'s required third argument
+  (#422), after the registrations it's checked against. For JavaScript callers,
+  and 0.2-style calls that pass options third, `startFsmlet` also throws a
+  `TypeError` before creating the pool.
+- The check is mandatory: no existence-only mode, no opt-out flag. A false
+  refusal can only be fixed with a release.
 - It runs once per start, never per dispatch: definitions are immutable per
   version, so a passing check stays valid for the process's lifetime.
 - Async actors are deliberately not checked here; see SPEC-008.

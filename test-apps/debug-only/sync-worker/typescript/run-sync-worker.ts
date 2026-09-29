@@ -45,5 +45,6 @@ await runFsmlet(
   SYNC_OPERATION_REGISTRATIONS,
   // Refuses to start unless the database holds exactly these fsm.json
   // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).
-  { signal: controller.signal, fsmDefinitions: FSM_DEFINITIONS },
+  FSM_DEFINITIONS,
+  { signal: controller.signal },
 );

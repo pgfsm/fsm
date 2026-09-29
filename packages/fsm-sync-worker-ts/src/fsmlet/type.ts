@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import type { PoolConfig } from "pg";
 import type { Database, Json } from "@pgfsm/db/database.types";
-import type { FsmDefinitionDigest, FsmModule } from "@pgfsm/db";
+import type { FsmModule } from "@pgfsm/db";
 
 /**
  * The PG-generated Args shape for `fsm_core.archive_event_from_fsm_type_worker_v2`
@@ -47,10 +47,7 @@ export type FsmStartupConfig = {
 export type ActiveWorker = { controller: AbortController };
 
 // Used in: fsmlet.ts, index.ts (direct import)
-export type FsmletOptions = FsmletBaseOptions & FsmDefinitionCheckOptions;
-
-/** Every fsmlet option except the startup FSM definition check's. */
-export type FsmletBaseOptions = {
+export type FsmletOptions = {
   signal?: AbortSignal;
   maxConcurrency?: number;
   asyncOperationVerificationMode?: string; // "none" | "checkReistry" | "checkRegistryAndWorking" default: "checkRegistryAndWorking"
@@ -63,30 +60,6 @@ export type FsmletBaseOptions = {
    */
   fsmletId?: string;
 };
-
-/**
- * The startup FSM definition check (SPEC-006) is mandatory: either pass
- * `fsmDefinitions`, or opt out explicitly with `skipFsmDefinitionCheck: true`.
- */
-export type FsmDefinitionCheckOptions =
-  | {
-    /**
-     * The compiler-generated `FSM_DEFINITIONS` (aggregate sync-operation
-     * registry): one digest per served fsm.json. Startup refuses any served
-     * FSM version that isn't loaded exactly once with this content, or that
-     * has no digest here.
-     */
-    fsmDefinitions: FsmDefinitionDigest[];
-    skipFsmDefinitionCheck?: false;
-  }
-  | {
-    fsmDefinitions?: FsmDefinitionDigest[];
-    /**
-     * Skip the startup check entirely: an escape hatch if the check itself
-     * misfires. Logs a warning at every start.
-     */
-    skipFsmDefinitionCheck: true;
-  };
 
 // Used in: fsmlet.ts, index.ts (direct import)
 export type FsmletHandle = {

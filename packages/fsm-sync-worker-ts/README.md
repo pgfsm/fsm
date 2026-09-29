@@ -28,7 +28,8 @@ import {
 await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
-  { fsmDefinitions: FSM_DEFINITIONS },
+  FSM_DEFINITIONS, // required: see "Startup check" below
+  // optional 4th argument: { signal, maxConcurrency, fsmletId, … }
 );
 ```
 
@@ -45,14 +46,11 @@ FSM version it serves is:
   a new version;
 - **undigested**: missing from `fsmDefinitions`; regenerate the sync worker.
 
-| Option                   | Default  | What it does                                                                                                   |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------- |
-| `fsmDefinitions`         | required | Compiled `FSM_DEFINITIONS`, one digest per served `fsm.json`                                                   |
-| `skipFsmDefinitionCheck` | `false`  | `true` skips the startup check entirely (the only way to omit `fsmDefinitions`); logs a warning at every start |
+The check is mandatory; there's no option to turn it off.
 
-Upgrading from 0.2: `runFsmlet`/`startFsmlet` now require `fsmDefinitions`. Add
-`FSM_DEFINITIONS` to the import from
-`aggregate-generated-sync-operation-registry.ts` and pass it as above.
+Upgrading from 0.2: `runFsmlet`/`startFsmlet` take `fsmDefinitions` as a
+required third argument, before `options`. Add `FSM_DEFINITIONS` to the import
+from `aggregate-generated-sync-operation-registry.ts` and pass it as above.
 
 Other exports:
 

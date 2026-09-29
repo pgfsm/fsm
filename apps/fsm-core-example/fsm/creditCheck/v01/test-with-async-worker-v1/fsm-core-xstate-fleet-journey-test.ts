@@ -154,10 +154,8 @@ async function startFleet(): Promise<Fleet> {
   const fsmletHandle = await startFsmlet(
     dbConfig,
     SYNC_OPERATION_REGISTRATIONS.filter(isJourneyFsm),
-    {
-      signal: controller.signal,
-      fsmDefinitions: FSM_DEFINITIONS.filter(isJourneyFsm),
-    },
+    FSM_DEFINITIONS.filter(isJourneyFsm),
+    { signal: controller.signal },
   );
 
   const asyncOpWorkerletHandle = await startAsyncOperationWorkerlet(

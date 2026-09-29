@@ -62,7 +62,8 @@ That includes `sync-worker/typescript/run-sync-worker.ts`. Projects created
 before `FSM_DEFINITIONS` existed keep a version that doesn't pass it to
 `runFsmlet`, which `@pgfsm/sync-worker` 0.3 requires: the worker refuses to
 start until you import `FSM_DEFINITIONS` next to `SYNC_OPERATION_REGISTRATIONS`
-and pass `fsmDefinitions: FSM_DEFINITIONS` in `runFsmlet`'s options.
+and pass it as `runFsmlet`'s third argument, after
+`SYNC_OPERATION_REGISTRATIONS`.
 
 ## Requirements
 

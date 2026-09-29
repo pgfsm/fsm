@@ -1,16 +1,17 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Pool } from "pg";
-import { fsmJsonDigest, loadFsmDefinitions } from "@pgfsm/db";
+import {
+  type FsmDefinitionDigest,
+  fsmJsonDigest,
+  loadFsmDefinitions,
+} from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
 import {
   classifyFsmDefinitions,
   FsmDefinitionCheckError,
 } from "../src/fsmlet/fsm-definition-check.ts";
 import { startFsmlet } from "../src/fsmlet/fsmlet.ts";
-import type {
-  FsmletOptions,
-  SyncOperationRegistration,
-} from "../src/fsmlet/type.ts";
+import type { SyncOperationRegistration } from "../src/fsmlet/type.ts";
 
 const mod = (fsm_name: string) => ({ fsm_name, fsm_version: "v1" });
 const row = (fsm_name: string, fsm_json: Json) => ({
@@ -83,10 +84,11 @@ Deno.test("startFsmlet requires fsmDefinitions before opening a connection", asy
           syncOperationLanguage: "typescript",
           handler: () => undefined,
         }],
-        {} as FsmletOptions,
+        // A 0.2-style call: options where fsmDefinitions now goes.
+        {} as unknown as FsmDefinitionDigest[],
       ),
     TypeError,
-    "options.fsmDefinitions is required",
+    "the third argument, fsmDefinitions, is required",
   );
 });
 
@@ -119,10 +121,12 @@ Deno.test(
     const fsmletId = crypto.randomUUID();
     const err = await assertRejects(
       () =>
-        startFsmlet({ connectionString: DATABASE_URL! }, [registration(name)], {
-          fsmletId,
-          fsmDefinitions: [],
-        }),
+        startFsmlet(
+          { connectionString: DATABASE_URL! },
+          [registration(name)],
+          [],
+          { fsmletId },
+        ),
       FsmDefinitionCheckError,
     );
     assert(err.message.includes(`${name}/v1: missing`));
@@ -160,13 +164,7 @@ Deno.test(
           startFsmlet(
             { connectionString: DATABASE_URL! },
             [registration(name)],
-            {
-              fsmDefinitions: [{
-                fsmName: name,
-                fsmVersion: "v1",
-                fsmJsonSha256,
-              }],
-            },
+            [{ fsmName: name, fsmVersion: "v1", fsmJsonSha256 }],
           ),
         FsmDefinitionCheckError,
         `${name}/v1: drifted`,
@@ -198,14 +196,12 @@ Deno.test(
       const handle = await startFsmlet(
         { connectionString: DATABASE_URL! },
         [registration(name)],
-        {
-          signal: controller.signal,
-          fsmDefinitions: [{
-            fsmName: name,
-            fsmVersion: "v1",
-            fsmJsonSha256: await fsmJsonDigest(machine(name)),
-          }],
-        },
+        [{
+          fsmName: name,
+          fsmVersion: "v1",
+          fsmJsonSha256: await fsmJsonDigest(machine(name)),
+        }],
+        { signal: controller.signal },
       );
       assertEquals(handle.registeredFsmModules, [mod(name)]);
       controller.abort();
