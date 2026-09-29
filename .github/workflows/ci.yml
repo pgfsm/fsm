@@ -30,14 +30,15 @@ jobs:
         continue-on-error: true
 
       # DB-free unit suites only. The route/db integration tests
-      # (apps/fsm-core-ts-hono-deno/routes, packages/fsm-core-db-ts,
-      # apps/fsm-core-example) need a live Postgres + fsm_core extension and are
-      # excluded until a service container is wired up.
+      # (apps/fsm-core-ts-hono-deno/routes, apps/fsm-core-example) need a live
+      # Postgres + fsm_core extension and are excluded until a service
+      # container is wired up. The fsm-core-db-ts and fsm-sync-worker-ts test/
+      # dirs are included: their DB tests skip themselves without DATABASE_URL.
       # Non-blocking: 8 CLI exit-code tests in
       # packages/fsm-compiler-ts/test/cli.test.ts are currently red — remove
       # `continue-on-error` once they're fixed so tests gate merges again.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
         continue-on-error: true
 
   python-async-worker-sdk:

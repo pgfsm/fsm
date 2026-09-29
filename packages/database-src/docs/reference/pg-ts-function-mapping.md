@@ -36,10 +36,12 @@ TypeScript wrappers live in `packages/fsm-core-db-ts/src/`.
 These TypeScript functions do not wrap a single PostgreSQL function. They either
 execute raw SQL against tables directly or call multiple PG functions.
 
-| TypeScript Function              | TS File           | PostgreSQL Interaction                                   | Notes                              |
-| -------------------------------- | ----------------- | -------------------------------------------------------- | ---------------------------------- |
-| `isFSMInstancePresent(deps, id)` | `fsm-instance.ts` | Raw `SELECT id FROM fsm_core.fsm_instance WHERE id = $1` | Direct table query; no PG function |
-| `getFSMData(deps, id)`           | `fsm-instance.ts` | Raw `SELECT * FROM fsm_core.fsm_instance WHERE id = $1`  | Direct table query; no PG function |
+| TypeScript Function                      | TS File             | PostgreSQL Interaction                                     | Notes                                       |
+| ---------------------------------------- | ------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| `isFSMInstancePresent(deps, id)`         | `fsm-instance.ts`   | Raw `SELECT id FROM fsm_core.fsm_instance WHERE id = $1`   | Direct table query; no PG function          |
+| `getFSMData(deps, id)`                   | `fsm-instance.ts`   | Raw `SELECT * FROM fsm_core.fsm_instance WHERE id = $1`    | Direct table query; no PG function          |
+| `getFsmJsonForFsmModules(deps, modules)` | `fsm-definition.ts` | Raw `SELECT … FROM fsm_core.fsm_json JOIN unnest($1, $2)`  | One read for many name/versions (SPEC-006)  |
+| `loadFsmDefinitions(deps, definitions)`  | `fsm-definition.ts` | `load_fsm_from_json_v2` per definition, in one transaction | Validates, orders children first (SPEC-006) |
 
 ---
 

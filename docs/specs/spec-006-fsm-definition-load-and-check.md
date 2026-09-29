@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                               |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                               |
+| Status  | Accepted                                                                                                                                                                            |
 | Date    | 2026-09-29                                                                                                                                                                          |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                            |
 | Issue   | #417                                                                                                                                                                                |
@@ -334,4 +334,16 @@ how.
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Accepted in #418. Implemented in one issue, #421:
+
+- DB: advisory lock in `load_fsm_from_json_v2`,
+  `UNIQUE (fsm_name,
+  fsm_version)` on `fsm_core.fsm_json` (migration
+  `fsm_core--2.0.7--2.0.8`). The lock uses the two-key
+  `pg_advisory_xact_lock(hashtext(...), hashtext(...))` form rather than the
+  one-key `hashtextextended` form in D4, to stay out of the single-bigint
+  advisory key space.
+- `@pgfsm/db` `fsm-definition.ts`; `@pgfsm/sync-worker`
+  `fsm-definition-check.ts`; compiler `FSM_DEFINITION`/`FSM_DEFINITIONS`;
+  `pgfsmctl fsm load`; `@pgfsm/cli` `db:load`.
+- D1: `fsmJsonDigest` is async (`Promise<string>`), since it uses Web Crypto.

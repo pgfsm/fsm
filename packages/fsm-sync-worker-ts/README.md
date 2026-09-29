@@ -20,13 +20,34 @@ npm install @pgfsm/sync-worker
 
 ```typescript
 import { runFsmlet } from "@pgfsm/sync-worker";
-import { SYNC_OPERATION_REGISTRATIONS } from "./aggregate-generated-sync-operation-registry.ts";
+import {
+  FSM_DEFINITIONS,
+  SYNC_OPERATION_REGISTRATIONS,
+} from "./aggregate-generated-sync-operation-registry.ts";
 
 await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
+  { fsmDefinitions: FSM_DEFINITIONS },
 );
 ```
+
+### Startup check
+
+Before it registers, the fsmlet reads `fsm_core.fsm_json` once and refuses to
+start (throwing `FsmDefinitionCheckError`, which lists every problem) when an
+FSM version it serves is:
+
+- **missing**: not loaded; run `npx @pgfsm/ctl fsm load fsm` first;
+- **ambiguous**: loaded more than once with different content;
+- **drifted**: loaded with different content than the `fsm.json` this worker was
+  generated from (checked only when `fsmDefinitions` is passed). A loaded
+  version can't be changed: give the edited `fsm.json` a new version.
+
+| Option                   | Default | What it does                                                         |
+| ------------------------ | ------- | -------------------------------------------------------------------- |
+| `fsmDefinitions`         | —       | Compiled `FSM_DEFINITIONS`; enables the drift check (warns if unset) |
+| `skipFsmDefinitionCheck` | `false` | Skip the startup check entirely (tests, debugging); logs a warning   |
 
 Other exports:
 
@@ -39,6 +60,7 @@ import {
 } from "@pgfsm/sync-worker";
 
 import type {
+  FsmDefinitionDigest,
   FsmletHandle,
   FsmletOptions,
   SyncOperationRegistration,
@@ -63,8 +85,9 @@ import type {
 
 ## Prerequisites
 
-- **A Postgres database** with the pgfsm schema applied, and the scheduler job
-  registered once (`npx @pgfsm/ctl pgcron register`)
+- **A Postgres database** with the pgfsm schema applied, the scheduler job
+  registered once (`npx @pgfsm/ctl pgcron register`), and the project's FSM
+  definitions loaded (`npx @pgfsm/ctl fsm load fsm`, on every deploy)
 
 ## License
 
