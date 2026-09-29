@@ -95,7 +95,7 @@ COMMANDS
   delete                              Delete generated fsm.json / xstate-fsm.json files (version folders without a machine.ts are kept). {cwd}/sync-worker/ and {cwd}/async-worker/ stub folders are kept unless --include-workers is passed
   validate-sync-operation             Validate sync operation logic (actions/guards/delays) for a plugin-root folder or a single fsm.json (--fsm-name/--fsm-version required for a single fsm.json)
   validate-async-operation            [DEPRECATED] Validate async operation logic (actors) for a sharedAsyncOperation folder — unsupported under the npm/npx build, requires the Deno-native CLI
-  load                                Load FSM JSON into the database
+  load                                [DEPRECATED] Load FSM JSON into the database — use 'pgfsmctl fsm load <folder>' (@pgfsm/ctl) instead
 
 OPTIONS
   -c, --command <command>             Command to run (required)
@@ -551,6 +551,9 @@ try {
         break;
       }
       case "load": {
+        logger.warn(
+          "load is deprecated: use `pgfsmctl fsm load <folder>` from @pgfsm/ctl instead (SPEC-006). It will be removed in a later release.",
+        );
         const deps = await buildDeps(args["db-url"]);
         await loadFsmJSONFromFolders(folder!, skipDirs, deps);
         break;

@@ -1,4 +1,6 @@
 import { getLogger } from "@logtape/logtape";
+import { fsmJsonDigest } from "@pgfsm/db";
+import type { Json } from "@pgfsm/db/database.types";
 import { writeOwnedFile } from "./write-policy.ts";
 import { extractFsmPluginRefs, RAISE_CANCEL } from "./util.ts";
 import {
@@ -100,6 +102,7 @@ async function scaffoldSyncLogicForVersion(
         filteredActions,
         guards,
         delays,
+        await fsmJsonDigest(fsmData as unknown as Json),
       );
       tsFiles.push(registryFile);
       logger.info("Wrote sync operation registry {file}", {
