@@ -208,6 +208,16 @@ Why the others lose on that driver:
    - Per invoke, pick the worker with the most free slots (least in-flight
      relative to `max_concurrency`).
    - Unregister removes only that worker from each set.
+   - **Routing snapshot:** each gateway replica can report, per registered actor
+     key (the 6-field actor identity), its live worker count, Σ
+     `max_concurrency` of those workers, and current in-flight invokes. Worker
+     count and capacity come from `actorRoutes`. In-flight invokes are tracked
+     per worker today (`WorkerState.pendingByInvokeId`), so each pending invoke
+     also records its actor key to be counted per actor. The values follow
+     `Register`/unregister and invoke completion. This is per replica only: how
+     the snapshot is exposed and aggregated across replicas (a status view,
+     alerting, an fsmlet startup warning) is SPEC-008's (#420) decision, not
+     this spec's.
 5. **Capacity-aware claim** (`database-src` + `fsm-core-db-ts`)
    - A new versioned claim function takes, per actor identity, `qty` (the
      aggregate free slots) and `vt_seconds`, and calls
@@ -286,6 +296,10 @@ Why the others lose on that driver:
       processed messages per minute under a saturated queue (≥ 1.8×), with no
       change to other languages' throughput. Verified E2E on a K8s cluster (kind
       is acceptable).
+- [ ] **Routing snapshot:** a gateway replica reports, for each registered actor
+      key, its live worker count, Σ `max_concurrency` and current in-flight
+      invokes, and the values track `Register`/unregister and invoke completion.
+      Covered by a gateway unit test.
 - [ ] **Claim is capacity-bounded:** a gateway never has more in-flight invokes
       for an actor than Σ `max_concurrency` of its connected workers for that
       actor. Verified by test.
