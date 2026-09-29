@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-pgfsm/sidecargateway/v1/sidecar_gateway.proto\x12\x17pgfsm.sidecargateway.v1\"\xfe\x02\n\x0fRegisteredActor\x12&\n\x0fparent_fsm_name\x18\x01 \x01(\tR\rparentFsmName\x12,\n\x12parent_fsm_version\x18\x02 \x01(\tR\x10parentFsmVersion\x12\x30\n\x14\x61sync_operation_type\x18\x03 \x01(\tR\x12\x61syncOperationType\x12\x30\n\x14\x61sync_operation_name\x18\x04 \x01(\tR\x12\x61syncOperationName\x12\x36\n\x17\x61sync_operation_version\x18\x05 \x01(\tR\x15\x61syncOperationVersion\x12\x38\n\x18\x61sync_operation_language\x18\x06 \x01(\tR\x16\x61syncOperationLanguage\x12\x1d\n\ntimeout_ms\x18\x07 \x01(\rR\ttimeoutMs\x12 \n\x0b\x64\x65scription\x18\x08 \x01(\tR\x0b\x64\x65scription\"\xb0\x01\n\x08Register\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\x12\x1a\n\x08language\x18\x02 \x01(\tR\x08language\x12)\n\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12@\n\x06\x61\x63tors\x18\x04 \x03(\x0b\x32(.pgfsm.sidecargateway.v1.RegisteredActorR\x06\x61\x63tors\"\xb9\x01\n\x0bRegisterAck\x12\x1a\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08R\x08\x61\x63\x63\x65pted\x12\x38\n\x18gateway_protocol_version\x18\x02 \x01(\tR\x16gatewayProtocolVersion\x12+\n\x11registered_actors\x18\x03 \x03(\tR\x10registeredActors\x12\'\n\x0frejected_actors\x18\x04 \x03(\tR\x0erejectedActors\"(\n\tHeartbeat\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\x81\x04\n\x06Invoke\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12&\n\x0fparent_fsm_name\x18\x02 \x01(\tR\rparentFsmName\x12,\n\x12parent_fsm_version\x18\x03 \x01(\tR\x10parentFsmVersion\x12\x30\n\x14\x61sync_operation_type\x18\x04 \x01(\tR\x12\x61syncOperationType\x12\x30\n\x14\x61sync_operation_name\x18\x05 \x01(\tR\x12\x61syncOperationName\x12\x36\n\x17\x61sync_operation_version\x18\x06 \x01(\tR\x15\x61syncOperationVersion\x12\x38\n\x18\x61sync_operation_language\x18\x07 \x01(\tR\x16\x61syncOperationLanguage\x12\x1d\n\ninput_json\x18\x08 \x01(\tR\tinputJson\x12\x1f\n\x0binstance_id\x18\t \x01(\tR\ninstanceId\x12%\n\x0e\x63orrelation_id\x18\n \x01(\tR\rcorrelationId\x12\x1d\n\ntimeout_ms\x18\x0b \x01(\rR\ttimeoutMs\x12(\n\x10\x64\x65\x61\x64line_unix_ms\x18\x0c \x01(\x03R\x0e\x64\x65\x61\x64lineUnixMs\"m\n\x0cInvokeResult\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12\x1f\n\x0boutput_json\x18\x02 \x01(\tR\noutputJson\x12\x1f\n\x0b\x64uration_ms\x18\x03 \x01(\rR\ndurationMs\"_\n\x11InvokeErrorDetail\x12\x12\n\x04\x63ode\x18\x01 \x01(\tR\x04\x63ode\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message\x12\x1c\n\tretriable\x18\x03 \x01(\x08R\tretriable\"\x8d\x01\n\x0bInvokeError\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12@\n\x05\x65rror\x18\x02 \x01(\x0b\x32*.pgfsm.sidecargateway.v1.InvokeErrorDetailR\x05\x65rror\x12\x1f\n\x0b\x64uration_ms\x18\x03 \x01(\rR\ndurationMs\"%\n\x06\x43\x61ncel\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\")\n\nUnregister\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\x80\x03\n\x0eSessionRequest\x12?\n\x08register\x18\x01 \x01(\x0b\x32!.pgfsm.sidecargateway.v1.RegisterH\x00R\x08register\x12\x42\n\theartbeat\x18\x02 \x01(\x0b\x32\".pgfsm.sidecargateway.v1.HeartbeatH\x00R\theartbeat\x12L\n\rinvoke_result\x18\x03 \x01(\x0b\x32%.pgfsm.sidecargateway.v1.InvokeResultH\x00R\x0cinvokeResult\x12I\n\x0cinvoke_error\x18\x04 \x01(\x0b\x32$.pgfsm.sidecargateway.v1.InvokeErrorH\x00R\x0binvokeError\x12\x45\n\nunregister\x18\x05 \x01(\x0b\x32#.pgfsm.sidecargateway.v1.UnregisterH\x00R\nunregisterB\t\n\x07payload\"\xdd\x01\n\x0fSessionResponse\x12I\n\x0cregister_ack\x18\x01 \x01(\x0b\x32$.pgfsm.sidecargateway.v1.RegisterAckH\x00R\x0bregisterAck\x12\x39\n\x06invoke\x18\x02 \x01(\x0b\x32\x1f.pgfsm.sidecargateway.v1.InvokeH\x00R\x06invoke\x12\x39\n\x06\x63\x61ncel\x18\x03 \x01(\x0b\x32\x1f.pgfsm.sidecargateway.v1.CancelH\x00R\x06\x63\x61ncelB\t\n\x07payload2y\n\x15SidecarGatewayService\x12`\n\x07Session\x12\'.pgfsm.sidecargateway.v1.SessionRequest\x1a(.pgfsm.sidecargateway.v1.SessionResponse(\x01\x30\x01\x42\xfa\x01\n\x1b\x63om.pgfsm.sidecargateway.v1B\x13SidecarGatewayProtoP\x01ZHgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1\xa2\x02\x03PSX\xaa\x02\x17Pgfsm.Sidecargateway.V1\xca\x02\x17Pgfsm\\Sidecargateway\\V1\xe2\x02#Pgfsm\\Sidecargateway\\V1\\GPBMetadata\xea\x02\x19Pgfsm::Sidecargateway::V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-pgfsm/sidecargateway/v1/sidecar_gateway.proto\x12\x17pgfsm.sidecargateway.v1\"\xa7\x03\n\x0fRegisteredActor\x12&\n\x0fparent_fsm_name\x18\x01 \x01(\tR\rparentFsmName\x12,\n\x12parent_fsm_version\x18\x02 \x01(\tR\x10parentFsmVersion\x12\x30\n\x14\x61sync_operation_type\x18\x03 \x01(\tR\x12\x61syncOperationType\x12\x30\n\x14\x61sync_operation_name\x18\x04 \x01(\tR\x12\x61syncOperationName\x12\x36\n\x17\x61sync_operation_version\x18\x05 \x01(\tR\x15\x61syncOperationVersion\x12\x38\n\x18\x61sync_operation_language\x18\x06 \x01(\tR\x16\x61syncOperationLanguage\x12\x1d\n\ntimeout_ms\x18\x07 \x01(\rR\ttimeoutMs\x12 \n\x0b\x64\x65scription\x18\x08 \x01(\tR\x0b\x64\x65scription\x12\'\n\x0fmax_concurrency\x18\t \x01(\rR\x0emaxConcurrency\"\xb0\x01\n\x08Register\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\x12\x1a\n\x08language\x18\x02 \x01(\tR\x08language\x12)\n\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12@\n\x06\x61\x63tors\x18\x04 \x03(\x0b\x32(.pgfsm.sidecargateway.v1.RegisteredActorR\x06\x61\x63tors\"\xb9\x01\n\x0bRegisterAck\x12\x1a\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08R\x08\x61\x63\x63\x65pted\x12\x38\n\x18gateway_protocol_version\x18\x02 \x01(\tR\x16gatewayProtocolVersion\x12+\n\x11registered_actors\x18\x03 \x03(\tR\x10registeredActors\x12\'\n\x0frejected_actors\x18\x04 \x03(\tR\x0erejectedActors\"(\n\tHeartbeat\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\x81\x04\n\x06Invoke\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12&\n\x0fparent_fsm_name\x18\x02 \x01(\tR\rparentFsmName\x12,\n\x12parent_fsm_version\x18\x03 \x01(\tR\x10parentFsmVersion\x12\x30\n\x14\x61sync_operation_type\x18\x04 \x01(\tR\x12\x61syncOperationType\x12\x30\n\x14\x61sync_operation_name\x18\x05 \x01(\tR\x12\x61syncOperationName\x12\x36\n\x17\x61sync_operation_version\x18\x06 \x01(\tR\x15\x61syncOperationVersion\x12\x38\n\x18\x61sync_operation_language\x18\x07 \x01(\tR\x16\x61syncOperationLanguage\x12\x1d\n\ninput_json\x18\x08 \x01(\tR\tinputJson\x12\x1f\n\x0binstance_id\x18\t \x01(\tR\ninstanceId\x12%\n\x0e\x63orrelation_id\x18\n \x01(\tR\rcorrelationId\x12\x1d\n\ntimeout_ms\x18\x0b \x01(\rR\ttimeoutMs\x12(\n\x10\x64\x65\x61\x64line_unix_ms\x18\x0c \x01(\x03R\x0e\x64\x65\x61\x64lineUnixMs\"m\n\x0cInvokeResult\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12\x1f\n\x0boutput_json\x18\x02 \x01(\tR\noutputJson\x12\x1f\n\x0b\x64uration_ms\x18\x03 \x01(\rR\ndurationMs\"_\n\x11InvokeErrorDetail\x12\x12\n\x04\x63ode\x18\x01 \x01(\tR\x04\x63ode\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message\x12\x1c\n\tretriable\x18\x03 \x01(\x08R\tretriable\"\x8d\x01\n\x0bInvokeError\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\x12@\n\x05\x65rror\x18\x02 \x01(\x0b\x32*.pgfsm.sidecargateway.v1.InvokeErrorDetailR\x05\x65rror\x12\x1f\n\x0b\x64uration_ms\x18\x03 \x01(\rR\ndurationMs\"%\n\x06\x43\x61ncel\x12\x1b\n\tinvoke_id\x18\x01 \x01(\tR\x08invokeId\")\n\nUnregister\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\x80\x03\n\x0eSessionRequest\x12?\n\x08register\x18\x01 \x01(\x0b\x32!.pgfsm.sidecargateway.v1.RegisterH\x00R\x08register\x12\x42\n\theartbeat\x18\x02 \x01(\x0b\x32\".pgfsm.sidecargateway.v1.HeartbeatH\x00R\theartbeat\x12L\n\rinvoke_result\x18\x03 \x01(\x0b\x32%.pgfsm.sidecargateway.v1.InvokeResultH\x00R\x0cinvokeResult\x12I\n\x0cinvoke_error\x18\x04 \x01(\x0b\x32$.pgfsm.sidecargateway.v1.InvokeErrorH\x00R\x0binvokeError\x12\x45\n\nunregister\x18\x05 \x01(\x0b\x32#.pgfsm.sidecargateway.v1.UnregisterH\x00R\nunregisterB\t\n\x07payload\"\xdd\x01\n\x0fSessionResponse\x12I\n\x0cregister_ack\x18\x01 \x01(\x0b\x32$.pgfsm.sidecargateway.v1.RegisterAckH\x00R\x0bregisterAck\x12\x39\n\x06invoke\x18\x02 \x01(\x0b\x32\x1f.pgfsm.sidecargateway.v1.InvokeH\x00R\x06invoke\x12\x39\n\x06\x63\x61ncel\x18\x03 \x01(\x0b\x32\x1f.pgfsm.sidecargateway.v1.CancelH\x00R\x06\x63\x61ncelB\t\n\x07payload2y\n\x15SidecarGatewayService\x12`\n\x07Session\x12\'.pgfsm.sidecargateway.v1.SessionRequest\x1a(.pgfsm.sidecargateway.v1.SessionResponse(\x01\x30\x01\x42\xfa\x01\n\x1b\x63om.pgfsm.sidecargateway.v1B\x13SidecarGatewayProtoP\x01ZHgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1\xa2\x02\x03PSX\xaa\x02\x17Pgfsm.Sidecargateway.V1\xca\x02\x17Pgfsm\\Sidecargateway\\V1\xe2\x02#Pgfsm\\Sidecargateway\\V1\\GPBMetadata\xea\x02\x19Pgfsm::Sidecargateway::V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,29 +33,29 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\033com.pgfsm.sidecargateway.v1B\023SidecarGatewayProtoP\001ZHgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1\242\002\003PSX\252\002\027Pgfsm.Sidecargateway.V1\312\002\027Pgfsm\\Sidecargateway\\V1\342\002#Pgfsm\\Sidecargateway\\V1\\GPBMetadata\352\002\031Pgfsm::Sidecargateway::V1'
   _globals['_REGISTEREDACTOR']._serialized_start=75
-  _globals['_REGISTEREDACTOR']._serialized_end=457
-  _globals['_REGISTER']._serialized_start=460
-  _globals['_REGISTER']._serialized_end=636
-  _globals['_REGISTERACK']._serialized_start=639
-  _globals['_REGISTERACK']._serialized_end=824
-  _globals['_HEARTBEAT']._serialized_start=826
-  _globals['_HEARTBEAT']._serialized_end=866
-  _globals['_INVOKE']._serialized_start=869
-  _globals['_INVOKE']._serialized_end=1382
-  _globals['_INVOKERESULT']._serialized_start=1384
-  _globals['_INVOKERESULT']._serialized_end=1493
-  _globals['_INVOKEERRORDETAIL']._serialized_start=1495
-  _globals['_INVOKEERRORDETAIL']._serialized_end=1590
-  _globals['_INVOKEERROR']._serialized_start=1593
-  _globals['_INVOKEERROR']._serialized_end=1734
-  _globals['_CANCEL']._serialized_start=1736
-  _globals['_CANCEL']._serialized_end=1773
-  _globals['_UNREGISTER']._serialized_start=1775
-  _globals['_UNREGISTER']._serialized_end=1816
-  _globals['_SESSIONREQUEST']._serialized_start=1819
-  _globals['_SESSIONREQUEST']._serialized_end=2203
-  _globals['_SESSIONRESPONSE']._serialized_start=2206
-  _globals['_SESSIONRESPONSE']._serialized_end=2427
-  _globals['_SIDECARGATEWAYSERVICE']._serialized_start=2429
-  _globals['_SIDECARGATEWAYSERVICE']._serialized_end=2550
+  _globals['_REGISTEREDACTOR']._serialized_end=498
+  _globals['_REGISTER']._serialized_start=501
+  _globals['_REGISTER']._serialized_end=677
+  _globals['_REGISTERACK']._serialized_start=680
+  _globals['_REGISTERACK']._serialized_end=865
+  _globals['_HEARTBEAT']._serialized_start=867
+  _globals['_HEARTBEAT']._serialized_end=907
+  _globals['_INVOKE']._serialized_start=910
+  _globals['_INVOKE']._serialized_end=1423
+  _globals['_INVOKERESULT']._serialized_start=1425
+  _globals['_INVOKERESULT']._serialized_end=1534
+  _globals['_INVOKEERRORDETAIL']._serialized_start=1536
+  _globals['_INVOKEERRORDETAIL']._serialized_end=1631
+  _globals['_INVOKEERROR']._serialized_start=1634
+  _globals['_INVOKEERROR']._serialized_end=1775
+  _globals['_CANCEL']._serialized_start=1777
+  _globals['_CANCEL']._serialized_end=1814
+  _globals['_UNREGISTER']._serialized_start=1816
+  _globals['_UNREGISTER']._serialized_end=1857
+  _globals['_SESSIONREQUEST']._serialized_start=1860
+  _globals['_SESSIONREQUEST']._serialized_end=2244
+  _globals['_SESSIONRESPONSE']._serialized_start=2247
+  _globals['_SESSIONRESPONSE']._serialized_end=2468
+  _globals['_SIDECARGATEWAYSERVICE']._serialized_start=2470
+  _globals['_SIDECARGATEWAYSERVICE']._serialized_end=2591
 # @@protoc_insertion_point(module_scope)

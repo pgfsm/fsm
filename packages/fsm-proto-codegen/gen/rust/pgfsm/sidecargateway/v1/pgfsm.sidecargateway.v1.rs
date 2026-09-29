@@ -24,6 +24,12 @@ pub struct RegisteredActor {
     pub timeout_ms: u32,
     #[prost(string, tag = "8")]
     pub description: ::prost::alloc::string::String,
+    /// How many invokes of this actor the registering worker runs at once. The
+    /// gateway claims at most (sum over its workers - in-flight) messages per
+    /// actor per poll, and routes each invoke to the worker with the most free
+    /// slots (SPEC-007). 0 (unset, e.g. an older SDK) means 1.
+    #[prost(uint32, tag = "9")]
+    pub max_concurrency: u32,
 }
 /// First message a worker sends on a new Session stream.
 #[derive(Clone, PartialEq, ::prost::Message)]

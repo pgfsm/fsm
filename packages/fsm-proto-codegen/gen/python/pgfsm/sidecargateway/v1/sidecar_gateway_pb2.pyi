@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class RegisteredActor(_message.Message):
-    __slots__ = ("parent_fsm_name", "parent_fsm_version", "async_operation_type", "async_operation_name", "async_operation_version", "async_operation_language", "timeout_ms", "description")
+    __slots__ = ("parent_fsm_name", "parent_fsm_version", "async_operation_type", "async_operation_name", "async_operation_version", "async_operation_language", "timeout_ms", "description", "max_concurrency")
     PARENT_FSM_NAME_FIELD_NUMBER: _ClassVar[int]
     PARENT_FSM_VERSION_FIELD_NUMBER: _ClassVar[int]
     ASYNC_OPERATION_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -16,6 +16,7 @@ class RegisteredActor(_message.Message):
     ASYNC_OPERATION_LANGUAGE_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_MS_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    MAX_CONCURRENCY_FIELD_NUMBER: _ClassVar[int]
     parent_fsm_name: str
     parent_fsm_version: str
     async_operation_type: str
@@ -24,7 +25,8 @@ class RegisteredActor(_message.Message):
     async_operation_language: str
     timeout_ms: int
     description: str
-    def __init__(self, parent_fsm_name: _Optional[str] = ..., parent_fsm_version: _Optional[str] = ..., async_operation_type: _Optional[str] = ..., async_operation_name: _Optional[str] = ..., async_operation_version: _Optional[str] = ..., async_operation_language: _Optional[str] = ..., timeout_ms: _Optional[int] = ..., description: _Optional[str] = ...) -> None: ...
+    max_concurrency: int
+    def __init__(self, parent_fsm_name: _Optional[str] = ..., parent_fsm_version: _Optional[str] = ..., async_operation_type: _Optional[str] = ..., async_operation_name: _Optional[str] = ..., async_operation_version: _Optional[str] = ..., async_operation_language: _Optional[str] = ..., timeout_ms: _Optional[int] = ..., description: _Optional[str] = ..., max_concurrency: _Optional[int] = ...) -> None: ...
 
 class Register(_message.Message):
     __slots__ = ("worker_id", "language", "protocol_version", "actors")
