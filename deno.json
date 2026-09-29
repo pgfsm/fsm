@@ -12,8 +12,8 @@
     "packages/fsm-proto-codegen",
     "packages/fsm-proto-codegen/gen/typescript",
     "packages/database-src",
-    "packages/fsm-devstack-ts",
-    "packages/fsm-cli-ts"
+    "packages/fsm-cli-ts",
+    "packages/fsm-ctl-ts"
   ],
   "fmt": {
     "exclude": [

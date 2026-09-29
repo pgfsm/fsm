@@ -311,6 +311,15 @@ queue). No changes needed there.
 
 ## Stage 3 — Kubernetes-Style Scheduler Model (Current)
 
+> **Where the commands live now
+> ([SPEC-005](../specs/spec-005-cli-consolidation-pgfsmctl.md)):** `fsmctl` is
+> `pgfsmctl instance create|resume|send|stop` and the `fsmscheduler` process is
+> `pgfsmctl scheduler run` (a fallback — the `fsm_schedule_all_pending` pg_cron
+> job, registered with `pgfsmctl pgcron register`, is the primary scheduler per
+> [SPEC-003](../specs/spec-003-pgcron-fsm-scheduler.md)), both in `@pgfsm/ctl`
+> (`packages/fsm-ctl-ts/`). `@pgfsm/sync-worker` is library-only (`fsmlet`). The
+> file paths below are as of this ADR.
+
 > This section covers the **orchestrator tier** (FSM instances: `fsmscheduler` +
 > `fsmlet`). The same scheduler/kubelet pattern is applied a second time to the
 > **activity tier** (actors: `asyncOperationScheduler` +

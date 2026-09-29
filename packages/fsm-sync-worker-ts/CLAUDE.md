@@ -5,37 +5,35 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 
 ## What it is
 
-The out-of-band worker fleet that drives FSM instances forward (see root
-`CLAUDE.md` point 3 — the API never owns worker lifecycle). Kubernetes-style
-split: `fsmlet` (kubelet — long-running node agent) is routed work by
-`fsmscheduler` (kube-scheduler — control plane, run once per cluster), driven
-one-shot by `fsmctl`. `pgcron` is a one-shot deploy-time script that
-(re)registers the `pg_cron` job driving `fsm_core.schedule_all_pending()` on a
-timer (see spec-003-pgcron-fsm-scheduler.md) — needed because that job
-registration is a data-level side effect migra's schema diff can't capture into
-a migration script.
+The `fsmlet` runtime library: the out-of-band worker that drives FSM instances
+forward (see root `CLAUDE.md` point 3 — the API never owns worker lifecycle).
+Kubernetes-style split: `fsmlet` (kubelet — long-running node agent) is assigned
+dispatch entries by the scheduler — the `pg_cron` job (SPEC-003), with
+`pgfsmctl scheduler run` as a fallback — and instances are driven one-shot by
+`pgfsmctl instance …` or the HTTP API.
 
-The equivalent trio for promise/callback-based async operations
-(`async-operation-workerlet`, `async-operation-scheduler`,
-`async-operation-ctl`) lives in the sibling package
-`packages/fsm-async-worker-ts/` — see its `CLAUDE.md`.
+**Library only (SPEC-005).** The `fsmctl`, `pgcron` and `fsmscheduler` bins, the
+`src/fsmscheduler/` loop (`runFsmScheduler` and friends) and
+`docs/guides/CLI-USAGE.md` moved to `@pgfsm/ctl` (`packages/fsm-ctl-ts/`, bin
+`pgfsmctl`). Don't add CLI bins back here: ops commands that act on the database
+belong in `@pgfsm/ctl`, and project scaffolding in `@pgfsm/cli`. A pgfsm project
+runs this library through its generated
+`sync-worker/typescript/run-sync-worker.ts`.
 
-Full CLI reference (flags, defaults, examples) lives in
-`docs/guides/CLI-USAGE.md` — read it before invoking any of these directly.
+The equivalent for promise/callback-based async operations is the Activity
+Gateway (`packages/fsm-async-worker-gateway-ts/`); the deprecated v1 trio lives
+in `packages/fsm-async-worker-ts/` — see their `CLAUDE.md` files.
 
 ## Commands
 
 ```bash
-deno task fsmscheduler # control-plane router (run once per cluster)
-deno task cli          # fsmctl — one-shot create/resume/send/stop
-deno task pgcron       # one-shot: (re)register the pg_cron drain job
 deno task check        # deno check src/index.ts
 deno task build:npm    # scripts/build-npm.ts (dnt npm build)
 ```
 
-`fsmlet` has no CLI/task for now (removed — see its own section below);
-`runFsmlet`/`startFsmlet` (`src/fsmlet/fsmlet.ts`) are still there to embed
-directly.
+`fsmlet` has no CLI/task (see its own section below): `runFsmlet`/`startFsmlet`
+(`src/fsmlet/fsmlet.ts`) are embedded directly. `test-cli-sdk.ts` at the package
+root runs one against `test-apps/debug-only`'s registry for debugging.
 
 Deno version is managed by `.prototools`: `proto install deno --pin local`.
 `README.md` is the npm/npx-consumer-facing document (published to `dist/` — see
@@ -44,28 +42,15 @@ below); keep source-only detail here instead of there.
 ## npm publish (`deno task build:npm`)
 
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, not `deno pack`
-(used for this repo's other npm-published packages) — see
-`packages/fsm-compiler-ts/CLAUDE.md`'s "npm publish" section for why dnt is
-required to ship CLI `bin` entries. Registers the library export alongside three
-shebanged bins (`fsmscheduler`, `fsmctl`, `pgcron`) in one pass — `fsmlet` is
-not among them for now (see its own section below).
+(used for this repo's other npm-published packages). It's library-only now (one
+entry point, `src/index.ts`, no bins), but stays on dnt to map `@pgfsm/db` and
+`@pgfsm/logging` to real npm dependencies and declare `@types/pg`.
 `.github/workflows/npm-publish.yml` builds this package's `sync-worker` matrix
 entry through the dnt path.
 
 `postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
 local `deno task build:npm` skips it.
-
-**Multi-bin `npx` gotcha**: because this package registers three bins and none
-of them is named `sync-worker` (the derived executable name from the package
-name), a plain `npx @pgfsm/sync-worker fsmscheduler ...` does **not** work — npm
-can't determine which bin to run and errors
-`could not determine
-executable to run` (verified empirically against a scratch
-multi-bin package). The correct form is
-`npx -p @pgfsm/sync-worker -- fsmscheduler ...` (or a real install, after which
-each bin is callable directly) — see `README.md`'s Install section, which
-documents this.
 
 **Previously known issue, now resolved**: `deno task build:npm` used to fail its
 type-check pass with `TS2345` errors in `src/fsmlet/fsmlet.ts` around
@@ -77,11 +62,10 @@ where to look first.
 
 ## Structure (`src/`)
 
-- `cli/` — three CLI entry points (`fsmscheduler.ts`, `fsmctl.ts`, `pgcron.ts`)
-- `fsmlet/` — node-agent implementation for FSM workers (no CLI entry point for
-  now — see its own section below)
-- `fsmscheduler/` — control-plane routing implementation
-- `logger.ts` — composition-root LogTape config for this process
+- `fsmlet/` — node-agent implementation for FSM workers (no CLI entry point —
+  see its own section below)
+- `logger.ts` — composition-root LogTape config (`configureWorkerLogger`) for a
+  process embedding this library
 
 ## `fsmlet` is driven directly by the compiled `SYNC_OPERATION_REGISTRATIONS` aggregate; no discovery/validation, no CLI for now (#340)
 

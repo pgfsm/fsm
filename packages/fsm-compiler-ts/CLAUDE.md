@@ -65,10 +65,10 @@ unvalidated (`-f a/fsm.json` from `/home/dev/proj` would yield `proj`/`a` and
 silently write there, and for machine.ts that bad version would also be baked
 into `asyncOperationVersion`). `generateAll` throws for a library caller; the
 CLI checks up front so it can print help. Guessing identity with a confirmation
-prompt belongs in the project-aware `@pgfsm/cli` (SPEC-004), not here. fsmdev's
-own in-process copy of the folder-mode sequence
-(`fsm-devstack-ts/src/cli/fsmdev.ts`'s `runGenerateAll`) deliberately still
-writes one level above its `--fsm-folder`.
+prompt belongs in the project-aware `@pgfsm/cli` (SPEC-004), not here. (The
+dev-stack launcher from #245 kept its own in-process copy of the folder-mode
+sequence that wrote one level above its fsm folder; SPEC-005 removed that
+package in favour of `@pgfsm/cli`.)
 
 ## Single-file mode writes `{cwd}/fsm/<fsmName>/<fsmVersion>/`; `--output` is gone (#376)
 
@@ -346,9 +346,10 @@ importing an aggregate that doesn't exist.
 
 Fleshed out from the original 3-line script (`SYNC_OPERATION_REGISTRATIONS` in,
 `runFsmlet` call out) into a real entry point, mirroring the shutdown/logging
-pattern every hand-written CLI in `fsm-sync-worker-ts` already uses (see
-`cli/fsmscheduler.ts`, and the now-removed `cli/fsmlet.ts`'s own copy of the
-same pattern before #340/#341 deleted it):
+pattern the hand-written worker CLIs used (`fsm-sync-worker-ts`'s
+`cli/fsmscheduler.ts`, now `fsm-ctl-ts/src/commands/scheduler.ts` per SPEC-005,
+and the now-removed `cli/fsmlet.ts`'s own copy of the same pattern before
+#340/#341 deleted it):
 
 - `dotenv.config({ path: ".env" })` before anything else reads
   `Deno.env.get("DATABASE_URL")`, so a `.env` file next to `run-sync-worker.ts`
