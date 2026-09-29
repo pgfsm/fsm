@@ -10,6 +10,21 @@ export type SyncOperationRegistration = {
   handler: (...args: unknown[]) => unknown;
 };
 
+export type FsmDefinitionDigest = {
+  fsmName: string;
+  fsmVersion: string;
+  fsmJsonSha256: string;
+};
+
+// Canonical (RFC 8785) SHA-256 of the fsm.json this registry was generated
+// from; the fsmlet refuses to start if the loaded definition differs.
+export const FSM_DEFINITION: FsmDefinitionDigest = {
+  fsmName: "taskMachineConfig",
+  fsmVersion: "v02",
+  fsmJsonSha256:
+    "0370c45b30f5299ce44cd8e01beedf25c7136c1a57e3e887931949ce8bf9fef1",
+};
+
 export const SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[] = [
   {
     fsmName: "taskMachineConfig",

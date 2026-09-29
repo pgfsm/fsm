@@ -51,10 +51,10 @@ it), like `fsm-compiler-ts`'s.
   `--force` skips the "version exists" refusal, whose job is catching a typo'd
   name/version or a clashing design.
 - **Generated `package.json` pins its tools, never depends on them.** `fsm:add`
-  pins this CLI (`toolVersion`); `db:pgcron` pins `@pgfsm/ctl` and `gateway`
-  pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the versions in
-  `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this build was
-  made from. The gateway is config, not a project directory: it has no user
+  pins this CLI (`toolVersion`); `db:load`/`db:pgcron` pin `@pgfsm/ctl` and
+  `gateway` pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the versions
+  in `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this build
+  was made from. The gateway is config, not a project directory: it has no user
   code.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)

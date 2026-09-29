@@ -115,10 +115,19 @@ Deno.test("create lays out the project with all four async-worker languages and 
   assertEquals(pkg.dependencies, undefined);
   assertEquals(pkg.devDependencies, undefined);
   assertStringIncludes(pkg.scripts["fsm:add"], "npx -y @pgfsm/cli@");
-  assertEquals(Object.keys(pkg.scripts), ["fsm:add", "db:pgcron", "gateway"]);
+  assertEquals(Object.keys(pkg.scripts), [
+    "fsm:add",
+    "db:load",
+    "db:pgcron",
+    "gateway",
+  ]);
   // Sibling tools are pinned to the versions this CLI was built with.
   const versionOf = async (dir: string) =>
     (await readJson(`${Deno.cwd()}/packages/${dir}/deno.json`)).version;
+  assertEquals(
+    pkg.scripts["db:load"],
+    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} fsm load fsm`,
+  );
   assertEquals(
     pkg.scripts["db:pgcron"],
     `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} pgcron register`,
@@ -130,10 +139,14 @@ Deno.test("create lays out the project with all four async-worker languages and 
     )} -- async-operation-worker-gateway`,
   );
   const readme = await Deno.readTextFile(join(APP, "README.md"));
+  const runStack = readme.slice(readme.indexOf("## Run the stack"));
   assert(
-    readme.indexOf("npm run db:pgcron") < readme.indexOf("npm run gateway") &&
-      readme.indexOf("npm run gateway") < readme.indexOf("deno task dev"),
-    "README runs pgcron, then the gateway, then the workers",
+    runStack.indexOf("npm run db:load") <
+        runStack.indexOf("npm run db:pgcron") &&
+      runStack.indexOf("npm run db:pgcron") <
+        runStack.indexOf("npm run gateway") &&
+      runStack.indexOf("npm run gateway") < runStack.indexOf("deno task dev"),
+    "README loads FSMs, registers pgcron, then starts the gateway and workers",
   );
 
   // Just a marker: nothing records FSM sources without sync (#390).

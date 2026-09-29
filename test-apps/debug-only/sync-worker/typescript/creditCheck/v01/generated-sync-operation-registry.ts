@@ -36,6 +36,21 @@ export type SyncOperationRegistration = {
   handler: (...args: unknown[]) => unknown;
 };
 
+export type FsmDefinitionDigest = {
+  fsmName: string;
+  fsmVersion: string;
+  fsmJsonSha256: string;
+};
+
+// Canonical (RFC 8785) SHA-256 of the fsm.json this registry was generated
+// from; the fsmlet refuses to start if the loaded definition differs.
+export const FSM_DEFINITION: FsmDefinitionDigest = {
+  fsmName: "creditCheck",
+  fsmVersion: "v01",
+  fsmJsonSha256:
+    "3025c74bf6e8186718ddd3dff4fbd032e22d1535cacb941911055417142022ec",
+};
+
 export const SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[] = [
   {
     fsmName: "creditCheck",

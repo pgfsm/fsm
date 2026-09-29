@@ -15,6 +15,21 @@ export type SyncOperationRegistration = {
   handler: (...args: unknown[]) => unknown;
 };
 
+export type FsmDefinitionDigest = {
+  fsmName: string;
+  fsmVersion: string;
+  fsmJsonSha256: string;
+};
+
+// Canonical (RFC 8785) SHA-256 of the fsm.json this registry was generated
+// from; the fsmlet refuses to start if the loaded definition differs.
+export const FSM_DEFINITION: FsmDefinitionDigest = {
+  fsmName: "vitalsWorkflow",
+  fsmVersion: "v01",
+  fsmJsonSha256:
+    "69997c288cce788cc95050152d359fa6707d0df005a5bb6d7f5a957c5ffcea1f",
+};
+
 export const SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[] = [
   {
     fsmName: "vitalsWorkflow",
