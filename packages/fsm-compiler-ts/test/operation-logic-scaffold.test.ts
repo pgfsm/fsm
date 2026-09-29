@@ -815,9 +815,16 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts with dotenv, @pgfsm
       ),
       true,
     );
-    // SPEC-006: the compiled digests go to the fsmlet's startup check.
+    // SPEC-006: the compiled digests go to the fsmlet's startup check, as
+    // runFsmlet's required third argument.
     assertEquals(
-      runContent.includes("fsmDefinitions: FSM_DEFINITIONS"),
+      runContent.includes(
+        "  SYNC_OPERATION_REGISTRATIONS,\n" +
+          "  // Refuses to start unless the database holds exactly these fsm.json\n" +
+          "  // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).\n" +
+          "  FSM_DEFINITIONS,\n" +
+          "  { signal: controller.signal },\n",
+      ),
       true,
     );
     assertEquals(

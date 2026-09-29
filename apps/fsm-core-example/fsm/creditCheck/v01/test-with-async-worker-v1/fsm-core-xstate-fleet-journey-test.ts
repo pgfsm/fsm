@@ -8,6 +8,10 @@ import { runFsmScheduler } from "@pgfsm/ctl";
 import { startFsmlet } from "@pgfsm/sync-worker";
 import type { FsmletHandle } from "@pgfsm/sync-worker";
 import {
+  FSM_DEFINITIONS,
+  SYNC_OPERATION_REGISTRATIONS,
+} from "../../../../../../test-apps/debug-only/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+import {
   runAsyncOperationScheduler,
   startAsyncOperationWorkerlet,
 } from "@pgfsm/async-worker-old";
@@ -143,10 +147,15 @@ async function startFleet(): Promise<Fleet> {
   // signal separate from their (never-resolving-until-abort) run promise.
   await sleep(500);
 
+  // Only creditCheck/v01: the startup check (SPEC-006) requires every served
+  // FSM version to be loaded, and this journey only needs this one.
+  const isJourneyFsm = (d: { fsmName: string; fsmVersion: string }) =>
+    d.fsmName === fsm_name && d.fsmVersion === fsm_version;
   const fsmletHandle = await startFsmlet(
     dbConfig,
-    { fsm: { folderPath: FSM_FOLDER_PATH, skipDirs: SKIP_DIRS } },
-    { signal: controller.signal, asyncOperationVerificationMode: "none" },
+    SYNC_OPERATION_REGISTRATIONS.filter(isJourneyFsm),
+    FSM_DEFINITIONS.filter(isJourneyFsm),
+    { signal: controller.signal },
   );
 
   const asyncOpWorkerletHandle = await startAsyncOperationWorkerlet(
