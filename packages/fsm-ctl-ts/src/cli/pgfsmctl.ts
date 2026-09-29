@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { fsmCommand } from "../commands/fsm.ts";
 import { instanceCommand } from "../commands/instance.ts";
 import { pgcronCommand } from "../commands/pgcron.ts";
 import { schedulerCommand } from "../commands/scheduler.ts";
@@ -19,6 +20,9 @@ COMMANDS
       Manage the fsm_schedule_all_pending pg_cron job (SPEC-003) — the
       primary dispatch scheduler. Run \`register\` once per database, after
       applying migrations.
+  fsm load <folder>
+      Load <folder>/<fsmName>/<version>/fsm.json definitions into the
+      database (SPEC-006) — a deploy step, before starting sync workers.
   instance create | resume | send | stop
       Create an FSM instance, re-enqueue one, send it an event, or stop its
       worker.
@@ -37,6 +41,7 @@ OPTIONS
 
 const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
   pgcron: pgcronCommand,
+  fsm: fsmCommand,
   instance: instanceCommand,
   scheduler: schedulerCommand,
 };
