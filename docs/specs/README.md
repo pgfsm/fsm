@@ -42,6 +42,7 @@ Flow:
 | [SPEC-003](spec-003-pgcron-fsm-scheduler.md)               | Replace the fsmscheduler TS Process with pg_cron                        | Accepted |
 | [SPEC-004](spec-004-pgfsm-cli-create-add.md)               | `@pgfsm/cli` — npx `create` / `add` for FSM Worker Projects             | Accepted |
 | [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md)         | CLI Consolidation — `@pgfsm/ctl` (`pgfsmctl`), Library-Only Sync Worker | Accepted |
+| [SPEC-008](spec-008-async-actor-coverage-and-liveness.md)  | Async Actor Coverage and Liveness                                       | Draft    |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
