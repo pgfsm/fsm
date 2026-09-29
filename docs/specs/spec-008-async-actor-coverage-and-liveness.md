@@ -8,8 +8,8 @@
 | Issue   | #419                                                                                                                                                                                                |
 | Affects | `packages/fsm-cli-ts`, `packages/fsm-compiler-ts`, `packages/fsm-async-worker-gateway-ts`, `packages/fsm-ctl-ts`, `packages/fsm-core-db-ts`, `packages/database-src`, `packages/fsm-sync-worker-ts` |
 
-Related: SPEC-006 (#418, fsmlet definition check), the gateway TCP/scaling spec
-(#394).
+Related: SPEC-006 (#418, fsmlet definition check), SPEC-007 (#394, gateway TCP
+and independent scaling).
 
 ---
 
@@ -38,8 +38,8 @@ actors implemented, and is anything serving them right now?":
    invoking state indefinitely, with no error and no alert.
 4. **Worker state is invisible outside the gateway process.** Actor → worker
    routing lives in memory in `SidecarGateway`. With several gateway replicas
-   (#394), no single place knows which actors have live workers. The v1 registry
-   checks (`checkRegistryForAsyncActors` /
+   (SPEC-007), no single place knows which actors have live workers. The v1
+   registry checks (`checkRegistryForAsyncActors` /
    `checkRegistryAndWorkingForAsyncActors`) read v1 tables that the gateway
    doesn't maintain.
 
@@ -56,11 +56,12 @@ plus alerting for 3–4.
 - **Connection minimization** (root `CLAUDE.md` #4). Gateways publish state
   through their existing pool, with one write per replica per interval, not per
   worker or per actor. Readers (pgfsmctl, the fsmlet) use one query.
-- **#394 (gateway as a Deployment).** Gateways are N replicas, each knowing only
-  its own workers. #394 has been asked (review comment) to require a per-replica
-  snapshot of actor key → live workers, Σ `max_concurrency`, in-flight. This
-  spec aggregates those snapshots. Without #394's `max_concurrency`, a worker
-  counts as capacity 1 (#394's `0 ⇒ 1` rule).
+- **SPEC-007 (gateway as a Deployment).** Gateways are N replicas, each knowing
+  only its own workers. SPEC-007 has been asked (review comment on #394) to
+  require a per-replica snapshot of actor key → live workers, Σ
+  `max_concurrency`, in-flight. This spec aggregates those snapshots. Without
+  SPEC-007's `max_concurrency`, a worker counts as capacity 1 (SPEC-007's
+  `0 ⇒ 1` rule).
 - **Scaffolded stubs are user-owned.** `--overwrite generated-only` never
   rewrites them, so any marker only reaches new stubs. Existing ones need a
   fallback rule.
@@ -156,9 +157,9 @@ A2 + B1 + C1, plus a non-fatal fsmlet warning. The deciding drivers:
   - `started_at timestamptz`
   - `last_heartbeat timestamptz`
 - The gateway upserts its row through its existing pool, every
-  `--heartbeat-interval-ms` (default 5 s), from the per-replica snapshot #394
-  requires. It's one statement per interval regardless of worker or actor count.
-  On graceful stop it deletes its row.
+  `--heartbeat-interval-ms` (default 5 s), from the per-replica snapshot
+  SPEC-007 requires. It's one statement per interval regardless of worker or
+  actor count. On graceful stop it deletes its row.
 - A row is **live** while `last_heartbeat > now() - 3 × interval`. Rows older
   than 10 minutes are deleted by the status function's caller path (D4), so
   crashed replicas don't accumulate.
@@ -237,8 +238,8 @@ one row per actor identity:
 1. `database-src` + `@pgfsm/db`: heartbeat table, status function, TS wrappers
    (schema-change propagation doc).
 2. `@pgfsm/async-worker-gateway`: publish heartbeats. This is independent of
-   #394: a single-replica gateway today works the same, with capacity counted as
-   1 per worker until #394 adds `max_concurrency`.
+   SPEC-007: a single-replica gateway today works the same, with capacity
+   counted as 1 per worker until SPEC-007 adds `max_concurrency`.
 3. `@pgfsm/ctl`: `actors status`.
 4. `@pgfsm/compiler`: marker in the four stub templates.
 5. `@pgfsm/cli`: `pgfsm check`. Regenerate `test-apps/debug-only`, whose
