@@ -8,6 +8,8 @@ const logger = getLogger(["@pgfsm/db", "async-operation-worker"]);
 
 const CLAIM_PENDING_ASYNC_OPERATION_EVENTS_FOR_WORKERS_FN =
   `${FSM_SCHEMA}.claim_pending_async_operation_events_for_workers_${FSM_SCHEMA_FN_VERSION}`;
+const CLAIM_PENDING_ASYNC_OPERATION_EVENTS_WITH_CAPACITY_FN =
+  `${FSM_SCHEMA}.claim_pending_async_operation_events_with_capacity_${FSM_SCHEMA_FN_VERSION}`;
 const ENSURE_ASYNC_OPERATION_QUEUE_FOR_WORKER_FN =
   `${FSM_SCHEMA}.ensure_async_operation_queue_for_worker_${FSM_SCHEMA_FN_VERSION}`;
 const COMPUTE_ASYNC_OPERATION_QUEUE_NAME_FN =
@@ -85,6 +87,75 @@ export async function claimPendingAsyncOperationEventsForWorkers(
       {
         cause: err,
       },
+    );
+  }
+}
+
+/**
+ * One actor identity to claim for, with how many messages to take and how
+ * long they stay invisible to other claims (SPEC-007 §5–6).
+ */
+export interface AsyncOperationWorkerClaim
+  extends AsyncOperationWorkerIdentity {
+  /** Messages to claim at most: the gateway's free slots for this actor. */
+  qty: number;
+  /**
+   * PGMQ visibility timeout for the claimed messages, in seconds: at least
+   * the invoke timeout, so a message can't be claimed again while its first
+   * invoke may still be running.
+   */
+  vtSeconds: number;
+}
+
+type ClaimPendingAsyncOperationEventsWithCapacityRow = {
+  claim_pending_async_operation_events_with_capacity_v2: Json;
+};
+
+/**
+ * Thin wrapper around
+ * `claim_pending_async_operation_events_with_capacity_v2()`: for
+ * each identity with `qty > 0`, reads up to `qty` messages from its PGMQ queue
+ * with a `vtSeconds` visibility timeout, skipping identities with no queue
+ * yet. Rows have the same shape as
+ * {@linkcode claimPendingAsyncOperationEventsForWorkers}'s, plus `readCount`
+ * (PGMQ's `read_ct`: how many times the message has been claimed).
+ */
+export async function claimPendingAsyncOperationEventsWithCapacity(
+  deps: DBDeps,
+  claims: AsyncOperationWorkerClaim[],
+): Promise<Json[]> {
+  if (claims.length === 0) return [];
+  try {
+    const text =
+      `SELECT * FROM ${CLAIM_PENDING_ASYNC_OPERATION_EVENTS_WITH_CAPACITY_FN}($1::jsonb);`;
+    const values = [
+      toJsonbParam(
+        claims.map((c) => ({
+          parent_fsm_name: c.parentFsmName,
+          parent_fsm_version: c.parentFsmVersion,
+          async_operation_type: c.asyncOperationType,
+          async_operation_name: c.asyncOperationName,
+          async_operation_version: c.asyncOperationVersion,
+          async_operation_language: c.asyncOperationLanguage,
+          qty: c.qty,
+          vt_seconds: c.vtSeconds,
+        })),
+      ),
+    ];
+    const res = await deps.db.query<
+      ClaimPendingAsyncOperationEventsWithCapacityRow
+    >(text, values);
+    return res.rows.map((
+      row: ClaimPendingAsyncOperationEventsWithCapacityRow,
+    ) => row.claim_pending_async_operation_events_with_capacity_v2);
+  } catch (err) {
+    logger.error(
+      "Error in claimPendingAsyncOperationEventsWithCapacity: {error}",
+      { error: err },
+    );
+    throw new Error(
+      "Failed to claim pending async-operation events for workers",
+      { cause: err },
     );
   }
 }

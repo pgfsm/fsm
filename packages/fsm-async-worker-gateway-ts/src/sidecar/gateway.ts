@@ -85,6 +85,8 @@ export interface RegisteredActor {
   asyncOperationLanguage: string;
   timeoutMs: number;
   description: string;
+  /** Invokes of this actor the worker runs at once; 0 (older SDKs) means 1. */
+  maxConcurrency: number;
 }
 
 export function actorKey(
@@ -96,6 +98,24 @@ export function actorKey(
   asyncOperationLanguage: string,
 ): string {
   return `${parentFsmName}@${parentFsmVersion}@${asyncOperationType}@${asyncOperationName}@${asyncOperationVersion}@${asyncOperationLanguage}`;
+}
+
+function keyOf(
+  actor: Omit<RegisteredActor, "timeoutMs" | "description" | "maxConcurrency">,
+): string {
+  return actorKey(
+    actor.parentFsmName,
+    actor.parentFsmVersion,
+    actor.asyncOperationType,
+    actor.asyncOperationName,
+    actor.asyncOperationVersion,
+    actor.asyncOperationLanguage,
+  );
+}
+
+/** A worker's declared concurrency for one actor: 0 (unset) means 1. */
+function concurrencyOf(maxConcurrency: number | undefined): number {
+  return maxConcurrency && maxConcurrency > 0 ? maxConcurrency : 1;
 }
 
 function toInputJson(input: unknown): string {
@@ -125,6 +145,12 @@ export interface ActivityInvokeResult {
   output: unknown;
 }
 
+/**
+ * An invoke that didn't produce a result. `retriable` marks failures that say
+ * nothing about the actor itself (no worker, the worker went away, a timeout):
+ * the poll loop leaves those messages on the queue to be delivered again
+ * instead of reporting them to the FSM as actor errors (#396).
+ */
 export class ActivityInvokeError extends Error {
   constructor(
     message: string,
@@ -212,6 +238,8 @@ interface WorkerState {
   language: string;
   outbox: AsyncQueue<SessionResponseMessage>;
   actors: Set<string>;
+  /** Declared max_concurrency per actor key (always ≥ 1). */
+  maxConcurrencyByKey: Map<string, number>;
   pendingByInvokeId: Map<string, PendingInvoke>;
   alive: boolean;
 }
@@ -225,9 +253,31 @@ interface ActorRoute {
   // key sends the same identity fields, so any one of them serves as the
   // poll loop's claim input.
   meta: RegisteredActor;
-  // Rotating start offset so ties on in-flight count don't always land on the
+  // Rotating start offset so ties on free slots don't always land on the
   // same worker.
   cursor: number;
+}
+
+/** Per-actor routing state of one gateway replica (SPEC-007 §4). */
+export interface ActorRoutingSnapshot {
+  actorKey: string;
+  identity: Omit<
+    RegisteredActor,
+    "timeoutMs" | "description" | "maxConcurrency"
+  >;
+  /** Connected workers serving this actor. */
+  liveWorkers: number;
+  /** Σ declared max_concurrency over those workers. */
+  maxConcurrency: number;
+  /** Invokes of this actor currently waiting on a worker. */
+  inFlight: number;
+}
+
+/** An actor the poll loop can claim for, with how much room it has. */
+export interface ClaimableActor {
+  identity: RegisteredActor;
+  /** Σ (max_concurrency − in-flight) over its workers, ≥ 0. */
+  freeSlots: number;
 }
 
 export interface SidecarGatewayOptions {
@@ -324,6 +374,52 @@ export class SidecarGateway {
     return Array.from(this.actorRoutes.values()).map((route) => route.meta);
   }
 
+  /**
+   * Every registered actor with its free slots: what the poll loop may claim
+   * right now without overloading this replica's workers (SPEC-007 §5).
+   */
+  listClaimableActors(): ClaimableActor[] {
+    return Array.from(this.actorRoutes.entries()).map(([key, route]) => {
+      let freeSlots = 0;
+      for (const worker of this.routeWorkers(route)) {
+        freeSlots += Math.max(0, this.freeSlotsOf(worker, key));
+      }
+      return { identity: route.meta, freeSlots };
+    });
+  }
+
+  /**
+   * Per-actor routing snapshot of this replica: live workers, Σ
+   * max_concurrency, and in-flight invokes (SPEC-007 §4). How it's exposed
+   * or aggregated across replicas is up to the caller (SPEC-008).
+   */
+  routingSnapshot(): ActorRoutingSnapshot[] {
+    return Array.from(this.actorRoutes.entries())
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, route]) => {
+        let maxConcurrency = 0;
+        let inFlight = 0;
+        const workers = this.routeWorkers(route);
+        for (const worker of workers) {
+          maxConcurrency += worker.maxConcurrencyByKey.get(key) ?? 1;
+          inFlight += this.inFlightOf(worker, key);
+        }
+        const {
+          timeoutMs: _t,
+          description: _d,
+          maxConcurrency: _m,
+          ...identity
+        } = route.meta;
+        return {
+          actorKey: key,
+          identity,
+          liveWorkers: workers.length,
+          maxConcurrency,
+          inFlight,
+        };
+      });
+  }
+
   async invoke(
     request: ActivityInvokeInput,
     timeoutMs: number,
@@ -338,13 +434,16 @@ export class SidecarGateway {
     );
     const route = this.actorRoutes.get(key);
     if (!route) {
+      // Retriable: the only worker for this actor may just be reconnecting
+      // between the poll loop's claim and this dispatch (#396).
       throw new ActivityInvokeError(
         `no worker registered for actor: ${key}`,
         "ACTOR_NOT_FOUND",
+        true,
       );
     }
 
-    const worker = this.pickWorker(route);
+    const worker = this.pickWorker(route, key);
     if (!worker) {
       throw new ActivityInvokeError(
         `worker unavailable for actor: ${key}`,
@@ -398,28 +497,50 @@ export class SidecarGateway {
     });
   }
 
-  /**
-   * Picks the alive worker with the fewest in-flight invokes for this route,
-   * scanning from a rotating offset so equally-loaded workers take turns.
-   */
-  private pickWorker(route: ActorRoute): WorkerState | undefined {
-    const candidates: WorkerState[] = [];
+  private routeWorkers(route: ActorRoute): WorkerState[] {
+    const workers: WorkerState[] = [];
     for (const workerId of route.workerIds) {
       const worker = this.workers.get(workerId);
-      if (worker?.alive) {
-        candidates.push(worker);
-      }
+      if (worker?.alive) workers.push(worker);
     }
+    return workers;
+  }
+
+  private inFlightOf(worker: WorkerState, key: string): number {
+    let count = 0;
+    for (const pending of worker.pendingByInvokeId.values()) {
+      if (pending.key === key) count++;
+    }
+    return count;
+  }
+
+  private freeSlotsOf(worker: WorkerState, key: string): number {
+    return (worker.maxConcurrencyByKey.get(key) ?? 1) -
+      this.inFlightOf(worker, key);
+  }
+
+  /**
+   * Picks the alive worker with the most free slots for this actor (its
+   * max_concurrency minus its in-flight invokes of it), scanning from a
+   * rotating offset so equally-free workers take turns. A worker with no free
+   * slot is still picked if nothing better exists (e.g. a direct Invoke()
+   * RPC); the poll loop never claims more than the free slots.
+   */
+  private pickWorker(route: ActorRoute, key: string): WorkerState | undefined {
+    const candidates = this.routeWorkers(route);
     if (candidates.length === 0) {
       return undefined;
     }
 
     const start = route.cursor++ % candidates.length;
     let best = candidates[start];
+    let bestFree = this.freeSlotsOf(best, key);
     for (let i = 1; i < candidates.length; i++) {
       const candidate = candidates[(start + i) % candidates.length];
-      if (candidate.pendingByInvokeId.size < best.pendingByInvokeId.size) {
+      const free = this.freeSlotsOf(candidate, key);
+      if (free > bestFree) {
         best = candidate;
+        bestFree = free;
       }
     }
     return best;
@@ -495,16 +616,7 @@ export class SidecarGateway {
     return new RegisterAck({
       accepted: true,
       gatewayProtocolVersion: "1.0",
-      registeredActors: register.actors.map((a: RegisteredActor) =>
-        actorKey(
-          a.parentFsmName,
-          a.parentFsmVersion,
-          a.asyncOperationType,
-          a.asyncOperationName,
-          a.asyncOperationVersion,
-          a.asyncOperationLanguage,
-        )
-      ),
+      registeredActors: register.actors.map((a: RegisteredActor) => keyOf(a)),
       rejectedActors: [],
     });
   }
@@ -571,6 +683,7 @@ export class SidecarGateway {
       language: register.language,
       outbox: new AsyncQueue<SessionResponseMessage>(),
       actors: new Set(),
+      maxConcurrencyByKey: new Map(),
       pendingByInvokeId: new Map(),
       alive: true,
     };
@@ -578,14 +691,7 @@ export class SidecarGateway {
     this.workers.set(register.workerId, worker);
 
     for (const meta of register.actors) {
-      const key = actorKey(
-        meta.parentFsmName,
-        meta.parentFsmVersion,
-        meta.asyncOperationType,
-        meta.asyncOperationName,
-        meta.asyncOperationVersion,
-        meta.asyncOperationLanguage,
-      );
+      const key = keyOf(meta);
       const route = this.actorRoutes.get(key);
       if (route) {
         route.workerIds.add(register.workerId);
@@ -598,6 +704,7 @@ export class SidecarGateway {
         });
       }
       worker.actors.add(key);
+      worker.maxConcurrencyByKey.set(key, concurrencyOf(meta.maxConcurrency));
       this.onActorRegistered?.(meta);
     }
 

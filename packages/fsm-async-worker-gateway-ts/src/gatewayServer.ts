@@ -94,8 +94,15 @@ export interface GatewayServerOptions {
     deps: DBDeps;
     /** Poll interval in ms. Default 30_000, per GOAL.md. */
     intervalMs?: number;
-    /** Per-invoke timeout for poll-loop-triggered invokes. Default 10_000. */
+    /**
+     * Per-invoke timeout for poll-loop-triggered invokes of actors without
+     * their own `timeout_ms`. Default 10_000.
+     */
     invokeTimeoutMs?: number;
+    /** Visibility-timeout margin over the invoke timeout, in s. Default 10. */
+    vtMarginSeconds?: number;
+    /** Deliveries before a retriable failure is archived. Default 5. */
+    maxDeliveryAttempts?: number;
   };
   /**
    * When set, ensures a PGMQ queue exists (fsm_core.ensure_async_operation_queue_for_worker,
@@ -210,6 +217,8 @@ export async function startActivityGatewayServer(
     startAsyncOpPollLoop(sidecar, options.asyncOpPollLoop.deps, {
       intervalMs: options.asyncOpPollLoop.intervalMs,
       invokeTimeoutMs: options.asyncOpPollLoop.invokeTimeoutMs,
+      vtMarginSeconds: options.asyncOpPollLoop.vtMarginSeconds,
+      maxDeliveryAttempts: options.asyncOpPollLoop.maxDeliveryAttempts,
       signal: options.signal,
     });
   }

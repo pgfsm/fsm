@@ -707,6 +707,10 @@ export type Database = {
         Args: { input_workers: Json };
         Returns: Json[];
       };
+      claim_pending_async_operation_events_with_capacity_v2: {
+        Args: { input_workers: Json };
+        Returns: Json[];
+      };
       claim_scheduled_for_async_operation_workerlet: {
         Args: { input_workerlet_id: string };
         Returns: Json;

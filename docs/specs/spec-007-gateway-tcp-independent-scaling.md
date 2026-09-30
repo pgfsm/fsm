@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                                          |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                                                          |
+| Status  | Accepted                                                                                                                                                                                                                                                       |
 | Date    | 2026-09-27                                                                                                                                                                                                                                                     |
 | Authors | Niraj, Claude                                                                                                                                                                                                                                                  |
 | Issue   | #393                                                                                                                                                                                                                                                           |
@@ -344,5 +344,16 @@ Prerequisites:
 - #391: multi-worker routing (merged in #395).
 - #392: SDK reconnect with backoff (PR #398).
 - #396: retriable invoke failures are archived as actor errors instead of
-  re-dispatched.
+  re-dispatched. Fixed together with migration step 2 (below).
+
+Implementation, tracked in #425:
+
+- Migration step 2 plus #396: `RegisteredActor.max_concurrency` (#426,
+  proto-codegen 0.2.0), free-slot routing and the routing snapshot, the
+  capacity-aware claim `claim_pending_async_operation_events_with_capacity_v2`
+  (named without `for_workers`: the full name is over Postgres's 63-character
+  identifier limit), the derived visibility timeout, and redelivery of retriable
+  failures up to `--max-delivery-attempts`.
+- Migration steps 3–4 (transport, SDKs, manifests) follow in the PR that closes
+  #425.
 - #397: `SidecarGateway.stop()` hangs while a worker is connected.

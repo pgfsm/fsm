@@ -70,17 +70,19 @@ deno task gateway [options]
 
 ### Options
 
-| Flag                         | Alias | Required                                                  | Default                                    | Description                                                                                        |
-| ---------------------------- | ----- | --------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `--bind <target>`            | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                    |
-| `--sidecar-socket <path>`    | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on                                                |
-| `--invoke-timeout-ms <ms>`   | `-t`  | no                                                        | `10000`                                    | Default per-invoke timeout, used by both the gRPC `Invoke` RPC and the poll loop's dispatches      |
-| `--db-url <url>`             | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled             |
-| `--poll-interval-ms <ms>`    |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                        |
-| `--disable-poll-loop`        |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`) |
-| `--ensure-queue-on-register` |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                          |
-| `--version`                  | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                             |
-| `--help`                     | `-h`  | —                                                         | —                                          | Print help and exit                                                                                |
+| Flag                          | Alias | Required                                                  | Default                                    | Description                                                                                                                   |
+| ----------------------------- | ----- | --------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--bind <target>`             | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                                               |
+| `--sidecar-socket <path>`     | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on                                                                           |
+| `--invoke-timeout-ms <ms>`    | `-t`  | no                                                        | `10000`                                    | Per-invoke timeout for the gRPC `Invoke` RPC and for poll-loop dispatches of actors that don't declare their own `timeout_ms` |
+| `--vt-margin-seconds <s>`     |       | no                                                        | `10`                                       | Claimed messages stay invisible for the invoke timeout plus this (see below)                                                  |
+| `--max-delivery-attempts <n>` |       | no                                                        | `5`                                        | Deliveries before a retriable failure is archived as an actor error (see below)                                               |
+| `--db-url <url>`              | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled                                        |
+| `--poll-interval-ms <ms>`     |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                                                   |
+| `--disable-poll-loop`         |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`)                            |
+| `--ensure-queue-on-register`  |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                                                     |
+| `--version`                   | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                                                        |
+| `--help`                      | `-h`  | —                                                         | —                                          | Print help and exit                                                                                                           |
 
 > **Poll loop is on by default; `--ensure-queue-on-register` is opt-in.** If
 > either needs a DB connection and neither `--db-url` nor `DATABASE_URL` is set,
@@ -160,19 +162,51 @@ letter (`t`/`p`/`r`/`g`) today.
 
 Every `--poll-interval-ms` (default 30s):
 
-1. Reads `sidecar.listRegisteredActorIdentities()` — if nothing is registered,
-   skips this tick entirely (no DB call).
-2. Calls `claimPendingAsyncOperationEventsForWorkers(deps, workers)`
-   (`fsm_core.claim_pending_async_operation_events_for_workers_v2` under the
-   hood) — for each registered worker identity, computes its queue name (same
-   rule as `--ensure-queue-on-register` above, via the shared
-   `fsm_core.compute_async_operation_queue_name_v2`), skips identities with no
-   existing queue, and reads up to one message (`vt=30s`) from each queue that
-   exists.
-3. For each claimed row: dispatches via `sidecar.invoke()`, then archives the
-   result via `archiveEventFromFsmAsyncOperationTypeWorker()` — fire-and-forget,
-   so one slow/failed dispatch never blocks another actor's dispatch or the next
-   poll tick.
+1. Reads `sidecar.listClaimableActors()`: every registered actor with its **free
+   slots**, the sum over its workers of `max_concurrency` (declared per actor at
+   `Register`; 0 means 1) minus that worker's in-flight invokes of it. If
+   nothing is registered, skips this tick entirely (no DB call); actors with no
+   free slot are left out of the claim (SPEC-007).
+2. Calls `claimPendingAsyncOperationEventsWithCapacity(deps, claims)`
+   (`fsm_core.claim_pending_async_operation_events_with_capacity_v2` under the
+   hood). For each actor with free slots, it computes the queue name (same rule
+   as `--ensure-queue-on-register` above, via the shared
+   `fsm_core.compute_async_operation_queue_name_v2`), skips actors with no
+   existing queue, and reads **up to the free slots** from each queue that
+   exists, with a visibility timeout of
+   `ceil(invoke timeout / 1000) + --vt-margin-seconds`. The invoke timeout is
+   the actor's own `timeout_ms`, else `--invoke-timeout-ms`, so a claimed
+   message can't become visible (and be claimed by another gateway replica)
+   while its invoke may still be running. Each row also carries `readCount`
+   (PGMQ's `read_ct`).
+3. For each claimed row: dispatches via `sidecar.invoke()` (to the worker with
+   the most free slots for that actor), then archives the result via
+   `archiveEventFromFsmAsyncOperationTypeWorker()`. Fire-and-forget, so one
+   slow/failed dispatch never blocks another actor's dispatch or the next poll
+   tick.
+
+#### Retriable failures are delivered again (#396)
+
+A failed invoke is only reported to the FSM (archived as
+`xstate.error.actor.<event>`) when the failure is about the actor: it threw, or
+its worker answered with a non-retriable error. Failures that say nothing about
+the actor are **retriable**:
+
+- `ACTOR_NOT_FOUND` / `WORKER_UNAVAILABLE`: no worker for the actor right now
+  (e.g. it's reconnecting between claim and dispatch);
+- `WORKER_DISCONNECTED`: the worker went away mid-invoke (restart, rollout,
+  dropped connection);
+- `TIMEOUT`: no result within the invoke timeout;
+- any error a worker sends with `retriable: true`.
+
+For those, the gateway doesn't archive anything. The message stays on its queue,
+becomes visible again when its visibility timeout ends, and a later tick
+delivers it again. Only once it has been delivered `--max-delivery-attempts`
+times (default 5, from `readCount`) is it archived as a failed actor call.
+
+**Delivery is at-least-once, so actors must be idempotent.** A gateway crash
+mid-invoke, or a result the gateway never received, means the actor may run
+again for the same message.
 
 #### PGMQ message payload shape
 

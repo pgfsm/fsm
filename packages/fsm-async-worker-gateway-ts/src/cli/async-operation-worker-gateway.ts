@@ -22,6 +22,8 @@ const args = parseArgs(Deno.args, {
     "bind",
     "sidecar-socket",
     "invoke-timeout-ms",
+    "vt-margin-seconds",
+    "max-delivery-attempts",
     "db-url",
     "poll-interval-ms",
   ],
@@ -60,7 +62,9 @@ USAGE
 OPTIONS
   -b, --bind <target>              gRPC bind target (default: unix:/tmp/pgfsm-activity-gateway.sock)
   -s, --sidecar-socket <path>      Unix socket path workers connect to (default: /tmp/pgfsm-activity-gateway-workers.sock)
-  -t, --invoke-timeout-ms <ms>     Default per-invoke timeout (default: 10000)
+  -t, --invoke-timeout-ms <ms>     Per-invoke timeout for actors without their own timeout_ms (default: 10000)
+  --vt-margin-seconds <s>          Claimed messages stay invisible for the invoke timeout plus this (default: 10)
+  --max-delivery-attempts <n>      Deliveries before a retriable failure is archived as an actor error (default: 5)
   -d, --db-url <url>               Database connection URL (overrides DATABASE_URL from .env)
   --poll-interval-ms <ms>          Async-op poll loop interval (default: 30000)
   --disable-poll-loop              Don't start the poll loop -- gateway/sidecar only
@@ -114,13 +118,41 @@ if (invokeTimeoutArg && !Number.isInteger(defaultInvokeTimeoutMs)) {
   Deno.exit(1);
 }
 
+/** An integer flag ≥ `min`, or undefined when not given; exits if invalid. */
+function integerFlag(
+  name: "vt-margin-seconds" | "max-delivery-attempts",
+  min: number,
+): number | undefined {
+  const raw = args[name];
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min) {
+    logger.error("--{name} must be an integer ≥ {min}, got: {value}", {
+      name,
+      min,
+      value: raw,
+    });
+    Deno.exit(1);
+  }
+  return value;
+}
+
+const vtMarginSeconds = integerFlag("vt-margin-seconds", 0);
+const maxDeliveryAttempts = integerFlag("max-delivery-attempts", 1);
+
 const pollLoopEnabled = !args["disable-poll-loop"];
 const ensureQueueOnRegisterEnabled = !!args["ensure-queue-on-register"];
 const needsDb = pollLoopEnabled || ensureQueueOnRegisterEnabled;
 
 let dbPool: Pool | undefined;
 let asyncOpPollLoopOption:
-  | { deps: DBDeps; intervalMs?: number; invokeTimeoutMs?: number }
+  | {
+    deps: DBDeps;
+    intervalMs?: number;
+    invokeTimeoutMs?: number;
+    vtMarginSeconds?: number;
+    maxDeliveryAttempts?: number;
+  }
   | undefined;
 let ensureQueueOnRegisterOption: { deps: DBDeps } | undefined;
 
@@ -151,6 +183,8 @@ if (needsDb) {
       deps,
       intervalMs: pollIntervalMs,
       invokeTimeoutMs: defaultInvokeTimeoutMs,
+      vtMarginSeconds,
+      maxDeliveryAttempts,
     };
   }
 
