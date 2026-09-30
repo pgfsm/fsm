@@ -110,4 +110,22 @@ Install section, which documents this. Same issue applies to
     sessions still open after `shutdownGraceMs` (default 5 s). Plain
     `server.close()` waits forever on a client that keeps its connection.
     Covered by `test/sidecar_gateway_stop_test.ts`.
-- `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop
+  - Capacity (SPEC-007): each worker declares `max_concurrency` per actor at
+    `Register` (0 means 1). `invoke()` picks the worker with the most free slots
+    (max_concurrency − its in-flight invokes of that actor).
+    `listClaimableActors()` gives the poll loop each actor's free slots, and
+    `routingSnapshot()` reports per actor its live workers, Σ max_concurrency
+    and in-flight invokes (exposing it is SPEC-008's job). Covered by
+    `test/sidecar_gateway_capacity_test.ts`.
+- `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop. It claims at most
+  each actor's free slots via
+  `claim_pending_async_operation_events_with_capacity_v2`, with a visibility
+  timeout of the invoke timeout plus `vtMarginSeconds`. Retriable invoke
+  failures (`ActivityInvokeError.retriable`: `ACTOR_NOT_FOUND`,
+  `WORKER_UNAVAILABLE`, `WORKER_DISCONNECTED`, `TIMEOUT`, or a worker's
+  retriable error) are not archived; the message is redelivered after its
+  visibility timeout, until `readCount` reaches `maxDeliveryAttempts` (#396).
+  The old `claim_pending_async_operation_events_for_workers_v2` stays until
+  nothing calls it. Unit tests in `test/async_op_poll_loop_test.ts`; the
+  capacity bound and redelivery against a real database in
+  `test/poll_loop_capacity_db_test.ts` (needs `DATABASE_URL`).

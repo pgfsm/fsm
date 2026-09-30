@@ -43,7 +43,7 @@ Flow:
 | [SPEC-004](spec-004-pgfsm-cli-create-add.md)               | `@pgfsm/cli` — npx `create` / `add` for FSM Worker Projects             | Accepted |
 | [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md)         | CLI Consolidation — `@pgfsm/ctl` (`pgfsmctl`), Library-Only Sync Worker | Accepted |
 | [SPEC-006](spec-006-fsm-definition-load-and-check.md)      | FSM Definition Loading as a Deploy Step, Checked at fsmlet Startup      | Accepted |
-| [SPEC-007](spec-007-gateway-tcp-independent-scaling.md)    | Activity Gateway as an Independently Scalable Deployment                | Draft    |
+| [SPEC-007](spec-007-gateway-tcp-independent-scaling.md)    | Activity Gateway as an Independently Scalable Deployment                | Accepted |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to

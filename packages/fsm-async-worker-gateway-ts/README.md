@@ -45,7 +45,14 @@ reference. Examples below assume a global install
   `unix:/tmp/pgfsm-activity-gateway.sock`)
 - `-s`/`--sidecar-socket <path>` — Unix socket worker processes connect to and
   register actors on (default `/tmp/pgfsm-activity-gateway-workers.sock`)
-- `-t`/`--invoke-timeout-ms <ms>` — default per-invoke timeout (default `10000`)
+- `-t`/`--invoke-timeout-ms <ms>` — per-invoke timeout for actors that don't
+  declare their own `timeout_ms` (default `10000`)
+- `--vt-margin-seconds <s>` — claimed messages stay invisible for the invoke
+  timeout plus this (default `10`)
+- `--max-delivery-attempts <n>` — deliveries before a retriable failure (no
+  worker, worker disconnected, timeout) is archived as an actor error instead of
+  being delivered again (default `5`). Delivery is at-least-once, so actors must
+  be idempotent.
 - `-d`/`--db-url <url>` — Postgres connection string (falls back to
   `DATABASE_URL` from `.env`); required unless both `--disable-poll-loop` and
   `--ensure-queue-on-register` are omitted/off
