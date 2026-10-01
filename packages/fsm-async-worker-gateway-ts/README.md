@@ -2,9 +2,10 @@
 
 The Activity Gateway for async-operation-type FSM operations across polyglot
 (TypeScript/Python/Rust/Go) actors: a standalone gateway process that accepts
-worker registrations over a Unix socket, polls Postgres for pending work
-matching those registrations, dispatches it to the right worker, and archives
-the result. Optionally exposes a client-facing gRPC/Connect `Invoke` API.
+worker registrations over a Unix socket and/or over TCP (TLS, with a bearer
+token or mutual TLS), polls Postgres for pending work matching those
+registrations, dispatches it to the right worker, and archives the result.
+Optionally exposes a client-facing gRPC/Connect `Invoke` API.
 
 Previously published as `@pgfsm/async-worker` (up to 0.1.6, now deprecated). The
 actor processes that connect to this gateway use
@@ -57,23 +58,46 @@ reference. Examples below assume a global install
   `DATABASE_URL` from `.env`); required unless both `--disable-poll-loop` and
   `--ensure-queue-on-register` are omitted/off
 - `--poll-interval-ms <ms>` — poll-loop interval (default `30000`)
+- `--sidecar-listen <target>` — also (or instead) accept workers on
+  `unix:<path>` or `tcp://<host>:<port>`. With neither this nor
+  `--sidecar-socket`, the default socket is served as before.
+- `--tls-cert <file>` / `--tls-key <file>` — TLS for a `tcp://` listener
+  (required unless `--insecure-plaintext`, which is for local testing only)
+- `--tls-min-version <1.2|1.3>` — lowest accepted TLS version (default `1.3`)
+- `--tls-client-ca <file>` — mutual TLS: require worker client certificates
+  signed by this CA
+- `--auth-token-file <file>` — bearer token TCP workers must send; re-read for
+  every new session, so a mounted Secret can be rotated without a restart
+- `--max-connection-age-ms <ms>` — drain and disconnect TCP workers after this
+  long (default `600000`, ±10 %; `0` disables), so they spread across replicas
+- `--keepalive-interval-ms <ms>` / `--keepalive-timeout-ms <ms>` — HTTP/2 PINGs
+  on TCP worker connections (defaults `30000` / `10000`)
 - `--disable-poll-loop` — run the gateway/sidecar only, no Postgres poll loop
 - `--ensure-queue-on-register` — also ensure a PGMQ queue exists for every actor
   a worker registers (default off; best-effort — a name that exceeds PGMQ's
   48-character limit fails only this step, not the registration)
 
 **Output/side effect** — starts a long-running process: a gRPC service
-(client-facing) backed by a Unix-socket sidecar (worker-facing), plus — unless
-disabled — its own Postgres poll loop that claims and dispatches pending
-async-operation-type work to whichever actors are currently registered, then
-archives each result. Runs until `SIGINT`/`SIGTERM` (a second signal
+(client-facing) backed by a sidecar (worker-facing, Unix socket and/or TCP),
+plus — unless disabled — its own Postgres poll loop that claims and dispatches
+pending async-operation-type work to whichever actors are currently registered,
+then archives each result. Runs until `SIGINT`/`SIGTERM` (a second signal
 force-exits).
 
 ```bash
 async-operation-worker-gateway
 async-operation-worker-gateway --disable-poll-loop
 async-operation-worker-gateway --db-url "$DATABASE_URL" --ensure-queue-on-register
+
+# As its own Deployment: workers connect over TLS with a bearer token
+async-operation-worker-gateway --sidecar-listen tcp://0.0.0.0:7443 \
+  --tls-cert tls.crt --tls-key tls.key --auth-token-file token
 ```
+
+Running the gateway as its own Deployment (SPEC-007) lets each language's
+workers scale and release independently, and keeps Postgres connections at
+gateway replicas × pool size however many workers run. See the CLI guide's "TCP
+listener, TLS and authentication" section for the details.
 
 ### `async-operation-worker-gateway-ctl` — debug/test client
 

@@ -33,6 +33,7 @@ import {
   actorKey,
   type RegisteredActor,
   SidecarGateway,
+  type SidecarListener,
 } from "./sidecar/gateway.ts";
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
@@ -75,8 +76,24 @@ interface RawActivityGatewayServiceImpl {
 export interface GatewayServerOptions {
   /** gRPC bind target, e.g. "unix:/tmp/pgfsm-activity-gateway.sock" or "127.0.0.1:50061". */
   bindTarget: string;
-  /** Unix socket the sidecar listens on for worker connections. */
-  sidecarSocketPath: string;
+  /**
+   * Unix socket the sidecar listens on for worker connections. Optional when
+   * `sidecarListeners` is given; the two can be combined (e.g. during a
+   * migration from the single-pod topology).
+   */
+  sidecarSocketPath?: string;
+  /** More places workers can connect, e.g. a TLS TCP port (SPEC-007). */
+  sidecarListeners?: SidecarListener[];
+  /**
+   * Bearer-token file TCP workers must authenticate with; re-read for every
+   * new session. Unix-socket workers aren't checked.
+   */
+  sidecarAuthTokenFile?: string;
+  /** TCP workers' max connection age (±10 % jitter); 0 disables. */
+  maxConnectionAgeMs?: number;
+  /** HTTP/2 keepalive on TCP worker connections; 0 disables. */
+  keepaliveIntervalMs?: number;
+  keepaliveTimeoutMs?: number;
   /** Default per-invoke timeout if the caller doesn't set one. */
   defaultInvokeTimeoutMs?: number;
   signal?: AbortSignal;
@@ -205,13 +222,22 @@ export async function startActivityGatewayServer(
 
   const sidecar = new SidecarGateway({
     socketPath: options.sidecarSocketPath,
+    listeners: options.sidecarListeners,
+    authTokenFile: options.sidecarAuthTokenFile,
+    maxConnectionAgeMs: options.maxConnectionAgeMs,
+    keepaliveIntervalMs: options.keepaliveIntervalMs,
+    keepaliveTimeoutMs: options.keepaliveTimeoutMs,
     onActorRegistered,
     shutdownGraceMs: options.shutdownGraceMs,
   });
   await sidecar.start();
-  logger.info("Sidecar worker gateway listening on unix:{path}", {
-    path: options.sidecarSocketPath,
-  });
+  for (const address of sidecar.addresses()) {
+    logger.info("Sidecar worker gateway listening on {address}", {
+      address: address.kind === "unix"
+        ? `unix:${address.path}`
+        : `${address.tls ? "https" : "http"}://${address.host}:${address.port}`,
+    });
+  }
 
   if (options.asyncOpPollLoop) {
     startAsyncOpPollLoop(sidecar, options.asyncOpPollLoop.deps, {
