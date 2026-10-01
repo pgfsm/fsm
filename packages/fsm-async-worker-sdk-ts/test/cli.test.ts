@@ -70,3 +70,52 @@ Deno.test({
     );
   },
 });
+
+Deno.test("runActorWorkerCli - start rejects bad transport and concurrency flags before connecting", async () => {
+  const dir = await Deno.makeTempDir();
+  const token = `${dir}/token`;
+  await Deno.writeTextFile(token, "t");
+  try {
+    for (
+      const args of [
+        // both ways of naming the gateway
+        [
+          "--gateway-socket",
+          "/tmp/x.sock",
+          "--gateway-address",
+          "unix:/tmp/y.sock",
+        ],
+        // not unix:/https:/http:
+        ["--gateway-address", "tcp://gw:7443"],
+        // a client certificate without its key
+        ["--gateway-address", "https://gw:7443", "--gateway-cert-file", token],
+        // credentials that don't exist
+        [
+          "--gateway-address",
+          "https://gw:7443",
+          "--gateway-token-file",
+          `${dir}/missing`,
+        ],
+        [
+          "--gateway-address",
+          "https://gw:7443",
+          "--gateway-ca-file",
+          `${dir}/missing`,
+        ],
+        // invalid numbers
+        ["--max-concurrency", "0"],
+        ["--max-concurrency", "two"],
+        ["--keepalive-timeout-ms", "0"],
+        ["--shutdown-grace-ms", "-1"],
+      ]
+    ) {
+      const code = await runActorWorkerCli({
+        registrations: REGISTRATIONS,
+        args: ["start", ...args],
+      });
+      assertEquals(code, 1, args.join(" "));
+    }
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});

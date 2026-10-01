@@ -1,5 +1,6 @@
-// TypeScript worker SDK: connects to the Activity Gateway's sidecar Unix
-// socket via the generated pgfsm.sidecargateway.v1.SidecarGatewayService
+// TypeScript worker SDK: connects to the Activity Gateway's sidecar, over its
+// Unix socket or over TCP (TLS, bearer token and/or mutual TLS — SPEC-007),
+// via the generated pgfsm.sidecargateway.v1.SidecarGatewayService
 // bidi-streaming client (@pgfsm/proto-codegen, from
 // packages/fsm-proto-codegen/proto/fsm-async-worker-gateway-ts/pgfsm/sidecargateway/v1/sidecar_gateway.proto,
 // #100), registers actors from a compiler-generated registry, and serves
@@ -29,6 +30,8 @@ import {
   Http2SessionManager,
 } from "@connectrpc/connect-node";
 import * as net from "node:net";
+import type * as http2 from "node:http2";
+import * as tls from "node:tls";
 import { SidecarGatewayService } from "@pgfsm/proto-codegen/sidecargateway/v1/connect";
 import {
   Heartbeat,
@@ -72,6 +75,12 @@ export interface RegisteredActor {
   asyncOperationName: string;
   asyncOperationVersion: string;
   asyncOperationLanguage: string;
+  /**
+   * How many invokes of this actor run at once. Overrides the worker's
+   * `maxConcurrency`; unset falls back to it, then to 1 (SPEC-007). Handlers
+   * must be safe to run concurrently once this is above 1.
+   */
+  maxConcurrency?: number;
 }
 
 // Same Deno-vs-tsc inference gap gatewayClient.ts's RawActivityGatewayClient
@@ -81,6 +90,7 @@ export interface RegisteredActor {
 interface RawSidecarGatewayClient {
   session(
     requests: AsyncIterable<SessionRequestMessage>,
+    options?: { headers?: HeadersInit },
   ): AsyncIterable<SessionResponseMessage>;
 }
 
@@ -97,6 +107,9 @@ export type ActorRegistration = RegisteredActor & {
 };
 
 const DEFAULT_HEARTBEAT_MS = 5_000;
+export const DEFAULT_KEEPALIVE_INTERVAL_MS = 30_000;
+export const DEFAULT_KEEPALIVE_TIMEOUT_MS = 10_000;
+export const DEFAULT_SHUTDOWN_GRACE_MS = 25_000;
 export const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
 export const DEFAULT_RECONNECT_MAX_DELAY_MS = 30_000;
 /**
@@ -126,7 +139,41 @@ function isFatal(error: unknown): boolean {
 export interface ActorWorkerOptions {
   workerId: string;
   language: string;
-  gatewaySocketPath: string;
+  /** Shorthand for `gatewayAddress: "unix:<path>"`. */
+  gatewaySocketPath?: string;
+  /**
+   * Where the gateway's sidecar listens: `unix:<path>`, `https://host:port`
+   * (TLS), or `http://host:port` (the gateway's --insecure-plaintext test
+   * mode). Takes precedence over `gatewaySocketPath`.
+   */
+  gatewayAddress?: string;
+  /** PEM CA bundle to trust the gateway's TLS certificate (default: system roots). */
+  caFile?: string;
+  /**
+   * File holding the bearer token sent as `authorization: Bearer <token>`.
+   * Re-read for every session, so a rotated Secret is picked up on reconnect.
+   */
+  tokenFile?: string;
+  /** PEM client certificate and key for mutual TLS; re-read for every session. */
+  certFile?: string;
+  keyFile?: string;
+  /**
+   * HTTP/2 PING interval on TCP connections; a PING unanswered for
+   * `keepaliveTimeoutMs` drops the session so the worker reconnects. 0
+   * disables. Defaults 30 s / 10 s. Not used for Unix sockets.
+   */
+  keepaliveIntervalMs?: number;
+  keepaliveTimeoutMs?: number;
+  /**
+   * Invokes of each actor run at once, for actors that don't set their own
+   * `maxConcurrency`. Default 1 (one at a time, the historical behaviour).
+   */
+  maxConcurrency?: number;
+  /**
+   * On `stop()`, how long in-flight invokes get to finish before the worker
+   * disconnects anyway (default 25 s).
+   */
+  shutdownGraceMs?: number;
   heartbeatMs?: number;
   /** First reconnect backoff step (default 250 ms). */
   reconnectInitialDelayMs?: number;
@@ -163,6 +210,63 @@ export function reconnectDelayMs(
 ): number {
   const ceiling = Math.min(maxMs, initialMs * 2 ** Math.max(0, attempt - 1));
   return Math.floor(Math.random() * ceiling);
+}
+
+/** A parsed `gatewayAddress`. */
+export type GatewayAddress =
+  | { kind: "unix"; path: string }
+  | { kind: "tcp"; url: string; tls: boolean };
+
+/** Parses `unix:<path>`, `https://host:port` or `http://host:port`. */
+export function parseGatewayAddress(address: string): GatewayAddress {
+  if (address.startsWith("unix:")) {
+    const path = address.slice("unix:".length);
+    if (path) return { kind: "unix", path };
+  }
+  const match = /^(https?):\/\/[^/]+:\d+\/?$/.exec(address);
+  if (match) {
+    return {
+      kind: "tcp",
+      url: address.replace(/\/$/, ""),
+      tls: match[1] === "https",
+    };
+  }
+  throw new Error(
+    `gateway address must be unix:<path>, https://host:port or http://host:port, got: ${address}`,
+  );
+}
+
+/** The limit an actor runs under: its own, else the worker's, else 1. */
+export function effectiveMaxConcurrency(
+  actorMax: number | undefined,
+  workerMax: number | undefined,
+): number {
+  for (const value of [actorMax, workerMax]) {
+    if (value !== undefined && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+  }
+  return 1;
+}
+
+/** Counting semaphore: at most `permits` holders, extra acquirers wait. */
+class Semaphore {
+  private readonly waiters: Array<() => void> = [];
+  constructor(private permits: number) {}
+
+  acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  release(): void {
+    const next = this.waiters.shift();
+    if (next) next();
+    else this.permits++;
+  }
 }
 
 function actorKey(reg: RegisteredActor): string {
@@ -246,21 +350,40 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 }
 
 /**
- * Connects to the gateway's sidecar socket, registers `registrations`, and
- * serves invoke requests until `stop()` is called. If the gateway isn't up
- * yet, or a session ends (gateway restart, dropped connection), it
- * reconnects with backoff and re-registers (#392).
+ * Connects to the gateway's sidecar, registers `registrations`, and serves
+ * invoke requests until `stop()` is called. If the gateway isn't up yet, or a
+ * session ends (gateway restart, dropped connection, max connection age), it
+ * reconnects with backoff on a new connection and re-registers (#392).
+ *
+ * Invokes run concurrently, up to each actor's limit (its own
+ * `maxConcurrency`, else the worker's, else 1); extra invokes of an actor wait
+ * for a slot. `stop()` drains: new invokes are refused as retriable
+ * (`WORKER_DRAINING`, so the gateway delivers them again elsewhere) while
+ * in-flight ones finish, up to `shutdownGraceMs`.
  */
 export class ActorWorker {
   private outbox: AsyncQueue<SessionRequestMessage> | null = null;
   private stopped = false;
+  private stopping: Promise<void> | null = null;
   private wakeBackoff: (() => void) | null = null;
   private readonly handlers = new Map<string, ActorHandler>();
+  private readonly slots = new Map<string, Semaphore>();
+  private readonly inFlight = new Set<Promise<void>>();
+  private readonly address: GatewayAddress;
 
   constructor(
     private readonly options: ActorWorkerOptions,
     private readonly registrations: ActorRegistration[],
-  ) {}
+  ) {
+    const address = options.gatewayAddress ??
+      (options.gatewaySocketPath
+        ? `unix:${options.gatewaySocketPath}`
+        : undefined);
+    if (!address) {
+      throw new Error("ActorWorker needs gatewayAddress or gatewaySocketPath");
+    }
+    this.address = parseGatewayAddress(address);
+  }
 
   /**
    * Serves until `stop()`. Rejects only on something reconnecting can't fix:
@@ -275,7 +398,13 @@ export class ActorWorker {
 
     const registeredActors: RegisteredActor[] = [];
     for (const reg of this.registrations) {
-      this.handlers.set(actorKey(reg), reg.handler);
+      const key = actorKey(reg);
+      const maxConcurrency = effectiveMaxConcurrency(
+        reg.maxConcurrency,
+        this.options.maxConcurrency,
+      );
+      this.handlers.set(key, reg.handler);
+      this.slots.set(key, new Semaphore(maxConcurrency));
       registeredActors.push({
         parentFsmName: reg.parentFsmName,
         parentFsmVersion: reg.parentFsmVersion,
@@ -283,6 +412,7 @@ export class ActorWorker {
         asyncOperationName: reg.asyncOperationName,
         asyncOperationVersion: reg.asyncOperationVersion,
         asyncOperationLanguage: reg.asyncOperationLanguage,
+        maxConcurrency,
       });
     }
 
@@ -293,7 +423,7 @@ export class ActorWorker {
     const maxAttempts = this.options.reconnectMaxAttempts ?? 0;
     let failures = 0;
 
-    while (!this.stopped) {
+    while (!this.stopped && !this.stopping) {
       const session = { registered: false };
       let lastError: unknown = null;
       const started = Date.now();
@@ -305,7 +435,7 @@ export class ActorWorker {
         }
         lastError = error;
       }
-      if (this.stopped) {
+      if (this.stopped || this.stopping) {
         break;
       }
 
@@ -333,21 +463,46 @@ export class ActorWorker {
       );
       await this.backoff(delayMs);
     }
+    await this.stopping;
   }
 
-  stop(): void {
-    if (this.stopped) return;
-    this.stopped = true;
-    this.outbox?.push(
-      new SessionRequest({
-        payload: {
-          case: "unregister",
-          value: new Unregister({ workerId: this.options.workerId }),
-        },
-      }),
-    );
-    this.outbox?.close();
+  /**
+   * Stops gracefully: new invokes are refused as retriable while in-flight
+   * ones finish (up to `shutdownGraceMs`), then the worker unregisters and
+   * closes its session. Resolves once that's done; calling it again returns
+   * the same promise.
+   */
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
     this.wakeBackoff?.();
+    this.stopping = (async () => {
+      if (this.inFlight.size > 0) {
+        const graceMs = this.options.shutdownGraceMs ??
+          DEFAULT_SHUTDOWN_GRACE_MS;
+        logger.info(
+          "Draining {count} in-flight invoke(s) before stopping (up to {graceMs}ms)",
+          { count: this.inFlight.size, graceMs },
+        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.allSettled([...this.inFlight]),
+          new Promise((resolve) => (timer = setTimeout(resolve, graceMs))),
+        ]);
+        clearTimeout(timer);
+      }
+      this.stopped = true;
+      this.outbox?.push(
+        new SessionRequest({
+          payload: {
+            case: "unregister",
+            value: new Unregister({ workerId: this.options.workerId }),
+          },
+        }),
+      );
+      this.outbox?.close();
+      this.wakeBackoff?.();
+    })();
+    return this.stopping;
   }
 
   /** Sleeps `ms`, returning early if `stop()` is called. */
@@ -366,6 +521,96 @@ export class ActorWorker {
   }
 
   /**
+   * A new HTTP/2 connection for one session, so a reconnect after the
+   * gateway's max connection age can reach another replica. TLS material and
+   * the token are read now, so rotated files apply from the next session.
+   */
+  private openTransport(): {
+    sessionManager: Http2SessionManager;
+    baseUrl: string;
+    headers: Record<string, string>;
+  } {
+    const headers: Record<string, string> = {};
+    if (this.options.tokenFile) {
+      const token = Deno.readTextFileSync(this.options.tokenFile).trim();
+      headers.authorization = `Bearer ${token}`;
+    }
+    if (this.address.kind === "unix") {
+      const path = this.address.path;
+      return {
+        sessionManager: new Http2SessionManager(
+          "http://localhost",
+          undefined,
+          { createConnection: () => net.connect(path) },
+        ),
+        baseUrl: "http://localhost",
+        headers,
+      };
+    }
+
+    const intervalMs = this.options.keepaliveIntervalMs ??
+      DEFAULT_KEEPALIVE_INTERVAL_MS;
+    const ping = intervalMs > 0
+      ? {
+        pingIntervalMs: intervalMs,
+        pingTimeoutMs: this.options.keepaliveTimeoutMs ??
+          DEFAULT_KEEPALIVE_TIMEOUT_MS,
+      }
+      : undefined;
+    const tlsOptions: http2.SecureClientSessionOptions = {};
+    if (this.address.tls) {
+      const url = new URL(this.address.url);
+      const secure: tls.ConnectionOptions = {
+        host: url.hostname,
+        port: Number(url.port),
+        servername: net.isIP(url.hostname) ? undefined : url.hostname,
+        ALPNProtocols: ["h2"],
+      };
+      if (this.options.caFile) {
+        secure.ca = Deno.readTextFileSync(this.options.caFile);
+      }
+      if (this.options.certFile && this.options.keyFile) {
+        secure.cert = Deno.readTextFileSync(this.options.certFile);
+        secure.key = Deno.readTextFileSync(this.options.keyFile);
+      }
+      // Our own TLS socket, whose errors never reach the HTTP/2 session as
+      // errors. Under TLS 1.3 the gateway can refuse us (e.g. "certificate
+      // required" with mutual TLS) only after the handshake: connect-node
+      // removes its session "error" listener on "connect", before attaching
+      // the next one, so that late alert became an unhandled session error
+      // and crashed the process. Instead, log it and close the socket
+      // without an error: the session sees a plain close, the call fails,
+      // and run() retries with backoff like any other dropped connection.
+      tlsOptions.createConnection = () => {
+        const socket = tls.connect(secure);
+        const emit = socket.emit.bind(socket);
+        socket.emit = ((event: string | symbol, ...args: unknown[]) => {
+          if (event === "error") {
+            logger.warn("Gateway TLS connection failed: {error}", {
+              error: args[0] instanceof Error
+                ? args[0].message
+                : String(args[0]),
+            });
+            socket.destroy();
+            return true;
+          }
+          return emit(event, ...args);
+        }) as typeof socket.emit;
+        return socket;
+      };
+    }
+    return {
+      sessionManager: new Http2SessionManager(
+        this.address.url,
+        ping,
+        tlsOptions,
+      ),
+      baseUrl: this.address.url,
+      headers,
+    };
+  }
+
+  /**
    * One connect → register → serve cycle. Sets `session.registered` once the
    * gateway acks; `run()` resets the backoff only if a registered session
    * also lasted STABLE_SESSION_MS.
@@ -374,15 +619,9 @@ export class ActorWorker {
     registeredActors: RegisteredActor[],
     session: { registered: boolean },
   ): Promise<void> {
-    const sessionManager = new Http2SessionManager(
-      "http://localhost",
-      undefined,
-      {
-        createConnection: () => net.connect(this.options.gatewaySocketPath),
-      },
-    );
+    const { sessionManager, baseUrl, headers } = this.openTransport();
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
+      baseUrl,
       httpVersion: "2",
       sessionManager,
     });
@@ -408,7 +647,7 @@ export class ActorWorker {
       }),
     );
 
-    const responses = client.session(outbox);
+    const responses = client.session(outbox, { headers });
     const iterator = responses[Symbol.asyncIterator]();
     let heartbeat: ReturnType<typeof setInterval> | undefined;
 
@@ -470,13 +709,28 @@ export class ActorWorker {
       if (done) {
         break;
       }
-      if (value.payload.case === "cancel") {
-        continue;
-      }
       if (value.payload.case !== "invoke") {
         continue;
       }
-      await this.handleInvoke(value.payload.value, outbox);
+      const body = value.payload.value;
+      if (this.stopping) {
+        // Draining: refuse as retriable, so the gateway leaves the message
+        // on its queue for another worker (#396).
+        sendError(
+          outbox,
+          body.invokeId,
+          "WORKER_DRAINING",
+          "worker is shutting down",
+          true,
+        );
+        continue;
+      }
+      // Not awaited: invokes run concurrently, each actor bounded by its
+      // own slots (see handleInvoke).
+      const running: Promise<void> = this.handleInvoke(body, outbox).finally(
+        () => this.inFlight.delete(running),
+      );
+      this.inFlight.add(running);
     }
   }
 
@@ -493,9 +747,9 @@ export class ActorWorker {
       asyncOperationLanguage: body.asyncOperationLanguage,
     });
     const handler = this.handlers.get(key);
-    const started = performance.now();
+    const slots = this.slots.get(key);
 
-    if (!handler) {
+    if (!handler || !slots) {
       sendError(
         outbox,
         body.invokeId,
@@ -505,6 +759,10 @@ export class ActorWorker {
       return;
     }
 
+    // Never run more of this actor than declared, even if the gateway sends
+    // more (after its own invoke timeout, or through a direct Invoke() RPC).
+    await slots.acquire();
+    const started = performance.now();
     try {
       const output = await Promise.resolve(
         handler(parseInputJson(body.inputJson)),
@@ -531,6 +789,8 @@ export class ActorWorker {
         "INTERNAL",
         error instanceof Error ? error.message : "unknown worker error",
       );
+    } finally {
+      slots.release();
     }
   }
 }
@@ -540,6 +800,7 @@ function sendError(
   invokeId: string,
   code: string,
   message: string,
+  retriable = false,
 ): void {
   outbox.push(
     new SessionRequest({
@@ -547,7 +808,7 @@ function sendError(
         case: "invokeError",
         value: new InvokeError({
           invokeId,
-          error: new InvokeErrorDetail({ code, message, retriable: false }),
+          error: new InvokeErrorDetail({ code, message, retriable }),
         }),
       },
     }),
