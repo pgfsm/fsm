@@ -51,6 +51,7 @@ package shared with it, so there's deliberately no `src/pgfsm/__init__.py`
   (`python/actors-registry.eta`, `python/shared-async-op-registry.eta`), which
   don't import from this package — `create-async-logic` writes registries
   without a `pyproject.toml`. Keep the keys in sync if either side changes.
+  `max_concurrency` is optional and the registries don't emit it yet (#435).
 - `ActorWorker.run()` closes its gRPC channel before returning.
 
 ## Tests
@@ -59,8 +60,54 @@ package shared with it, so there's deliberately no `src/pgfsm/__init__.py`
 `SidecarGatewayService` (a real grpcio server built from the same stubs) on a
 temp Unix socket: register, invoke, handler error → `INTERNAL`, unknown actor →
 `NOT_FOUND`, unregister on stop, rejected registration, and the CLI's `start`
-path. `tests/test_cli.py` covers the CLI's exit codes. CI runs both (`ci.yml`,
-`python-async-worker-sdk` job).
+path. `tests/test_transport_concurrency.py` covers SPEC-007 over real TCP
+sockets (see below). `tests/test_cli.py` covers the CLI's exit codes and flag
+validation. CI runs all of them (`ci.yml`, `python-async-worker-sdk` job).
+
+## Transport, concurrency and drain (SPEC-007, #432)
+
+Same behaviour as the TypeScript SDK (#431); keep the two in step.
+
+- **Addresses.** `gateway_address` (`unix:` / `https://` / `http://`) is parsed
+  once by `parse_gateway_address`; `gateway_socket_path` is shorthand for
+  `unix:`. `_open_channel()` builds a **new** grpc channel per session (so a
+  reconnect after the gateway's max-age drain can reach another replica), and
+  reads the token, CA and client certificate then, so rotated files apply from
+  the next session. The token goes as call metadata (`authorization: Bearer`),
+  not call credentials, so it also works on the plaintext test mode.
+- **Keepalive** is grpc channel options (`grpc.keepalive_time_ms`,
+  `grpc.keepalive_timeout_ms`, and `grpc.http2.max_pings_without_data` 0,
+  without which grpc-core stops pinging a quiet stream after two PINGs). TCP
+  only.
+- **TLS failures are retried.** Unlike connect-node (see the TS SDK's
+  CLAUDE.md), grpc-core reports a refused handshake (no client certificate, an
+  untrusted server) as `UNAVAILABLE` on the call, so `run()` retries it with
+  backoff; no special handling needed.
+- **Concurrency.** `_serve_loop` no longer runs handlers inline: each invoke
+  gets its own thread, and each actor a `threading.Semaphore` sized by
+  `effective_max_concurrency(reg.get("max_concurrency"), max_concurrency)`
+  (actor, else worker, else 1), which is also sent in `Register`. The local
+  semaphore matters: the gateway can briefly send more than declared.
+- **Drain.** `stop()` doesn't block (it's called from the signal handler): it
+  sets `_stopping`, and a drain thread waits for the in-flight invoke threads up
+  to `shutdown_grace_ms`, then sets `_stopped` and closes the session. Invokes
+  that arrive while `_stopping` get a retriable `WORKER_DRAINING`. `run()`
+  doesn't reconnect once stopping and returns after `_stopped`. An invoke thread
+  is added to `_in_flight` and started under `_lock`, the same lock `stop()`
+  takes, so the drain never misses one or sees an unstarted thread.
+- **`_Session.send()`** returns False once the session is closed; that's how a
+  late result is detected and logged as dropped.
+
+Tests: `tests/test_transport_concurrency.py` runs a grpcio server (TLS/mTLS via
+`grpc.ssl_server_credentials`, max age via `grpc.max_connection_age_ms`) that
+checks the bearer token like the real gateway: TLS + token, token re-read after
+a reconnect, wrong token, mTLS with/without a client certificate, an untrusted
+server certificate, plaintext, worker-wide and per-actor concurrency, drain and
+its grace limit, max-age reconnect. TLS fixtures come from `openssl` at test
+time (`tests/conftest.py`'s `tls` fixture; no committed keys). The real
+connect-node gateway isn't started here (it's Deno); interop with it was checked
+by hand for #432 (mTLS + token, concurrency, max-age reconnect, drain, wrong
+token).
 
 ## Releasing
 
@@ -150,6 +197,8 @@ without a release.
 
 ## Known behaviour
 
-A handler runs on the gRPC response thread, so invokes are served one at a time
-per worker (same as the pre-#364 generated `sdk.py`). Async handlers are run
-with `asyncio.run()` per invoke.
+Each invoke runs on its own thread, bounded per actor (default 1, so one at a
+time as before #432). Async handlers run with `asyncio.run()` per invoke, so
+each has its own event loop: loop-bound objects can't be shared across invokes.
+Over a Unix socket there's no keepalive: a crash there shows up immediately as
+end of stream.
