@@ -16,6 +16,9 @@ export type {
   ActorRoutingSnapshot,
   ClaimableActor,
   RegisteredActor,
+  SidecarGatewayOptions,
+  SidecarListener,
+  SidecarTls,
 } from "./sidecar/gateway.ts";
 export {
   effectiveTimeoutMs,

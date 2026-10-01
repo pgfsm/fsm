@@ -1,9 +1,10 @@
 // Sidecar gateway: accepts one worker-initiated bidi-streaming Session call
 // per worker process, tracks which actors each worker has registered, and
-// routes invocations to the right worker's stream. Bound to a Unix socket via
-// node:http2 + connectNodeAdapter, the same mechanism gatewayServer.ts uses
-// for the client-facing ActivityGateway leg — a separate http2.Server on a
-// separate socket path, since Node's http2 Server binds exactly one path.
+// routes invocations to the right worker's stream. Bound via node:http2 +
+// connectNodeAdapter, the same mechanism gatewayServer.ts uses for the
+// client-facing ActivityGateway leg, on one or more listeners: a Unix socket
+// (the default, and the single-pod topology) and/or TCP, with TLS and a bearer
+// token, for the gateway-as-a-Deployment topology (SPEC-007).
 //
 // Replaces the hand-rolled length-prefixed-JSON envelope this class used to
 // speak (the former sidecar/protocol.ts's readFrame/writeFrame/makeEnvelope,
@@ -29,9 +30,13 @@ import {
   Code,
   ConnectError,
   type ConnectRouter,
+  type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
 import * as http2 from "node:http2";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Buffer } from "node:buffer";
+import { timingSafeEqual } from "node:crypto";
 import { SidecarGatewayService } from "@pgfsm/proto-codegen/sidecargateway/v1/connect";
 import {
   Invoke,
@@ -147,9 +152,9 @@ export interface ActivityInvokeResult {
 
 /**
  * An invoke that didn't produce a result. `retriable` marks failures that say
- * nothing about the actor itself (no worker, the worker went away, a timeout):
- * the poll loop leaves those messages on the queue to be delivered again
- * instead of reporting them to the FSM as actor errors (#396).
+ * nothing about the actor itself (no worker, the worker went away, a timeout,
+ * a draining worker): the poll loop leaves those messages on the queue to be
+ * delivered again instead of reporting them to the FSM as actor errors (#396).
  */
 export class ActivityInvokeError extends Error {
   constructor(
@@ -242,6 +247,15 @@ interface WorkerState {
   maxConcurrencyByKey: Map<string, number>;
   pendingByInvokeId: Map<string, PendingInvoke>;
   alive: boolean;
+  /**
+   * Past its max connection age: gets no new invokes and counts for no
+   * capacity, and is closed once its in-flight invokes finish (SPEC-007).
+   */
+  draining: boolean;
+  /** Max-connection-age and drain timers, cleared on unregister. */
+  timers: Set<ReturnType<typeof setTimeout>>;
+  /** The HTTP/2 session its stream arrived on, closed (GOAWAY) after a drain. */
+  http2Session?: http2.ServerHttp2Session;
 }
 
 // Every worker currently serving one actor key. Several workers (replicas of
@@ -258,6 +272,36 @@ interface ActorRoute {
   cursor: number;
 }
 
+/** One place workers can connect: a Unix socket or a TCP port. */
+export type SidecarListener =
+  | { kind: "unix"; path: string }
+  | {
+    kind: "tcp";
+    host: string;
+    port: number;
+    /**
+     * PEM certificate chain and key files. Omitted means plaintext, which
+     * the CLI only allows with --insecure-plaintext (local testing).
+     */
+    tls?: SidecarTls;
+  };
+
+/** TLS settings of a TCP sidecar listener (SPEC-007 §1). */
+export interface SidecarTls {
+  /** PEM certificate chain the gateway presents. */
+  certFile: string;
+  /** PEM private key for `certFile`. */
+  keyFile: string;
+  /**
+   * PEM CA bundle for mutual TLS: when set, every worker must present a
+   * client certificate signed by it, or the TLS handshake fails before any
+   * gRPC call (no shared secret needed). Unset: server-side TLS only.
+   */
+  clientCaFile?: string;
+  /** Lowest TLS version accepted. Default TLSv1.3. */
+  minVersion?: "TLSv1.2" | "TLSv1.3";
+}
+
 /** Per-actor routing state of one gateway replica (SPEC-007 §4). */
 export interface ActorRoutingSnapshot {
   actorKey: string;
@@ -265,7 +309,7 @@ export interface ActorRoutingSnapshot {
     RegisteredActor,
     "timeoutMs" | "description" | "maxConcurrency"
   >;
-  /** Connected workers serving this actor. */
+  /** Connected workers serving this actor, draining ones included. */
   liveWorkers: number;
   /** Σ declared max_concurrency over those workers. */
   maxConcurrency: number;
@@ -276,12 +320,40 @@ export interface ActorRoutingSnapshot {
 /** An actor the poll loop can claim for, with how much room it has. */
 export interface ClaimableActor {
   identity: RegisteredActor;
-  /** Σ (max_concurrency − in-flight) over its workers, ≥ 0. */
+  /** Σ (max_concurrency − in-flight) over non-draining workers, ≥ 0. */
   freeSlots: number;
 }
 
 export interface SidecarGatewayOptions {
-  socketPath: string;
+  /** Shorthand for one Unix-socket listener (today's default topology). */
+  socketPath?: string;
+  /** Listeners to serve; added to `socketPath`'s, if both are given. */
+  listeners?: SidecarListener[];
+  /**
+   * File holding the bearer token TCP workers must send
+   * (`authorization: Bearer <token>`). Re-read for every new session, so a
+   * mounted Secret can be rotated without a restart. Unix-socket sessions
+   * aren't checked.
+   */
+  authTokenFile?: string;
+  /**
+   * TCP workers are drained and disconnected after this long (±10 %
+   * jitter), so they reconnect and spread across gateway replicas. 0
+   * disables. Default 10 min.
+   */
+  maxConnectionAgeMs?: number;
+  /**
+   * How long a draining worker gets to finish its in-flight invokes before
+   * it's disconnected anyway (default 30 s).
+   */
+  connectionDrainGraceMs?: number;
+  /**
+   * HTTP/2 PING interval on TCP connections; a connection whose PING goes
+   * unanswered for `keepaliveTimeoutMs` is destroyed, so a half-open
+   * connection doesn't go unnoticed. 0 disables. Defaults 30 s / 10 s.
+   */
+  keepaliveIntervalMs?: number;
+  keepaliveTimeoutMs?: number;
   /**
    * Called once per actor, synchronously, whenever a worker registers it
    * (including on re-registration). Fire-and-forget by design — registration
@@ -297,45 +369,207 @@ export interface SidecarGatewayOptions {
   shutdownGraceMs?: number;
 }
 
+export const DEFAULT_MAX_CONNECTION_AGE_MS = 10 * 60_000;
+export const DEFAULT_CONNECTION_DRAIN_GRACE_MS = 30_000;
+export const DEFAULT_KEEPALIVE_INTERVAL_MS = 30_000;
+export const DEFAULT_KEEPALIVE_TIMEOUT_MS = 10_000;
+const DRAIN_POLL_MS = 100;
+
+/** How a session's listener treats it: auth and max age only apply to TCP. */
+interface ListenerPolicy {
+  kind: "unix" | "tcp";
+}
+
+const UNIX_POLICY: ListenerPolicy = { kind: "unix" };
+
+interface RunningListener {
+  listener: SidecarListener;
+  server: http2.Http2Server | http2.Http2SecureServer;
+  sessions: Set<http2.ServerHttp2Session>;
+  keepalives: Set<ReturnType<typeof setInterval>>;
+}
+
+/** Constant-time comparison of two header values. */
+function safeEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) {
+    // Still spend the comparison, so the length doesn't leak through timing.
+    timingSafeEqual(left, left);
+    return false;
+  }
+  return timingSafeEqual(left, right);
+}
+
 export class SidecarGateway {
-  private readonly socketPath: string;
+  private readonly listeners: SidecarListener[];
+  private readonly authTokenFile?: string;
+  private readonly maxConnectionAgeMs: number;
+  private readonly connectionDrainGraceMs: number;
+  private readonly keepaliveIntervalMs: number;
+  private readonly keepaliveTimeoutMs: number;
   private readonly onActorRegistered?: (actor: RegisteredActor) => void;
   private readonly shutdownGraceMs: number;
-  private server: http2.Http2Server | null = null;
-  private sessions = new Set<http2.ServerHttp2Session>();
+  private running: RunningListener[] = [];
   private readonly workers = new Map<string, WorkerState>();
   private readonly actorRoutes = new Map<string, ActorRoute>();
+  /** The HTTP/2 session a Session call arrived on, for its handler. */
+  private readonly currentHttp2Session = new AsyncLocalStorage<
+    http2.ServerHttp2Session
+  >();
 
   constructor(options: SidecarGatewayOptions) {
-    this.socketPath = options.socketPath;
+    this.listeners = [
+      ...(options.socketPath
+        ? [{ kind: "unix", path: options.socketPath } as const]
+        : []),
+      ...(options.listeners ?? []),
+    ];
+    this.authTokenFile = options.authTokenFile;
+    this.maxConnectionAgeMs = options.maxConnectionAgeMs ??
+      DEFAULT_MAX_CONNECTION_AGE_MS;
+    this.connectionDrainGraceMs = options.connectionDrainGraceMs ??
+      DEFAULT_CONNECTION_DRAIN_GRACE_MS;
+    this.keepaliveIntervalMs = options.keepaliveIntervalMs ??
+      DEFAULT_KEEPALIVE_INTERVAL_MS;
+    this.keepaliveTimeoutMs = options.keepaliveTimeoutMs ??
+      DEFAULT_KEEPALIVE_TIMEOUT_MS;
     this.onActorRegistered = options.onActorRegistered;
     this.shutdownGraceMs = options.shutdownGraceMs ??
       DEFAULT_SHUTDOWN_GRACE_MS;
   }
 
   async start(): Promise<void> {
-    this.cleanupSocket();
+    if (this.listeners.length === 0) {
+      throw new Error(
+        "SidecarGateway needs at least one listener (socketPath or listeners)",
+      );
+    }
+    for (const listener of this.listeners) {
+      this.running.push(await this.listen(listener));
+    }
+  }
 
+  /**
+   * Where each listener ended up, in `listeners` order — e.g. the real port
+   * of a TCP listener started on port 0.
+   */
+  addresses(): SidecarListener[] {
+    return this.running.map(({ listener, server }) => {
+      if (listener.kind === "unix") return listener;
+      const address = server.address();
+      const port = typeof address === "object" && address
+        ? address.port
+        : listener.port;
+      return { ...listener, port };
+    });
+  }
+
+  private async listen(listener: SidecarListener): Promise<RunningListener> {
+    const policy: ListenerPolicy = { kind: listener.kind };
     const routes = (router: ConnectRouter): void => {
       router.service(
         SidecarGatewayService,
-        { session: this.handleSession.bind(this) } as unknown as Partial<
-          ServiceImpl<typeof SidecarGatewayService>
-        >,
+        {
+          session: (
+            requests: AsyncIterable<SessionRequestMessage>,
+            context: HandlerContext,
+          ) => this.handleSession(requests, context, policy),
+        } as unknown as Partial<ServiceImpl<typeof SidecarGatewayService>>,
       );
     };
+    const adapter = connectNodeAdapter({ routes });
+    // Carries the request's HTTP/2 session into the Session handler, so a
+    // drained worker's connection can be closed (GOAWAY), not just its stream.
+    const handler = (
+      req: http2.Http2ServerRequest,
+      res: http2.Http2ServerResponse,
+    ) =>
+      this.currentHttp2Session.run(
+        req.stream.session as http2.ServerHttp2Session,
+        () => adapter(req, res),
+      );
 
-    const server = http2.createServer(connectNodeAdapter({ routes }));
-    this.server = server;
-    this.sessions = trackHttp2Sessions(server);
+    let server: http2.Http2Server | http2.Http2SecureServer;
+    if (listener.kind === "tcp" && listener.tls) {
+      const { certFile, keyFile, clientCaFile, minVersion } = listener.tls;
+      server = http2.createSecureServer(
+        {
+          cert: Deno.readTextFileSync(certFile),
+          key: Deno.readTextFileSync(keyFile),
+          allowHTTP1: false,
+          minVersion: minVersion ?? "TLSv1.3",
+          // Mutual TLS: refuse the handshake unless the worker presents a
+          // certificate signed by the client CA.
+          ...(clientCaFile
+            ? {
+              ca: Deno.readTextFileSync(clientCaFile),
+              requestCert: true,
+              rejectUnauthorized: true,
+            }
+            : {}),
+        },
+        handler,
+      );
+    } else {
+      server = http2.createServer(handler);
+    }
+    const sessions = trackHttp2Sessions(server as http2.Http2Server);
+    const keepalives = new Set<ReturnType<typeof setInterval>>();
+    if (listener.kind === "tcp" && this.keepaliveIntervalMs > 0) {
+      server.on("session", (session) => this.keepAlive(session, keepalives));
+    }
 
+    if (listener.kind === "unix") {
+      this.cleanupSocket(listener.path);
+    }
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => reject(err);
       server.once("error", onError);
-      server.listen(this.socketPath, () => {
+      const onListening = () => {
         server.off("error", onError);
         resolve();
+      };
+      if (listener.kind === "unix") {
+        server.listen(listener.path, onListening);
+      } else {
+        server.listen(listener.port, listener.host, onListening);
+      }
+    });
+    return { listener, server, sessions, keepalives };
+  }
+
+  /**
+   * PINGs a TCP connection every keepaliveIntervalMs and destroys it if a
+   * PING goes unanswered for keepaliveTimeoutMs — the stream then errors, the
+   * worker is unregistered and its in-flight invokes fail as retriable.
+   */
+  private keepAlive(
+    session: http2.ServerHttp2Session,
+    keepalives: Set<ReturnType<typeof setInterval>>,
+  ): void {
+    let awaitingAck: ReturnType<typeof setTimeout> | undefined;
+    const interval = setInterval(() => {
+      if (awaitingAck || session.destroyed || session.closed) return;
+      awaitingAck = setTimeout(() => {
+        logger.warn("Sidecar connection missed a keepalive PING; closing it");
+        session.destroy(new Error("keepalive timeout"));
+      }, this.keepaliveTimeoutMs);
+      const sent = session.ping((error) => {
+        clearTimeout(awaitingAck);
+        awaitingAck = undefined;
+        if (error && !session.destroyed) session.destroy(error);
       });
+      if (!sent) {
+        clearTimeout(awaitingAck);
+        awaitingAck = undefined;
+      }
+    }, this.keepaliveIntervalMs);
+    keepalives.add(interval);
+    session.once("close", () => {
+      clearInterval(interval);
+      clearTimeout(awaitingAck);
+      keepalives.delete(interval);
     });
   }
 
@@ -343,7 +577,7 @@ export class SidecarGateway {
    * Unregisters every worker — failing their in-flight invokes as
    * WORKER_DISCONNECTED (retriable) rather than leaving callers to wait out
    * the invoke timeout — ends each Session stream so workers see EOF and go
-   * reconnect, then closes the server (#397).
+   * reconnect, then closes every listener (#397).
    */
   async stop(): Promise<void> {
     for (const worker of [...this.workers.values()]) {
@@ -351,13 +585,19 @@ export class SidecarGateway {
     }
     this.actorRoutes.clear();
 
-    const server = this.server;
-    this.server = null;
-    if (server) {
-      await closeHttp2Server(server, this.sessions, this.shutdownGraceMs);
-    }
-
-    this.cleanupSocket();
+    const running = this.running;
+    this.running = [];
+    await Promise.all(
+      running.map(async ({ listener, server, sessions, keepalives }) => {
+        for (const interval of keepalives) clearInterval(interval);
+        await closeHttp2Server(
+          server as http2.Http2Server,
+          sessions,
+          this.shutdownGraceMs,
+        );
+        if (listener.kind === "unix") this.cleanupSocket(listener.path);
+      }),
+    );
   }
 
   listRegisteredActors(): string[] {
@@ -382,6 +622,7 @@ export class SidecarGateway {
     return Array.from(this.actorRoutes.entries()).map(([key, route]) => {
       let freeSlots = 0;
       for (const worker of this.routeWorkers(route)) {
+        if (worker.draining) continue;
         freeSlots += Math.max(0, this.freeSlotsOf(worker, key));
       }
       return { identity: route.meta, freeSlots };
@@ -520,14 +761,14 @@ export class SidecarGateway {
   }
 
   /**
-   * Picks the alive worker with the most free slots for this actor (its
-   * max_concurrency minus its in-flight invokes of it), scanning from a
-   * rotating offset so equally-free workers take turns. A worker with no free
-   * slot is still picked if nothing better exists (e.g. a direct Invoke()
-   * RPC); the poll loop never claims more than the free slots.
+   * Picks the alive, non-draining worker with the most free slots for this
+   * actor (its max_concurrency minus its in-flight invokes of it), scanning
+   * from a rotating offset so equally-free workers take turns. A worker with
+   * no free slot is still picked if nothing better exists (e.g. a direct
+   * Invoke() RPC); the poll loop never claims more than the free slots.
    */
   private pickWorker(route: ActorRoute, key: string): WorkerState | undefined {
-    const candidates = this.routeWorkers(route);
+    const candidates = this.routeWorkers(route).filter((w) => !w.draining);
     if (candidates.length === 0) {
       return undefined;
     }
@@ -546,6 +787,24 @@ export class SidecarGateway {
     return best;
   }
 
+  /** Whether this TCP session presented the configured bearer token. */
+  private authorized(context: HandlerContext | undefined): boolean {
+    if (!this.authTokenFile) return true;
+    let expected: string;
+    try {
+      expected = Deno.readTextFileSync(this.authTokenFile).trim();
+    } catch (error) {
+      logger.error("Can't read the sidecar auth token file {file}: {error}", {
+        file: this.authTokenFile,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+    if (!expected) return false;
+    const presented = context?.requestHeader.get("authorization") ?? "";
+    return safeEqual(presented, `Bearer ${expected}`);
+  }
+
   /**
    * The Session bidi-streaming handler: one call per worker process. Reads
    * `register` as the required first message, acks it, then concurrently
@@ -554,10 +813,24 @@ export class SidecarGateway {
    * pushes onto this worker's outbox — the same worker-initiates,
    * gateway-pushes-invoke shape the old length-prefixed protocol had, now
    * carried over one gRPC stream instead of a raw socket.
+   *
+   * On a TCP listener the bearer token is checked before anything is read
+   * (UNAUTHENTICATED otherwise), and the worker is drained and disconnected
+   * after its max connection age.
    */
   private async *handleSession(
     requests: AsyncIterable<SessionRequestMessage>,
+    context?: HandlerContext,
+    policy: ListenerPolicy = UNIX_POLICY,
   ): AsyncIterable<SessionResponseMessage> {
+    if (policy.kind === "tcp" && !this.authorized(context)) {
+      logger.warn("Refused a sidecar session with a missing or wrong token");
+      throw new ConnectError(
+        "missing or invalid bearer token",
+        Code.Unauthenticated,
+      );
+    }
+
     const iterator = requests[Symbol.asyncIterator]();
     const first = await iterator.next();
     if (first.done || first.value.payload.case !== "register") {
@@ -568,6 +841,10 @@ export class SidecarGateway {
     }
 
     const worker = this.registerWorker(first.value.payload.value);
+    worker.http2Session = this.currentHttp2Session.getStore();
+    if (policy.kind === "tcp" && this.maxConnectionAgeMs > 0) {
+      this.scheduleMaxAge(worker);
+    }
 
     yield new SessionResponse({
       payload: {
@@ -610,6 +887,48 @@ export class SidecarGateway {
       yield response;
     }
     void readerLoop;
+  }
+
+  /**
+   * After the max connection age (±10 % jitter), stop routing to the worker,
+   * let its in-flight invokes finish (up to connectionDrainGraceMs), then
+   * end its stream and close its connection (GOAWAY). The worker reconnects,
+   * and the Service may send it to another gateway replica.
+   */
+  private scheduleMaxAge(worker: WorkerState): void {
+    const ageMs = Math.round(
+      this.maxConnectionAgeMs * (0.9 + Math.random() * 0.2),
+    );
+    const ageTimer = setTimeout(() => {
+      worker.timers.delete(ageTimer);
+      if (!worker.alive) return;
+      worker.draining = true;
+      logger.info(
+        "Worker {workerId} reached its max connection age; draining",
+        { workerId: worker.workerId },
+      );
+      const deadline = Date.now() + this.connectionDrainGraceMs;
+      const poll = () => {
+        if (!worker.alive) return;
+        if (worker.pendingByInvokeId.size > 0 && Date.now() < deadline) {
+          const next = setTimeout(() => {
+            worker.timers.delete(next);
+            poll();
+          }, DRAIN_POLL_MS);
+          worker.timers.add(next);
+          return;
+        }
+        const session = worker.http2Session;
+        this.unregisterWorker(worker);
+        // GOAWAY once the stream has ended, so the worker's next session
+        // opens a new connection (and can land on another replica).
+        if (session && !session.closed && !session.destroyed) {
+          session.close();
+        }
+      };
+      poll();
+    }, ageMs);
+    worker.timers.add(ageTimer);
   }
 
   private buildRegisterAck(register: RegisterMessage): RegisterAckMessage {
@@ -686,6 +1005,8 @@ export class SidecarGateway {
       maxConcurrencyByKey: new Map(),
       pendingByInvokeId: new Map(),
       alive: true,
+      draining: false,
+      timers: new Set(),
     };
 
     this.workers.set(register.workerId, worker);
@@ -729,6 +1050,8 @@ export class SidecarGateway {
     const workerId = worker.workerId;
 
     worker.alive = false;
+    for (const timer of worker.timers) clearTimeout(timer);
+    worker.timers.clear();
 
     // Remove only this worker from each route; the key disappears only once
     // no other worker still serves it.
@@ -791,9 +1114,9 @@ export class SidecarGateway {
     pending.reject(error);
   }
 
-  private cleanupSocket(): void {
+  private cleanupSocket(path: string): void {
     try {
-      Deno.removeSync(this.socketPath);
+      Deno.removeSync(path);
     } catch (error) {
       if (!isNotFoundError(error)) {
         throw error;

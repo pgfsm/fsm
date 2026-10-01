@@ -94,8 +94,35 @@ Install section, which documents this. Same issue applies to
   `async-operation-worker-gateway-ctl.ts`)
 - `gatewayServer.ts` — sidecar + gRPC/Connect server, wired together
 - `gatewayClient.ts` — client for the gRPC/Connect API (`ActivityGatewayClient`)
-- `sidecar/` — worker registration + dispatch over the Unix socket
-  (`SidecarGateway`)
+- `sidecar/` — worker registration + dispatch (`SidecarGateway`), on one or more
+  listeners: Unix socket(s) and/or TCP (SPEC-007)
+  - Each listener is its own `http2` server with its own Connect adapter, so the
+    Session handler knows which kind it's serving (`ListenerPolicy`). Auth and
+    max connection age apply to **TCP sessions only**; Unix sessions are
+    unchecked and behave exactly as before.
+  - TCP: `createSecureServer` with the listener's cert/key, `minVersion`
+    (default TLSv1.3), and for mutual TLS `ca` + `requestCert` +
+    `rejectUnauthorized`, so a worker without a valid client certificate fails
+    the handshake before any gRPC call. Plaintext only via
+    `--insecure-plaintext`.
+  - Token: read from `authTokenFile` **on every new session** (rotation without
+    restart), compared with `timingSafeEqual`, `UNAUTHENTICATED` before the
+    `Register` is read. One token for now; several is #429.
+  - Max connection age: a timer per TCP worker (±10 % jitter) marks it
+    `draining` (no new invokes, no capacity in `listClaimableActors()`), waits
+    for its in-flight invokes up to `connectionDrainGraceMs`, then unregisters
+    it and closes its HTTP/2 session (GOAWAY). The handler gets that session
+    through an `AsyncLocalStorage` set in the per-listener request handler,
+    since Connect's `HandlerContext` doesn't expose the raw connection.
+  - Keepalive: per TCP session, a PING every `keepaliveIntervalMs`; no ack
+    within `keepaliveTimeoutMs` destroys the session, so the worker is
+    unregistered and its in-flight invokes fail as retriable.
+  - Tests: `test/sidecar_gateway_capacity_test.ts` (token checks and rotation,
+    draining) drives the handler in memory with a TCP policy;
+    `test/sidecar_gateway_tcp_test.ts` uses real sockets. Its TLS fixtures (a
+    CA, a server cert and a client cert) are generated with `openssl` at test
+    time, so no private key is committed (the pre-commit secrets scan would
+    reject one) and `openssl` must be on `PATH`.
   - Routing is one actor key → a **set** of workers (#391). Several replicas may
     register the same actor. `invoke()` picks the one with the fewest in-flight
     invokes, rotating on ties. Unregister removes only that worker, and only if

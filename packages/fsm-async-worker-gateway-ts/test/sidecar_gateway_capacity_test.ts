@@ -1,8 +1,9 @@
 // SPEC-007 routing in SidecarGateway: workers declare max_concurrency per
 // actor, invokes go to the worker with the most free slots, the poll loop can
-// see each actor's free slots, and the per-actor routing snapshot tracks
-// registration and invoke completion. Drives the private Session handler with
-// in-memory streams, like sidecar_gateway_routing_test.ts.
+// see each actor's free slots, the per-actor routing snapshot tracks
+// registration and invoke completion, and TCP sessions are authenticated and
+// drained after their max connection age. Drives the private Session handler
+// with in-memory streams, like sidecar_gateway_routing_test.ts.
 
 import { assertEquals, assertRejects } from "@std/assert";
 import {
@@ -12,6 +13,8 @@ import {
   SessionRequest,
   type SessionResponse,
 } from "@pgfsm/proto-codegen/sidecargateway/v1/pb";
+import { createHandlerContext } from "@connectrpc/connect";
+import { SidecarGatewayService } from "@pgfsm/proto-codegen/sidecargateway/v1/connect";
 import {
   type ActivityInvokeInput,
   actorKey,
@@ -86,16 +89,33 @@ interface FakeWorker {
   invokes: string[];
   reply(invokeId: string): void;
   close(): Promise<void>;
+  /** Resolves when the gateway ends this worker's response stream. */
+  ended: Promise<void>;
 }
 
 type HandleSession = (
   requests: AsyncIterable<SessionRequestMessage>,
+  context?: unknown,
+  policy?: { kind: "unix" | "tcp" },
 ) => AsyncIterable<SessionResponseMessage>;
+
+function sessionContext(authorization?: string) {
+  return createHandlerContext({
+    service: SidecarGatewayService,
+    method: SidecarGatewayService.methods.session,
+    protocolName: "grpc",
+    requestMethod: "POST",
+    url:
+      "http://localhost/pgfsm.sidecargateway.v1.SidecarGatewayService/Session",
+    requestHeader: authorization ? { authorization } : {},
+  });
+}
 
 async function connectWorker(
   gateway: SidecarGateway,
   workerId: string,
   maxConcurrency: number,
+  options: { tcp?: boolean; authorization?: string } = {},
 ): Promise<FakeWorker> {
   const requests = new PushStream<SessionRequestMessage>();
   requests.push(
@@ -114,13 +134,17 @@ async function connectWorker(
 
   const handleSession = (gateway as unknown as { handleSession: HandleSession })
     .handleSession.bind(gateway);
-  const responses = handleSession(requests)[Symbol.asyncIterator]();
+  const responses = handleSession(
+    requests,
+    options.tcp ? sessionContext(options.authorization) : undefined,
+    options.tcp ? { kind: "tcp" } : undefined,
+  )[Symbol.asyncIterator]();
 
   const ack = await responses.next();
   assertEquals(ack.value?.payload.case, "registerAck");
 
   const invokes: string[] = [];
-  const drained = (async () => {
+  const ended = (async () => {
     while (true) {
       const { value, done } = await responses.next();
       if (done) return;
@@ -132,6 +156,7 @@ async function connectWorker(
 
   return {
     invokes,
+    ended,
     reply(invokeId) {
       requests.push(
         new SessionRequest({
@@ -147,12 +172,13 @@ async function connectWorker(
     },
     async close() {
       requests.close();
-      await drained;
+      await ended;
     },
   };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function freeSlots(gateway: SidecarGateway): number | undefined {
   return gateway.listClaimableActors().find((a) =>
@@ -250,4 +276,90 @@ Deno.test("a missing route is a retriable ACTOR_NOT_FOUND (#396)", async () => {
     ],
     ["ACTOR_NOT_FOUND", true],
   );
+});
+
+Deno.test("TCP sessions need the bearer token, re-read from its file each time", async () => {
+  const tokenFile = await Deno.makeTempFile();
+  await Deno.writeTextFile(tokenFile, "first-token\n");
+  const gateway = new SidecarGateway({
+    socketPath: "/unused",
+    authTokenFile: tokenFile,
+    maxConnectionAgeMs: 0,
+  });
+  try {
+    for (const authorization of [undefined, "Bearer wrong", "first-token"]) {
+      await assertRejects(
+        () => connectWorker(gateway, "x", 1, { tcp: true, authorization }),
+        Error,
+        "missing or invalid bearer token",
+      );
+    }
+    const ok = await connectWorker(gateway, "a", 1, {
+      tcp: true,
+      authorization: "Bearer first-token",
+    });
+    await ok.close();
+
+    // Rotation: the new token works and the old one doesn't, no restart.
+    await Deno.writeTextFile(tokenFile, "second-token");
+    await assertRejects(
+      () =>
+        connectWorker(gateway, "b", 1, {
+          tcp: true,
+          authorization: "Bearer first-token",
+        }),
+      Error,
+      "missing or invalid bearer token",
+    );
+    const rotated = await connectWorker(gateway, "b", 1, {
+      tcp: true,
+      authorization: "Bearer second-token",
+    });
+    await rotated.close();
+
+    // Unix-socket sessions aren't checked.
+    const unix = await connectWorker(gateway, "c", 1);
+    await unix.close();
+  } finally {
+    await Deno.remove(tokenFile);
+  }
+});
+
+Deno.test("a TCP worker past its max connection age is drained, then disconnected", async () => {
+  const gateway = new SidecarGateway({
+    socketPath: "/unused",
+    maxConnectionAgeMs: 50,
+    connectionDrainGraceMs: 5_000,
+  });
+  const a = await connectWorker(gateway, "a", 2, { tcp: true });
+  const inFlight = gateway.invoke(INVOKE, 5_000);
+  await tick();
+  assertEquals(a.invokes.length, 1);
+
+  await sleep(80); // past 50 ms ± 10 %
+  // Draining: no capacity, no new invokes, but still connected.
+  assertEquals(freeSlots(gateway), 0);
+  await assertRejects(
+    () => gateway.invoke(INVOKE, 1_000),
+    Error,
+    "worker unavailable",
+  );
+  assertEquals(gateway.routingSnapshot()[0].liveWorkers, 1);
+
+  // The in-flight invoke finishes, then the gateway ends the stream.
+  a.reply(a.invokes[0]);
+  await inFlight;
+  await a.ended;
+  assertEquals(gateway.listRegisteredActors(), []);
+});
+
+Deno.test("Unix-socket workers never hit the max connection age", async () => {
+  const gateway = new SidecarGateway({
+    socketPath: "/unused",
+    maxConnectionAgeMs: 20,
+  });
+  const a = await connectWorker(gateway, "a", 1);
+  await sleep(60);
+  assertEquals(freeSlots(gateway), 1);
+  await a.close();
 });

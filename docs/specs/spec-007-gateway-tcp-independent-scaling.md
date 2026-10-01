@@ -59,9 +59,12 @@ Two known bugs also block any scaled topology:
   without containers today stops working.
 - **ADR-003 — connection pooler in front of Postgres.** Gateway pools stay small
   (`max: 2–5`) behind a transaction pooler.
-- **Worker ↔ gateway security** on a shared network: the gateway serves **TLS**,
-  and workers authenticate with a **bearer token** (from a K8s Secret). No
-  service mesh is assumed.
+- **Worker ↔ gateway security** on a shared network: the gateway serves **TLS**
+  (1.3 by default), and workers authenticate with a **bearer token** (from a K8s
+  Secret), with **client certificates (mutual TLS)**, or both. No service mesh
+  is assumed. This mirrors how Temporal workers connect: the worker always opens
+  the connection, over gRPC with TLS, and authenticates with an API key or with
+  mTLS (Temporal's recommended mode).
 - **Existing wire protocol.** The sidecar leg is already gRPC (Connect over
   `node:http2`, `pgfsm.sidecargateway.v1.SidecarGatewayService`, one
   bidirectional `Session` stream per worker). Only its listener is Unix-only.
@@ -176,12 +179,20 @@ Why the others lose on that driver:
    - TCP mode uses `http2.createSecureServer` with `--tls-cert` / `--tls-key`.
      - Plaintext TCP requires explicit `--insecure-plaintext` and logs a warning
        (for local testing only).
+     - `--tls-min-version` (`1.2` or `1.3`, default `1.3`) sets the lowest TLS
+       version the listener accepts.
+     - **Mutual TLS:** `--tls-client-ca <file>` makes the listener require a
+       client certificate signed by that CA; a worker without one fails the TLS
+       handshake before any gRPC call. It identifies workers without a shared
+       secret, and can be used instead of, or together with, the token.
    - Auth: `--auth-token-file <path>`. When set, a `Session` whose
      `authorization: Bearer <token>` header doesn't match (constant-time
      compare) is rejected with `UNAUTHENTICATED` before `Register` is processed.
      - The file is re-read on change, so a mounted Secret can be rotated without
        a restart.
      - Unix mode may omit the token.
+     - One token per gateway for now. Accepting several (overlapping rotation,
+       one token per language/service) is #429.
    - The gateway sets an HTTP/2 **max connection age**
      (`--max-connection-age-ms`, default 10 min ± 10 % jitter), then sends
      GOAWAY once in-flight invokes drain or a grace period ends.
@@ -196,11 +207,22 @@ Why the others lose on that driver:
    - `--gateway-socket <path>` stays. It is joined by
      `--gateway-address
      <unix:path | https://host:port>`, plus
-     `--gateway-ca-file` and `--gateway-token-file`.
+     `--gateway-ca-file` and `--gateway-token-file`, and `--gateway-cert-file` /
+     `--gateway-key-file` for a client certificate (mutual TLS).
    - Reconnect with exponential backoff + jitter (#392): re-send `Register` on
      every new session, and treat GOAWAY / max-age as a normal reconnect.
    - Graceful drain on SIGTERM: stop taking new invokes, finish in-flight
      invokes within a grace period, then close.
+   - **Concurrency:** each SDK runs invokes concurrently, up to each actor's
+     declared `max_concurrency`, and enforces that limit locally too (extra
+     invokes wait), since the gateway can briefly send more (after its own
+     invoke timeout, or through the direct `Invoke()` RPC). An actor's limit is
+     its own `maxConcurrency` if declared, else the worker's
+     `--max-concurrency`, else 1. The default of 1 keeps today's one-at-a-time
+     behaviour, so actor code only needs to be concurrency-safe once someone
+     raises it. The per-actor value is a property of the actor's code, so the
+     compiler lets developers declare it in the actor's stub (#435); the
+     worker-wide flag is the operator's capacity knob.
 3. **Proto** (`sidecar_gateway.proto`, additive)
    - `RegisteredActor.max_concurrency` (`uint32`, field 9; `0` ⇒ 1).
 4. **Routing** (#391)
@@ -246,9 +268,10 @@ Why the others lose on that driver:
 
 **What gets harder**
 
-- The gateway is now a network service: TLS certs and the token Secret must be
-  issued and rotated (cert-manager or manual). There are more places to
-  misconfigure (Service port, CA trust, token mismatch).
+- The gateway is now a network service: TLS certs, the token Secret and, with
+  mutual TLS, worker client certificates must be issued and rotated
+  (cert-manager or manual). There are more places to misconfigure (Service port,
+  CA trust, token mismatch, client-certificate CA).
 - Load across gateway replicas can drift until the next max-connection-age
   cycle. After a gateway scale-out, new replicas take work only as workers
   reconnect.
@@ -318,6 +341,10 @@ Why the others lose on that driver:
       `UNAUTHENTICATED` before registration. A plaintext connection to a TLS
       listener fails. Rotating the token file is picked up without a gateway
       restart. Verified E2E.
+- [ ] **Mutual TLS and TLS version:** with `--tls-client-ca`, a worker
+      presenting a client certificate signed by that CA registers, and one
+      without fails the TLS handshake. By default, a client limited to TLS 1.2
+      is refused. Verified by test and E2E.
 - [ ] **Half-open connections are detected over TCP:** the gateway and the SDKs
       enable HTTP/2 keepalive pings on the TCP transport (default 30 s interval,
       10 s timeout, configurable). If the network drops without a clean close,
@@ -327,8 +354,9 @@ Why the others lose on that driver:
 - [ ] **Unix mode unchanged:** with no new flags, gateway and SDKs behave
       exactly as today (default Unix socket paths, no TLS/token required).
 - [ ] **Flag parity:** all 4 SDKs expose the same `--gateway-address`,
-      `--gateway-ca-file`, and `--gateway-token-file` flags and reconnect
-      behavior, documented in each README.
+      `--gateway-ca-file`, `--gateway-token-file`, `--gateway-cert-file` and
+      `--gateway-key-file` flags and reconnect behavior, documented in each
+      README.
 - [ ] **Reference manifests** apply cleanly to a kind cluster and pass the E2E
       checks above, and the Pod Security `restricted` profile admits them (no
       `hostPath`, non-root).

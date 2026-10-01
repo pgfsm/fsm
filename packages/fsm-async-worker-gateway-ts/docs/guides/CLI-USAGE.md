@@ -10,15 +10,17 @@ service another orchestrator's poll/claim/archive loop calls into.
 Concretely, it:
 
 1. **Accepts worker registrations** — TS/Python/Rust/Go worker processes connect
-   over a Unix socket (the "sidecar") and announce which actors they serve
-   (`SidecarGateway`).
+   to the "sidecar" and announce which actors they serve (`SidecarGateway`):
+   over a Unix socket (single pod) and/or over TCP with TLS, a bearer token or
+   mutual TLS (the gateway as its own Deployment, SPEC-007).
 2. **Owns its own Postgres connection and poll loop** — every 30 seconds
-   (default), asks Postgres which pending work matches its currently-registered
-   workers (`claimPendingAsyncOperationEventsForWorkers` — see the "PGMQ message
-   payload shape" section below), with zero dependency on any external
-   orchestrator's poll loop.
+   (default), claims pending work for its currently-registered actors, at most
+   as many messages per actor as its workers have free slots
+   (`claimPendingAsyncOperationEventsWithCapacity` — see "Poll loop behavior"
+   and the "PGMQ message payload shape" section below), with zero dependency on
+   any external orchestrator's poll loop.
 3. **Dispatches and archives** — for each claimed item, invokes the right worker
-   over the sidecar socket (`sidecar.invoke()`) and archives the result
+   over its sidecar session (`sidecar.invoke()`) and archives the result
    (`archiveEventFromFsmAsyncOperationTypeWorker`), non-blocking, per actor.
 4. **Optionally exposes a client-facing gRPC/Connect API** (`Invoke`,
    `ListRegisteredActors`) — the _original_ reason this package existed (a
@@ -54,9 +56,10 @@ This package provides two CLIs:
 
 ## async-operation-worker-gateway — gateway + sidecar + poll loop
 
-Starts the sidecar (accepts worker registrations over a Unix socket), the
-client-facing gRPC/Connect server, and — unless disabled — the 30-second
-async-op poll loop, all in one process sharing one `SidecarGateway` instance.
+Starts the sidecar (accepts worker registrations over a Unix socket and/or a TCP
+listener), the client-facing gRPC/Connect server, and — unless disabled — the
+30-second async-op poll loop, all in one process sharing one `SidecarGateway`
+instance.
 
 ### Invocation
 
@@ -70,19 +73,29 @@ deno task gateway [options]
 
 ### Options
 
-| Flag                          | Alias | Required                                                  | Default                                    | Description                                                                                                                   |
-| ----------------------------- | ----- | --------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--bind <target>`             | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                                               |
-| `--sidecar-socket <path>`     | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on                                                                           |
-| `--invoke-timeout-ms <ms>`    | `-t`  | no                                                        | `10000`                                    | Per-invoke timeout for the gRPC `Invoke` RPC and for poll-loop dispatches of actors that don't declare their own `timeout_ms` |
-| `--vt-margin-seconds <s>`     |       | no                                                        | `10`                                       | Claimed messages stay invisible for the invoke timeout plus this (see below)                                                  |
-| `--max-delivery-attempts <n>` |       | no                                                        | `5`                                        | Deliveries before a retriable failure is archived as an actor error (see below)                                               |
-| `--db-url <url>`              | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled                                        |
-| `--poll-interval-ms <ms>`     |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                                                   |
-| `--disable-poll-loop`         |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`)                            |
-| `--ensure-queue-on-register`  |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                                                     |
-| `--version`                   | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                                                        |
-| `--help`                      | `-h`  | —                                                         | —                                          | Print help and exit                                                                                                           |
+| Flag                           | Alias | Required                                                  | Default                                    | Description                                                                                                                   |
+| ------------------------------ | ----- | --------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `--bind <target>`              | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                                               |
+| `--sidecar-socket <path>`      | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on. The default applies only when `--sidecar-listen` isn't given either      |
+| `--sidecar-listen <target>`    |       | no                                                        | —                                          | Also (or instead) listen for workers on `unix:<path>` or `tcp://<host>:<port>` (see "TCP listener" below)                     |
+| `--tls-cert <file>`            |       | for `tcp://`, unless `--insecure-plaintext`               | —                                          | PEM certificate chain the TCP listener presents                                                                               |
+| `--tls-key <file>`             |       | with `--tls-cert`                                         | —                                          | PEM private key for `--tls-cert`                                                                                              |
+| `--tls-min-version <v>`        |       | no                                                        | `1.3`                                      | Lowest TLS version the TCP listener accepts: `1.2` or `1.3`                                                                   |
+| `--tls-client-ca <file>`       |       | no                                                        | —                                          | Mutual TLS: require worker client certificates signed by this CA                                                              |
+| `--insecure-plaintext`         |       | no                                                        | off                                        | Allow a `tcp://` listener without TLS. Local testing only; logs a warning                                                     |
+| `--auth-token-file <file>`     |       | no                                                        | —                                          | Bearer token TCP workers must send; re-read for every new session                                                             |
+| `--max-connection-age-ms <ms>` |       | no                                                        | `600000`                                   | Drain and disconnect TCP workers after this long, ±10 % jitter; `0` disables                                                  |
+| `--keepalive-interval-ms <ms>` |       | no                                                        | `30000`                                    | HTTP/2 PING interval on TCP worker connections; `0` disables                                                                  |
+| `--keepalive-timeout-ms <ms>`  |       | no                                                        | `10000`                                    | Close a TCP connection whose PING goes unanswered this long                                                                   |
+| `--invoke-timeout-ms <ms>`     | `-t`  | no                                                        | `10000`                                    | Per-invoke timeout for the gRPC `Invoke` RPC and for poll-loop dispatches of actors that don't declare their own `timeout_ms` |
+| `--vt-margin-seconds <s>`      |       | no                                                        | `10`                                       | Claimed messages stay invisible for the invoke timeout plus this (see below)                                                  |
+| `--max-delivery-attempts <n>`  |       | no                                                        | `5`                                        | Deliveries before a retriable failure is archived as an actor error (see below)                                               |
+| `--db-url <url>`               | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled                                        |
+| `--poll-interval-ms <ms>`      |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                                                   |
+| `--disable-poll-loop`          |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`)                            |
+| `--ensure-queue-on-register`   |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                                                     |
+| `--version`                    | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                                                        |
+| `--help`                       | `-h`  | —                                                         | —                                          | Print help and exit                                                                                                           |
 
 > **Poll loop is on by default; `--ensure-queue-on-register` is opt-in.** If
 > either needs a DB connection and neither `--db-url` nor `DATABASE_URL` is set,
@@ -111,19 +124,94 @@ deno task gateway \
   --bind unix:/tmp/my-gateway.sock \
   --sidecar-socket /tmp/my-gateway-workers.sock \
   --disable-poll-loop
+
+# Gateway as its own Deployment: workers connect over TLS with a bearer token
+deno task gateway \
+  --sidecar-listen tcp://0.0.0.0:7443 \
+  --tls-cert /etc/pgfsm/tls/tls.crt --tls-key /etc/pgfsm/tls/tls.key \
+  --auth-token-file /etc/pgfsm/token/token
+
+# Same, with mutual TLS instead of (or as well as) the token
+deno task gateway \
+  --sidecar-listen tcp://0.0.0.0:7443 \
+  --tls-cert /etc/pgfsm/tls/tls.crt --tls-key /etc/pgfsm/tls/tls.key \
+  --tls-client-ca /etc/pgfsm/tls/workers-ca.crt
+
+# Migration: keep the pod-local socket and add the TCP listener
+deno task gateway \
+  --sidecar-socket /tmp/pgfsm-activity-gateway-workers.sock \
+  --sidecar-listen tcp://0.0.0.0:7443 \
+  --tls-cert tls.crt --tls-key tls.key --auth-token-file token
+
+# Local testing only: plaintext TCP (logs a warning)
+deno task gateway --sidecar-listen tcp://127.0.0.1:7443 --insecure-plaintext
 ```
 
 ### Startup sequence
 
-1. **Sidecar** — binds the Unix socket workers register on
-   (`SidecarGateway.start()`). If `--ensure-queue-on-register` is set, every
-   actor a worker registers also triggers a PGMQ queue-ensure call (see below) —
-   fire-and-forget, doesn't block or fail registration itself.
+1. **Sidecar** — binds every worker listener: the Unix socket and/or the
+   `--sidecar-listen` target (`SidecarGateway.start()`), logging each address.
+   If `--ensure-queue-on-register` is set, every actor a worker registers also
+   triggers a PGMQ queue-ensure call (see below) — fire-and-forget, doesn't
+   block or fail registration itself.
 2. **Poll loop** (unless `--disable-poll-loop`) — starts against the same
    `SidecarGateway` instance, so it always dispatches to whichever workers are
    currently registered.
 3. **gRPC/Connect server** — binds `--bind` and starts serving `Invoke` /
    `ListRegisteredActors`.
+
+### TCP listener, TLS and authentication
+
+By default workers reach the sidecar over a Unix socket, so the gateway and
+every language's workers share one pod. `--sidecar-listen tcp://<host>:<port>`
+lets workers connect over the network instead, so the gateway runs as its own
+Deployment behind a Service and each language scales and releases on its own
+(SPEC-007). Workers always open the connection
+(`--gateway-address
+https://<service>:<port>` in each SDK); the gateway never
+dials workers.
+
+- **Both at once.** `--sidecar-socket` and `--sidecar-listen` can be combined,
+  so a single-pod setup can move one language at a time. With neither flag, the
+  default socket is served exactly as before.
+- **TLS.** A `tcp://` listener needs `--tls-cert` and `--tls-key`. TLS 1.3 is
+  the minimum by default (`--tls-min-version 1.2` relaxes it). Plaintext TCP is
+  refused unless you pass `--insecure-plaintext`, which is for local testing
+  only and logs a warning.
+- **Bearer token.** With `--auth-token-file`, a TCP worker must send
+  `authorization: Bearer <token>` (`--gateway-token-file` in the SDKs). A
+  missing or wrong token gets `UNAUTHENTICATED` before its `Register` is read.
+  The file is re-read for every new session, so a mounted Kubernetes Secret can
+  be rotated without restarting the gateway. Only one token is accepted at a
+  time; several tokens (overlapping rotation, one per language) are #429.
+- **Mutual TLS.** With `--tls-client-ca`, a worker must present a client
+  certificate signed by that CA (`--gateway-cert-file`/`--gateway-key-file` in
+  the SDKs), or the TLS handshake fails before any gRPC call. It identifies
+  workers without a shared secret, and works alone or together with the token.
+- **Unix-socket sessions aren't checked**: only processes that share the pod can
+  reach the socket.
+
+If a TCP listener has neither a token nor a client CA, the gateway logs a
+warning at startup: any client that can reach it can register as a worker.
+
+### Max connection age and keepalive
+
+Both apply to TCP worker connections only; Unix-socket workers behave as before.
+
+- **Max connection age** (`--max-connection-age-ms`, default 10 min ±10 %
+  jitter). A Kubernetes Service balances per connection, so a worker stays on
+  the gateway replica it first reached. After its max age the worker is
+  **drained**: it gets no new invokes and counts for no capacity, its in-flight
+  invokes are allowed to finish (up to 30 s), and then its stream ends and its
+  connection is closed with GOAWAY. The worker reconnects as normal, possibly to
+  another replica, which spreads workers across replicas added by scale-out.
+- **Keepalive** (`--keepalive-interval-ms`, default 30 s;
+  `--keepalive-timeout-ms`, default 10 s). The gateway PINGs each TCP
+  connection, and one whose PING goes unanswered is closed. A half-open
+  connection (node loss, a NetworkPolicy blackhole) is therefore noticed within
+  about 40 s: the worker is unregistered and its in-flight invokes fail as
+  retriable, so their messages are delivered again (#396). The SDKs PING the
+  gateway the same way, so their side notices and reconnects too.
 
 ### `--ensure-queue-on-register` behavior
 
@@ -328,10 +416,10 @@ SELECT pgmq.send('creditCheck_v01_i_checkBureau_t', jsonb_build_object(
 
 ### Graceful shutdown
 
-| Signal                             | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections and gives open ones up to 5 s to finish. Then it closes the sidecar: in-flight invokes fail as `WORKER_DISCONNECTED`, every worker's session ends (so it reconnects to the next gateway), and any worker connection still open after another 5 s is dropped. Finally it removes the Unix sockets and closes the DB pool (if the poll loop was running). Shutdown no longer waits indefinitely on connected workers (#397). |
-| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Signal                             | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections and gives open ones up to 5 s to finish. Then it closes the sidecar: in-flight invokes fail as `WORKER_DISCONNECTED` (retriable, so their messages are delivered again), every worker's session ends (so it reconnects to the next gateway), and any worker connection still open after another 5 s is dropped, on every listener. Finally it removes the Unix sockets and closes the DB pool (if the poll loop was running). Shutdown no longer waits indefinitely on connected workers (#397). |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### Environment variables
 
