@@ -5,7 +5,7 @@
 // the TLS port.
 
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { Code, ConnectError, createClient } from "@connectrpc/connect";
+import { Code, type ConnectError, createClient } from "@connectrpc/connect";
 import {
   createGrpcTransport,
   Http2SessionManager,
