@@ -79,9 +79,44 @@ there (see that README's "Using local SDK source"). Workspace code that needs
 the SDK directly (e.g. the example journey test) imports
 `@pgfsm/async-worker-sdk` by its workspace name.
 
+## Transport, concurrency and drain (SPEC-007, #431)
+
+- **Addresses.** `gatewayAddress` (`unix:` / `https://` / `http://`) is parsed
+  once by `parseGatewayAddress`; `gatewaySocketPath` is shorthand for `unix:`.
+  `openTransport()` builds a **new** `Http2SessionManager` per session (so a
+  reconnect after the gateway's max-age drain can reach another replica), and
+  reads the token, CA and client certificate then, so rotated files apply from
+  the next session.
+- **TLS sockets are ours.** For `https://`, `createConnection` returns a
+  `tls.connect` socket whose `"error"` events are intercepted: logged, then the
+  socket is destroyed _without_ an error. Under TLS 1.3 a gateway refuses a
+  missing client certificate only after the handshake, and connect-node removes
+  its session `"error"` listener on `"connect"` before attaching the next one,
+  so that late alert used to become an unhandled session error and crash the
+  process. Now the call fails and `run()` retries with backoff. Covered by the
+  mTLS test in `test/transport_concurrency.test.ts`.
+- **Concurrency.** `serveLoop` no longer awaits `handleInvoke`; each actor has a
+  `Semaphore` sized by
+  `effectiveMaxConcurrency(reg.maxConcurrency,
+  options.maxConcurrency)`
+  (actor, else worker, else 1), and that value is sent in `Register`. The local
+  semaphore matters: the gateway can briefly send more than declared (after its
+  own invoke timeout, or a direct `Invoke()`).
+- **Drain.** `stop()` returns a promise: it refuses new invokes with a retriable
+  `WORKER_DRAINING` error, waits for in-flight ones up to `shutdownGraceMs`,
+  then unregisters and closes. `run()` doesn't reconnect while stopping and
+  resolves after the drain.
+- **CLI integers** reject empty values: `parseArgs` reads `--flag -1` as a
+  separate flag `1`, leaving an empty string that `Number()` turned into 0.
+
+Tests: `test/transport_concurrency.test.ts` runs a real in-process gateway over
+real sockets (TLS + token, wrong token, mTLS with/without a client certificate,
+plaintext, worker-wide and per-actor concurrency, drain, max-age reconnect),
+with TLS fixtures made by `openssl` at test time (`test/tls_fixture.ts`; no
+committed keys).
+
 ## Known behaviour
 
-`ActorWorker.run()` doesn't notice the gateway going away: if the gateway
-process exits, the worker keeps waiting until it's stopped (SIGINT/SIGTERM or
-`stop()`). This predates the move out of the compiler (the old generated
-`sdk.ts` behaves the same).
+Over a Unix socket there's no keepalive: a crash there shows up immediately as
+end of stream. Over TCP, HTTP/2 PINGs (`keepaliveIntervalMs`) detect a half-open
+connection and the worker reconnects.

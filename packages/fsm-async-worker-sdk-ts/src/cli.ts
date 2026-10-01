@@ -13,8 +13,12 @@ import { getLogger } from "@logtape/logtape";
 import {
   type ActorRegistration,
   ActorWorker,
+  DEFAULT_KEEPALIVE_INTERVAL_MS,
+  DEFAULT_KEEPALIVE_TIMEOUT_MS,
   DEFAULT_RECONNECT_INITIAL_DELAY_MS,
   DEFAULT_RECONNECT_MAX_DELAY_MS,
+  DEFAULT_SHUTDOWN_GRACE_MS,
+  parseGatewayAddress,
 } from "./actorWorker.ts";
 
 const logger = getLogger([
@@ -48,6 +52,20 @@ USAGE
 
 OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: ${DEFAULT_GATEWAY_SOCKET_PATH})
+  -a, --gateway-address <addr>  Gateway sidecar address instead: unix:<path>, https://host:port,
+                                or http://host:port (the gateway's --insecure-plaintext test mode)
+      --gateway-ca-file <file>  PEM CA bundle to trust the gateway's TLS certificate (default: system roots)
+      --gateway-token-file <file>
+                                Bearer token sent to the gateway; re-read on every reconnect
+      --gateway-cert-file <file>
+      --gateway-key-file <file> Client certificate and key for mutual TLS
+  -c, --max-concurrency <n>     Invokes of each actor run at once, for actors without their own
+                                maxConcurrency (default: 1). Handlers must be concurrency-safe above 1.
+      --keepalive-interval-ms <ms>
+                                HTTP/2 PING interval over TCP (default: ${DEFAULT_KEEPALIVE_INTERVAL_MS}; 0 disables)
+      --keepalive-timeout-ms <ms>
+                                Reconnect when a PING goes unanswered this long (default: ${DEFAULT_KEEPALIVE_TIMEOUT_MS})
+      --shutdown-grace-ms <ms>  On SIGINT/SIGTERM, let in-flight invokes finish this long (default: ${DEFAULT_SHUTDOWN_GRACE_MS})
   -i, --worker-id <id>          Stable worker identity (default: typescript-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: 5000)
       --reconnect-initial-delay-ms <ms>
@@ -62,15 +80,18 @@ COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
           Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
-          session drops (e.g. the gateway restarts).
+          session drops (e.g. the gateway restarts). On SIGINT/SIGTERM it drains: new invokes
+          are refused as retriable while in-flight ones finish.
 
 DESCRIPTION
   Actors come from a compiler-generated registry (see
   fsm-compiler-ts's writeAggregateActorsRegistry) -- statically imported at
   build time, not scanned or dynamically loaded at startup.
 
-EXAMPLE
+EXAMPLES
   ${invocation} start --gateway-socket ${DEFAULT_GATEWAY_SOCKET_PATH}
+  ${invocation} start --gateway-address https://activity-gateway:7443 \\
+    --gateway-ca-file ca.crt --gateway-token-file token --max-concurrency 10
 `);
 }
 
@@ -91,6 +112,15 @@ export async function runActorWorkerCli(
   const args = parseArgs(options.args, {
     string: [
       "gateway-socket",
+      "gateway-address",
+      "gateway-ca-file",
+      "gateway-token-file",
+      "gateway-cert-file",
+      "gateway-key-file",
+      "max-concurrency",
+      "keepalive-interval-ms",
+      "keepalive-timeout-ms",
+      "shutdown-grace-ms",
       "worker-id",
       "heartbeat-ms",
       "reconnect-initial-delay-ms",
@@ -101,6 +131,8 @@ export async function runActorWorkerCli(
     alias: {
       h: "help",
       g: "gateway-socket",
+      a: "gateway-address",
+      c: "max-concurrency",
       i: "worker-id",
     },
   });
@@ -119,8 +151,76 @@ export async function runActorWorkerCli(
     return 1;
   }
 
-  const gatewaySocketPath = args["gateway-socket"] ??
-    DEFAULT_GATEWAY_SOCKET_PATH;
+  /** An integer flag ≥ `min`, or undefined when not given; null if invalid. */
+  const integerFlag = (
+    name: string,
+    min: number,
+  ): number | undefined | null => {
+    const raw = args[name as keyof typeof args] as string | undefined;
+    if (raw === undefined) return undefined;
+    // An empty value (`--flag=`, or `--flag -1`, which parses `-1` as a
+    // separate flag) must not read as 0.
+    const value = raw.trim() === "" ? NaN : Number(raw);
+    if (!Number.isInteger(value) || value < min) {
+      logger.error("--{name} must be an integer ≥ {min}, got: {value}", {
+        name,
+        min,
+        value: raw,
+      });
+      return null;
+    }
+    return value;
+  };
+
+  if (args["gateway-socket"] && args["gateway-address"]) {
+    logger.error("Pass either --gateway-socket or --gateway-address, not both");
+    return 1;
+  }
+  const gatewayAddress = args["gateway-address"] ??
+    `unix:${args["gateway-socket"] ?? DEFAULT_GATEWAY_SOCKET_PATH}`;
+  try {
+    parseGatewayAddress(gatewayAddress);
+  } catch (error) {
+    logger.error("{error}", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 1;
+  }
+  const caFile = args["gateway-ca-file"];
+  const tokenFile = args["gateway-token-file"];
+  const certFile = args["gateway-cert-file"];
+  const keyFile = args["gateway-key-file"];
+  if (!!certFile !== !!keyFile) {
+    logger.error("--gateway-cert-file and --gateway-key-file go together");
+    return 1;
+  }
+  // Fail fast on unreadable credentials instead of retrying forever.
+  for (
+    const [flag, file] of Object.entries({
+      caFile,
+      tokenFile,
+      certFile,
+      keyFile,
+    })
+  ) {
+    if (!file) continue;
+    try {
+      Deno.statSync(file);
+    } catch {
+      logger.error("Can't read {flag} file {file}", { flag, file });
+      return 1;
+    }
+  }
+  const maxConcurrency = integerFlag("max-concurrency", 1);
+  const keepaliveIntervalMs = integerFlag("keepalive-interval-ms", 0);
+  const keepaliveTimeoutMs = integerFlag("keepalive-timeout-ms", 1);
+  const shutdownGraceMs = integerFlag("shutdown-grace-ms", 0);
+  if (
+    [maxConcurrency, keepaliveIntervalMs, keepaliveTimeoutMs, shutdownGraceMs]
+      .includes(null)
+  ) {
+    return 1;
+  }
   const workerId = args["worker-id"] ??
     `typescript-${crypto.randomUUID().slice(0, 8)}`;
   const heartbeatMs = args["heartbeat-ms"]
@@ -164,7 +264,15 @@ export async function runActorWorkerCli(
     {
       workerId,
       language: "typescript",
-      gatewaySocketPath,
+      gatewayAddress,
+      caFile,
+      tokenFile,
+      certFile,
+      keyFile,
+      maxConcurrency: maxConcurrency ?? undefined,
+      keepaliveIntervalMs: keepaliveIntervalMs ?? undefined,
+      keepaliveTimeoutMs: keepaliveTimeoutMs ?? undefined,
+      shutdownGraceMs: shutdownGraceMs ?? undefined,
       heartbeatMs,
       reconnectInitialDelayMs,
       reconnectMaxDelayMs,
@@ -173,17 +281,23 @@ export async function runActorWorkerCli(
     registrations,
   );
 
+  let stopRequested = false;
   const onSignal = () => {
-    logger.info("Shutdown requested — stopping worker...");
-    worker.stop();
+    if (stopRequested) {
+      logger.info("Already stopping: waiting for in-flight invokes to finish");
+      return;
+    }
+    stopRequested = true;
+    logger.info("Shutdown requested — draining and stopping worker...");
+    void worker.stop();
   };
   Deno.addSignalListener("SIGINT", onSignal);
   Deno.addSignalListener("SIGTERM", onSignal);
 
   try {
     logger.info(
-      "Starting worker {workerId}: gateway-socket={socket}",
-      { workerId, socket: gatewaySocketPath },
+      "Starting worker {workerId}: gateway={address}",
+      { workerId, address: gatewayAddress },
     );
     await worker.run();
     logger.info("Worker {workerId} stopped.", { workerId });
