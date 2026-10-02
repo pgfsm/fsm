@@ -14,7 +14,7 @@ authors = [{ name = "Niraj Kashyap", email = "niraj.38.re@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
   # Generated pgfsm.sidecargateway.v1 client stubs; brings grpcio/protobuf.
-  "pgfsm-proto-codegen>=0.1.1,<0.2",
+  "pgfsm-proto-codegen>=0.2,<0.3",
 ]
 
 [project.urls]

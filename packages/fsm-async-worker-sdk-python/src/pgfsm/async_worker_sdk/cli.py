@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import threading
 import uuid
@@ -19,10 +20,14 @@ from typing import List, Optional, Sequence
 
 from .actor_worker import (
     DEFAULT_HEARTBEAT_MS,
+    DEFAULT_KEEPALIVE_INTERVAL_MS,
+    DEFAULT_KEEPALIVE_TIMEOUT_MS,
     DEFAULT_RECONNECT_INITIAL_DELAY_MS,
     DEFAULT_RECONNECT_MAX_DELAY_MS,
+    DEFAULT_SHUTDOWN_GRACE_MS,
     ActorRegistration,
     ActorWorker,
+    parse_gateway_address,
 )
 
 logger = logging.getLogger("pgfsm.async_worker_sdk.cli")
@@ -36,7 +41,8 @@ commands:
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
           Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
-          session drops (e.g. the gateway restarts).
+          session drops (e.g. the gateway restarts). On SIGINT/SIGTERM it drains: new invokes
+          are refused as retriable while in-flight ones finish.
 
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateActorsRegistry) -- statically imported, not scanned or
@@ -61,15 +67,80 @@ def _build_parser(invocation: str) -> _ArgumentParser:
         prog=invocation,
         description=_DESCRIPTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"example:\n  {invocation} start --gateway-socket {DEFAULT_GATEWAY_SOCKET_PATH}",
+        epilog=(
+            "examples:\n"
+            f"  {invocation} start --gateway-socket {DEFAULT_GATEWAY_SOCKET_PATH}\n"
+            f"  {invocation} start --gateway-address https://activity-gateway:7443 \\\n"
+            "    --gateway-ca-file ca.crt --gateway-token-file token --max-concurrency 10"
+        ),
         add_help=False,
     )
     parser.add_argument("command", nargs="?", choices=["list", "start"])
     parser.add_argument(
         "-g",
         "--gateway-socket",
-        default=DEFAULT_GATEWAY_SOCKET_PATH,
+        default=None,
         help=f"Sidecar socket to connect to (default: {DEFAULT_GATEWAY_SOCKET_PATH})",
+    )
+    parser.add_argument(
+        "-a",
+        "--gateway-address",
+        default=None,
+        help=(
+            "Gateway sidecar address instead: unix:<path>, https://host:port, "
+            "or http://host:port (the gateway's --insecure-plaintext test mode)"
+        ),
+    )
+    parser.add_argument(
+        "--gateway-ca-file",
+        default=None,
+        help="PEM CA bundle to trust the gateway's TLS certificate (default: system roots)",
+    )
+    parser.add_argument(
+        "--gateway-token-file",
+        default=None,
+        help="Bearer token sent to the gateway; re-read on every reconnect",
+    )
+    parser.add_argument(
+        "--gateway-cert-file",
+        default=None,
+        help="Client certificate for mutual TLS (with --gateway-key-file)",
+    )
+    parser.add_argument(
+        "--gateway-key-file",
+        default=None,
+        help="Client key for mutual TLS (with --gateway-cert-file)",
+    )
+    parser.add_argument(
+        "-c",
+        "--max-concurrency",
+        type=int,
+        default=None,
+        help=(
+            "Invokes of each actor run at once, for actors without their own "
+            "max_concurrency (default: 1). Handlers must be concurrency-safe above 1."
+        ),
+    )
+    parser.add_argument(
+        "--keepalive-interval-ms",
+        type=int,
+        default=DEFAULT_KEEPALIVE_INTERVAL_MS,
+        help=f"HTTP/2 PING interval over TCP (default: {DEFAULT_KEEPALIVE_INTERVAL_MS}; 0 disables)",
+    )
+    parser.add_argument(
+        "--keepalive-timeout-ms",
+        type=int,
+        default=DEFAULT_KEEPALIVE_TIMEOUT_MS,
+        help=f"Reconnect when a PING goes unanswered this long (default: {DEFAULT_KEEPALIVE_TIMEOUT_MS})",
+    )
+    parser.add_argument(
+        "--shutdown-grace-ms",
+        type=int,
+        default=DEFAULT_SHUTDOWN_GRACE_MS,
+        help=(
+            "On SIGINT/SIGTERM, let in-flight invokes finish this long "
+            f"(default: {DEFAULT_SHUTDOWN_GRACE_MS})"
+        ),
     )
     parser.add_argument(
         "-i",
@@ -139,7 +210,40 @@ def run_actor_worker_cli(
         print(parser.format_help())
         return 1
 
-    gateway_socket_path: str = parsed.gateway_socket
+    if parsed.gateway_socket and parsed.gateway_address:
+        logger.error("Pass either --gateway-socket or --gateway-address, not both")
+        return 1
+    gateway_address: str = parsed.gateway_address or (
+        f"unix:{parsed.gateway_socket or DEFAULT_GATEWAY_SOCKET_PATH}"
+    )
+    try:
+        parse_gateway_address(gateway_address)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 1
+    if bool(parsed.gateway_cert_file) != bool(parsed.gateway_key_file):
+        logger.error("--gateway-cert-file and --gateway-key-file go together")
+        return 1
+    # Fail fast on unreadable credentials instead of retrying forever.
+    for flag, path in (
+        ("--gateway-ca-file", parsed.gateway_ca_file),
+        ("--gateway-token-file", parsed.gateway_token_file),
+        ("--gateway-cert-file", parsed.gateway_cert_file),
+        ("--gateway-key-file", parsed.gateway_key_file),
+    ):
+        if path and not (os.path.isfile(path) and os.access(path, os.R_OK)):
+            logger.error("Can't read %s file %s", flag, path)
+            return 1
+    for flag, value, minimum in (
+        ("--max-concurrency", parsed.max_concurrency, 1),
+        ("--keepalive-interval-ms", parsed.keepalive_interval_ms, 0),
+        ("--keepalive-timeout-ms", parsed.keepalive_timeout_ms, 1),
+        ("--shutdown-grace-ms", parsed.shutdown_grace_ms, 0),
+    ):
+        if value is not None and value < minimum:
+            logger.error("%s must be an integer >= %d, got: %d", flag, minimum, value)
+            return 1
+
     worker_id: str = parsed.worker_id or f"python-{uuid.uuid4().hex[:8]}"
 
     logger.info("%d actor(s) compiled into this registry", len(registrations))
@@ -161,17 +265,32 @@ def run_actor_worker_cli(
 
     worker = ActorWorker(
         worker_id=worker_id,
-        gateway_socket_path=gateway_socket_path,
         registrations=registrations,
         heartbeat_ms=parsed.heartbeat_ms,
         reconnect_initial_delay_ms=parsed.reconnect_initial_delay_ms,
         reconnect_max_delay_ms=parsed.reconnect_max_delay_ms,
         reconnect_max_attempts=parsed.reconnect_max_attempts,
+        gateway_address=gateway_address,
+        ca_file=parsed.gateway_ca_file,
+        token_file=parsed.gateway_token_file,
+        cert_file=parsed.gateway_cert_file,
+        key_file=parsed.gateway_key_file,
+        keepalive_interval_ms=parsed.keepalive_interval_ms,
+        keepalive_timeout_ms=parsed.keepalive_timeout_ms,
+        max_concurrency=parsed.max_concurrency,
+        shutdown_grace_ms=parsed.shutdown_grace_ms,
     )
 
+    stop_requested = False
+
     def _on_signal(signum: int, frame: object) -> None:
+        nonlocal stop_requested
         del signum, frame
-        logger.info("Shutdown requested — stopping worker...")
+        if stop_requested:
+            logger.info("Already stopping: waiting for in-flight invokes to finish")
+            return
+        stop_requested = True
+        logger.info("Shutdown requested — draining and stopping worker...")
         worker.stop()
 
     # signal.signal() only works from the main thread; elsewhere (e.g. a test
@@ -182,9 +301,7 @@ def run_actor_worker_cli(
             previous_handlers[sig] = signal.signal(sig, _on_signal)
 
     try:
-        logger.info(
-            "Starting worker %s: gateway-socket=%s", worker_id, gateway_socket_path
-        )
+        logger.info("Starting worker %s: gateway=%s", worker_id, gateway_address)
         worker.run()
         logger.info("Worker %s stopped.", worker_id)
         return 0
