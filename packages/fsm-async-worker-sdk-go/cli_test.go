@@ -6,6 +6,7 @@ package asyncworkersdk
 
 import (
 	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -61,7 +62,7 @@ func TestParseArgs(t *testing.T) {
 		t.Fatalf("unexpected parse: %+v", p)
 	}
 	p, _ = parseArgs([]string{"list"})
-	if p.gatewaySocketPath != DefaultGatewaySocketPath || p.heartbeatMs != DefaultHeartbeatMs || p.workerID != "" {
+	if p.gatewaySocketPath != "" || p.gatewayAddress != "" || p.heartbeatMs != DefaultHeartbeatMs || p.workerID != "" {
 		t.Fatalf("unexpected defaults: %+v", p)
 	}
 	if p.reconnectInitial != DefaultReconnectInitialDelayMs || p.reconnectMax != DefaultReconnectMaxDelayMs || p.reconnectMaxAttempts != 0 {
@@ -76,5 +77,59 @@ func TestParseArgs(t *testing.T) {
 	}
 	if id := randomWorkerID(); !strings.HasPrefix(id, "go-") || len(id) != 11 {
 		t.Fatalf("unexpected worker id %q", id)
+	}
+}
+
+func TestParseArgsTCPConcurrencyAndDrain(t *testing.T) {
+	p, err := parseArgs([]string{"start", "-a", "https://gw:7443", "--gateway-ca-file=ca.crt", "--gateway-token-file", "token",
+		"--gateway-cert-file", "c.crt", "--gateway-key-file", "c.key", "-c", "10",
+		"--keepalive-interval-ms", "0", "--keepalive-timeout-ms", "500", "--shutdown-grace-ms", "0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := parsedArgs{command: "start", gatewayAddress: "https://gw:7443", caFile: "ca.crt", tokenFile: "token",
+		certFile: "c.crt", keyFile: "c.key", maxConcurrency: 10, keepaliveInterval: 0, keepaliveTimeout: 500, shutdownGrace: 0,
+		heartbeatMs: DefaultHeartbeatMs, reconnectInitial: DefaultReconnectInitialDelayMs, reconnectMax: DefaultReconnectMaxDelayMs}
+	if p != want {
+		t.Fatalf("got %+v\nwant %+v", p, want)
+	}
+	p, _ = parseArgs([]string{"list"})
+	if p.maxConcurrency != 0 || p.keepaliveInterval != DefaultKeepaliveIntervalMs || p.keepaliveTimeout != DefaultKeepaliveTimeoutMs || p.shutdownGrace != DefaultShutdownGraceMs {
+		t.Fatalf("unexpected defaults: %+v", p)
+	}
+}
+
+// Flag validation (SPEC-007): bad flags exit 1 before connecting, instead of
+// retrying forever against a misconfiguration.
+func TestBadTCPConcurrencyAndDrainFlagsExit1(t *testing.T) {
+	for _, args := range [][]string{
+		{"start", "-g", "/tmp/x.sock", "-a", "unix:/tmp/y.sock"},
+		{"start", "-a", "tcp://gw:1"},
+		{"start", "-a", "https://gw"},
+		{"start", "-a", "unix:"},
+		{"start", "--gateway-cert-file", "c.crt"},
+		{"start", "--gateway-key-file", "c.key"},
+		{"start", "-c", "0"},
+		{"start", "-c", "-1"},
+		{"start", "-c", ""},
+		{"start", "--keepalive-interval-ms", "-1"},
+		{"start", "--keepalive-timeout-ms", "0"},
+		{"start", "--shutdown-grace-ms", ""},
+		{"start", "-a", "https://gw:7443", "--gateway-ca-file", "/nonexistent/file"},
+		{"start", "-a", "https://gw:7443", "--gateway-token-file", "/nonexistent/file"},
+	} {
+		if code := run(args...); code != 1 {
+			t.Fatalf("%v: exit code %d, want 1", args, code)
+		}
+	}
+}
+
+func TestListAcceptsTheTCPFlags(t *testing.T) {
+	token := t.TempDir() + "/token"
+	if err := os.WriteFile(token, []byte("t"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := run("list", "-a", "https://gw:7443", "--gateway-token-file", token, "-c", "4", "--keepalive-interval-ms", "0"); code != 0 {
+		t.Fatalf("exit code %d", code)
 	}
 }

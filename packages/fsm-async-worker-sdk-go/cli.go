@@ -12,6 +12,7 @@ package asyncworkersdk
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -31,6 +32,15 @@ const defaultInvocation = "go run ."
 type parsedArgs struct {
 	command              string
 	gatewaySocketPath    string
+	gatewayAddress       string
+	caFile               string
+	tokenFile            string
+	certFile             string
+	keyFile              string
+	maxConcurrency       int
+	keepaliveInterval    int
+	keepaliveTimeout     int
+	shutdownGrace        int
 	workerID             string
 	heartbeatMs          int
 	reconnectInitial     int
@@ -49,10 +59,25 @@ COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
           Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
-          session drops (e.g. the gateway restarts).
+          session drops (e.g. the gateway restarts). On SIGINT/SIGTERM it drains: new invokes
+          are refused as retriable while in-flight ones finish.
 
 OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: %[2]s)
+  -a, --gateway-address <addr>  Gateway sidecar address instead: unix:<path>, https://host:port,
+                                or http://host:port (the gateway's --insecure-plaintext test mode)
+      --gateway-ca-file <file>  PEM CA bundle to trust the gateway's TLS certificate (default: system roots)
+      --gateway-token-file <file>
+                                Bearer token sent to the gateway; re-read on every reconnect
+      --gateway-cert-file <file>
+      --gateway-key-file <file> Client certificate and key for mutual TLS
+  -c, --max-concurrency <n>     Invokes of each actor run at once, for actors without their own
+                                MaxConcurrency (default: 1). Handlers must be concurrency-safe above 1.
+      --keepalive-interval-ms <ms>
+                                HTTP/2 PING interval over TCP (default: %[6]d; 0 disables; min 10000)
+      --keepalive-timeout-ms <ms>
+                                Reconnect when a PING goes unanswered this long (default: %[7]d)
+      --shutdown-grace-ms <ms>  On SIGINT/SIGTERM, let in-flight invokes finish this long (default: %[8]d)
   -i, --worker-id <id>          Stable worker identity (default: go-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: %[3]d)
       --reconnect-initial-delay-ms <ms>
@@ -66,19 +91,32 @@ OPTIONS
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateGoRegistry), linked into the binary at compile time.
 
-EXAMPLE
+EXAMPLES
   %[1]s start --gateway-socket %[2]s
-`, invocation, DefaultGatewaySocketPath, DefaultHeartbeatMs, DefaultReconnectInitialDelayMs, DefaultReconnectMaxDelayMs)
+  %[1]s start --gateway-address https://activity-gateway:7443 \\
+    --gateway-ca-file ca.crt --gateway-token-file token --max-concurrency 10
+`, invocation, DefaultGatewaySocketPath, DefaultHeartbeatMs, DefaultReconnectInitialDelayMs, DefaultReconnectMaxDelayMs,
+		DefaultKeepaliveIntervalMs, DefaultKeepaliveTimeoutMs, DefaultShutdownGraceMs)
 }
 
 // parseArgs accepts the command and flags in any order, and both
 // "--flag value" and "--flag=value".
 func parseArgs(args []string) (parsedArgs, error) {
 	parsed := parsedArgs{
-		gatewaySocketPath: DefaultGatewaySocketPath,
 		heartbeatMs:       DefaultHeartbeatMs,
 		reconnectInitial:  DefaultReconnectInitialDelayMs,
 		reconnectMax:      DefaultReconnectMaxDelayMs,
+		keepaliveInterval: DefaultKeepaliveIntervalMs,
+		keepaliveTimeout:  DefaultKeepaliveTimeoutMs,
+		shutdownGrace:     DefaultShutdownGraceMs,
+	}
+	// intFlag reads an integer flag >= minimum.
+	intFlag := func(flag, v string, minimum int) (int, error) {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < minimum {
+			return 0, fmt.Errorf("%s must be an integer >= %d, got: %s", flag, minimum, v)
+		}
+		return n, nil
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -108,6 +146,54 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, err
 			}
 			parsed.gatewaySocketPath = v
+		case "-a", "--gateway-address":
+			v, err := value("--gateway-address")
+			if err != nil {
+				return parsed, err
+			}
+			if _, err := ParseGatewayAddress(v); err != nil {
+				return parsed, err
+			}
+			parsed.gatewayAddress = v
+		case "--gateway-ca-file", "--gateway-token-file", "--gateway-cert-file", "--gateway-key-file":
+			v, err := value(flag)
+			if err != nil {
+				return parsed, err
+			}
+			switch flag {
+			case "--gateway-ca-file":
+				parsed.caFile = v
+			case "--gateway-token-file":
+				parsed.tokenFile = v
+			case "--gateway-cert-file":
+				parsed.certFile = v
+			default:
+				parsed.keyFile = v
+			}
+		case "-c", "--max-concurrency", "--keepalive-interval-ms", "--keepalive-timeout-ms", "--shutdown-grace-ms":
+			name := flag
+			if name == "-c" {
+				name = "--max-concurrency"
+			}
+			v, err := value(name)
+			if err != nil {
+				return parsed, err
+			}
+			minimum := map[string]int{"--max-concurrency": 1, "--keepalive-interval-ms": 0, "--keepalive-timeout-ms": 1, "--shutdown-grace-ms": 0}[name]
+			n, err := intFlag(name, v, minimum)
+			if err != nil {
+				return parsed, err
+			}
+			switch name {
+			case "--max-concurrency":
+				parsed.maxConcurrency = n
+			case "--keepalive-interval-ms":
+				parsed.keepaliveInterval = n
+			case "--keepalive-timeout-ms":
+				parsed.keepaliveTimeout = n
+			default:
+				parsed.shutdownGrace = n
+			}
 		case "-i", "--worker-id":
 			v, err := value("--worker-id")
 			if err != nil {
@@ -156,7 +242,43 @@ func parseArgs(args []string) (parsedArgs, error) {
 			}
 		}
 	}
+	if parsed.gatewaySocketPath != "" && parsed.gatewayAddress != "" {
+		return parsed, errors.New("pass either --gateway-socket or --gateway-address, not both")
+	}
+	if (parsed.certFile == "") != (parsed.keyFile == "") {
+		return parsed, errors.New("--gateway-cert-file and --gateway-key-file go together")
+	}
 	return parsed, nil
+}
+
+// checkReadable fails fast on unreadable credentials instead of retrying
+// forever.
+func checkReadable(parsed parsedArgs) error {
+	for _, f := range []struct{ flag, path string }{
+		{"--gateway-ca-file", parsed.caFile},
+		{"--gateway-token-file", parsed.tokenFile},
+		{"--gateway-cert-file", parsed.certFile},
+		{"--gateway-key-file", parsed.keyFile},
+	} {
+		if f.path == "" {
+			continue
+		}
+		file, err := os.Open(f.path)
+		if err != nil {
+			return fmt.Errorf("can't read %s file %s", f.flag, f.path)
+		}
+		file.Close()
+	}
+	return nil
+}
+
+// optionMs maps a CLI value where 0 means "none" onto an option where 0
+// means "default" and a negative value means "none".
+func optionMs(v int) int {
+	if v == 0 {
+		return -1
+	}
+	return v
 }
 
 func randomWorkerID() string {
@@ -172,8 +294,9 @@ func randomWorkerID() string {
 // it, which keeps this testable. args excludes the program name
 // (os.Args[1:]).
 //
-// start stops the worker gracefully (unregistering from the gateway) on
-// SIGINT/SIGTERM, and restores default signal handling once it returns.
+// start stops the worker gracefully on SIGINT/SIGTERM (draining in-flight
+// invokes, then unregistering from the gateway), and restores default signal
+// handling once it returns.
 //
 // invocation is how to run the calling program, shown in --help; "" means
 // "go run .".
@@ -203,6 +326,19 @@ func runCLI(registrations []ActorRegistration, args []string, invocation string,
 		return 1
 	}
 
+	if err := checkReadable(parsed); err != nil {
+		logger.Error(err.Error())
+		return 1
+	}
+	gatewayAddress := parsed.gatewayAddress
+	if gatewayAddress == "" {
+		socket := parsed.gatewaySocketPath
+		if socket == "" {
+			socket = DefaultGatewaySocketPath
+		}
+		gatewayAddress = "unix:" + socket
+	}
+
 	workerID := parsed.workerID
 	if workerID == "" {
 		workerID = randomWorkerID()
@@ -223,9 +359,17 @@ func runCLI(registrations []ActorRegistration, args []string, invocation string,
 	}
 
 	worker := NewActorWorker(ActorWorkerOptions{
-		WorkerID:          workerID,
-		GatewaySocketPath: parsed.gatewaySocketPath,
-		HeartbeatMs:       parsed.heartbeatMs,
+		WorkerID:            workerID,
+		GatewayAddress:      gatewayAddress,
+		CAFile:              parsed.caFile,
+		TokenFile:           parsed.tokenFile,
+		CertFile:            parsed.certFile,
+		KeyFile:             parsed.keyFile,
+		MaxConcurrency:      parsed.maxConcurrency,
+		KeepaliveIntervalMs: optionMs(parsed.keepaliveInterval),
+		KeepaliveTimeoutMs:  parsed.keepaliveTimeout,
+		ShutdownGraceMs:     optionMs(parsed.shutdownGrace),
+		HeartbeatMs:         parsed.heartbeatMs,
 
 		ReconnectInitialDelayMs: parsed.reconnectInitial,
 		ReconnectMaxDelayMs:     parsed.reconnectMax,
@@ -240,15 +384,24 @@ func runCLI(registrations []ActorRegistration, args []string, invocation string,
 		close(done)
 	}()
 	go func() {
-		select {
-		case <-signals:
-			logger.Info("shutdown requested — stopping worker...")
-			worker.Stop()
-		case <-done:
+		stopping := false
+		for {
+			select {
+			case <-signals:
+				if stopping {
+					logger.Info("already stopping: waiting for in-flight invokes to finish")
+					continue
+				}
+				stopping = true
+				logger.Info("shutdown requested — draining and stopping worker...")
+				worker.Stop()
+			case <-done:
+				return
+			}
 		}
 	}()
 
-	logger.Info("starting worker", "worker_id", workerID, "gateway_socket", parsed.gatewaySocketPath)
+	logger.Info("starting worker", "worker_id", workerID, "gateway", gatewayAddress)
 	if err := worker.Run(); err != nil {
 		logger.Error("worker failed", "worker_id", workerID, "error", err)
 		return 1
