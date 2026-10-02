@@ -41,6 +41,190 @@ export interface RunActorWorkerCliOptions {
    * `deno run --allow-all run-async-worker.ts`.
    */
   invocation?: string;
+  /**
+   * Reads an environment variable; defaults to `Deno.env.get`. Every option
+   * falls back to its variable (see `envVarFor`) when the flag isn't given.
+   */
+  env?: (name: string) => string | undefined;
+}
+
+/**
+ * The options that fall back to an environment variable, by long name. Same
+ * list, names and precedence (flag → variable → default) in all four SDKs.
+ */
+export const ENV_OPTIONS = [
+  "gateway-socket",
+  "gateway-address",
+  "gateway-ca-file",
+  "gateway-token-file",
+  "gateway-cert-file",
+  "gateway-key-file",
+  "max-concurrency",
+  "keepalive-interval-ms",
+  "keepalive-timeout-ms",
+  "shutdown-grace-ms",
+  "worker-id",
+  "heartbeat-ms",
+  "reconnect-initial-delay-ms",
+  "reconnect-max-delay-ms",
+  "reconnect-max-attempts",
+] as const;
+
+/** `PGFSM_` + the long option name upper-cased, `-` → `_`. */
+export function envVarFor(option: string): string {
+  return `PGFSM_${option.toUpperCase().replaceAll("-", "_")}`;
+}
+
+function defaultEnv(name: string): string | undefined {
+  try {
+    return Deno.env.get(name);
+  } catch {
+    // No --allow-env: behave as if nothing is set.
+    return undefined;
+  }
+}
+
+/** Everything `start` needs, resolved from flags, then variables, then defaults. */
+export interface CliSettings {
+  gatewayAddress: string;
+  caFile?: string;
+  tokenFile?: string;
+  certFile?: string;
+  keyFile?: string;
+  maxConcurrency?: number;
+  keepaliveIntervalMs?: number;
+  keepaliveTimeoutMs?: number;
+  shutdownGraceMs?: number;
+  workerId?: string;
+  heartbeatMs?: number;
+  reconnectInitialDelayMs?: number;
+  reconnectMaxDelayMs?: number;
+  reconnectMaxAttempts?: number;
+}
+
+/**
+ * Resolves the options from parsed flags (long names → raw strings) and the
+ * environment: a flag wins over its variable, which wins over the default. An
+ * empty variable counts as unset. Returns an error message (naming the flag or
+ * variable it came from) for anything invalid, so `start` can exit 1 before
+ * connecting.
+ */
+export function resolveSettings(
+  flags: Partial<Record<(typeof ENV_OPTIONS)[number], string>>,
+  env: (name: string) => string | undefined,
+): CliSettings | { error: string } {
+  const fromEnv = (option: (typeof ENV_OPTIONS)[number]) => {
+    const value = env(envVarFor(option));
+    return value === undefined || value === "" ? undefined : value;
+  };
+  /** The raw value and where it came from, or undefined when unset. */
+  const setting = (option: (typeof ENV_OPTIONS)[number]) => {
+    if (flags[option] !== undefined) {
+      return { raw: flags[option]!, label: `--${option}` };
+    }
+    const value = fromEnv(option);
+    return value === undefined
+      ? undefined
+      : { raw: value, label: envVarFor(option) };
+  };
+  /** An integer ≥ `min`, or undefined when unset; an error if invalid. */
+  const integer = (
+    option: (typeof ENV_OPTIONS)[number],
+    min: number,
+  ): number | undefined | { error: string } => {
+    const found = setting(option);
+    if (!found) return undefined;
+    // An empty value (`--flag=`, or `--flag -1`, which parses `-1` as a
+    // separate flag) must not read as 0.
+    const value = found.raw.trim() === "" ? NaN : Number(found.raw);
+    if (!Number.isInteger(value) || value < min) {
+      return {
+        error: `${found.label} must be an integer ≥ ${min}, got: ${found.raw}`,
+      };
+    }
+    return value;
+  };
+
+  // Where the gateway is counts as one setting: a flag for either form
+  // overrides both variables.
+  let gatewayAddress: string;
+  const level = flags["gateway-socket"] !== undefined ||
+      flags["gateway-address"] !== undefined
+    ? { socket: flags["gateway-socket"], address: flags["gateway-address"] }
+    : {
+      socket: fromEnv("gateway-socket"),
+      address: fromEnv("gateway-address"),
+    };
+  if (level.socket && level.address) {
+    const fromFlags = flags["gateway-socket"] !== undefined ||
+      flags["gateway-address"] !== undefined;
+    return {
+      error: fromFlags
+        ? "Pass either --gateway-socket or --gateway-address, not both"
+        : `Set either ${envVarFor("gateway-socket")} or ${
+          envVarFor("gateway-address")
+        }, not both`,
+    };
+  }
+  if (level.address) {
+    gatewayAddress = level.address;
+    try {
+      parseGatewayAddress(gatewayAddress);
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  } else {
+    gatewayAddress = `unix:${level.socket ?? DEFAULT_GATEWAY_SOCKET_PATH}`;
+  }
+
+  const files = {
+    caFile: setting("gateway-ca-file"),
+    tokenFile: setting("gateway-token-file"),
+    certFile: setting("gateway-cert-file"),
+    keyFile: setting("gateway-key-file"),
+  };
+  if (!!files.certFile !== !!files.keyFile) {
+    return {
+      error: "--gateway-cert-file and --gateway-key-file go together " +
+        `(or ${envVarFor("gateway-cert-file")} and ${
+          envVarFor("gateway-key-file")
+        })`,
+    };
+  }
+  // Fail fast on unreadable credentials instead of retrying forever.
+  for (const found of Object.values(files)) {
+    if (!found) continue;
+    try {
+      Deno.statSync(found.raw);
+    } catch {
+      return { error: `Can't read ${found.label} file ${found.raw}` };
+    }
+  }
+
+  const numbers = {
+    maxConcurrency: integer("max-concurrency", 1),
+    keepaliveIntervalMs: integer("keepalive-interval-ms", 0),
+    keepaliveTimeoutMs: integer("keepalive-timeout-ms", 1),
+    shutdownGraceMs: integer("shutdown-grace-ms", 0),
+    heartbeatMs: integer("heartbeat-ms", 1),
+    reconnectInitialDelayMs: integer("reconnect-initial-delay-ms", 1),
+    reconnectMaxDelayMs: integer("reconnect-max-delay-ms", 1),
+    reconnectMaxAttempts: integer("reconnect-max-attempts", 0),
+  };
+  for (const value of Object.values(numbers)) {
+    if (typeof value === "object") return value;
+  }
+  const n = numbers as Record<keyof typeof numbers, number | undefined>;
+
+  return {
+    gatewayAddress,
+    caFile: files.caFile?.raw,
+    tokenFile: files.tokenFile?.raw,
+    certFile: files.certFile?.raw,
+    keyFile: files.keyFile?.raw,
+    workerId: setting("worker-id")?.raw,
+    ...n,
+  };
 }
 
 function printHelp(invocation: string): void {
@@ -75,6 +259,12 @@ OPTIONS
       --reconnect-max-attempts <n>
                                 Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
+
+ENVIRONMENT
+  Every option above except --help falls back to an environment variable when the flag
+  isn't given: PGFSM_ + the long name in upper case, with - as _. A flag wins over its
+  variable; an empty variable counts as unset. Credentials stay file paths.
+    ${ENV_OPTIONS.map(envVarFor).join("\n    ")}
 
 COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
@@ -151,90 +341,19 @@ export async function runActorWorkerCli(
     return 1;
   }
 
-  /** An integer flag ≥ `min`, or undefined when not given; null if invalid. */
-  const integerFlag = (
-    name: string,
-    min: number,
-  ): number | undefined | null => {
-    const raw = args[name as keyof typeof args] as string | undefined;
-    if (raw === undefined) return undefined;
-    // An empty value (`--flag=`, or `--flag -1`, which parses `-1` as a
-    // separate flag) must not read as 0.
-    const value = raw.trim() === "" ? NaN : Number(raw);
-    if (!Number.isInteger(value) || value < min) {
-      logger.error("--{name} must be an integer ≥ {min}, got: {value}", {
-        name,
-        min,
-        value: raw,
-      });
-      return null;
-    }
-    return value;
-  };
-
-  if (args["gateway-socket"] && args["gateway-address"]) {
-    logger.error("Pass either --gateway-socket or --gateway-address, not both");
+  const flags: Partial<Record<(typeof ENV_OPTIONS)[number], string>> = {};
+  for (const option of ENV_OPTIONS) {
+    const value = args[option as keyof typeof args];
+    if (typeof value === "string") flags[option] = value;
+  }
+  const settings = resolveSettings(flags, options.env ?? defaultEnv);
+  if ("error" in settings) {
+    logger.error("{error}", { error: settings.error });
     return 1;
   }
-  const gatewayAddress = args["gateway-address"] ??
-    `unix:${args["gateway-socket"] ?? DEFAULT_GATEWAY_SOCKET_PATH}`;
-  try {
-    parseGatewayAddress(gatewayAddress);
-  } catch (error) {
-    logger.error("{error}", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return 1;
-  }
-  const caFile = args["gateway-ca-file"];
-  const tokenFile = args["gateway-token-file"];
-  const certFile = args["gateway-cert-file"];
-  const keyFile = args["gateway-key-file"];
-  if (!!certFile !== !!keyFile) {
-    logger.error("--gateway-cert-file and --gateway-key-file go together");
-    return 1;
-  }
-  // Fail fast on unreadable credentials instead of retrying forever.
-  for (
-    const [flag, file] of Object.entries({
-      caFile,
-      tokenFile,
-      certFile,
-      keyFile,
-    })
-  ) {
-    if (!file) continue;
-    try {
-      Deno.statSync(file);
-    } catch {
-      logger.error("Can't read {flag} file {file}", { flag, file });
-      return 1;
-    }
-  }
-  const maxConcurrency = integerFlag("max-concurrency", 1);
-  const keepaliveIntervalMs = integerFlag("keepalive-interval-ms", 0);
-  const keepaliveTimeoutMs = integerFlag("keepalive-timeout-ms", 1);
-  const shutdownGraceMs = integerFlag("shutdown-grace-ms", 0);
-  if (
-    [maxConcurrency, keepaliveIntervalMs, keepaliveTimeoutMs, shutdownGraceMs]
-      .includes(null)
-  ) {
-    return 1;
-  }
-  const workerId = args["worker-id"] ??
+  const workerId = settings.workerId ??
     `typescript-${crypto.randomUUID().slice(0, 8)}`;
-  const heartbeatMs = args["heartbeat-ms"]
-    ? Number(args["heartbeat-ms"])
-    : undefined;
-  const reconnectInitialDelayMs = args["reconnect-initial-delay-ms"]
-    ? Number(args["reconnect-initial-delay-ms"])
-    : undefined;
-  const reconnectMaxDelayMs = args["reconnect-max-delay-ms"]
-    ? Number(args["reconnect-max-delay-ms"])
-    : undefined;
-  const reconnectMaxAttempts = args["reconnect-max-attempts"]
-    ? Number(args["reconnect-max-attempts"])
-    : undefined;
+  const { gatewayAddress } = settings;
 
   logger.info("{count} actor(s) compiled into this registry", {
     count: registrations.length,
@@ -262,21 +381,9 @@ export async function runActorWorkerCli(
 
   const worker = new ActorWorker(
     {
+      ...settings,
       workerId,
       language: "typescript",
-      gatewayAddress,
-      caFile,
-      tokenFile,
-      certFile,
-      keyFile,
-      maxConcurrency: maxConcurrency ?? undefined,
-      keepaliveIntervalMs: keepaliveIntervalMs ?? undefined,
-      keepaliveTimeoutMs: keepaliveTimeoutMs ?? undefined,
-      shutdownGraceMs: shutdownGraceMs ?? undefined,
-      heartbeatMs,
-      reconnectInitialDelayMs,
-      reconnectMaxDelayMs,
-      reconnectMaxAttempts,
     },
     registrations,
   );

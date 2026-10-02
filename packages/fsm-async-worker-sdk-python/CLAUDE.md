@@ -109,6 +109,20 @@ connect-node gateway isn't started here (it's Deno); interop with it was checked
 by hand for #432 (mTLS + token, concurrency, max-age reconnect, drain, wrong
 token).
 
+## Environment variables (#438)
+
+Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
+flag → variable → default, an empty variable counts as unset, and
+`--gateway-socket`/`--gateway-address` are one setting (a flag for either
+overrides both variables). Same option list (`ENV_OPTIONS`/`EnvOptions`), names,
+precedence and error messages in all four SDKs; change them together.
+`resolve_settings(flags, env)` in `cli.py`; argparse keeps every env-backed
+option `default=None` with no `type=`, so "flag given" is detectable and one
+validator covers flags and variables. `run_actor_worker_cli(..., env=)` defaults
+to `os.environ`. Tests in `tests/test_cli.py`. No `.env` loading in the SDK: the
+CLI is library code inside the user's process, so the README points at
+`--env-file` (Deno, uv) or `set -a`.
+
 ## Releasing
 
 `.github/workflows/pypi-publish.yml` publishes to PyPI when an

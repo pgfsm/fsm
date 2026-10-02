@@ -16,7 +16,8 @@ import os
 import signal
 import threading
 import uuid
-from typing import List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from .actor_worker import (
     DEFAULT_HEARTBEAT_MS,
@@ -44,10 +45,165 @@ commands:
           session drops (e.g. the gateway restarts). On SIGINT/SIGTERM it drains: new invokes
           are refused as retriable while in-flight ones finish.
 
+environment:
+  Every option except --help falls back to an environment variable when the flag isn't
+  given: PGFSM_ + the long name in upper case, with - as _. A flag wins over its variable;
+  an empty variable counts as unset. Credentials stay file paths.
+    PGFSM_GATEWAY_SOCKET
+    PGFSM_GATEWAY_ADDRESS
+    PGFSM_GATEWAY_CA_FILE
+    PGFSM_GATEWAY_TOKEN_FILE
+    PGFSM_GATEWAY_CERT_FILE
+    PGFSM_GATEWAY_KEY_FILE
+    PGFSM_MAX_CONCURRENCY
+    PGFSM_KEEPALIVE_INTERVAL_MS
+    PGFSM_KEEPALIVE_TIMEOUT_MS
+    PGFSM_SHUTDOWN_GRACE_MS
+    PGFSM_WORKER_ID
+    PGFSM_HEARTBEAT_MS
+    PGFSM_RECONNECT_INITIAL_DELAY_MS
+    PGFSM_RECONNECT_MAX_DELAY_MS
+    PGFSM_RECONNECT_MAX_ATTEMPTS
+
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateActorsRegistry) -- statically imported, not scanned or
 dynamically loaded at startup.
 """
+
+
+# The options that fall back to an environment variable, by long name. Same
+# list, names and precedence (flag -> variable -> default) in all four SDKs.
+ENV_OPTIONS = (
+    "gateway-socket",
+    "gateway-address",
+    "gateway-ca-file",
+    "gateway-token-file",
+    "gateway-cert-file",
+    "gateway-key-file",
+    "max-concurrency",
+    "keepalive-interval-ms",
+    "keepalive-timeout-ms",
+    "shutdown-grace-ms",
+    "worker-id",
+    "heartbeat-ms",
+    "reconnect-initial-delay-ms",
+    "reconnect-max-delay-ms",
+    "reconnect-max-attempts",
+)
+
+
+def env_var_for(option: str) -> str:
+    """`PGFSM_` + the long option name upper-cased, `-` -> `_`."""
+    return "PGFSM_" + option.upper().replace("-", "_")
+
+
+@dataclass
+class CliSettings:
+    """Everything `start` needs, resolved from flags, then variables, then
+    defaults."""
+
+    gateway_address: str
+    ca_file: Optional[str] = None
+    token_file: Optional[str] = None
+    cert_file: Optional[str] = None
+    key_file: Optional[str] = None
+    max_concurrency: Optional[int] = None
+    keepalive_interval_ms: int = DEFAULT_KEEPALIVE_INTERVAL_MS
+    keepalive_timeout_ms: int = DEFAULT_KEEPALIVE_TIMEOUT_MS
+    shutdown_grace_ms: int = DEFAULT_SHUTDOWN_GRACE_MS
+    worker_id: Optional[str] = None
+    heartbeat_ms: int = DEFAULT_HEARTBEAT_MS
+    reconnect_initial_delay_ms: int = DEFAULT_RECONNECT_INITIAL_DELAY_MS
+    reconnect_max_delay_ms: int = DEFAULT_RECONNECT_MAX_DELAY_MS
+    reconnect_max_attempts: int = 0
+
+
+def resolve_settings(
+    flags: Mapping[str, Optional[str]], env: Mapping[str, str]
+) -> CliSettings:
+    """Resolves the options from flags (long name -> raw string, None when not
+    given) and the environment: a flag wins over its variable, which wins over
+    the default. An empty variable counts as unset. Raises ValueError, naming
+    the flag or variable a bad value came from, so `start` can exit 1 before
+    connecting."""
+
+    def from_env(option: str) -> Optional[str]:
+        return env.get(env_var_for(option)) or None
+
+    def setting(option: str) -> Optional["tuple[str, str]"]:
+        """(raw value, where it came from), or None when unset."""
+        if flags.get(option) is not None:
+            return flags[option], f"--{option}"  # type: ignore[return-value]
+        value = from_env(option)
+        return None if value is None else (value, env_var_for(option))
+
+    def integer(option: str, minimum: int) -> Optional[int]:
+        found = setting(option)
+        if found is None:
+            return None
+        raw, label = found
+        try:
+            value = int(raw.strip())
+        except ValueError:
+            value = None
+        if value is None or value < minimum:
+            raise ValueError(f"{label} must be an integer >= {minimum}, got: {raw}")
+        return value
+
+    # Where the gateway is counts as one setting: a flag for either form
+    # overrides both variables.
+    from_flags = flags.get("gateway-socket") is not None or flags.get("gateway-address") is not None
+    if from_flags:
+        socket, address = flags.get("gateway-socket"), flags.get("gateway-address")
+    else:
+        socket, address = from_env("gateway-socket"), from_env("gateway-address")
+    if socket and address:
+        if from_flags:
+            raise ValueError("Pass either --gateway-socket or --gateway-address, not both")
+        raise ValueError(
+            f"Set either {env_var_for('gateway-socket')} or "
+            f"{env_var_for('gateway-address')}, not both"
+        )
+    if address:
+        parse_gateway_address(address)  # ValueError names the address
+        gateway_address = address
+    else:
+        gateway_address = f"unix:{socket or DEFAULT_GATEWAY_SOCKET_PATH}"
+
+    files = {
+        name: setting(f"gateway-{name}")
+        for name in ("ca-file", "token-file", "cert-file", "key-file")
+    }
+    if (files["cert-file"] is None) != (files["key-file"] is None):
+        raise ValueError(
+            "--gateway-cert-file and --gateway-key-file go together (or "
+            f"{env_var_for('gateway-cert-file')} and {env_var_for('gateway-key-file')})"
+        )
+    # Fail fast on unreadable credentials instead of retrying forever.
+    for found in files.values():
+        if found is not None and not (os.path.isfile(found[0]) and os.access(found[0], os.R_OK)):
+            raise ValueError(f"Can't read {found[1]} file {found[0]}")
+
+    settings = CliSettings(gateway_address=gateway_address)
+    for name, found in files.items():
+        if found is not None:
+            setattr(settings, name.replace("-", "_"), found[0])
+    worker_id = setting("worker-id")
+    settings.worker_id = worker_id[0] if worker_id else None
+    for option, minimum in (
+        ("max-concurrency", 1),
+        ("keepalive-interval-ms", 0),
+        ("keepalive-timeout-ms", 1),
+        ("shutdown-grace-ms", 0),
+        ("heartbeat-ms", 1),
+        ("reconnect-initial-delay-ms", 1),
+        ("reconnect-max-delay-ms", 1),
+        ("reconnect-max-attempts", 0),
+    ):
+        value = integer(option, minimum)
+        if value is not None:
+            setattr(settings, option.replace("-", "_"), value)
+    return settings
 
 
 class _UsageError(Exception):
@@ -114,7 +270,6 @@ def _build_parser(invocation: str) -> _ArgumentParser:
     parser.add_argument(
         "-c",
         "--max-concurrency",
-        type=int,
         default=None,
         help=(
             "Invokes of each actor run at once, for actors without their own "
@@ -123,20 +278,17 @@ def _build_parser(invocation: str) -> _ArgumentParser:
     )
     parser.add_argument(
         "--keepalive-interval-ms",
-        type=int,
-        default=DEFAULT_KEEPALIVE_INTERVAL_MS,
+        default=None,
         help=f"HTTP/2 PING interval over TCP (default: {DEFAULT_KEEPALIVE_INTERVAL_MS}; 0 disables)",
     )
     parser.add_argument(
         "--keepalive-timeout-ms",
-        type=int,
-        default=DEFAULT_KEEPALIVE_TIMEOUT_MS,
+        default=None,
         help=f"Reconnect when a PING goes unanswered this long (default: {DEFAULT_KEEPALIVE_TIMEOUT_MS})",
     )
     parser.add_argument(
         "--shutdown-grace-ms",
-        type=int,
-        default=DEFAULT_SHUTDOWN_GRACE_MS,
+        default=None,
         help=(
             "On SIGINT/SIGTERM, let in-flight invokes finish this long "
             f"(default: {DEFAULT_SHUTDOWN_GRACE_MS})"
@@ -150,26 +302,22 @@ def _build_parser(invocation: str) -> _ArgumentParser:
     )
     parser.add_argument(
         "--heartbeat-ms",
-        type=int,
-        default=DEFAULT_HEARTBEAT_MS,
+        default=None,
         help=f"Heartbeat interval (default: {DEFAULT_HEARTBEAT_MS})",
     )
     parser.add_argument(
         "--reconnect-initial-delay-ms",
-        type=int,
-        default=DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+        default=None,
         help=f"First reconnect backoff step (default: {DEFAULT_RECONNECT_INITIAL_DELAY_MS})",
     )
     parser.add_argument(
         "--reconnect-max-delay-ms",
-        type=int,
-        default=DEFAULT_RECONNECT_MAX_DELAY_MS,
+        default=None,
         help=f"Reconnect backoff cap (default: {DEFAULT_RECONNECT_MAX_DELAY_MS})",
     )
     parser.add_argument(
         "--reconnect-max-attempts",
-        type=int,
-        default=0,
+        default=None,
         help="Exit after n consecutive failed attempts (default: 0 = retry forever)",
     )
     parser.add_argument(
@@ -182,6 +330,7 @@ def run_actor_worker_cli(
     registrations: List[ActorRegistration],
     args: Sequence[str],
     invocation: Optional[str] = None,
+    env: Optional[Mapping[str, str]] = None,
 ) -> int:
     """Runs the `list`/`start` worker CLI against `registrations` and returns
     the process exit code — the caller decides whether to exit with it, which
@@ -190,7 +339,9 @@ def run_actor_worker_cli(
     previous handlers once it returns.
 
     `invocation` is how to run the calling script, shown in `--help`; defaults
-    to `python3 run_async_worker.py`.
+    to `python3 run_async_worker.py`. Every option falls back to its
+    environment variable (see `env_var_for`), read from `env` (default
+    `os.environ`).
     """
     parser = _build_parser(invocation or "python3 run_async_worker.py")
 
@@ -210,41 +361,17 @@ def run_actor_worker_cli(
         print(parser.format_help())
         return 1
 
-    if parsed.gateway_socket and parsed.gateway_address:
-        logger.error("Pass either --gateway-socket or --gateway-address, not both")
-        return 1
-    gateway_address: str = parsed.gateway_address or (
-        f"unix:{parsed.gateway_socket or DEFAULT_GATEWAY_SOCKET_PATH}"
-    )
+    flags: Dict[str, Optional[str]] = {
+        option: getattr(parsed, option.replace("-", "_")) for option in ENV_OPTIONS
+    }
     try:
-        parse_gateway_address(gateway_address)
+        settings = resolve_settings(flags, os.environ if env is None else env)
     except ValueError as exc:
         logger.error("%s", exc)
         return 1
-    if bool(parsed.gateway_cert_file) != bool(parsed.gateway_key_file):
-        logger.error("--gateway-cert-file and --gateway-key-file go together")
-        return 1
-    # Fail fast on unreadable credentials instead of retrying forever.
-    for flag, path in (
-        ("--gateway-ca-file", parsed.gateway_ca_file),
-        ("--gateway-token-file", parsed.gateway_token_file),
-        ("--gateway-cert-file", parsed.gateway_cert_file),
-        ("--gateway-key-file", parsed.gateway_key_file),
-    ):
-        if path and not (os.path.isfile(path) and os.access(path, os.R_OK)):
-            logger.error("Can't read %s file %s", flag, path)
-            return 1
-    for flag, value, minimum in (
-        ("--max-concurrency", parsed.max_concurrency, 1),
-        ("--keepalive-interval-ms", parsed.keepalive_interval_ms, 0),
-        ("--keepalive-timeout-ms", parsed.keepalive_timeout_ms, 1),
-        ("--shutdown-grace-ms", parsed.shutdown_grace_ms, 0),
-    ):
-        if value is not None and value < minimum:
-            logger.error("%s must be an integer >= %d, got: %d", flag, minimum, value)
-            return 1
+    gateway_address = settings.gateway_address
 
-    worker_id: str = parsed.worker_id or f"python-{uuid.uuid4().hex[:8]}"
+    worker_id: str = settings.worker_id or f"python-{uuid.uuid4().hex[:8]}"
 
     logger.info("%d actor(s) compiled into this registry", len(registrations))
     for reg in registrations:
@@ -266,19 +393,19 @@ def run_actor_worker_cli(
     worker = ActorWorker(
         worker_id=worker_id,
         registrations=registrations,
-        heartbeat_ms=parsed.heartbeat_ms,
-        reconnect_initial_delay_ms=parsed.reconnect_initial_delay_ms,
-        reconnect_max_delay_ms=parsed.reconnect_max_delay_ms,
-        reconnect_max_attempts=parsed.reconnect_max_attempts,
+        heartbeat_ms=settings.heartbeat_ms,
+        reconnect_initial_delay_ms=settings.reconnect_initial_delay_ms,
+        reconnect_max_delay_ms=settings.reconnect_max_delay_ms,
+        reconnect_max_attempts=settings.reconnect_max_attempts,
         gateway_address=gateway_address,
-        ca_file=parsed.gateway_ca_file,
-        token_file=parsed.gateway_token_file,
-        cert_file=parsed.gateway_cert_file,
-        key_file=parsed.gateway_key_file,
-        keepalive_interval_ms=parsed.keepalive_interval_ms,
-        keepalive_timeout_ms=parsed.keepalive_timeout_ms,
-        max_concurrency=parsed.max_concurrency,
-        shutdown_grace_ms=parsed.shutdown_grace_ms,
+        ca_file=settings.ca_file,
+        token_file=settings.token_file,
+        cert_file=settings.cert_file,
+        key_file=settings.key_file,
+        keepalive_interval_ms=settings.keepalive_interval_ms,
+        keepalive_timeout_ms=settings.keepalive_timeout_ms,
+        max_concurrency=settings.max_concurrency,
+        shutdown_grace_ms=settings.shutdown_grace_ms,
     )
 
     stop_requested = False

@@ -115,6 +115,19 @@ plaintext, worker-wide and per-actor concurrency, drain, max-age reconnect),
 with TLS fixtures made by `openssl` at test time (`test/tls_fixture.ts`; no
 committed keys).
 
+## Environment variables (#438)
+
+Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
+flag → variable → default, an empty variable counts as unset, and
+`--gateway-socket`/`--gateway-address` are one setting (a flag for either
+overrides both variables). Same option list (`ENV_OPTIONS`/`EnvOptions`), names,
+precedence and error messages in all four SDKs; change them together.
+`resolveSettings(flags, env)` in `src/cli.ts`; `runActorWorkerCli` passes the
+parsed flags and `options.env` (default `Deno.env.get`, swallowing a missing
+`--allow-env`). Tests in `test/cli.test.ts` drive `resolveSettings` with a fake
+env. No `.env` loading in the SDK: the CLI is library code inside the user's
+process, so the README points at `--env-file` (Deno, uv) or `set -a`.
+
 ## Known behaviour
 
 Over a Unix socket there's no keepalive: a crash there shows up immediately as

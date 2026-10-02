@@ -18,5 +18,11 @@ export type {
   GatewayAddress,
   RegisteredActor,
 } from "./actorWorker.ts";
-export { DEFAULT_GATEWAY_SOCKET_PATH, runActorWorkerCli } from "./cli.ts";
-export type { RunActorWorkerCliOptions } from "./cli.ts";
+export {
+  DEFAULT_GATEWAY_SOCKET_PATH,
+  ENV_OPTIONS,
+  envVarFor,
+  resolveSettings,
+  runActorWorkerCli,
+} from "./cli.ts";
+export type { CliSettings, RunActorWorkerCliOptions } from "./cli.ts";

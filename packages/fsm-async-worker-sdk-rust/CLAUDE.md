@@ -141,6 +141,21 @@ its grace limit, max-age reconnect, an invalid address. TLS fixtures come from
 started here (it's Deno); interop with it was checked by hand for #433 (mTLS +
 token, concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
+## Environment variables (#438)
+
+Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
+flag → variable → default, an empty variable counts as unset, and
+`--gateway-socket`/`--gateway-address` are one setting (a flag for either
+overrides both variables). Same option list (`ENV_OPTIONS`/`EnvOptions`), names,
+precedence and error messages in all four SDKs; change them together.
+`parse_args_with_env(args, env)` in `src/cli.rs` (`parse_args` passes
+`std::env::var`): flags are collected first, unset options filled from
+variables, then every value is validated with its source label
+(`ParsedArgs.sources`, also used by `check_readable`). Unit tests pass a fake
+env, so a stray `PGFSM_*` in CI can't leak in. No `.env` loading in the SDK: the
+CLI is library code inside the user's process, so the README points at
+`--env-file` (Deno, uv) or `set -a`.
+
 ## Releasing
 
 `.github/workflows/crates-publish.yml` publishes to crates.io when an

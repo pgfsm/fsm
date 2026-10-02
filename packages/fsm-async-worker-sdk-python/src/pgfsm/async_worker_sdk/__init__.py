@@ -20,7 +20,14 @@ from .actor_worker import (
     parse_gateway_address,
     reconnect_delay_ms,
 )
-from .cli import DEFAULT_GATEWAY_SOCKET_PATH, run_actor_worker_cli
+from .cli import (
+    DEFAULT_GATEWAY_SOCKET_PATH,
+    ENV_OPTIONS,
+    CliSettings,
+    env_var_for,
+    resolve_settings,
+    run_actor_worker_cli,
+)
 
 __all__ = [
     "DEFAULT_GATEWAY_SOCKET_PATH",
@@ -32,15 +39,19 @@ __all__ = [
     "DEFAULT_SHUTDOWN_GRACE_MS",
     "FATAL_STATUS_CODES",
     "STABLE_SESSION_MS",
+    "ENV_OPTIONS",
     "ActorHandler",
     "ActorRegistration",
     "ActorWorker",
+    "CliSettings",
     "GatewayAddress",
     "ProtocolError",
     "RegistrationRejectedError",
     "actor_key",
     "effective_max_concurrency",
+    "env_var_for",
     "parse_gateway_address",
     "reconnect_delay_ms",
+    "resolve_settings",
     "run_actor_worker_cli",
 ]
