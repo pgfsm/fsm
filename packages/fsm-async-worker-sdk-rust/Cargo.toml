@@ -16,8 +16,10 @@ categories = ["network-programming"]
 # Generated pgfsm.sidecargateway.v1 client stubs, from crates.io (not the
 # monorepo's packages/fsm-proto-codegen/gen/rust). Its prost/tonic/tonic-prost
 # must share one major with ours below — see fsm-proto-codegen's README.
-pgfsm-proto-codegen = "0.1.1"
-tonic = { version = "0.14", features = ["transport"] }
+pgfsm-proto-codegen = "0.2"
+# tls-ring: rustls TLS (1.2 and 1.3) for https:// gateway addresses;
+# tls-native-roots: the system trust store when no --gateway-ca-file is given.
+tonic = { version = "0.14", features = ["transport", "tls-ring", "tls-native-roots"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 tokio-stream = "0.1"
 serde_json = "1"

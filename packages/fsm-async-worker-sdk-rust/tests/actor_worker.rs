@@ -430,6 +430,60 @@ async fn cli_start_reconnects_then_exits_after_max_reconnect_attempts() {
     assert_eq!(code, 1);
 }
 
+// A handler still blocking when the worker gives up mustn't keep the CLI (and
+// so the process) from exiting: run_actor_worker_cli doesn't wait for the
+// runtime's blocking threads.
+#[tokio::test(flavor = "multi_thread")]
+async fn cli_exits_without_waiting_for_a_stuck_handler() {
+    let h = Harness::start(true, false).await;
+    let socket = h.socket_path.to_string_lossy().into_owned();
+    let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stuck = {
+        let started = started.clone();
+        ActorRegistration::new(
+            "creditCheck",
+            "v01",
+            "internalAsyncOperation",
+            "stuck",
+            "v01",
+            "rust",
+            move |_input: Value| {
+                started.store(true, std::sync::atomic::Ordering::SeqCst);
+                std::thread::sleep(Duration::from_secs(60));
+                Value::Null
+            },
+        )
+    };
+    let cli = tokio::task::spawn_blocking(move || {
+        run_actor_worker_cli(
+            vec![stuck],
+            [
+                "start",
+                "--gateway-socket",
+                socket.as_str(),
+                "--reconnect-initial-delay-ms",
+                "10",
+                "--reconnect-max-attempts",
+                "1",
+            ],
+            None,
+        )
+    });
+    let mut h = h;
+    h.next_of(is_register).await;
+    h.invoke("i-stuck", "stuck", json!(null));
+    while !started.load(std::sync::atomic::Ordering::SeqCst) {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let _dir = h.crash();
+
+    let code = tokio::time::timeout(TIMEOUT, cli)
+        .await
+        .expect("CLI waited for the stuck handler")
+        .unwrap();
+    assert_eq!(code, 1);
+}
+
 // Reconnect (#392): the worker waits for a gateway that isn't up yet,
 // re-registers after the gateway restarts, and only gives up when told to.
 
