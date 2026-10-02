@@ -67,7 +67,9 @@ worker, not a startup error.
   `Cargo.toml`. The generated `main.rs` maps one into the other. Keep them in
   step if either side changes.
 - A panicking handler becomes an `INTERNAL` invoke error; the worker keeps
-  running. `stop()` is sync and safe to call from any thread.
+  running. `stop()` is sync, doesn't block, and is safe to call from any thread.
+- `ActorRegistration::with_max_concurrency` sets `meta.max_concurrency`; the
+  compiler's registries don't emit it yet (#435).
 - CLI errors print the whole error `source()` chain: tonic's top-level
   connection error is just "transport error".
 
@@ -83,10 +85,61 @@ worker, not a startup error.
   - `stop()` sends an unregister and `run()` returns
   - a rejected registration, and an empty registry
   - the CLI's `start` path, returning 0 when the gateway ends the stream
-- `tests/cli.rs` covers the CLI's exit codes.
+  - the CLI exiting without waiting for a handler stuck in its blocking thread
+- `tests/transport_concurrency.rs` covers SPEC-007 over real TCP sockets (see
+  below).
+- `tests/cli.rs` covers the CLI's exit codes and flag validation.
 
 CI runs all of it (`ci.yml`, `rust-async-worker-sdk` job: fmt, clippy
 `-D warnings`, test, `cargo publish --dry-run`).
+
+## Transport, concurrency and drain (SPEC-007, #433)
+
+Same behaviour as the TypeScript (#431) and Python (#432) SDKs; keep them in
+step.
+
+- **Addresses.** `gateway_address` (`unix:` / `https://` / `http://`) is parsed
+  by `parse_gateway_address` in `ActorWorker::new`; an invalid one makes `run()`
+  fail at once. `gateway_socket_path` is the `unix:` fallback. `endpoint()`
+  builds a **new** tonic `Endpoint` per session (so a reconnect after the
+  gateway's max-age drain can reach another replica) and reads the token, CA and
+  client certificate then, so rotated files apply from the next session. The
+  token goes as request metadata (`authorization: Bearer`).
+- **TLS** is tonic's rustls (`tls-ring`), with `tls-native-roots` for the system
+  trust store when no CA file is given. A refused handshake (no client
+  certificate, an untrusted or expired server certificate) is a transport error
+  or a non-fatal status, so `run()` retries it; `error_chain` puts the rustls
+  reason in the log ("transport error" alone says nothing).
+- **Keepalive** is `Endpoint::http2_keep_alive_interval` / `keep_alive_timeout`
+  / `keep_alive_while_idle`. TCP only.
+- **Concurrency.** The serve loop doesn't run handlers inline: each invoke is a
+  tokio task that takes a permit from its actor's `Semaphore` (sized by
+  `effective_max_concurrency(actor, worker)`, also sent in `Register`), then
+  runs the sync handler on `spawn_blocking` inside `catch_unwind`. Results go to
+  that invoke's own session through `SessionOutbox`; tasks hold an `Arc` of it,
+  not a sender clone, so closing it still ends the request stream, and a late
+  result is detected and logged as dropped.
+- **Drain.** `stop()` records the drain deadline and flips the `stopping`
+  `watch` flag. The serve loop then refuses invokes with a retriable
+  `WORKER_DRAINING`, waits for the in-flight count (a `watch<usize>` kept by an
+  `InFlight` guard) to reach 0 or the deadline, closes the request stream with
+  an unregister, and keeps reading until the gateway ends its side (at most
+  `CLOSE_WAIT`): returning right away dropped the connection before the
+  unregister went out. `run()` stops reconnecting once stopping and returns
+  after the drain.
+- **CLI exit.** `run_actor_worker_cli` ends with `shutdown_background()`:
+  dropping the runtime would wait for a handler still blocking past the grace
+  period.
+
+Tests: `tests/transport_concurrency.rs` runs a tonic server (TLS/mTLS via
+`ServerTlsConfig`, max age via `Server::max_connection_age`) that checks the
+bearer token like the real gateway: TLS + token, token re-read after a
+reconnect, wrong token, mTLS with/without a client certificate, an untrusted
+server certificate, plaintext, worker-wide and per-actor concurrency, drain and
+its grace limit, max-age reconnect, an invalid address. TLS fixtures come from
+`openssl` at test time (no committed keys). The real connect-node gateway isn't
+started here (it's Deno); interop with it was checked by hand for #433 (mTLS +
+token, concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
 ## Releasing
 

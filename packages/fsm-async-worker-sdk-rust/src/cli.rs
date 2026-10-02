@@ -8,11 +8,13 @@
 //! logger once before calling this.
 
 use crate::actor_worker::{
-    ActorRegistration, ActorWorker, ActorWorkerOptions, DEFAULT_HEARTBEAT_MS,
-    DEFAULT_RECONNECT_INITIAL_DELAY_MS, DEFAULT_RECONNECT_MAX_DELAY_MS,
+    error_chain, parse_gateway_address, ActorRegistration, ActorWorker, ActorWorkerOptions,
+    DEFAULT_HEARTBEAT_MS, DEFAULT_KEEPALIVE_INTERVAL_MS, DEFAULT_KEEPALIVE_TIMEOUT_MS,
+    DEFAULT_RECONNECT_INITIAL_DELAY_MS, DEFAULT_RECONNECT_MAX_DELAY_MS, DEFAULT_SHUTDOWN_GRACE_MS,
 };
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Sidecar socket the worker connects to unless `--gateway-socket` is given.
@@ -20,7 +22,7 @@ pub const DEFAULT_GATEWAY_SOCKET_PATH: &str = "/tmp/pgfsm-activity-gateway-worke
 
 const DEFAULT_INVOCATION: &str = "cargo run --release --";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum Command {
     List,
     Start,
@@ -29,7 +31,16 @@ enum Command {
 #[derive(Debug)]
 struct ParsedArgs {
     command: Option<Command>,
-    gateway_socket_path: String,
+    gateway_socket_path: Option<String>,
+    gateway_address: Option<String>,
+    ca_file: Option<PathBuf>,
+    token_file: Option<PathBuf>,
+    cert_file: Option<PathBuf>,
+    key_file: Option<PathBuf>,
+    max_concurrency: u32,
+    keepalive_interval_ms: u64,
+    keepalive_timeout_ms: u64,
+    shutdown_grace_ms: u64,
     worker_id: Option<String>,
     heartbeat_ms: u64,
     reconnect_initial_delay_ms: u64,
@@ -49,10 +60,25 @@ COMMANDS
   list    Print the actors compiled into this registry, without connecting to the gateway.
   start   Connect to the gateway and serve invocations for every actor in the registry until stopped.
           Waits for the gateway if it isn't up yet, and reconnects and re-registers if the
-          session drops (e.g. the gateway restarts).
+          session drops (e.g. the gateway restarts). On SIGINT/SIGTERM it drains: new invokes
+          are refused as retriable while in-flight ones finish.
 
 OPTIONS
   -g, --gateway-socket <path>   Sidecar socket to connect to (default: {DEFAULT_GATEWAY_SOCKET_PATH})
+  -a, --gateway-address <addr>  Gateway sidecar address instead: unix:<path>, https://host:port,
+                                or http://host:port (the gateway's --insecure-plaintext test mode)
+      --gateway-ca-file <file>  PEM CA bundle to trust the gateway's TLS certificate (default: system roots)
+      --gateway-token-file <file>
+                                Bearer token sent to the gateway; re-read on every reconnect
+      --gateway-cert-file <file>
+      --gateway-key-file <file> Client certificate and key for mutual TLS
+  -c, --max-concurrency <n>     Invokes of each actor run at once, for actors without their own
+                                max_concurrency (default: 1). Handlers must be concurrency-safe above 1.
+      --keepalive-interval-ms <ms>
+                                HTTP/2 PING interval over TCP (default: {DEFAULT_KEEPALIVE_INTERVAL_MS}; 0 disables)
+      --keepalive-timeout-ms <ms>
+                                Reconnect when a PING goes unanswered this long (default: {DEFAULT_KEEPALIVE_TIMEOUT_MS})
+      --shutdown-grace-ms <ms>  On SIGINT/SIGTERM, let in-flight invokes finish this long (default: {DEFAULT_SHUTDOWN_GRACE_MS})
   -i, --worker-id <id>          Stable worker identity (default: rust-<random>)
       --heartbeat-ms <ms>       Heartbeat interval (default: {DEFAULT_HEARTBEAT_MS})
       --reconnect-initial-delay-ms <ms>
@@ -66,15 +92,26 @@ OPTIONS
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateActorsRegistry), linked into the binary at compile time.
 
-EXAMPLE
-  {invocation} start --gateway-socket {DEFAULT_GATEWAY_SOCKET_PATH}"
+EXAMPLES
+  {invocation} start --gateway-socket {DEFAULT_GATEWAY_SOCKET_PATH}
+  {invocation} start --gateway-address https://activity-gateway:7443 \\
+    --gateway-ca-file ca.crt --gateway-token-file token --max-concurrency 10"
     )
 }
 
 fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
     let mut parsed = ParsedArgs {
         command: None,
-        gateway_socket_path: DEFAULT_GATEWAY_SOCKET_PATH.to_string(),
+        gateway_socket_path: None,
+        gateway_address: None,
+        ca_file: None,
+        token_file: None,
+        cert_file: None,
+        key_file: None,
+        max_concurrency: 0,
+        keepalive_interval_ms: DEFAULT_KEEPALIVE_INTERVAL_MS,
+        keepalive_timeout_ms: DEFAULT_KEEPALIVE_TIMEOUT_MS,
+        shutdown_grace_ms: DEFAULT_SHUTDOWN_GRACE_MS,
         worker_id: None,
         heartbeat_ms: DEFAULT_HEARTBEAT_MS,
         reconnect_initial_delay_ms: DEFAULT_RECONNECT_INITIAL_DELAY_MS,
@@ -101,7 +138,48 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
         match flag.as_str() {
             "-h" | "--help" => parsed.help = true,
             "-g" | "--gateway-socket" => {
-                parsed.gateway_socket_path = value_for("--gateway-socket")?
+                parsed.gateway_socket_path = Some(value_for("--gateway-socket")?)
+            }
+            "-a" | "--gateway-address" => {
+                let value = value_for("--gateway-address")?;
+                parse_gateway_address(&value)?;
+                parsed.gateway_address = Some(value);
+            }
+            "--gateway-ca-file" => parsed.ca_file = Some(value_for("--gateway-ca-file")?.into()),
+            "--gateway-token-file" => {
+                parsed.token_file = Some(value_for("--gateway-token-file")?.into())
+            }
+            "--gateway-cert-file" => {
+                parsed.cert_file = Some(value_for("--gateway-cert-file")?.into())
+            }
+            "--gateway-key-file" => parsed.key_file = Some(value_for("--gateway-key-file")?.into()),
+            "-c" | "--max-concurrency" => {
+                let value = value_for("--max-concurrency")?;
+                parsed.max_concurrency = parse_positive(&value, "--max-concurrency")?
+                    .try_into()
+                    .map_err(|_| format!("--max-concurrency is too large: {}", value))?;
+            }
+            "--keepalive-interval-ms" => {
+                let value = value_for("--keepalive-interval-ms")?;
+                parsed.keepalive_interval_ms = value.parse::<u64>().map_err(|_| {
+                    format!(
+                        "--keepalive-interval-ms must be a non-negative integer, got: {}",
+                        value
+                    )
+                })?;
+            }
+            "--keepalive-timeout-ms" => {
+                let value = value_for("--keepalive-timeout-ms")?;
+                parsed.keepalive_timeout_ms = parse_positive(&value, "--keepalive-timeout-ms")?;
+            }
+            "--shutdown-grace-ms" => {
+                let value = value_for("--shutdown-grace-ms")?;
+                parsed.shutdown_grace_ms = value.parse::<u64>().map_err(|_| {
+                    format!(
+                        "--shutdown-grace-ms must be a non-negative integer, got: {}",
+                        value
+                    )
+                })?;
             }
             "-i" | "--worker-id" => parsed.worker_id = Some(value_for("--worker-id")?),
             "--heartbeat-ms" => {
@@ -150,7 +228,30 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
             }
         }
     }
+    if parsed.gateway_socket_path.is_some() && parsed.gateway_address.is_some() {
+        return Err("Pass either --gateway-socket or --gateway-address, not both".to_string());
+    }
+    if parsed.cert_file.is_some() != parsed.key_file.is_some() {
+        return Err("--gateway-cert-file and --gateway-key-file go together".to_string());
+    }
     Ok(parsed)
+}
+
+/// Fails fast on unreadable credentials instead of retrying forever.
+fn check_readable(parsed: &ParsedArgs) -> Result<(), String> {
+    for (flag, path) in [
+        ("--gateway-ca-file", &parsed.ca_file),
+        ("--gateway-token-file", &parsed.token_file),
+        ("--gateway-cert-file", &parsed.cert_file),
+        ("--gateway-key-file", &parsed.key_file),
+    ] {
+        if let Some(path) = path {
+            if std::fs::File::open(path).is_err() {
+                return Err(format!("Can't read {} file {}", flag, path.display()));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parse_positive(value: &str, flag: &str) -> Result<u64, String> {
@@ -177,8 +278,9 @@ fn random_worker_id() -> String {
 ///
 /// `start` builds its own multi-threaded tokio runtime, so call this from a
 /// plain (non-async) `main`, not from inside another tokio runtime. It stops
-/// the worker gracefully (unregistering from the gateway) on SIGINT/SIGTERM;
-/// those signals stay routed through tokio for the rest of the process.
+/// the worker gracefully on SIGINT/SIGTERM (draining in-flight invokes, then
+/// unregistering from the gateway); those signals stay routed through tokio
+/// for the rest of the process.
 ///
 /// `invocation` is how to run the calling binary, shown in `--help`; defaults
 /// to `cargo run --release --`.
@@ -215,7 +317,20 @@ where
         }
     };
 
-    let worker_id = parsed.worker_id.unwrap_or_else(random_worker_id);
+    if let Err(message) = check_readable(&parsed) {
+        log::error!("{}", message);
+        return 1;
+    }
+    let gateway_address = parsed.gateway_address.clone().unwrap_or_else(|| {
+        format!(
+            "unix:{}",
+            parsed
+                .gateway_socket_path
+                .as_deref()
+                .unwrap_or(DEFAULT_GATEWAY_SOCKET_PATH)
+        )
+    });
+    let worker_id = parsed.worker_id.clone().unwrap_or_else(random_worker_id);
 
     log::info!(
         "{} actor(s) compiled into this registry",
@@ -254,23 +369,28 @@ where
     let worker = Arc::new(ActorWorker::new(
         ActorWorkerOptions {
             worker_id: worker_id.clone(),
-            gateway_socket_path: parsed.gateway_socket_path.clone(),
+            gateway_address: Some(gateway_address.clone()),
+            ca_file: parsed.ca_file.clone(),
+            token_file: parsed.token_file.clone(),
+            cert_file: parsed.cert_file.clone(),
+            key_file: parsed.key_file.clone(),
+            keepalive_interval_ms: parsed.keepalive_interval_ms,
+            keepalive_timeout_ms: parsed.keepalive_timeout_ms,
+            max_concurrency: parsed.max_concurrency,
+            shutdown_grace_ms: parsed.shutdown_grace_ms,
             heartbeat_ms: parsed.heartbeat_ms,
             reconnect_initial_delay_ms: parsed.reconnect_initial_delay_ms,
             reconnect_max_delay_ms: parsed.reconnect_max_delay_ms,
             reconnect_max_attempts: parsed.reconnect_max_attempts,
+            ..Default::default()
         },
         registrations,
     ));
 
-    runtime.block_on(async {
+    let code = runtime.block_on(async {
         let signal_task = tokio::spawn(stop_on_signal(worker.clone()));
 
-        log::info!(
-            "Starting worker {}: gateway-socket={}",
-            worker_id,
-            parsed.gateway_socket_path
-        );
+        log::info!("Starting worker {}: gateway={}", worker_id, gateway_address);
         let result = worker.run().await;
         signal_task.abort();
 
@@ -284,51 +404,47 @@ where
                 1
             }
         }
-    })
-}
-
-/// `err` followed by each of its `source()`s, joined with `: `. tonic's
-/// top-level connection error is just "transport error"; the useful part (for
-/// example "No such file or directory") is further down the chain.
-fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
-    let mut message = err.to_string();
-    let mut source = err.source();
-    while let Some(cause) = source {
-        let text = cause.to_string();
-        if !message.ends_with(&text) {
-            message.push_str(": ");
-            message.push_str(&text);
-        }
-        source = cause.source();
-    }
-    message
+    });
+    // A handler still running past the drain's grace period (Rust can't kill
+    // its thread) mustn't hold up the exit: dropping the runtime would wait
+    // for that blocking thread to return.
+    runtime.shutdown_background();
+    code
 }
 
 async fn stop_on_signal(worker: Arc<ActorWorker>) {
     #[cfg(unix)]
+    let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
     {
-        use tokio::signal::unix::{signal, SignalKind};
-        let mut sigterm = match signal(SignalKind::terminate()) {
-            Ok(s) => s,
-            Err(err) => {
-                log::warn!("Could not install a SIGTERM handler: {}", err);
-                let _ = tokio::signal::ctrl_c().await;
-                log::info!("Shutdown requested — stopping worker...");
-                worker.stop();
-                return;
-            }
-        };
+        Ok(s) => Some(s),
+        Err(err) => {
+            log::warn!("Could not install a SIGTERM handler: {}", err);
+            None
+        }
+    };
+    let mut stop_requested = false;
+    loop {
+        #[cfg(unix)]
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {}
-            _ = sigterm.recv() => {}
+            _ = async {
+                match sigterm.as_mut() {
+                    Some(s) => { s.recv().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {}
         }
-    }
-    #[cfg(not(unix))]
-    {
+        #[cfg(not(unix))]
         let _ = tokio::signal::ctrl_c().await;
+
+        if stop_requested {
+            log::info!("Already stopping: waiting for in-flight invokes to finish");
+            continue;
+        }
+        stop_requested = true;
+        log::info!("Shutdown requested — draining and stopping worker...");
+        worker.stop();
     }
-    log::info!("Shutdown requested — stopping worker...");
-    worker.stop();
 }
 
 #[cfg(test)]
@@ -351,7 +467,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(p.command, Some(Command::Start));
-        assert_eq!(p.gateway_socket_path, "/tmp/x.sock");
+        assert_eq!(p.gateway_socket_path.as_deref(), Some("/tmp/x.sock"));
         assert_eq!(p.worker_id.as_deref(), Some("w1"));
         assert_eq!(p.heartbeat_ms, 250);
     }
@@ -360,7 +476,11 @@ mod tests {
     fn defaults() {
         let p = parse(&["list"]).unwrap();
         assert_eq!(p.command, Some(Command::List));
-        assert_eq!(p.gateway_socket_path, DEFAULT_GATEWAY_SOCKET_PATH);
+        assert!(p.gateway_socket_path.is_none() && p.gateway_address.is_none());
+        assert_eq!(p.max_concurrency, 0);
+        assert_eq!(p.keepalive_interval_ms, DEFAULT_KEEPALIVE_INTERVAL_MS);
+        assert_eq!(p.keepalive_timeout_ms, DEFAULT_KEEPALIVE_TIMEOUT_MS);
+        assert_eq!(p.shutdown_grace_ms, DEFAULT_SHUTDOWN_GRACE_MS);
         assert_eq!(p.heartbeat_ms, DEFAULT_HEARTBEAT_MS);
         assert!(p.worker_id.is_none());
         assert_eq!(
@@ -396,6 +516,61 @@ mod tests {
         assert!(parse(&["start", "--heartbeat-ms", "0"]).is_err());
         assert!(parse(&["start", "--bogus"]).is_err());
         assert!(parse(&["list", "start"]).is_err());
+    }
+
+    #[test]
+    fn parses_tcp_concurrency_and_drain_options() {
+        let p = parse(&[
+            "start",
+            "-a",
+            "https://gw:7443",
+            "--gateway-ca-file=ca.crt",
+            "--gateway-token-file",
+            "token",
+            "--gateway-cert-file",
+            "c.crt",
+            "--gateway-key-file",
+            "c.key",
+            "-c",
+            "10",
+            "--keepalive-interval-ms",
+            "0",
+            "--keepalive-timeout-ms",
+            "500",
+            "--shutdown-grace-ms",
+            "0",
+        ])
+        .unwrap();
+        assert_eq!(p.gateway_address.as_deref(), Some("https://gw:7443"));
+        assert_eq!(p.ca_file, Some(PathBuf::from("ca.crt")));
+        assert_eq!(p.token_file, Some(PathBuf::from("token")));
+        assert_eq!(p.cert_file, Some(PathBuf::from("c.crt")));
+        assert_eq!(p.key_file, Some(PathBuf::from("c.key")));
+        assert_eq!(p.max_concurrency, 10);
+        assert_eq!(p.keepalive_interval_ms, 0);
+        assert_eq!(p.keepalive_timeout_ms, 500);
+        assert_eq!(p.shutdown_grace_ms, 0);
+    }
+
+    #[test]
+    fn rejects_bad_tcp_concurrency_and_drain_options() {
+        for args in [
+            &["start", "-g", "/tmp/x.sock", "-a", "unix:/tmp/y.sock"][..],
+            &["start", "-a", "tcp://gw:1"],
+            &["start", "-a", "https://gw"],
+            &["start", "-a", "unix:"],
+            &["start", "--gateway-cert-file", "c.crt"],
+            &["start", "--gateway-key-file", "c.key"],
+            &["start", "-c", "0"],
+            &["start", "-c", "-1"],
+            &["start", "-c", ""],
+            &["start", "-c", "99999999999"],
+            &["start", "--keepalive-interval-ms", "-1"],
+            &["start", "--keepalive-timeout-ms", "0"],
+            &["start", "--shutdown-grace-ms", ""],
+        ] {
+            assert!(parse(args).is_err(), "{:?}", args);
+        }
     }
 
     #[test]
