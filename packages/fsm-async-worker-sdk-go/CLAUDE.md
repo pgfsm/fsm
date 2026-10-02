@@ -56,12 +56,16 @@ A missing or mistyped actor is a compile error in the generated worker.
 - **Protobuf messages are held by pointer** (`ActorRegistration.Meta` is
   `*RegisteredActor`). Generated messages embed a mutex and must not be copied;
   the pre-#370 generated `sdk.go` held them by value and `go vet` flagged it.
-- **`Stop()` half-closes the stream (`CloseSend`); it doesn't close the
+- **The drain half-closes the stream (`CloseSend`); it doesn't close the
   connection.** The gateway sees the unregister and end of stream, ends its
   side, and `Run()` returns `nil`. The pre-#370 `sdk.go` closed the connection,
   which made `Run()` return an error on a normal Ctrl-C (exit 1) and panicked if
-  `Stop()` ran before `Run()` connected. `stream` and every `Send` are guarded
-  by `mu` (tests run with `-race`).
+  `Stop()` ran before `Run()` connected. `mu` guards `stopping` and `stream` and
+  is never held across a `Send` (so `Stop()` never blocks); `sendMu` serializes
+  `Send`/`CloseSend` (tests run with `-race`).
+- `ActorRegistration.WithMaxConcurrency` sets `Meta.MaxConcurrency`; the
+  compiler's Go registry doesn't emit it yet (#435). `NewActorWorker` clones
+  each `Meta` (`proto.Clone`) before writing the effective limit into it.
 - **`NewActorRegistration`'s six identity arguments are the contract with the
   compiler's Go registry** (`go/actors-registry-aggregate.eta` and
   `create-async-logic`'s shared-async-op Go registry). Those registries define
@@ -83,9 +87,54 @@ A missing or mistyped actor is a compile error in the generated worker.
   - `Stop()` sends an unregister and `Run()` returns `nil`
   - a rejected registration, an empty registry, and `Stop()` before `Run()`
   - the CLI's `start` path, returning 0 when the gateway ends the stream
+- `transport_concurrency_test.go`: SPEC-007 over real TCP sockets (see below).
 
 CI runs all of it (`ci.yml`, `go-async-worker-sdk` job: gofmt, vet, test
 `-race`, all `-mod=readonly`).
+
+## Transport, concurrency and drain (SPEC-007, #434)
+
+Same behaviour as the TypeScript (#431), Python (#432) and Rust (#433) SDKs;
+keep them in step.
+
+- **Addresses.** `GatewayAddress` (`unix:` / `https://` / `http://`) is parsed
+  by `ParseGatewayAddress` in `NewActorWorker`; an invalid one makes `Run()`
+  fail at once. `GatewaySocketPath` is the `unix:` fallback. `dial()` opens a
+  **new** `grpc.ClientConn` per session (so a reconnect after the gateway's
+  max-age drain can reach another replica) and reads the token, CA and client
+  certificate then, so rotated files apply from the next session. The token goes
+  as outgoing metadata (`authorization: Bearer`), not per-RPC credentials, so it
+  also works on the plaintext test mode.
+- **Keepalive** is `grpc.WithKeepaliveParams`; grpc-go raises a `Time` below ten
+  seconds to ten seconds. TCP only. Options keep this package's "zero means
+  default" convention, so "disabled" is negative (`KeepaliveIntervalMs`,
+  `ShutdownGraceMs`); the CLI maps its `0` to `-1` (`optionMs`).
+- **TLS failures are retried.** A refused handshake (no client certificate, an
+  untrusted server) surfaces as `Unavailable`, so `Run()` retries it.
+- **Concurrency.** `serveLoop` starts a goroutine per invoke; each takes a slot
+  from its actor's buffered channel (sized by
+  `EffectiveMaxConcurrency(actor, worker)`, also sent in `Register`). Results go
+  out through `sendOn(stream, ...)`, which drops them (logged) if `stream` is no
+  longer the current session's, so a late result never lands on a later session.
+- **Drain.** `Stop()` sets `stopping` under `mu`, closes `stopCh` and starts
+  `drain()`: wait for `inFlight` (a `WaitGroup`; no `Add` after `stopping`, so
+  no `Add`/`Wait` race) up to `ShutdownGraceMs`, then clear `stream`, send the
+  unregister and `CloseSend`. Invokes that arrive while `stopping` get a
+  retriable `WORKER_DRAINING`. `runSession` publishes its stream under `mu` only
+  if not `stopping`, so the drain either sees it or no session starts. After the
+  drain the session gets `closeWait` (5 s) for the gateway to end its side, then
+  the call is cancelled. `Run()` returns after `drained`.
+
+Tests: `transport_concurrency_test.go` runs a grpc-go server (TLS/mTLS via
+`credentials.NewTLS`, max age via `keepalive.ServerParameters`) that checks the
+bearer token like the real gateway: TLS + token, token re-read after a
+reconnect, wrong token, mTLS with/without a client certificate, an untrusted
+server certificate, plaintext, worker-wide and per-actor concurrency, drain and
+its grace limit, max-age reconnect, an invalid address. TLS fixtures come from
+`openssl` at test time (no committed keys; the client certificate gets an
+extension so OpenSSL 3.0 issues v3). The real connect-node gateway isn't started
+here (it's Deno); interop with it was checked by hand for #434 (mTLS + token,
+concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
 ## Releasing
 
