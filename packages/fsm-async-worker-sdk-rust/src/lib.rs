@@ -37,6 +37,6 @@ pub use actor_worker::{
     DEFAULT_KEEPALIVE_TIMEOUT_MS, DEFAULT_RECONNECT_INITIAL_DELAY_MS,
     DEFAULT_RECONNECT_MAX_DELAY_MS, DEFAULT_SHUTDOWN_GRACE_MS, FATAL_CODES, STABLE_SESSION_MS,
 };
-pub use cli::{run_actor_worker_cli, DEFAULT_GATEWAY_SOCKET_PATH};
+pub use cli::{env_var_for, run_actor_worker_cli, DEFAULT_GATEWAY_SOCKET_PATH, ENV_OPTIONS};
 /// The generated protocol message an [`ActorRegistration`]'s `meta` is.
 pub use pgfsm_proto_codegen::pgfsm::sidecargateway::v1::RegisteredActor;

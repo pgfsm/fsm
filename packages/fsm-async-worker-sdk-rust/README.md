@@ -97,6 +97,40 @@ or `--reconnect-max-attempts` consecutive failed attempts. An invoke result that
 can't be sent because its session ended is logged and dropped; the gateway has
 already failed that invoke.
 
+### Environment variables
+
+Every option except `--help` can also be set through an environment variable:
+`PGFSM_` + the long option name in upper case, with `-` as `_`. The names are
+the same in all four worker SDKs (TypeScript, Python, Rust, Go).
+
+| Flag                           | Variable                           |
+| ------------------------------ | ---------------------------------- |
+| `--gateway-socket`             | `PGFSM_GATEWAY_SOCKET`             |
+| `--gateway-address`            | `PGFSM_GATEWAY_ADDRESS`            |
+| `--gateway-ca-file`            | `PGFSM_GATEWAY_CA_FILE`            |
+| `--gateway-token-file`         | `PGFSM_GATEWAY_TOKEN_FILE`         |
+| `--gateway-cert-file`          | `PGFSM_GATEWAY_CERT_FILE`          |
+| `--gateway-key-file`           | `PGFSM_GATEWAY_KEY_FILE`           |
+| `--max-concurrency`            | `PGFSM_MAX_CONCURRENCY`            |
+| `--keepalive-interval-ms`      | `PGFSM_KEEPALIVE_INTERVAL_MS`      |
+| `--keepalive-timeout-ms`       | `PGFSM_KEEPALIVE_TIMEOUT_MS`       |
+| `--shutdown-grace-ms`          | `PGFSM_SHUTDOWN_GRACE_MS`          |
+| `--worker-id`                  | `PGFSM_WORKER_ID`                  |
+| `--heartbeat-ms`               | `PGFSM_HEARTBEAT_MS`               |
+| `--reconnect-initial-delay-ms` | `PGFSM_RECONNECT_INITIAL_DELAY_MS` |
+| `--reconnect-max-delay-ms`     | `PGFSM_RECONNECT_MAX_DELAY_MS`     |
+| `--reconnect-max-attempts`     | `PGFSM_RECONNECT_MAX_ATTEMPTS`     |
+
+- **Precedence: flag → variable → default.** An empty variable counts as unset.
+- `--gateway-socket` and `--gateway-address` count as one setting: a flag for
+  either overrides both variables, and setting both variables is an error.
+- Credentials stay **file paths** (`PGFSM_GATEWAY_TOKEN_FILE` names the token
+  file, not the token), so secrets never sit in the environment.
+- A bad value exits 1 before connecting, naming the variable.
+- Variables are read from the process environment. The SDK doesn't load `.env`
+  files itself; use `set -a; . ./.env; set +a` before `cargo run`, or a
+  container's `env_file`.
+
 ### Connecting over TCP (SPEC-007)
 
 When the gateway runs as its own Deployment, point workers at its Service with

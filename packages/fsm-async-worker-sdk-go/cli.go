@@ -46,7 +46,60 @@ type parsedArgs struct {
 	reconnectInitial     int
 	reconnectMax         int
 	reconnectMaxAttempts int
-	help                 bool
+	// sources maps each set option's long name to the flag or variable its
+	// value came from, for error messages.
+	sources map[string]string
+	help    bool
+}
+
+// EnvOptions are the options that fall back to an environment variable, by
+// long name. Same list, names and precedence (flag -> variable -> default) in
+// all four SDKs.
+var EnvOptions = []string{
+	"gateway-socket",
+	"gateway-address",
+	"gateway-ca-file",
+	"gateway-token-file",
+	"gateway-cert-file",
+	"gateway-key-file",
+	"max-concurrency",
+	"keepalive-interval-ms",
+	"keepalive-timeout-ms",
+	"shutdown-grace-ms",
+	"worker-id",
+	"heartbeat-ms",
+	"reconnect-initial-delay-ms",
+	"reconnect-max-delay-ms",
+	"reconnect-max-attempts",
+}
+
+// EnvVarFor is "PGFSM_" + the long option name upper-cased, "-" -> "_".
+func EnvVarFor(option string) string {
+	return "PGFSM_" + strings.ToUpper(strings.ReplaceAll(option, "-", "_"))
+}
+
+// canonical is the long option name for a flag ("-g", "--gateway-socket", ...).
+func canonical(flag string) (string, bool) {
+	switch flag {
+	case "-g":
+		return "gateway-socket", true
+	case "-a":
+		return "gateway-address", true
+	case "-c":
+		return "max-concurrency", true
+	case "-i":
+		return "worker-id", true
+	}
+	name, ok := strings.CutPrefix(flag, "--")
+	if !ok {
+		return "", false
+	}
+	for _, option := range EnvOptions {
+		if option == name {
+			return option, true
+		}
+	}
+	return "", false
 }
 
 func helpText(invocation string) string {
@@ -88,6 +141,12 @@ OPTIONS
                                 Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
 
+ENVIRONMENT
+  Every option above except --help falls back to an environment variable when the flag
+  isn't given: PGFSM_ + the long name in upper case, with - as _. A flag wins over its
+  variable; an empty variable counts as unset. Credentials stay file paths.
+    %[9]s
+
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateGoRegistry), linked into the binary at compile time.
 
@@ -96,12 +155,23 @@ EXAMPLES
   %[1]s start --gateway-address https://activity-gateway:7443 \\
     --gateway-ca-file ca.crt --gateway-token-file token --max-concurrency 10
 `, invocation, DefaultGatewaySocketPath, DefaultHeartbeatMs, DefaultReconnectInitialDelayMs, DefaultReconnectMaxDelayMs,
-		DefaultKeepaliveIntervalMs, DefaultKeepaliveTimeoutMs, DefaultShutdownGraceMs)
+		DefaultKeepaliveIntervalMs, DefaultKeepaliveTimeoutMs, DefaultShutdownGraceMs, envVarList())
+}
+
+func envVarList() string {
+	vars := make([]string, len(EnvOptions))
+	for i, option := range EnvOptions {
+		vars[i] = EnvVarFor(option)
+	}
+	return strings.Join(vars, "\n    ")
 }
 
 // parseArgs accepts the command and flags in any order, and both
-// "--flag value" and "--flag=value".
-func parseArgs(args []string) (parsedArgs, error) {
+// "--flag value" and "--flag=value". Every option not given as a flag falls
+// back to its environment variable (read with getenv; an empty one counts as
+// unset), then the default. An invalid value is reported by the flag or
+// variable it came from.
+func parseArgs(args []string, getenv func(string) string) (parsedArgs, error) {
 	parsed := parsedArgs{
 		heartbeatMs:       DefaultHeartbeatMs,
 		reconnectInitial:  DefaultReconnectInitialDelayMs,
@@ -109,15 +179,11 @@ func parseArgs(args []string) (parsedArgs, error) {
 		keepaliveInterval: DefaultKeepaliveIntervalMs,
 		keepaliveTimeout:  DefaultKeepaliveTimeoutMs,
 		shutdownGrace:     DefaultShutdownGraceMs,
+		sources:           map[string]string{},
 	}
-	// intFlag reads an integer flag >= minimum.
-	intFlag := func(flag, v string, minimum int) (int, error) {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < minimum {
-			return 0, fmt.Errorf("%s must be an integer >= %d, got: %s", flag, minimum, v)
-		}
-		return n, nil
-	}
+
+	type setting struct{ value, label string }
+	values := map[string]setting{}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		flag, inline, hasInline := arg, "", false
@@ -126,127 +192,114 @@ func parseArgs(args []string) (parsedArgs, error) {
 				flag, inline, hasInline = name, value, true
 			}
 		}
-		value := func(name string) (string, error) {
-			if hasInline {
-				return inline, nil
-			}
-			if i+1 >= len(args) {
-				return "", fmt.Errorf("%s requires a value", name)
-			}
-			i++
-			return args[i], nil
-		}
-
-		switch flag {
-		case "-h", "--help":
+		switch {
+		case flag == "-h" || flag == "--help":
 			parsed.help = true
-		case "-g", "--gateway-socket":
-			v, err := value("--gateway-socket")
-			if err != nil {
-				return parsed, err
-			}
-			parsed.gatewaySocketPath = v
-		case "-a", "--gateway-address":
-			v, err := value("--gateway-address")
-			if err != nil {
-				return parsed, err
-			}
-			if _, err := ParseGatewayAddress(v); err != nil {
-				return parsed, err
-			}
-			parsed.gatewayAddress = v
-		case "--gateway-ca-file", "--gateway-token-file", "--gateway-cert-file", "--gateway-key-file":
-			v, err := value(flag)
-			if err != nil {
-				return parsed, err
-			}
-			switch flag {
-			case "--gateway-ca-file":
-				parsed.caFile = v
-			case "--gateway-token-file":
-				parsed.tokenFile = v
-			case "--gateway-cert-file":
-				parsed.certFile = v
-			default:
-				parsed.keyFile = v
-			}
-		case "-c", "--max-concurrency", "--keepalive-interval-ms", "--keepalive-timeout-ms", "--shutdown-grace-ms":
-			name := flag
-			if name == "-c" {
-				name = "--max-concurrency"
-			}
-			v, err := value(name)
-			if err != nil {
-				return parsed, err
-			}
-			minimum := map[string]int{"--max-concurrency": 1, "--keepalive-interval-ms": 0, "--keepalive-timeout-ms": 1, "--shutdown-grace-ms": 0}[name]
-			n, err := intFlag(name, v, minimum)
-			if err != nil {
-				return parsed, err
-			}
-			switch name {
-			case "--max-concurrency":
-				parsed.maxConcurrency = n
-			case "--keepalive-interval-ms":
-				parsed.keepaliveInterval = n
-			case "--keepalive-timeout-ms":
-				parsed.keepaliveTimeout = n
-			default:
-				parsed.shutdownGrace = n
-			}
-		case "-i", "--worker-id":
-			v, err := value("--worker-id")
-			if err != nil {
-				return parsed, err
-			}
-			parsed.workerID = v
-		case "--heartbeat-ms":
-			v, err := value("--heartbeat-ms")
-			if err != nil {
-				return parsed, err
-			}
-			ms, convErr := strconv.Atoi(v)
-			if convErr != nil || ms <= 0 {
-				return parsed, fmt.Errorf("--heartbeat-ms must be a positive integer, got: %s", v)
-			}
-			parsed.heartbeatMs = ms
-		case "--reconnect-initial-delay-ms", "--reconnect-max-delay-ms", "--reconnect-max-attempts":
-			v, err := value(flag)
-			if err != nil {
-				return parsed, err
-			}
-			n, convErr := strconv.Atoi(v)
-			minimum := 1
-			if flag == "--reconnect-max-attempts" {
-				minimum = 0
-			}
-			if convErr != nil || n < minimum {
-				return parsed, fmt.Errorf("%s must be an integer >= %d, got: %s", flag, minimum, v)
-			}
-			switch flag {
-			case "--reconnect-initial-delay-ms":
-				parsed.reconnectInitial = n
-			case "--reconnect-max-delay-ms":
-				parsed.reconnectMax = n
-			default:
-				parsed.reconnectMaxAttempts = n
-			}
+		case (flag == "list" || flag == "start") && parsed.command == "":
+			parsed.command = flag
 		default:
+			option, ok := canonical(flag)
 			switch {
+			case ok:
+				label := "--" + option
+				value := inline
+				if !hasInline {
+					if i+1 >= len(args) {
+						return parsed, fmt.Errorf("%s requires a value", label)
+					}
+					i++
+					value = args[i]
+				}
+				values[option] = setting{value, label}
 			case strings.HasPrefix(flag, "-"):
 				return parsed, fmt.Errorf("unknown option: %s", flag)
-			case (flag == "list" || flag == "start") && parsed.command == "":
-				parsed.command = flag
 			default:
 				return parsed, fmt.Errorf("first argument must be one of: list, start. Got: %s", flag)
 			}
 		}
 	}
-	if parsed.gatewaySocketPath != "" && parsed.gatewayAddress != "" {
-		return parsed, errors.New("pass either --gateway-socket or --gateway-address, not both")
+
+	// Where the gateway is counts as one setting: a flag for either form
+	// overrides both variables.
+	_, socketFlag := values["gateway-socket"]
+	_, addressFlag := values["gateway-address"]
+	locationFromFlags := socketFlag || addressFlag
+	for _, option := range EnvOptions {
+		if _, given := values[option]; given {
+			continue
+		}
+		if locationFromFlags && (option == "gateway-socket" || option == "gateway-address") {
+			continue
+		}
+		if v := getenv(EnvVarFor(option)); v != "" {
+			values[option] = setting{v, EnvVarFor(option)}
+		}
 	}
-	if (parsed.certFile == "") != (parsed.keyFile == "") {
-		return parsed, errors.New("--gateway-cert-file and --gateway-key-file go together")
+	_, hasSocket := values["gateway-socket"]
+	_, hasAddress := values["gateway-address"]
+	if hasSocket && hasAddress {
+		if locationFromFlags {
+			return parsed, errors.New("pass either --gateway-socket or --gateway-address, not both")
+		}
+		return parsed, fmt.Errorf("set either %s or %s, not both", EnvVarFor("gateway-socket"), EnvVarFor("gateway-address"))
+	}
+	_, hasCert := values["gateway-cert-file"]
+	_, hasKey := values["gateway-key-file"]
+	if hasCert != hasKey {
+		return parsed, fmt.Errorf("--gateway-cert-file and --gateway-key-file go together (or %s and %s)",
+			EnvVarFor("gateway-cert-file"), EnvVarFor("gateway-key-file"))
+	}
+
+	integer := func(s setting, minimum int) (int, error) {
+		n, err := strconv.Atoi(strings.TrimSpace(s.value))
+		if err != nil || n < minimum {
+			return 0, fmt.Errorf("%s must be an integer >= %d, got: %s", s.label, minimum, s.value)
+		}
+		return n, nil
+	}
+	ints := map[string]struct {
+		min    int
+		target *int
+	}{
+		"max-concurrency":            {1, &parsed.maxConcurrency},
+		"keepalive-interval-ms":      {0, &parsed.keepaliveInterval},
+		"keepalive-timeout-ms":       {1, &parsed.keepaliveTimeout},
+		"shutdown-grace-ms":          {0, &parsed.shutdownGrace},
+		"heartbeat-ms":               {1, &parsed.heartbeatMs},
+		"reconnect-initial-delay-ms": {1, &parsed.reconnectInitial},
+		"reconnect-max-delay-ms":     {1, &parsed.reconnectMax},
+		"reconnect-max-attempts":     {0, &parsed.reconnectMaxAttempts},
+	}
+	strs := map[string]*string{
+		"gateway-socket":     &parsed.gatewaySocketPath,
+		"gateway-address":    &parsed.gatewayAddress,
+		"gateway-ca-file":    &parsed.caFile,
+		"gateway-token-file": &parsed.tokenFile,
+		"gateway-cert-file":  &parsed.certFile,
+		"gateway-key-file":   &parsed.keyFile,
+		"worker-id":          &parsed.workerID,
+	}
+	// In EnvOptions order, so the first invalid value reported is stable.
+	for _, option := range EnvOptions {
+		s, ok := values[option]
+		if !ok {
+			continue
+		}
+		if spec, isInt := ints[option]; isInt {
+			n, err := integer(s, spec.min)
+			if err != nil {
+				return parsed, err
+			}
+			*spec.target = n
+		} else {
+			if option == "gateway-address" {
+				if _, err := ParseGatewayAddress(s.value); err != nil {
+					return parsed, err
+				}
+			}
+			*strs[option] = s.value
+		}
+		parsed.sources[option] = s.label
 	}
 	return parsed, nil
 }
@@ -254,18 +307,22 @@ func parseArgs(args []string) (parsedArgs, error) {
 // checkReadable fails fast on unreadable credentials instead of retrying
 // forever.
 func checkReadable(parsed parsedArgs) error {
-	for _, f := range []struct{ flag, path string }{
-		{"--gateway-ca-file", parsed.caFile},
-		{"--gateway-token-file", parsed.tokenFile},
-		{"--gateway-cert-file", parsed.certFile},
-		{"--gateway-key-file", parsed.keyFile},
+	for _, f := range []struct{ option, path string }{
+		{"gateway-ca-file", parsed.caFile},
+		{"gateway-token-file", parsed.tokenFile},
+		{"gateway-cert-file", parsed.certFile},
+		{"gateway-key-file", parsed.keyFile},
 	} {
 		if f.path == "" {
 			continue
 		}
 		file, err := os.Open(f.path)
 		if err != nil {
-			return fmt.Errorf("can't read %s file %s", f.flag, f.path)
+			label := parsed.sources[f.option]
+			if label == "" {
+				label = "--" + f.option
+			}
+			return fmt.Errorf("can't read %s file %s", label, f.path)
 		}
 		file.Close()
 	}
@@ -294,6 +351,9 @@ func randomWorkerID() string {
 // it, which keeps this testable. args excludes the program name
 // (os.Args[1:]).
 //
+// Every option falls back to its environment variable (see [EnvVarFor]) when
+// the flag isn't given.
+//
 // start stops the worker gracefully on SIGINT/SIGTERM (draining in-flight
 // invokes, then unregistering from the gateway), and restores default signal
 // handling once it returns.
@@ -310,7 +370,7 @@ func runCLI(registrations []ActorRegistration, args []string, invocation string,
 	}
 	logger := slog.Default().With("component", "pgfsm.async_worker_sdk.cli")
 
-	parsed, err := parseArgs(args)
+	parsed, err := parseArgs(args, os.Getenv)
 	if err != nil {
 		logger.Error(err.Error())
 		fmt.Fprint(stdout, helpText(invocation))

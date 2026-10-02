@@ -13,6 +13,7 @@ use crate::actor_worker::{
     DEFAULT_RECONNECT_INITIAL_DELAY_MS, DEFAULT_RECONNECT_MAX_DELAY_MS, DEFAULT_SHUTDOWN_GRACE_MS,
 };
 use std::collections::hash_map::RandomState;
+use std::collections::HashMap;
 use std::hash::{BuildHasher, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -46,10 +47,17 @@ struct ParsedArgs {
     reconnect_initial_delay_ms: u64,
     reconnect_max_delay_ms: u64,
     reconnect_max_attempts: u32,
+    /// Long option name → the flag or variable its value came from.
+    sources: HashMap<&'static str, String>,
     help: bool,
 }
 
 fn help_text(invocation: &str) -> String {
+    let env_vars = ENV_OPTIONS
+        .iter()
+        .map(|o| env_var_for(o))
+        .collect::<Vec<_>>()
+        .join("\n    ");
     format!(
         "pgfsm-async-worker-sdk — Rust worker for the Activity Gateway
 
@@ -89,6 +97,12 @@ OPTIONS
                                 Exit after n consecutive failed attempts (default: 0 = retry forever)
   -h, --help                    Show this help message
 
+ENVIRONMENT
+  Every option above except --help falls back to an environment variable when the flag
+  isn't given: PGFSM_ + the long name in upper case, with - as _. A flag wins over its
+  variable; an empty variable counts as unset. Credentials stay file paths.
+    {env_vars}
+
 Actors come from a compiler-generated registry (see fsm-compiler-ts's
 writeAggregateActorsRegistry), linked into the binary at compile time.
 
@@ -99,7 +113,56 @@ EXAMPLES
     )
 }
 
+/// The options that fall back to an environment variable, by long name. Same
+/// list, names and precedence (flag → variable → default) in all four SDKs.
+pub const ENV_OPTIONS: [&str; 15] = [
+    "gateway-socket",
+    "gateway-address",
+    "gateway-ca-file",
+    "gateway-token-file",
+    "gateway-cert-file",
+    "gateway-key-file",
+    "max-concurrency",
+    "keepalive-interval-ms",
+    "keepalive-timeout-ms",
+    "shutdown-grace-ms",
+    "worker-id",
+    "heartbeat-ms",
+    "reconnect-initial-delay-ms",
+    "reconnect-max-delay-ms",
+    "reconnect-max-attempts",
+];
+
+/// `PGFSM_` + the long option name upper-cased, `-` → `_`.
+pub fn env_var_for(option: &str) -> String {
+    format!("PGFSM_{}", option.to_uppercase().replace('-', "_"))
+}
+
+/// The long option name for a flag (`-g`, `--gateway-socket`, ...).
+fn canonical(flag: &str) -> Option<&'static str> {
+    match flag {
+        "-g" => Some("gateway-socket"),
+        "-a" => Some("gateway-address"),
+        "-c" => Some("max-concurrency"),
+        "-i" => Some("worker-id"),
+        _ => {
+            let name = flag.strip_prefix("--")?;
+            ENV_OPTIONS.iter().copied().find(|o| *o == name)
+        }
+    }
+}
+
 fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
+    parse_args_with_env(args, &|name| std::env::var(name).ok())
+}
+
+/// Parses flags, then fills every option not given as a flag from its
+/// environment variable (an empty one counts as unset), then the default. An
+/// invalid value is reported by the flag or variable it came from.
+fn parse_args_with_env(
+    args: Vec<String>,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<ParsedArgs, String> {
     let mut parsed = ParsedArgs {
         command: None,
         gateway_socket_path: None,
@@ -117,9 +180,12 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
         reconnect_initial_delay_ms: DEFAULT_RECONNECT_INITIAL_DELAY_MS,
         reconnect_max_delay_ms: DEFAULT_RECONNECT_MAX_DELAY_MS,
         reconnect_max_attempts: 0,
+        sources: HashMap::new(),
         help: false,
     };
 
+    // Raw values by long option name, with where each came from.
+    let mut values: HashMap<&'static str, (String, String)> = HashMap::new();
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         // Accept both `--flag value` and `--flag=value`.
@@ -127,91 +193,8 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
             Some((f, v)) if f.starts_with("--") => (f.to_string(), Some(v.to_string())),
             _ => (arg.clone(), None),
         };
-        let mut value_for = |name: &str| -> Result<String, String> {
-            match inline_value.clone() {
-                Some(v) => Ok(v),
-                None => iter
-                    .next()
-                    .ok_or_else(|| format!("{} requires a value", name)),
-            }
-        };
         match flag.as_str() {
             "-h" | "--help" => parsed.help = true,
-            "-g" | "--gateway-socket" => {
-                parsed.gateway_socket_path = Some(value_for("--gateway-socket")?)
-            }
-            "-a" | "--gateway-address" => {
-                let value = value_for("--gateway-address")?;
-                parse_gateway_address(&value)?;
-                parsed.gateway_address = Some(value);
-            }
-            "--gateway-ca-file" => parsed.ca_file = Some(value_for("--gateway-ca-file")?.into()),
-            "--gateway-token-file" => {
-                parsed.token_file = Some(value_for("--gateway-token-file")?.into())
-            }
-            "--gateway-cert-file" => {
-                parsed.cert_file = Some(value_for("--gateway-cert-file")?.into())
-            }
-            "--gateway-key-file" => parsed.key_file = Some(value_for("--gateway-key-file")?.into()),
-            "-c" | "--max-concurrency" => {
-                let value = value_for("--max-concurrency")?;
-                parsed.max_concurrency = parse_positive(&value, "--max-concurrency")?
-                    .try_into()
-                    .map_err(|_| format!("--max-concurrency is too large: {}", value))?;
-            }
-            "--keepalive-interval-ms" => {
-                let value = value_for("--keepalive-interval-ms")?;
-                parsed.keepalive_interval_ms = value.parse::<u64>().map_err(|_| {
-                    format!(
-                        "--keepalive-interval-ms must be a non-negative integer, got: {}",
-                        value
-                    )
-                })?;
-            }
-            "--keepalive-timeout-ms" => {
-                let value = value_for("--keepalive-timeout-ms")?;
-                parsed.keepalive_timeout_ms = parse_positive(&value, "--keepalive-timeout-ms")?;
-            }
-            "--shutdown-grace-ms" => {
-                let value = value_for("--shutdown-grace-ms")?;
-                parsed.shutdown_grace_ms = value.parse::<u64>().map_err(|_| {
-                    format!(
-                        "--shutdown-grace-ms must be a non-negative integer, got: {}",
-                        value
-                    )
-                })?;
-            }
-            "-i" | "--worker-id" => parsed.worker_id = Some(value_for("--worker-id")?),
-            "--heartbeat-ms" => {
-                let value = value_for("--heartbeat-ms")?;
-                parsed.heartbeat_ms = match value.parse::<u64>() {
-                    Ok(ms) if ms > 0 => ms,
-                    _ => {
-                        return Err(format!(
-                            "--heartbeat-ms must be a positive integer, got: {}",
-                            value
-                        ))
-                    }
-                };
-            }
-            "--reconnect-initial-delay-ms" => {
-                let value = value_for("--reconnect-initial-delay-ms")?;
-                parsed.reconnect_initial_delay_ms =
-                    parse_positive(&value, "--reconnect-initial-delay-ms")?;
-            }
-            "--reconnect-max-delay-ms" => {
-                let value = value_for("--reconnect-max-delay-ms")?;
-                parsed.reconnect_max_delay_ms = parse_positive(&value, "--reconnect-max-delay-ms")?;
-            }
-            "--reconnect-max-attempts" => {
-                let value = value_for("--reconnect-max-attempts")?;
-                parsed.reconnect_max_attempts = value.parse::<u32>().map_err(|_| {
-                    format!(
-                        "--reconnect-max-attempts must be a non-negative integer, got: {}",
-                        value
-                    )
-                })?;
-            }
             "list" | "start" if parsed.command.is_none() => {
                 parsed.command = Some(if flag == "list" {
                     Command::List
@@ -219,47 +202,131 @@ fn parse_args(args: Vec<String>) -> Result<ParsedArgs, String> {
                     Command::Start
                 });
             }
-            other if other.starts_with('-') => return Err(format!("unknown option: {}", other)),
-            other => {
-                return Err(format!(
-                    "First argument must be one of: list, start. Got: {}",
-                    other
-                ))
-            }
+            other => match canonical(other) {
+                Some(option) => {
+                    let label = format!("--{}", option);
+                    let value = match inline_value {
+                        Some(v) => v,
+                        None => iter
+                            .next()
+                            .ok_or_else(|| format!("{} requires a value", label))?,
+                    };
+                    values.insert(option, (value, label));
+                }
+                None if other.starts_with('-') => return Err(format!("unknown option: {}", other)),
+                None => {
+                    return Err(format!(
+                        "First argument must be one of: list, start. Got: {}",
+                        other
+                    ))
+                }
+            },
         }
     }
-    if parsed.gateway_socket_path.is_some() && parsed.gateway_address.is_some() {
-        return Err("Pass either --gateway-socket or --gateway-address, not both".to_string());
+
+    // Where the gateway is counts as one setting: a flag for either form
+    // overrides both variables.
+    let location_from_flags =
+        values.contains_key("gateway-socket") || values.contains_key("gateway-address");
+    for option in ENV_OPTIONS {
+        if values.contains_key(option)
+            || (location_from_flags && matches!(option, "gateway-socket" | "gateway-address"))
+        {
+            continue;
+        }
+        let var = env_var_for(option);
+        if let Some(value) = env(&var).filter(|v| !v.is_empty()) {
+            values.insert(option, (value, var));
+        }
     }
-    if parsed.cert_file.is_some() != parsed.key_file.is_some() {
-        return Err("--gateway-cert-file and --gateway-key-file go together".to_string());
+    if values.contains_key("gateway-socket") && values.contains_key("gateway-address") {
+        return Err(if location_from_flags {
+            "Pass either --gateway-socket or --gateway-address, not both".to_string()
+        } else {
+            format!(
+                "Set either {} or {}, not both",
+                env_var_for("gateway-socket"),
+                env_var_for("gateway-address")
+            )
+        });
+    }
+    if values.contains_key("gateway-cert-file") != values.contains_key("gateway-key-file") {
+        return Err(format!(
+            "--gateway-cert-file and --gateway-key-file go together (or {} and {})",
+            env_var_for("gateway-cert-file"),
+            env_var_for("gateway-key-file")
+        ));
+    }
+
+    for option in ENV_OPTIONS {
+        let Some((value, label)) = values.remove(option) else {
+            continue;
+        };
+        match option {
+            "gateway-socket" => parsed.gateway_socket_path = Some(value),
+            "gateway-address" => {
+                parse_gateway_address(&value)?;
+                parsed.gateway_address = Some(value);
+            }
+            "gateway-ca-file" => parsed.ca_file = Some(value.into()),
+            "gateway-token-file" => parsed.token_file = Some(value.into()),
+            "gateway-cert-file" => parsed.cert_file = Some(value.into()),
+            "gateway-key-file" => parsed.key_file = Some(value.into()),
+            "max-concurrency" => {
+                parsed.max_concurrency = integer(&value, &label, 1)?
+                    .try_into()
+                    .map_err(|_| format!("{} is too large: {}", label, value))?
+            }
+            "keepalive-interval-ms" => parsed.keepalive_interval_ms = integer(&value, &label, 0)?,
+            "keepalive-timeout-ms" => parsed.keepalive_timeout_ms = integer(&value, &label, 1)?,
+            "shutdown-grace-ms" => parsed.shutdown_grace_ms = integer(&value, &label, 0)?,
+            "worker-id" => parsed.worker_id = Some(value),
+            "heartbeat-ms" => parsed.heartbeat_ms = integer(&value, &label, 1)?,
+            "reconnect-initial-delay-ms" => {
+                parsed.reconnect_initial_delay_ms = integer(&value, &label, 1)?
+            }
+            "reconnect-max-delay-ms" => parsed.reconnect_max_delay_ms = integer(&value, &label, 1)?,
+            "reconnect-max-attempts" => {
+                parsed.reconnect_max_attempts = integer(&value, &label, 0)?
+                    .try_into()
+                    .map_err(|_| format!("{} is too large: {}", label, value))?
+            }
+            _ => unreachable!("every ENV_OPTIONS entry is handled"),
+        }
+        parsed.sources.insert(option, label);
     }
     Ok(parsed)
 }
 
 /// Fails fast on unreadable credentials instead of retrying forever.
 fn check_readable(parsed: &ParsedArgs) -> Result<(), String> {
-    for (flag, path) in [
-        ("--gateway-ca-file", &parsed.ca_file),
-        ("--gateway-token-file", &parsed.token_file),
-        ("--gateway-cert-file", &parsed.cert_file),
-        ("--gateway-key-file", &parsed.key_file),
+    for (option, path) in [
+        ("gateway-ca-file", &parsed.ca_file),
+        ("gateway-token-file", &parsed.token_file),
+        ("gateway-cert-file", &parsed.cert_file),
+        ("gateway-key-file", &parsed.key_file),
     ] {
         if let Some(path) = path {
             if std::fs::File::open(path).is_err() {
-                return Err(format!("Can't read {} file {}", flag, path.display()));
+                let label = parsed
+                    .sources
+                    .get(option)
+                    .cloned()
+                    .unwrap_or_else(|| format!("--{}", option));
+                return Err(format!("Can't read {} file {}", label, path.display()));
             }
         }
     }
     Ok(())
 }
 
-fn parse_positive(value: &str, flag: &str) -> Result<u64, String> {
-    match value.parse::<u64>() {
-        Ok(n) if n > 0 => Ok(n),
+/// An integer ≥ `min` from a flag or variable called `label`.
+fn integer(value: &str, label: &str, min: u64) -> Result<u64, String> {
+    match value.trim().parse::<u64>() {
+        Ok(n) if n >= min => Ok(n),
         _ => Err(format!(
-            "{} must be a positive integer, got: {}",
-            flag, value
+            "{} must be an integer >= {}, got: {}",
+            label, min, value
         )),
     }
 }
@@ -452,7 +519,18 @@ mod tests {
     use super::*;
 
     fn parse(args: &[&str]) -> Result<ParsedArgs, String> {
-        parse_args(args.iter().map(|s| s.to_string()).collect())
+        parse_with_env(args, &[])
+    }
+
+    /// Parses `args` with only `vars` in the environment.
+    fn parse_with_env(args: &[&str], vars: &[(&str, &str)]) -> Result<ParsedArgs, String> {
+        let vars: HashMap<String, String> = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        parse_args_with_env(args.iter().map(|s| s.to_string()).collect(), &|name| {
+            vars.get(name).cloned()
+        })
     }
 
     #[test]
@@ -570,6 +648,173 @@ mod tests {
             &["start", "--shutdown-grace-ms", ""],
         ] {
             assert!(parse(args).is_err(), "{:?}", args);
+        }
+    }
+
+    // Environment-variable fallbacks (#438): every option falls back to
+    // PGFSM_<LONG_NAME>; a flag wins over its variable; an empty variable
+    // counts as unset; invalid values are named by their variable.
+
+    #[test]
+    fn env_var_names_match_the_other_sdks() {
+        let names: Vec<String> = ENV_OPTIONS.iter().map(|o| env_var_for(o)).collect();
+        assert_eq!(
+            names,
+            [
+                "PGFSM_GATEWAY_SOCKET",
+                "PGFSM_GATEWAY_ADDRESS",
+                "PGFSM_GATEWAY_CA_FILE",
+                "PGFSM_GATEWAY_TOKEN_FILE",
+                "PGFSM_GATEWAY_CERT_FILE",
+                "PGFSM_GATEWAY_KEY_FILE",
+                "PGFSM_MAX_CONCURRENCY",
+                "PGFSM_KEEPALIVE_INTERVAL_MS",
+                "PGFSM_KEEPALIVE_TIMEOUT_MS",
+                "PGFSM_SHUTDOWN_GRACE_MS",
+                "PGFSM_WORKER_ID",
+                "PGFSM_HEARTBEAT_MS",
+                "PGFSM_RECONNECT_INITIAL_DELAY_MS",
+                "PGFSM_RECONNECT_MAX_DELAY_MS",
+                "PGFSM_RECONNECT_MAX_ATTEMPTS",
+            ]
+        );
+    }
+
+    #[test]
+    fn every_option_comes_from_its_variable() {
+        let p = parse_with_env(
+            &["start"],
+            &[
+                ("PGFSM_GATEWAY_ADDRESS", "https://gw:7443"),
+                ("PGFSM_GATEWAY_CA_FILE", "ca.crt"),
+                ("PGFSM_GATEWAY_TOKEN_FILE", "token"),
+                ("PGFSM_GATEWAY_CERT_FILE", "c.crt"),
+                ("PGFSM_GATEWAY_KEY_FILE", "c.key"),
+                ("PGFSM_MAX_CONCURRENCY", "10"),
+                ("PGFSM_KEEPALIVE_INTERVAL_MS", "0"),
+                ("PGFSM_KEEPALIVE_TIMEOUT_MS", "500"),
+                ("PGFSM_SHUTDOWN_GRACE_MS", "1000"),
+                ("PGFSM_WORKER_ID", "w-env"),
+                ("PGFSM_HEARTBEAT_MS", "250"),
+                ("PGFSM_RECONNECT_INITIAL_DELAY_MS", "5"),
+                ("PGFSM_RECONNECT_MAX_DELAY_MS", "100"),
+                ("PGFSM_RECONNECT_MAX_ATTEMPTS", "3"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(p.gateway_address.as_deref(), Some("https://gw:7443"));
+        assert_eq!(p.ca_file, Some(PathBuf::from("ca.crt")));
+        assert_eq!(p.token_file, Some(PathBuf::from("token")));
+        assert_eq!(p.cert_file, Some(PathBuf::from("c.crt")));
+        assert_eq!(p.key_file, Some(PathBuf::from("c.key")));
+        assert_eq!(
+            (
+                p.max_concurrency,
+                p.keepalive_interval_ms,
+                p.keepalive_timeout_ms,
+                p.shutdown_grace_ms
+            ),
+            (10, 0, 500, 1000)
+        );
+        assert_eq!(p.worker_id.as_deref(), Some("w-env"));
+        assert_eq!(
+            (
+                p.heartbeat_ms,
+                p.reconnect_initial_delay_ms,
+                p.reconnect_max_delay_ms,
+                p.reconnect_max_attempts
+            ),
+            (250, 5, 100, 3)
+        );
+        assert_eq!(
+            p.sources.get("max-concurrency").map(String::as_str),
+            Some("PGFSM_MAX_CONCURRENCY")
+        );
+    }
+
+    #[test]
+    fn a_flag_wins_and_an_empty_variable_is_unset() {
+        let p = parse_with_env(
+            &["start", "-c", "2", "--worker-id", "w-flag"],
+            &[
+                ("PGFSM_MAX_CONCURRENCY", "10"),
+                ("PGFSM_WORKER_ID", "w-env"),
+                ("PGFSM_SHUTDOWN_GRACE_MS", ""),
+                ("PGFSM_GATEWAY_SOCKET", "/tmp/env.sock"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(p.max_concurrency, 2);
+        assert_eq!(p.worker_id.as_deref(), Some("w-flag"));
+        assert_eq!(p.shutdown_grace_ms, DEFAULT_SHUTDOWN_GRACE_MS);
+        assert_eq!(p.gateway_socket_path.as_deref(), Some("/tmp/env.sock"));
+        // A valid flag overrides an invalid variable, which isn't read.
+        assert!(
+            parse_with_env(&["start", "-c", "3"], &[("PGFSM_MAX_CONCURRENCY", "zero")]).is_ok()
+        );
+    }
+
+    #[test]
+    fn a_gateway_flag_of_either_form_overrides_both_variables() {
+        let p = parse_with_env(
+            &["start", "-g", "/tmp/x.sock"],
+            &[("PGFSM_GATEWAY_ADDRESS", "https://gw:7443")],
+        )
+        .unwrap();
+        assert_eq!(p.gateway_socket_path.as_deref(), Some("/tmp/x.sock"));
+        assert!(p.gateway_address.is_none());
+        let err = parse_with_env(
+            &["start"],
+            &[
+                ("PGFSM_GATEWAY_SOCKET", "/tmp/x.sock"),
+                ("PGFSM_GATEWAY_ADDRESS", "https://gw:7443"),
+            ],
+        )
+        .unwrap_err();
+        assert!(err.contains("PGFSM_GATEWAY_SOCKET"), "{}", err);
+    }
+
+    #[test]
+    fn invalid_variables_are_reported_by_name() {
+        for (var, value, named) in [
+            ("PGFSM_MAX_CONCURRENCY", "0", "PGFSM_MAX_CONCURRENCY"),
+            ("PGFSM_MAX_CONCURRENCY", "two", "PGFSM_MAX_CONCURRENCY"),
+            (
+                "PGFSM_KEEPALIVE_TIMEOUT_MS",
+                "0",
+                "PGFSM_KEEPALIVE_TIMEOUT_MS",
+            ),
+            ("PGFSM_SHUTDOWN_GRACE_MS", "-1", "PGFSM_SHUTDOWN_GRACE_MS"),
+            ("PGFSM_HEARTBEAT_MS", "0", "PGFSM_HEARTBEAT_MS"),
+            (
+                "PGFSM_RECONNECT_MAX_ATTEMPTS",
+                "x",
+                "PGFSM_RECONNECT_MAX_ATTEMPTS",
+            ),
+            ("PGFSM_GATEWAY_ADDRESS", "tcp://gw:1", "tcp://gw:1"),
+            (
+                "PGFSM_GATEWAY_CERT_FILE",
+                "/tmp/c",
+                "PGFSM_GATEWAY_KEY_FILE",
+            ),
+        ] {
+            let err = parse_with_env(&["start"], &[(var, value)]).unwrap_err();
+            assert!(err.contains(named), "{}={}: {}", var, value, err);
+        }
+        let p = parse_with_env(
+            &["start"],
+            &[("PGFSM_GATEWAY_TOKEN_FILE", "/nonexistent/t")],
+        )
+        .unwrap();
+        let err = check_readable(&p).unwrap_err();
+        assert!(err.contains("PGFSM_GATEWAY_TOKEN_FILE"), "{}", err);
+    }
+
+    #[test]
+    fn help_lists_every_variable() {
+        let help = help_text("x");
+        for option in ENV_OPTIONS {
+            assert!(help.contains(&env_var_for(option)), "{}", option);
         }
     }
 

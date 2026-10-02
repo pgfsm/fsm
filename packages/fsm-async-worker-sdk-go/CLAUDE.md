@@ -136,6 +136,20 @@ extension so OpenSSL 3.0 issues v3). The real connect-node gateway isn't started
 here (it's Deno); interop with it was checked by hand for #434 (mTLS + token,
 concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
+## Environment variables (#438)
+
+Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
+flag → variable → default, an empty variable counts as unset, and
+`--gateway-socket`/`--gateway-address` are one setting (a flag for either
+overrides both variables). Same option list (`ENV_OPTIONS`/`EnvOptions`), names,
+precedence and error messages in all four SDKs; change them together.
+`parseArgs(args, getenv)` in `cli.go` (`runCLI` passes `os.Getenv`): flags are
+collected first, unset options filled from variables, then every value is
+validated with its source label (`parsedArgs.sources`, also used by
+`checkReadable`). Unit tests pass `noEnv`/`envOf`; the exit-code test uses
+`t.Setenv`. No `.env` loading in the SDK: the CLI is library code inside the
+user's process, so the README points at `--env-file` (Deno, uv) or `set -a`.
+
 ## Releasing
 
 `.github/workflows/go-publish.yml` runs on an `async-worker-sdk-go-v<version>`
