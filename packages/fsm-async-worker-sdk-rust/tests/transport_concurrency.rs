@@ -62,8 +62,12 @@ impl Tls {
             "-CAcreateserial", "-days", "1", "-out", "server.crt", "-extfile", "san.ext"]);
         openssl(d, &["req", "-newkey", "rsa:2048", "-nodes", "-keyout", "client.key",
             "-out", "client.csr", "-subj", "/CN=pgfsm-test-worker"]);
+        // An extension makes OpenSSL 3.0 (Ubuntu 24.04, CI) issue a v3
+        // certificate; without one it issues v1, which rustls (the test
+        // gateway here) rejects. Newer OpenSSL issues v3 either way.
+        std::fs::write(d.join("client.ext"), "extendedKeyUsage=clientAuth\n").unwrap();
         openssl(d, &["x509", "-req", "-in", "client.csr", "-CA", "ca.crt", "-CAkey", "ca.key",
-            "-CAcreateserial", "-days", "1", "-out", "client.crt"]);
+            "-CAcreateserial", "-days", "1", "-out", "client.crt", "-extfile", "client.ext"]);
         Tls { dir }
     }
 
