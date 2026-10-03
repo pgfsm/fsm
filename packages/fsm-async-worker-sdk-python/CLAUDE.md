@@ -163,8 +163,8 @@ section has the short version; the full procedure is below.
 
 ### Letting generated projects use a new minor version
 
-Generated projects pin `pgfsm-async-worker-sdk>=0.2.0,<0.3`, so they won't pick
-up `0.3.0` until that pin moves. Update it in the same PR as the bump, or a
+Generated projects pin `pgfsm-async-worker-sdk>=0.3.0,<0.4`, so they won't pick
+up `0.4.0` until that pin moves. Update it in the same PR as the bump, or a
 follow-up once the release is on PyPI. It lives in:
 
 - `packages/fsm-compiler-ts/src/scaffold-templates/eta/python/worker-sdk-pyproject.eta`,
@@ -178,7 +178,7 @@ follow-up once the release is on PyPI. It lives in:
   generated copy (the `dependencies` pin and its pip comment).
 - `DEVELOPER.md`'s pip install example.
 
-Patch releases need none of this: the existing `<0.2` range already allows them.
+Patch releases need none of this: the existing `<0.4` range already allows them.
 
 ### If something goes wrong
 
