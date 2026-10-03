@@ -51,7 +51,8 @@ package shared with it, so there's deliberately no `src/pgfsm/__init__.py`
   (`python/actors-registry.eta`, `python/shared-async-op-registry.eta`), which
   don't import from this package — `create-async-logic` writes registries
   without a `pyproject.toml`. Keep the keys in sync if either side changes.
-  `max_concurrency` is optional and the registries don't emit it yet (#435).
+  `max_concurrency` is optional; the registries fill it from the actor stub's
+  `MAX_CONCURRENCY` when the stub declares it (#435).
 - `ActorWorker.run()` closes its gRPC channel before returning.
 
 ## Tests

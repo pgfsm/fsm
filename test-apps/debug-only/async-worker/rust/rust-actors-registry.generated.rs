@@ -9,6 +9,10 @@ pub struct ActorRegistration {
     pub async_operation_name: &'static str,
     pub async_operation_version: &'static str,
     pub async_operation_language: &'static str,
+    /// The actor's own limit, from its stub's `MAX_CONCURRENCY`; 0 falls back
+    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.
+    #[allow(dead_code)]
+    pub max_concurrency: u32,
     pub handler: fn(serde_json::Value) -> serde_json::Value,
 }
 
@@ -20,6 +24,7 @@ pub fn actor_registrations() -> Vec<ActorRegistration> {
         async_operation_name: "checkBureauRust",
         async_operation_version: "v01",
         async_operation_language: "rust",
+        max_concurrency: creditcheck_v01::checkBureauRust::MAX_CONCURRENCY as u32,
         handler: creditcheck_v01::checkBureauRust,
     }]
 }

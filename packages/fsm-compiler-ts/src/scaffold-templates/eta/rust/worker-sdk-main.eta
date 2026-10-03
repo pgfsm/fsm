@@ -40,6 +40,8 @@ fn main() {
                 reg.async_operation_language,
                 reg.handler,
             )
+            // The actor's own limit from its stub (0 = use --max-concurrency).
+            .with_max_concurrency(reg.max_concurrency)
         })
         .collect();
 

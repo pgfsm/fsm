@@ -23,6 +23,17 @@ import type {
   WrittenActor,
 } from "../src/types/index.ts";
 
+// The per-actor concurrency setting every new actor stub declares (#435),
+// between the label comment and the function.
+const MC_TS =
+  "\n// How many invokes of this actor one worker runs at once. Above 1, the\n// handler must be safe to run concurrently (no unguarded shared state, only\n// concurrency-safe clients). Delivery is at-least-once, so the handler must\n// also be idempotent: the same invoke can arrive more than once.\nexport const maxConcurrency = 1;\n\n";
+const MC_PY =
+  "\n# How many invokes of this actor one worker runs at once. Above 1, the\n# handler runs on several threads at once and must be thread-safe (no\n# unguarded shared state, only thread-safe clients). Delivery is\n# at-least-once, so the handler must also be idempotent: the same invoke can\n# arrive more than once.\nMAX_CONCURRENCY = 1\n\n\n";
+const MC_RS =
+  "\n/// How many invokes of this actor one worker runs at once. Above 1, the\n/// handler runs on several threads at once: shared state needs a `Mutex` or\n/// atomics. Delivery is at-least-once, so the handler must also be\n/// idempotent: the same invoke can arrive more than once.\npub const MAX_CONCURRENCY: u32 = 1;\n\n";
+const MC_GO =
+  "\n// MaxConcurrency is how many invokes of this actor one worker runs at once.\n// Above 1, the handler runs on several goroutines at once: guard shared state\n// with a sync.Mutex, atomics or channels. Delivery is at-least-once, so the\n// handler must also be idempotent: the same invoke can arrive more than once.\nconst MaxConcurrency = 1\n\n";
+
 type Case = {
   lang: OperationLang;
   kind: OperationKind;
@@ -61,8 +72,8 @@ const cases: Case[] = [
     lang: "typescript",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '// Actor: creditCheck\nexport function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+    expected: "// Actor: creditCheck\n" + MC_TS +
+      'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
   },
   // python
   {
@@ -90,8 +101,8 @@ const cases: Case[] = [
     lang: "python",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '# Actor: creditCheck\ndef creditCheck(input):\n    # TODO: implement actor logic\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
+    expected: "# Actor: creditCheck\n" + MC_PY +
+      'def creditCheck(input):\n    # TODO: implement actor logic\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
   },
   // rust
   {
@@ -119,8 +130,8 @@ const cases: Case[] = [
     lang: "rust",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '// Actor: creditCheck\n#[allow(non_snake_case)]\npub fn creditCheck(input: serde_json::Value) -> serde_json::Value {\n    // TODO: implement actor logic\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
+    expected: "// Actor: creditCheck\n" + MC_RS +
+      '#[allow(non_snake_case)]\npub fn creditCheck(input: serde_json::Value) -> serde_json::Value {\n    // TODO: implement actor logic\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
   },
   // go (renderOperationModule prefixes the `package <kind>` header — accounted
   // for separately below, these cases cover the per-name stub only)
@@ -152,7 +163,8 @@ const cases: Case[] = [
     expected:
       // Go exports (capitalizes) actor function names for cross-package
       // access — see toGoExportedName / #83. Other kinds/languages don't.
-      '// Actor: creditCheck\nfunc CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      "// Actor: creditCheck\n" + MC_GO +
+      'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
   },
 ];
 
@@ -188,7 +200,8 @@ Deno.test("writeActorFile - go actor gets a package header, exported (capitalize
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      'package actors\n\n// Actor: creditCheck\nfunc CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      "package actors\n\n// Actor: creditCheck\n" + MC_GO +
+        'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -244,7 +257,8 @@ Deno.test("writeActorFile - typescript actor has no package header", async () =>
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      '// Actor: creditCheck\nexport function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+      "// Actor: creditCheck\n" + MC_TS +
+        'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -267,6 +281,7 @@ Deno.test("writeActorFile - typescript actor with a long name is wrapped to pass
     assertEquals(
       content,
       "// Actor: CheckingCreditScores3parallel\n" +
+        MC_TS +
         "export function CheckingCreditScores3parallel(input: unknown): unknown {\n" +
         "  // TODO: implement actor logic\n" +
         "  return {\n" +
@@ -428,7 +443,7 @@ Deno.test("writeActorsBarrel - rust writes a mod.rs with #[path] attributes", as
       content,
       '#[path = "checkBureau/checkBureau.rs"]\n' +
         "#[allow(non_snake_case)]\n" +
-        "mod checkBureau;\n" +
+        "pub mod checkBureau;\n" +
         "pub use checkBureau::checkBureau;\n",
     );
   } finally {
@@ -479,6 +494,8 @@ Deno.test("writeActorsRegistry - typescript carries the full activity-registrati
         "  asyncOperationName: string;\n" +
         "  asyncOperationVersion: string;\n" +
         "  asyncOperationLanguage: string;\n" +
+        "  /** The actor's own limit, from its stub; unset falls back to the worker's --max-concurrency. */\n" +
+        "  maxConcurrency?: number;\n" +
         "  handler: (input: unknown) => unknown;\n" +
         "};\n" +
         "\n" +
@@ -559,6 +576,10 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
         "    pub async_operation_name: &'static str,\n" +
         "    pub async_operation_version: &'static str,\n" +
         "    pub async_operation_language: &'static str,\n" +
+        "    /// The actor's own limit, from its stub's `MAX_CONCURRENCY`; 0 falls back\n" +
+        "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
+        "    #[allow(dead_code)]\n" +
+        "    pub max_concurrency: u32,\n" +
         "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
@@ -571,6 +592,7 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
         '            async_operation_name: "checkBureau",\n' +
         '            async_operation_version: "v01",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: actors::checkBureau,\n" +
         "        },\n" +
         "    ]\n" +
@@ -993,6 +1015,10 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         "    pub async_operation_name: &'static str,\n" +
         "    pub async_operation_version: &'static str,\n" +
         "    pub async_operation_language: &'static str,\n" +
+        "    /// The actor's own limit, from its stub's `MAX_CONCURRENCY`; 0 falls back\n" +
+        "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
+        "    #[allow(dead_code)]\n" +
+        "    pub max_concurrency: u32,\n" +
         "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
@@ -1005,6 +1031,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         '            async_operation_name: "checkBureau",\n' +
         '            async_operation_version: "v01",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: creditcheck_v01::checkBureau,\n" +
         "        },\n" +
         "        ActorRegistration {\n" +
@@ -1014,6 +1041,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         '            async_operation_name: "someActorRs",\n' +
         '            async_operation_version: "v02",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: otherfsm_v02::someActorRs,\n" +
         "        },\n" +
         "    ]\n" +
@@ -1079,6 +1107,9 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
         "\tAsyncOperationName          string\n" +
         "\tAsyncOperationVersion       string\n" +
         "\tAsyncOperationLanguage      string\n" +
+        "\t// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;\n" +
+        "\t// 0 falls back to the worker's --max-concurrency.\n" +
+        "\tMaxConcurrency   uint32\n" +
         "\tHandler          func(input any) (any, error)\n" +
         "}\n" +
         "\n" +

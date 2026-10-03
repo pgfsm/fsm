@@ -400,6 +400,74 @@ export function actorFileBaseName(actor: ActorReference): string {
 }
 
 /**
+ * The per-actor concurrency setting an actor stub declares (#435), by
+ * language: how many invokes of that actor a worker runs at once. The SDKs
+ * apply it as the actor's own `maxConcurrency`, ahead of the worker's
+ * `--max-concurrency` (SPEC-007).
+ */
+export const MAX_CONCURRENCY_NAME: Record<OperationLang, string> = {
+  typescript: "maxConcurrency",
+  python: "MAX_CONCURRENCY",
+  rust: "MAX_CONCURRENCY",
+  go: "MaxConcurrency",
+};
+
+/**
+ * Matches a top-level declaration of {@linkcode MAX_CONCURRENCY_NAME} in a
+ * stub (a commented-out one doesn't match). Rust's must be `pub`, since the
+ * registry reaches it from outside the actor's module.
+ */
+const MAX_CONCURRENCY_DECLARATION: Record<OperationLang, RegExp> = {
+  typescript: /^[ \t]*export[ \t]+(?:const|let|var)[ \t]+maxConcurrency\b/m,
+  python: /^MAX_CONCURRENCY[ \t]*(?::[^=\n]*)?=/m,
+  rust: /^[ \t]*pub[ \t]+const[ \t]+MAX_CONCURRENCY[ \t]*:/m,
+  go: /^[ \t]*(?:const[ \t]+)?MaxConcurrency(?:[ \t]+\w+)?[ \t]*=/m,
+};
+
+/**
+ * Whether the stub at `stubPath` declares {@linkcode MAX_CONCURRENCY_NAME}.
+ * A stub kept from before #435 doesn't, and referencing a missing name fails
+ * to compile (Rust, Go) or import (TypeScript, Python), so registries only
+ * reference it when this is true; otherwise the actor falls back to the
+ * worker's `--max-concurrency`. A missing file counts as not declaring it.
+ */
+export async function stubDeclaresMaxConcurrency(
+  stubPath: string,
+  lang: OperationLang,
+): Promise<boolean> {
+  try {
+    return MAX_CONCURRENCY_DECLARATION[lang].test(
+      await Deno.readTextFile(stubPath),
+    );
+  } catch (err) {
+    if (isNotFoundError(err)) return false;
+    throw err;
+  }
+}
+
+/**
+ * `actors`, each with `declaresMaxConcurrency` set from its stub on disk,
+ * found at `stubPathOf(actor)` -- what the registry templates use to decide
+ * whether to reference the actor's own setting.
+ */
+export async function withMaxConcurrencyDeclarations<
+  T extends { asyncOperationLanguage: OperationLang },
+>(
+  actors: T[],
+  stubPathOf: (actor: T) => string,
+): Promise<(T & { declaresMaxConcurrency: boolean })[]> {
+  return await Promise.all(
+    actors.map(async (a) => ({
+      ...a,
+      declaresMaxConcurrency: await stubDeclaresMaxConcurrency(
+        stubPathOf(a),
+        a.asyncOperationLanguage,
+      ),
+    })),
+  );
+}
+
+/**
  * Derives the Go module path for a single actor's own `go.mod`, matching the
  * convention already established by hand for `apps/fsm-core-example`'s Go
  * actors (see `CheckReportsTable/go.mod`):
@@ -638,7 +706,9 @@ function actorsBarrelEntry(
     case "python":
       return `from .${fileBaseName}.${fileBaseName} import ${src}`;
     case "rust":
-      return `#[path = "${fileBaseName}/${fileBaseName}.rs"]\n#[allow(non_snake_case)]\nmod ${fileBaseName};\npub use ${fileBaseName}::${src};`;
+      // `pub mod` so the registry can reach the actor's own
+      // MAX_CONCURRENCY as `actors::<module>::MAX_CONCURRENCY` (#435).
+      return `#[path = "${fileBaseName}/${fileBaseName}.rs"]\n#[allow(non_snake_case)]\npub mod ${fileBaseName};\npub use ${fileBaseName}::${src};`;
   }
 }
 
@@ -691,7 +761,7 @@ const ACTORS_REGISTRY_FILE_NAME: Record<ActorsBarrelLang, string> = {
  * comment for why).
  */
 function buildActorsRegistryContent(
-  langActors: RegisteredActor[],
+  langActors: (RegisteredActor & { declaresMaxConcurrency: boolean })[],
   lang: ActorsBarrelLang,
 ): string {
   switch (lang) {
@@ -735,9 +805,14 @@ export async function writeActorsRegistry(
     : `${absFolderPath}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${ACTORS_REGISTRY_FILE_NAME[lang]}`;
+  // Each actor's stub sits at `<registry dir>/<filePath>`.
+  const annotated = await withMaxConcurrencyDeclarations(
+    langActors,
+    (a) => `${dir}/${a.filePath}`,
+  );
   await writeOwnedFile(
     file,
-    buildActorsRegistryContent(langActors, lang),
+    buildActorsRegistryContent(annotated, lang),
     "generated",
   );
   return file;
@@ -918,7 +993,7 @@ export function relativeImportDir(fromDir: string, toDir: string): string {
  * construction.
  */
 function buildAggregateRegistryContent(
-  langActors: RegisteredActor[],
+  langActors: (RegisteredActor & { declaresMaxConcurrency: boolean })[],
   lang: ActorsBarrelLang,
 ): string {
   const groups = groupByParentFsm(langActors);
@@ -981,9 +1056,14 @@ export async function writeAggregateActorsRegistry(
   const dir = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/${lang}`;
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${AGGREGATE_ACTORS_REGISTRY_FILE_NAME[lang]}`;
+  // Each actor's stub sits at `<lang dir>/<fsmName>/<fsmVersion>/<filePath>`.
+  const annotated = await withMaxConcurrencyDeclarations(
+    langActors,
+    (a) => `${dir}/${a.parentFsmName}/${a.parentFsmVersion}/${a.filePath}`,
+  );
   await writeOwnedFile(
     file,
-    buildAggregateRegistryContent(langActors, lang),
+    buildAggregateRegistryContent(annotated, lang),
     "generated",
   );
   return file;
@@ -1098,7 +1178,11 @@ export async function writeAggregateGoRegistry(
     `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/go/${GO_AGGREGATE_DIR_NAME}`;
   await Deno.mkdir(dir, { recursive: true });
 
-  const withMeta = goActors.map((a) => ({
+  const goRoot = `${writeRootAbsPath}/${ASYNC_WORKER_DIR_NAME}/go`;
+  const withMeta = (await withMaxConcurrencyDeclarations(
+    goActors,
+    (a) => `${goRoot}/${a.parentFsmName}/${a.parentFsmVersion}/${a.filePath}`,
+  )).map((a) => ({
     ...a,
     modulePath: goActorModulePathFromRegisteredActor(goModuleAppRoot, a),
     alias: goImportAlias(a),
@@ -1334,6 +1418,9 @@ export async function writeWorkerSdk(
         registryRelativePath: "../rust-actors-registry.generated.rs",
       }),
       "scaffolded",
+      // A main.rs kept from before #435 doesn't pass each actor's own
+      // max_concurrency on; report it so the developer can add the call.
+      ["with_max_concurrency"],
     );
     await writeOwnedFile(
       `${dir}/Cargo.toml`,

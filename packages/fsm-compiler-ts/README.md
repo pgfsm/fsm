@@ -181,6 +181,20 @@ npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm
 npx @pgfsm/compiler -c generate-async-logic -f apps/fsm-core-example/fsm/creditCheck/v01/fsm.json --fsm-name creditCheck --fsm-version v01
 ```
 
+**Per-actor concurrency.** Every new actor stub declares how many invokes of
+that actor one worker runs at once, next to the handler:
+`export const
+maxConcurrency = 1;` (TypeScript), `MAX_CONCURRENCY = 1` (Python),
+`pub const MAX_CONCURRENCY: u32 = 1;` (Rust), `const MaxConcurrency = 1` (Go).
+The generated registries pass it to the worker SDK, which sends it to the
+gateway; it wins over the worker's `--max-concurrency`. Raise it only when the
+handler is safe to run concurrently, and keep handlers idempotent (delivery is
+at-least-once). A stub from an older compiler without the setting still builds:
+its actor uses the worker's `--max-concurrency`. Add the line to opt in. A kept
+Rust `src/main.rs` from before this needs
+`.with_max_concurrency(reg.max_concurrency)` on each registration;
+`--overwrite generated-only` reports it.
+
 ### `generate-all` — run all three generate steps in sequence
 
 Runs `generate-fsm-json`, then `generate-async-logic`, then

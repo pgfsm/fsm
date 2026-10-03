@@ -172,7 +172,8 @@ By default each actor handles **one invoke at a time**. To run more, set:
 - `--max-concurrency <n>` (or `MaxConcurrency` in `ActorWorkerOptions`): the
   worker-wide default for every actor;
 - `.WithMaxConcurrency(n)` on an actor's `ActorRegistration`: that actor's own
-  limit, which wins over the worker-wide one.
+  limit, which wins over the worker-wide one. Generated projects set it in each
+  actor's stub.
 
 The effective limit per actor is **its own `MaxConcurrency`, else the worker's,
 else 1**. It's sent to the gateway at registration, so the gateway claims and

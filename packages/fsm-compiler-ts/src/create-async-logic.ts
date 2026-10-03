@@ -9,7 +9,9 @@ import {
   formatTsFilesBestEffort,
   goModTidyManyBestEffort,
   relativeImportDir,
+  stubDeclaresMaxConcurrency,
   toWrittenActor,
+  withMaxConcurrencyDeclarations,
   writeActorFile,
   writeActorsBarrel,
   writeActorsManifest,
@@ -266,7 +268,7 @@ function toSharedAsyncOpRegisteredActor(
 
 /** Renders the global registry's content for one language via its Eta template. */
 function buildSharedAsyncOpRegistryContent(
-  entries: SharedAsyncOpRegistryEntry[],
+  entries: (SharedAsyncOpRegistryEntry & { declaresMaxConcurrency: boolean })[],
   lang: ActorsBarrelLang,
 ): string {
   switch (lang) {
@@ -308,13 +310,17 @@ async function rewriteSharedAsyncOpRegistry(
 ): Promise<string | undefined> {
   if (!isRegistryLang(lang)) return undefined;
   const existing = await listExistingSharedAsyncOpActors(asyncWorkerRoot, lang);
-  const entries = existing
-    .filter(({ version }) => version === functionVersion)
-    .map(({ name, version }) =>
-      toSharedAsyncOpRegistryEntry(lang, name, version)
-    );
   const dir =
     `${asyncWorkerRoot}/${lang}/${SHARED_ASYNC_OP_DIR_NAME}/${functionVersion}`;
+  // Each actor's stub sits at `<version dir>/actors/<name>/<name>.<ext>`.
+  const entries = await withMaxConcurrencyDeclarations(
+    existing
+      .filter(({ version }) => version === functionVersion)
+      .map(({ name, version }) =>
+        toSharedAsyncOpRegistryEntry(lang, name, version)
+      ),
+    (a) => `${dir}/${toWrittenActor(lang, { src: a.src }).filePath}`,
+  );
   await Deno.mkdir(dir, { recursive: true });
   const file = `${dir}/${SHARED_ASYNC_OP_REGISTRY_FILE_NAME[lang]}`;
   await writeOwnedFile(
@@ -441,7 +447,7 @@ async function rewriteSharedAsyncOpGoRegistry(
     `${asyncWorkerRoot}/go/${SHARED_ASYNC_OP_DIR_NAME}/${GO_AGGREGATE_DIR_NAME}`;
   await Deno.mkdir(dir, { recursive: true });
 
-  const withMeta = existing.map(({ name, version }) => {
+  const withMeta = await Promise.all(existing.map(async ({ name, version }) => {
     const registered = toSharedAsyncOpRegisteredActor("go", name, version);
     // Matches goActorModulePath's own convention (operation-logic-scaffold.ts)
     // for the individual actor's own go.mod, written via writeActorFile ->
@@ -458,8 +464,12 @@ async function rewriteSharedAsyncOpGoRegistry(
       modulePath,
       alias: toRegistryAlias(name, version),
       actorDir,
+      declaresMaxConcurrency: await stubDeclaresMaxConcurrency(
+        `${asyncWorkerRoot}/go/${SHARED_ASYNC_OP_DIR_NAME}/${version}/${registered.filePath}`,
+        "go",
+      ),
     };
-  });
+  }));
 
   const goModContent = renderGoModAggregate({
     moduleName:

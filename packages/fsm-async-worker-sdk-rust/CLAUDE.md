@@ -69,7 +69,8 @@ worker, not a startup error.
 - A panicking handler becomes an `INTERNAL` invoke error; the worker keeps
   running. `stop()` is sync, doesn't block, and is safe to call from any thread.
 - `ActorRegistration::with_max_concurrency` sets `meta.max_concurrency`; the
-  compiler's registries don't emit it yet (#435).
+  compiler's registries carry the actor stub's `MAX_CONCURRENCY` as
+  `max_concurrency` (0 when unset), and the generated `main.rs` calls it (#435).
 - CLI errors print the whole error `source()` chain: tonic's top-level
   connection error is just "transport error".
 
