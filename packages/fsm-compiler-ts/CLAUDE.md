@@ -655,6 +655,45 @@ that reason is gone, but the behavior hasn't changed: a worker SDK build still
 needs a `generate-async-logic`/`generate-all` run at least once; only the
 aggregate _registry_ files are kept fresh by `create-async-logic` alone.
 
+## Per-actor `maxConcurrency` in stubs (#435)
+
+Every actor stub template (`actors.eta` ×4) declares the actor's own limit
+(`MAX_CONCURRENCY_NAME` in `operation-logic-scaffold.ts`: `maxConcurrency` /
+`MAX_CONCURRENCY` / `MAX_CONCURRENCY` / `MaxConcurrency`) with a comment on
+concurrency safety and idempotency. Registries reference it only when the stub
+on disk declares it: `stubDeclaresMaxConcurrency` (a per-language regex, like
+the `missingNames` text check) runs at registry-render time, and
+`withMaxConcurrencyDeclarations` adds `declaresMaxConcurrency` to each entry the
+templates get. A stub kept from before #435 doesn't declare it, and referencing
+a missing name fails to compile (Rust, Go) or import (TS, Python), so its entry
+leaves the field unset (Rust: `0`) and the SDK falls back to
+`--max-concurrency`.
+
+- **Where the stub is read:** per-version registry `<registry dir>/<filePath>`;
+  aggregates `<async-worker/<lang>>/<fsmName>/<fsmVersion>/<filePath>`;
+  `create-async-logic`'s shared registries
+  `<sharedAsyncOperation/<version>>/<filePath>`.
+- **TS/Python** import it aliased per actor
+  (`maxConcurrency as
+  maxConcurrency_<fileBaseName>`,
+  `MAX_CONCURRENCY as
+  _max_concurrency_<fileBaseName>`; shared registries
+  `<alias>_…`), since every stub uses the same name.
+- **Rust** reaches it as `actors::<fileBaseName>::MAX_CONCURRENCY as u32` (the
+  cast accepts any integer type the developer picks), so the barrel declares
+  each actor `pub mod`. The registry structs gained `max_concurrency: u32` with
+  `#[allow(dead_code)]`, since a kept `main.rs` from before #435 doesn't read
+  it. `main.rs` is scaffolded (user-owned): the template calls
+  `.with_max_concurrency(reg.max_concurrency)`, and it's passed as a
+  `requiredNames` entry, so `--overwrite generated-only` reports a kept
+  `main.rs` that doesn't.
+- **Go** uses `uint32(<alias>.MaxConcurrency)` (each actor is its own package);
+  `main.go` is generated, so it always calls `.WithMaxConcurrency`.
+
+Verified on `test-apps/debug-only`: one actor per language set to 5 registers
+with `max_concurrency=5` in the gateway's routing snapshot; kept stubs register
+with 1.
+
 ## npm publish (`deno task build:npm`)
 
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, not `deno pack`

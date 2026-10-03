@@ -152,7 +152,7 @@ By default each actor handles **one invoke at a time**. To run more, set:
 - `--max-concurrency <n>` (or `maxConcurrency` in `ActorWorkerOptions`): the
   worker-wide default for every actor;
 - `maxConcurrency` on an actor's registration: that actor's own limit, which
-  wins over the worker-wide one.
+  wins over the worker-wide one. Generated projects set it in each actor's stub.
 
 The effective limit per actor is **its own `maxConcurrency`, else the worker's,
 else 1**. It's sent to the gateway at registration, so the gateway claims and

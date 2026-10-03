@@ -14,7 +14,7 @@ if _SHARED_ASYNC_OP_ROOT not in sys.path:
     sys.path.insert(0, _SHARED_ASYNC_OP_ROOT)
 
 <% for (const a of it.actors) { -%>
-from <%~ a.importPath %> import <%~ a.src %> as <%~ a.alias %>
+from <%~ a.importPath %> import <%~ a.src %> as <%~ a.alias %><% if (a.declaresMaxConcurrency) { %>, MAX_CONCURRENCY as <%~ a.alias %>_max_concurrency<% } %>
 <% } -%>
 
 ACTOR_REGISTRATIONS = [
@@ -26,6 +26,9 @@ ACTOR_REGISTRATIONS = [
         "async_operation_name": <%~ JSON.stringify(a.asyncOperationName) %>,
         "async_operation_version": <%~ JSON.stringify(a.asyncOperationVersion) %>,
         "async_operation_language": <%~ JSON.stringify(a.asyncOperationLanguage) %>,
+<% if (a.declaresMaxConcurrency) { -%>
+        "max_concurrency": <%~ a.alias %>_max_concurrency,
+<% } -%>
         "handler": <%~ a.alias %>,
     },
 <% } -%>

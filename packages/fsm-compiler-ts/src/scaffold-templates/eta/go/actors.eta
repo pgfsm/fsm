@@ -1,4 +1,11 @@
 // <%~ it.label %>: <%~ it.name %>
+
+// MaxConcurrency is how many invokes of this actor one worker runs at once.
+// Above 1, the handler runs on several goroutines at once: guard shared state
+// with a sync.Mutex, atomics or channels. Delivery is at-least-once, so the
+// handler must also be idempotent: the same invoke can arrive more than once.
+const MaxConcurrency = 1
+
 func <%~ it.fnName %>(input any) (any, error) {
 	// <%~ it.todo %>
 	return map[string]any{"input": input, "msg": "<%~ it.name %> actor invoked by <%~ it.lang %>"}, nil

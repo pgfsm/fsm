@@ -11,6 +11,8 @@ export type ActorRegistration = {
   asyncOperationName: string;
   asyncOperationVersion: string;
   asyncOperationLanguage: string;
+  /** The actor's own limit, from its stub; unset falls back to the worker's --max-concurrency. */
+  maxConcurrency?: number;
   handler: (input: unknown) => unknown;
 };
 

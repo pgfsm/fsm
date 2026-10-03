@@ -64,8 +64,9 @@ A missing or mistyped actor is a compile error in the generated worker.
   is never held across a `Send` (so `Stop()` never blocks); `sendMu` serializes
   `Send`/`CloseSend` (tests run with `-race`).
 - `ActorRegistration.WithMaxConcurrency` sets `Meta.MaxConcurrency`; the
-  compiler's Go registry doesn't emit it yet (#435). `NewActorWorker` clones
-  each `Meta` (`proto.Clone`) before writing the effective limit into it.
+  compiler's Go registry fills it from the actor stub's `MaxConcurrency`, and
+  the generated `main.go` calls it (#435). `NewActorWorker` clones each `Meta`
+  (`proto.Clone`) before writing the effective limit into it.
 - **`NewActorRegistration`'s six identity arguments are the contract with the
   compiler's Go registry** (`go/actors-registry-aggregate.eta` and
   `create-async-logic`'s shared-async-op Go registry). Those registries define

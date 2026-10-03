@@ -12,7 +12,10 @@ type ActorRegistration struct {
 	AsyncOperationName     string
 	AsyncOperationVersion  string
 	AsyncOperationLanguage string
-	Handler                func(input any) (any, error)
+	// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;
+	// 0 falls back to the worker's --max-concurrency.
+	MaxConcurrency uint32
+	Handler        func(input any) (any, error)
 }
 
 func ActorRegistrations() []ActorRegistration {
@@ -24,6 +27,7 @@ func ActorRegistrations() []ActorRegistration {
 			AsyncOperationName:     "CheckReportsTable",
 			AsyncOperationVersion:  "v01",
 			AsyncOperationLanguage: "go",
+			MaxConcurrency:         uint32(creditcheck_v01_checkreportstable.MaxConcurrency),
 			Handler:                creditcheck_v01_checkreportstable.CheckReportsTable,
 		},
 	}

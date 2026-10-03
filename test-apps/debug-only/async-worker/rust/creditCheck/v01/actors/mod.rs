@@ -1,4 +1,4 @@
 #[path = "checkBureauRust/checkBureauRust.rs"]
 #[allow(non_snake_case)]
-mod checkBureauRust;
+pub mod checkBureauRust;
 pub use checkBureauRust::checkBureauRust;

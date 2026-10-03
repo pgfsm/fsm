@@ -39,7 +39,7 @@ func main() {
 			reg.AsyncOperationVersion,
 			reg.AsyncOperationLanguage,
 			reg.Handler,
-		))
+		).WithMaxConcurrency(reg.MaxConcurrency)) // 0 = use --max-concurrency
 	}
 	os.Exit(asyncworkersdk.RunActorWorkerCLI(registrations, os.Args[1:], ""))
 }

@@ -14,6 +14,9 @@ type ActorRegistration struct {
 	AsyncOperationName          string
 	AsyncOperationVersion       string
 	AsyncOperationLanguage      string
+	// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;
+	// 0 falls back to the worker's --max-concurrency.
+	MaxConcurrency   uint32
 	Handler          func(input any) (any, error)
 }
 
@@ -27,6 +30,9 @@ func ActorRegistrations() []ActorRegistration {
 			AsyncOperationName:          <%~ JSON.stringify(a.asyncOperationName) %>,
 			AsyncOperationVersion:       <%~ JSON.stringify(a.asyncOperationVersion) %>,
 			AsyncOperationLanguage:      <%~ JSON.stringify(a.asyncOperationLanguage) %>,
+<% if (a.declaresMaxConcurrency) { -%>
+			MaxConcurrency:   uint32(<%~ a.alias %>.MaxConcurrency),
+<% } -%>
 			Handler:          <%~ a.alias %>.<%~ a.exportedName %>,
 		},
 <% } -%>
