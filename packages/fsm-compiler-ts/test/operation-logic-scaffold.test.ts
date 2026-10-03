@@ -1199,7 +1199,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
       await Deno.readTextFile(`${base}/typescript/deno.json`),
     );
     assertEquals(tsDenoJson.imports, {
-      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.2.0",
+      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.3.0",
       "@pgfsm/logging": "npm:@pgfsm/logging@^0.1.0",
     });
 
@@ -1220,7 +1220,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // run_async_worker.py's only third-party import comes from this pin.
     const pyproject = await Deno.readTextFile(`${base}/python/pyproject.toml`);
     assertEquals(
-      pyproject.includes('"pgfsm-async-worker-sdk>=0.2.0,<0.3",'),
+      pyproject.includes('"pgfsm-async-worker-sdk>=0.3.0,<0.4",'),
       true,
     );
 
@@ -1241,7 +1241,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // main.rs's only external crates come from these; no monorepo `path =`
     // dependency (the SDK and its proto stubs come from crates.io).
     const cargoToml = await Deno.readTextFile(`${base}/rust/Cargo.toml`);
-    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.2"'), true);
+    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.3"'), true);
     assertEquals(cargoToml.includes('serde_json = "1"'), true);
     assertEquals(cargoToml.includes('env_logger = "0.11"'), true);
     assertEquals(cargoToml.includes("{ path ="), false);
@@ -1268,7 +1268,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
         "require fsm-core-example/go-actors-registry-generated v0.0.0\n" +
         "require fsm-core-example/creditcheck/v01/go/actors/checkbureau v0.0.0\n" +
         "require fsm-core-example/otherfsm/v02/go/actors/someactor v0.0.0\n" +
-        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.2.0\n\n" +
+        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.0\n\n" +
         "replace fsm-core-example/go-actors-registry-generated => ./go-actors-registry-generated\n" +
         "replace fsm-core-example/creditcheck/v01/go/actors/checkbureau => ./creditCheck/v01/actors/checkBureau\n" +
         "replace fsm-core-example/otherfsm/v02/go/actors/someactor => ./otherFsm/v02/actors/someActor\n",

@@ -183,8 +183,8 @@ from `proto-publish.yml` on `proto-v*` tags.
 
 ### Letting generated projects use a new minor version
 
-Generated projects depend on `pgfsm-async-worker-sdk = "0.2"` (Cargo's
-`>=0.2.0, <0.3.0`), so they won't pick up `0.3.0` until that moves. It lives in:
+Generated projects depend on `pgfsm-async-worker-sdk = "0.3"` (Cargo's
+`>=0.3.0, <0.4.0`), so they won't pick up `0.4.0` until that moves. It lives in:
 
 - `packages/fsm-compiler-ts/src/scaffold-templates/eta/rust/worker-sdk-cargo-toml.eta`,
   then, in `packages/fsm-compiler-ts`, run

@@ -19,7 +19,7 @@ name = "run-async-worker"
 path = "src/main.rs"
 
 [dependencies]
-pgfsm-async-worker-sdk = "0.2"
+pgfsm-async-worker-sdk = "0.3"
 # The actor handlers and the generated registry take and return
 # serde_json::Value.
 serde_json = "1"
