@@ -1,0 +1,24 @@
+# Example: scale one language's workers on CPU (needs metrics-server).
+#
+# CPU is a stand-in. The better signal is that language's queue depth (pgmq
+# queue length), e.g. with KEDA's PostgreSQL scaler, since a worker waiting on
+# I/O uses little CPU while its queue grows. Each worker's capacity is its
+# actors' max_concurrency; the gateway only claims what connected workers can
+# take, so adding replicas is what raises throughput.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: async-worker-python
+  namespace: pgfsm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: async-worker-python
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

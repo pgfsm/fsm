@@ -32,6 +32,32 @@ deno task build:npm    # scripts/build-npm.ts (dnt npm build)
 
 Deno version is managed by `.prototools`: `proto install deno --pin local`.
 
+## `deploy/`: images and Kubernetes manifests (SPEC-007 step 2a, #457)
+
+- `deploy/docker/gateway.Dockerfile` builds both CLIs from **repository source**
+  (context = repo root) with
+  `deno compile --no-check
+  --node-modules-dir=none`, onto `distroless/cc` as
+  non-root. `--node-modules-dir=none` matters: without it, a cold build installs
+  the npm workspaces' `node_modules` (database-src, fsm-proto-codegen) and
+  embeds them (~700 MB per binary instead of ~140 MB). `--no-check` because
+  `pg`'s types don't resolve without those `node_modules`; CI type-checks.
+  `--include` the package's `deno.json`, which `version.ts` reads at runtime.
+  Each Dockerfile has its own `<name>.Dockerfile.dockerignore` (BuildKit).
+- `deploy/docker/worker-<lang>.Dockerfile` take a **generated
+  `async-worker/<lang>/`** directory as context (any project, not just
+  `test-apps/debug-only`), and are configured through `PGFSM_*` env vars.
+- `deploy/k8s/base` is the reference layout (namespace enforcing "restricted",
+  gateway Deployment + Service + PDB with `--auth-token-dir`, one worker
+  Deployment per language mounting only its own token key). `examples/` (HPA,
+  PgBouncer), `single-pod/` (the small topology), `overlays/kind/` (smoke test:
+  test Postgres in its own namespace, `smoke.sh`, run by the `k8s-smoke`
+  workflow on PRs touching `deploy/` and on demand; a local run needs ~8 GB of
+  free Docker disk). kustomize only loads directories from outside an overlay,
+  hence `examples/pooler/` with its own kustomization.
+- Nothing is published: images are built locally or by the workflow and
+  `kind load`ed. The acceptance E2E suite on top of this is #458.
+
 ## npm publish (`deno task build:npm`)
 
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, modeled on

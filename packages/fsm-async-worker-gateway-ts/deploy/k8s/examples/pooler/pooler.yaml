@@ -1,0 +1,68 @@
+# Example: a PgBouncer pooler in front of Postgres, for the gateway's
+# DATABASE_URL (SPEC-007: the activity tier's connections stay bounded by
+# gateway replicas × pool size, whatever the worker count).
+#
+# On a managed database, prefer its own pooler (Supabase's Supavisor, RDS
+# Proxy, Cloud SQL's pooling, CloudNativePG's Pooler) and skip this file.
+#
+# Transaction pooling suits the gateway: it holds no session state and uses
+# unnamed statements. Create the `pgbouncer-upstream` Secret first:
+#   kubectl -n pgfsm create secret generic pgbouncer-upstream \
+#     --from-literal=DB_HOST=<postgres host> --from-literal=DB_PORT=5432 \
+#     --from-literal=DB_USER=<user> --from-literal=DB_PASSWORD=<password> \
+#     --from-literal=DB_NAME=postgres
+# then point activity-gateway-db's DATABASE_URL at
+#   postgresql://<user>:<password>@pgbouncer.pgfsm.svc:5432/postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: pgfsm
+  labels: {
+    app.kubernetes.io/name: pgbouncer,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: pgbouncer }
+  template:
+    metadata:
+      labels: {
+        app.kubernetes.io/name: pgbouncer,
+        app.kubernetes.io/part-of: pgfsm,
+      }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:v1.24.1-p1
+          envFrom:
+            - secretRef: { name: pgbouncer-upstream }
+          env:
+            - { name: LISTEN_PORT, value: "5432" }
+            - { name: POOL_MODE, value: transaction }
+            - { name: AUTH_TYPE, value: scram-sha-256 }
+            - { name: MAX_CLIENT_CONN, value: "500" }
+            - { name: DEFAULT_POOL_SIZE, value: "20" }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          readinessProbe:
+            tcpSocket: { port: postgres }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: pgfsm
+spec:
+  selector: { app.kubernetes.io/name: pgbouncer }
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres }
