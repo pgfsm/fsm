@@ -1299,7 +1299,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
         "require fsm-core-example/go-actors-registry-generated v0.0.0\n" +
         "require fsm-core-example/creditcheck/v01/go/actors/checkbureau v0.0.0\n" +
         "require fsm-core-example/otherfsm/v02/go/actors/someactor v0.0.0\n" +
-        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.0\n\n" +
+        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.1\n\n" +
         "replace fsm-core-example/go-actors-registry-generated => ./go-actors-registry-generated\n" +
         "replace fsm-core-example/creditcheck/v01/go/actors/checkbureau => ./creditCheck/v01/actors/checkBureau\n" +
         "replace fsm-core-example/otherfsm/v02/go/actors/someactor => ./otherFsm/v02/actors/someActor\n",
