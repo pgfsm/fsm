@@ -325,6 +325,141 @@ Deno.test("TCP sessions need the bearer token, re-read from its file each time",
   }
 });
 
+// Several accepted tokens (#429).
+
+/** Connects a TCP worker with `Bearer <token>`; resolves true if accepted. */
+async function acceptsToken(
+  gateway: SidecarGateway,
+  workerId: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const worker = await connectWorker(gateway, workerId, 1, {
+      tcp: true,
+      authorization: `Bearer ${token}`,
+    });
+    await worker.close();
+    return true;
+  } catch (error) {
+    if (String(error).includes("missing or invalid bearer token")) return false;
+    throw error;
+  }
+}
+
+/** The name of the token `authorization` matches, without registering a worker. */
+function tokenNameFor(gateway: SidecarGateway, authorization: string) {
+  return (gateway as unknown as {
+    authorize(context: { requestHeader: Headers }): string | undefined;
+  }).authorize({ requestHeader: new Headers({ authorization }) });
+}
+
+Deno.test("TCP sessions accept any of several token files, and nothing else", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/python`, "py-token\n");
+    await Deno.writeTextFile(`${dir}/go`, "go-token");
+    const gateway = new SidecarGateway({
+      socketPath: "/unused",
+      authTokenFiles: [`${dir}/python`, `${dir}/go`],
+      maxConnectionAgeMs: 0,
+    });
+    assertEquals(await acceptsToken(gateway, "a", "py-token"), true);
+    assertEquals(await acceptsToken(gateway, "b", "go-token"), true);
+    assertEquals(await acceptsToken(gateway, "c", "rust-token"), false);
+    // The name logged is the file's, never the value.
+    assertEquals(tokenNameFor(gateway, "Bearer go-token"), "go");
+    assertEquals(tokenNameFor(gateway, "Bearer nope"), undefined);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("a token directory rotates with overlap: add the new token, switch, remove the old, no refused reconnect", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/token-v1`, "old");
+    const gateway = new SidecarGateway({
+      socketPath: "/unused",
+      authTokenDir: dir,
+      maxConnectionAgeMs: 0,
+    });
+    assertEquals(await acceptsToken(gateway, "w", "old"), true);
+    assertEquals(await acceptsToken(gateway, "w", "new"), false);
+
+    // 1. Add the new token: both work, so workers can switch one by one.
+    await Deno.writeTextFile(`${dir}/token-v2`, "new");
+    assertEquals(await acceptsToken(gateway, "w", "old"), true);
+    assertEquals(await acceptsToken(gateway, "w", "new"), true);
+
+    // 2. Remove the old one once every worker uses the new token.
+    await Deno.remove(`${dir}/token-v1`);
+    assertEquals(await acceptsToken(gateway, "w", "new"), true);
+    assertEquals(await acceptsToken(gateway, "w", "old"), false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("a Kubernetes Secret volume works as the token directory: one key per language, hidden entries skipped", async () => {
+  // What kubelet mounts for a Secret with keys `python` and `go`:
+  //   ..2026_10_04_10_00_00.000000000/{python,go}   (the real files)
+  //   ..data -> ..2026_10_04_10_00_00.000000000
+  //   python -> ..data/python, go -> ..data/go
+  const dir = await Deno.makeTempDir();
+  try {
+    const stamp = "..2026_10_04_10_00_00.000000000";
+    await Deno.mkdir(`${dir}/${stamp}`);
+    await Deno.writeTextFile(`${dir}/${stamp}/python`, "py-token\n");
+    await Deno.writeTextFile(`${dir}/${stamp}/go`, "go-token\n");
+    await Deno.symlink(stamp, `${dir}/..data`);
+    await Deno.symlink("..data/python", `${dir}/python`);
+    await Deno.symlink("..data/go", `${dir}/go`);
+    const gateway = new SidecarGateway({
+      socketPath: "/unused",
+      authTokenDir: dir,
+      maxConnectionAgeMs: 0,
+    });
+    assertEquals(await acceptsToken(gateway, "py", "py-token"), true);
+    assertEquals(await acceptsToken(gateway, "go", "go-token"), true);
+    assertEquals(tokenNameFor(gateway, "Bearer py-token"), "python");
+    assertEquals(await acceptsToken(gateway, "x", "other"), false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("empty or missing token sources are skipped; with none left, every TCP session is refused", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/empty`, "  \n");
+    await Deno.writeTextFile(`${dir}/good`, "good-token");
+    const gateway = new SidecarGateway({
+      socketPath: "/unused",
+      authTokenFiles: [`${dir}/missing`, `${dir}/empty`, `${dir}/good`],
+      maxConnectionAgeMs: 0,
+    });
+    assertEquals(await acceptsToken(gateway, "a", "good-token"), true);
+    // An empty file never makes an empty token valid.
+    assertEquals(await acceptsToken(gateway, "b", ""), false);
+
+    await Deno.remove(`${dir}/good`);
+    assertEquals(await acceptsToken(gateway, "c", "good-token"), false);
+
+    // A configured but unreadable directory fails closed too.
+    const noDir = new SidecarGateway({
+      socketPath: "/unused",
+      authTokenDir: `${dir}/no-such-dir`,
+      maxConnectionAgeMs: 0,
+    });
+    assertEquals(await acceptsToken(noDir, "d", "good-token"), false);
+    // Unix-socket sessions stay unchecked.
+    const unix = await connectWorker(noDir, "e", 1);
+    await unix.close();
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("a TCP worker past its max connection age is drained, then disconnected", async () => {
   const gateway = new SidecarGateway({
     socketPath: "/unused",

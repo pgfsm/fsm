@@ -27,6 +27,7 @@ const args = parseArgs(Deno.args, {
     "tls-client-ca",
     "tls-min-version",
     "auth-token-file",
+    "auth-token-dir",
     "max-connection-age-ms",
     "keepalive-interval-ms",
     "keepalive-timeout-ms",
@@ -36,6 +37,8 @@ const args = parseArgs(Deno.args, {
     "db-url",
     "poll-interval-ms",
   ],
+  // Several accepted tokens, e.g. old and new during a rotation (#429).
+  collect: ["auth-token-file"],
   boolean: [
     "help",
     "version",
@@ -79,7 +82,10 @@ OPTIONS
   --tls-client-ca <file>           Mutual TLS: require worker client certificates signed by this CA
   --tls-min-version <1.2|1.3>      Lowest TLS version a tcp:// listener accepts (default: 1.3)
   --insecure-plaintext             Allow a tcp:// listener without TLS (local testing only)
-  --auth-token-file <file>         Bearer token TCP workers must send; re-read for every new session
+  --auth-token-file <file>         An accepted bearer token for TCP workers; repeat for several (e.g. old
+                                   and new during a rotation). Re-read for every new session
+  --auth-token-dir <dir>           A directory of accepted tokens, one per file (e.g. a Kubernetes Secret
+                                   with one key per language, mounted as a directory); hidden entries skipped
   --max-connection-age-ms <ms>     Drain and disconnect TCP workers after this long, ±10% (default: 600000; 0 disables)
   --keepalive-interval-ms <ms>     HTTP/2 PING interval on TCP worker connections (default: 30000; 0 disables)
   --keepalive-timeout-ms <ms>      Close a TCP connection whose PING goes unanswered this long (default: 10000)
@@ -219,11 +225,12 @@ const sidecarListeners = sidecarListenArg
   ? [parseSidecarListen(sidecarListenArg)]
   : [];
 if (
-  sidecarListeners.some((l) => l.kind === "tcp") && !args["auth-token-file"] &&
+  sidecarListeners.some((l) => l.kind === "tcp") &&
+  args["auth-token-file"].length === 0 && !args["auth-token-dir"] &&
   !args["tls-client-ca"]
 ) {
   logger.warn(
-    "The TCP sidecar listener has neither --auth-token-file nor --tls-client-ca: any client that reaches it can register as a worker",
+    "The TCP sidecar listener has no --auth-token-file, --auth-token-dir or --tls-client-ca: any client that reaches it can register as a worker",
   );
 }
 
@@ -313,7 +320,8 @@ try {
     bindTarget,
     sidecarSocketPath,
     sidecarListeners,
-    sidecarAuthTokenFile: args["auth-token-file"],
+    sidecarAuthTokenFiles: args["auth-token-file"],
+    sidecarAuthTokenDir: args["auth-token-dir"],
     maxConnectionAgeMs,
     keepaliveIntervalMs,
     keepaliveTimeoutMs,
