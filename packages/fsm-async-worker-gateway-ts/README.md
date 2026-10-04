@@ -66,8 +66,15 @@ reference. Examples below assume a global install
 - `--tls-min-version <1.2|1.3>` — lowest accepted TLS version (default `1.3`)
 - `--tls-client-ca <file>` — mutual TLS: require worker client certificates
   signed by this CA
-- `--auth-token-file <file>` — bearer token TCP workers must send; re-read for
-  every new session, so a mounted Secret can be rotated without a restart
+- `--auth-token-file <file>` — an accepted bearer token for TCP workers; repeat
+  it to accept several (e.g. the old and new token during a rotation)
+- `--auth-token-dir <dir>` — a directory of accepted tokens, one per file (e.g.
+  a Kubernetes Secret with one key per language, mounted as a directory; hidden
+  entries are skipped)
+
+  Both are re-read for every new session, so tokens can be added and removed
+  without a restart. The gateway logs which token (by file name, never its
+  value) each worker authenticated with.
 - `--max-connection-age-ms <ms>` — drain and disconnect TCP workers after this
   long (default `600000`, ±10 %; `0` disables), so they spread across replicas
 - `--keepalive-interval-ms <ms>` / `--keepalive-timeout-ms <ms>` — HTTP/2 PINGs

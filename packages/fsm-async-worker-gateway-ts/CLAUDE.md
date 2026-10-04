@@ -105,9 +105,18 @@ Install section, which documents this. Same issue applies to
     `rejectUnauthorized`, so a worker without a valid client certificate fails
     the handshake before any gRPC call. Plaintext only via
     `--insecure-plaintext`.
-  - Token: read from `authTokenFile` **on every new session** (rotation without
-    restart), compared with `timingSafeEqual`, `UNAUTHENTICATED` before the
-    `Register` is read. One token for now; several is #429.
+  - Tokens (#429): `authTokenFile`/`authTokenFiles` and every non-hidden file in
+    `authTokenDir`, read **on every new session** (`acceptedTokens()`), so
+    tokens can be added and removed without a restart. Hidden entries are
+    skipped so a Kubernetes Secret volume's `..data`/`..<timestamp>` aren't
+    tokens; `statSync` follows the key symlinks. `authorize()` compares the
+    presented header with every token (`safeEqual`, no early exit, so timing
+    doesn't reveal which matched) and returns the match's name, which is logged
+    with the worker id after `Register`; values are never logged. Empty or
+    unreadable sources are skipped; with none left every TCP session is refused
+    (fail closed), and `start()` warns. `UNAUTHENTICATED` comes before the
+    `Register` is read. Authorization (which token may register which actors) is
+    out of scope.
   - Max connection age: a timer per TCP worker (±10 % jitter) marks it
     `draining` (no new invokes, no capacity in `listClaimableActors()`), waits
     for its in-flight invokes up to `connectionDrainGraceMs`, then unregisters

@@ -73,29 +73,30 @@ deno task gateway [options]
 
 ### Options
 
-| Flag                           | Alias | Required                                                  | Default                                    | Description                                                                                                                   |
-| ------------------------------ | ----- | --------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `--bind <target>`              | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                                               |
-| `--sidecar-socket <path>`      | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on. The default applies only when `--sidecar-listen` isn't given either      |
-| `--sidecar-listen <target>`    |       | no                                                        | —                                          | Also (or instead) listen for workers on `unix:<path>` or `tcp://<host>:<port>` (see "TCP listener" below)                     |
-| `--tls-cert <file>`            |       | for `tcp://`, unless `--insecure-plaintext`               | —                                          | PEM certificate chain the TCP listener presents                                                                               |
-| `--tls-key <file>`             |       | with `--tls-cert`                                         | —                                          | PEM private key for `--tls-cert`                                                                                              |
-| `--tls-min-version <v>`        |       | no                                                        | `1.3`                                      | Lowest TLS version the TCP listener accepts: `1.2` or `1.3`                                                                   |
-| `--tls-client-ca <file>`       |       | no                                                        | —                                          | Mutual TLS: require worker client certificates signed by this CA                                                              |
-| `--insecure-plaintext`         |       | no                                                        | off                                        | Allow a `tcp://` listener without TLS. Local testing only; logs a warning                                                     |
-| `--auth-token-file <file>`     |       | no                                                        | —                                          | Bearer token TCP workers must send; re-read for every new session                                                             |
-| `--max-connection-age-ms <ms>` |       | no                                                        | `600000`                                   | Drain and disconnect TCP workers after this long, ±10 % jitter; `0` disables                                                  |
-| `--keepalive-interval-ms <ms>` |       | no                                                        | `30000`                                    | HTTP/2 PING interval on TCP worker connections; `0` disables                                                                  |
-| `--keepalive-timeout-ms <ms>`  |       | no                                                        | `10000`                                    | Close a TCP connection whose PING goes unanswered this long                                                                   |
-| `--invoke-timeout-ms <ms>`     | `-t`  | no                                                        | `10000`                                    | Per-invoke timeout for the gRPC `Invoke` RPC and for poll-loop dispatches of actors that don't declare their own `timeout_ms` |
-| `--vt-margin-seconds <s>`      |       | no                                                        | `10`                                       | Claimed messages stay invisible for the invoke timeout plus this (see below)                                                  |
-| `--max-delivery-attempts <n>`  |       | no                                                        | `5`                                        | Deliveries before a retriable failure is archived as an actor error (see below)                                               |
-| `--db-url <url>`               | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled                                        |
-| `--poll-interval-ms <ms>`      |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                                                   |
-| `--disable-poll-loop`          |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`)                            |
-| `--ensure-queue-on-register`   |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                                                     |
-| `--version`                    | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                                                        |
-| `--help`                       | `-h`  | —                                                         | —                                          | Print help and exit                                                                                                           |
+| Flag                           | Alias | Required                                                  | Default                                    | Description                                                                                                                                              |
+| ------------------------------ | ----- | --------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--bind <target>`              | `-b`  | no                                                        | `unix:/tmp/pgfsm-activity-gateway.sock`    | gRPC bind target — `unix:<path>` or `host:port`                                                                                                          |
+| `--sidecar-socket <path>`      | `-s`  | no                                                        | `/tmp/pgfsm-activity-gateway-workers.sock` | Unix socket path workers connect to and register on. The default applies only when `--sidecar-listen` isn't given either                                 |
+| `--sidecar-listen <target>`    |       | no                                                        | —                                          | Also (or instead) listen for workers on `unix:<path>` or `tcp://<host>:<port>` (see "TCP listener" below)                                                |
+| `--tls-cert <file>`            |       | for `tcp://`, unless `--insecure-plaintext`               | —                                          | PEM certificate chain the TCP listener presents                                                                                                          |
+| `--tls-key <file>`             |       | with `--tls-cert`                                         | —                                          | PEM private key for `--tls-cert`                                                                                                                         |
+| `--tls-min-version <v>`        |       | no                                                        | `1.3`                                      | Lowest TLS version the TCP listener accepts: `1.2` or `1.3`                                                                                              |
+| `--tls-client-ca <file>`       |       | no                                                        | —                                          | Mutual TLS: require worker client certificates signed by this CA                                                                                         |
+| `--insecure-plaintext`         |       | no                                                        | off                                        | Allow a `tcp://` listener without TLS. Local testing only; logs a warning                                                                                |
+| `--auth-token-file <file>`     |       | no                                                        | —                                          | An accepted bearer token for TCP workers; repeatable (e.g. old and new during a rotation). Re-read for every new session                                 |
+| `--auth-token-dir <dir>`       |       | no                                                        | —                                          | A directory of accepted tokens, one per file (e.g. a Kubernetes Secret with one key per language); hidden entries skipped. Re-read for every new session |
+| `--max-connection-age-ms <ms>` |       | no                                                        | `600000`                                   | Drain and disconnect TCP workers after this long, ±10 % jitter; `0` disables                                                                             |
+| `--keepalive-interval-ms <ms>` |       | no                                                        | `30000`                                    | HTTP/2 PING interval on TCP worker connections; `0` disables                                                                                             |
+| `--keepalive-timeout-ms <ms>`  |       | no                                                        | `10000`                                    | Close a TCP connection whose PING goes unanswered this long                                                                                              |
+| `--invoke-timeout-ms <ms>`     | `-t`  | no                                                        | `10000`                                    | Per-invoke timeout for the gRPC `Invoke` RPC and for poll-loop dispatches of actors that don't declare their own `timeout_ms`                            |
+| `--vt-margin-seconds <s>`      |       | no                                                        | `10`                                       | Claimed messages stay invisible for the invoke timeout plus this (see below)                                                                             |
+| `--max-delivery-attempts <n>`  |       | no                                                        | `5`                                        | Deliveries before a retriable failure is archived as an actor error (see below)                                                                          |
+| `--db-url <url>`               | `-d`  | only if poll loop or `--ensure-queue-on-register` enabled | `DATABASE_URL` from `.env`                 | PostgreSQL connection string — one pool, shared by both features when both are enabled                                                                   |
+| `--poll-interval-ms <ms>`      |       | no                                                        | `30000`                                    | Async-op poll loop interval                                                                                                                              |
+| `--disable-poll-loop`          |       | no                                                        | off (poll loop runs by default)            | Run the gateway/sidecar only — no Postgres connection needed (unless `--ensure-queue-on-register`)                                                       |
+| `--ensure-queue-on-register`   |       | no                                                        | off                                        | Ensure a PGMQ queue exists for every actor a worker registers (see below)                                                                                |
+| `--version`                    | `-v`  | —                                                         | —                                          | Print `@pgfsm/async-worker-gateway`'s version and exit                                                                                                   |
+| `--help`                       | `-h`  | —                                                         | —                                          | Print help and exit                                                                                                                                      |
 
 > **Poll loop is on by default; `--ensure-queue-on-register` is opt-in.** If
 > either needs a DB connection and neither `--db-url` nor `DATABASE_URL` is set,
@@ -130,6 +131,12 @@ deno task gateway \
   --sidecar-listen tcp://0.0.0.0:7443 \
   --tls-cert /etc/pgfsm/tls/tls.crt --tls-key /etc/pgfsm/tls/tls.key \
   --auth-token-file /etc/pgfsm/token/token
+
+# One token per language: a Secret with keys python, go, ... mounted as a directory
+deno task gateway \
+  --sidecar-listen tcp://0.0.0.0:7443 \
+  --tls-cert /etc/pgfsm/tls/tls.crt --tls-key /etc/pgfsm/tls/tls.key \
+  --auth-token-dir /etc/pgfsm/tokens
 
 # Same, with mutual TLS instead of (or as well as) the token
 deno task gateway \
@@ -178,12 +185,22 @@ dials workers.
   the minimum by default (`--tls-min-version 1.2` relaxes it). Plaintext TCP is
   refused unless you pass `--insecure-plaintext`, which is for local testing
   only and logs a warning.
-- **Bearer token.** With `--auth-token-file`, a TCP worker must send
-  `authorization: Bearer <token>` (`--gateway-token-file` in the SDKs). A
+- **Bearer tokens.** With `--auth-token-file` (repeatable) and/or
+  `--auth-token-dir`, a TCP worker must send `authorization: Bearer <token>`
+  (`--gateway-token-file` in the SDKs) matching one of the accepted tokens. A
   missing or wrong token gets `UNAUTHENTICATED` before its `Register` is read.
-  The file is re-read for every new session, so a mounted Kubernetes Secret can
-  be rotated without restarting the gateway. Only one token is accepted at a
-  time; several tokens (overlapping rotation, one per language) are #429.
+  Every source is re-read for each new session, so tokens can be added and
+  removed without restarting the gateway. Each token is compared in constant
+  time, and the gateway logs which one (by file name, never the value) a worker
+  authenticated with.
+  - **Rotation with overlap:** add the new token (a new Secret key, or a second
+    `--auth-token-file`), switch the workers' token files, then remove the old
+    token. Workers that reconnect in between are accepted with either.
+  - **One token per language or service:** mount a Secret with one key per
+    language as `--auth-token-dir`, and give each language's worker Deployment
+    only its own key, so a leaked token exposes one language, not all.
+  - An empty or unreadable token source is skipped and logged. If none is left,
+    every TCP session is refused (and the gateway warns at startup).
 - **Mutual TLS.** With `--tls-client-ca`, a worker must present a client
   certificate signed by that CA (`--gateway-cert-file`/`--gateway-key-file` in
   the SDKs), or the TLS handshake fails before any gRPC call. It identifies

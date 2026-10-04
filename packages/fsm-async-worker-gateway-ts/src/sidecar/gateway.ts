@@ -330,12 +330,26 @@ export interface SidecarGatewayOptions {
   /** Listeners to serve; added to `socketPath`'s, if both are given. */
   listeners?: SidecarListener[];
   /**
-   * File holding the bearer token TCP workers must send
-   * (`authorization: Bearer <token>`). Re-read for every new session, so a
-   * mounted Secret can be rotated without a restart. Unix-socket sessions
-   * aren't checked.
+   * File holding a bearer token TCP workers may send
+   * (`authorization: Bearer <token>`). Shorthand for a one-element
+   * `authTokenFiles`. Unix-socket sessions aren't checked.
    */
   authTokenFile?: string;
+  /**
+   * Files each holding one accepted bearer token (#429). A TCP worker must
+   * send one of them. Re-read for every new session, so tokens can be added
+   * and removed without a restart: during a rotation, list both the old and
+   * the new token.
+   */
+  authTokenFiles?: string[];
+  /**
+   * A directory whose every file is one accepted token, named after the file
+   * (#429): fits a Kubernetes Secret with one key per language or service,
+   * mounted as a directory. Hidden entries (a Secret volume's `..data` and
+   * `..<timestamp>`) are skipped. Re-read for every new session, like
+   * `authTokenFiles`, and combined with them.
+   */
+  authTokenDir?: string;
   /**
    * TCP workers are drained and disconnected after this long (±10 %
    * jitter), so they reconnect and spread across gateway replicas. 0
@@ -389,6 +403,16 @@ interface RunningListener {
   keepalives: Set<ReturnType<typeof setInterval>>;
 }
 
+/** One accepted bearer token, and the name it's logged under (never the value). */
+interface AcceptedToken {
+  name: string;
+  value: string;
+}
+
+function baseName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
 /** Constant-time comparison of two header values. */
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -403,7 +427,8 @@ function safeEqual(a: string, b: string): boolean {
 
 export class SidecarGateway {
   private readonly listeners: SidecarListener[];
-  private readonly authTokenFile?: string;
+  private readonly authTokenFiles: string[];
+  private readonly authTokenDir?: string;
   private readonly maxConnectionAgeMs: number;
   private readonly connectionDrainGraceMs: number;
   private readonly keepaliveIntervalMs: number;
@@ -425,7 +450,11 @@ export class SidecarGateway {
         : []),
       ...(options.listeners ?? []),
     ];
-    this.authTokenFile = options.authTokenFile;
+    this.authTokenFiles = [
+      ...(options.authTokenFile ? [options.authTokenFile] : []),
+      ...(options.authTokenFiles ?? []),
+    ];
+    this.authTokenDir = options.authTokenDir;
     this.maxConnectionAgeMs = options.maxConnectionAgeMs ??
       DEFAULT_MAX_CONNECTION_AGE_MS;
     this.connectionDrainGraceMs = options.connectionDrainGraceMs ??
@@ -443,6 +472,14 @@ export class SidecarGateway {
     if (this.listeners.length === 0) {
       throw new Error(
         "SidecarGateway needs at least one listener (socketPath or listeners)",
+      );
+    }
+    if (
+      (this.authTokenFiles.length > 0 || this.authTokenDir) &&
+      this.acceptedTokens().length === 0
+    ) {
+      logger.warn(
+        "Sidecar auth is configured but no token is readable yet: every TCP worker is refused until one is",
       );
     }
     for (const listener of this.listeners) {
@@ -787,22 +824,77 @@ export class SidecarGateway {
     return best;
   }
 
-  /** Whether this TCP session presented the configured bearer token. */
-  private authorized(context: HandlerContext | undefined): boolean {
-    if (!this.authTokenFile) return true;
-    let expected: string;
-    try {
-      expected = Deno.readTextFileSync(this.authTokenFile).trim();
-    } catch (error) {
-      logger.error("Can't read the sidecar auth token file {file}: {error}", {
-        file: this.authTokenFile,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return false;
+  /**
+   * Every token a TCP worker may present right now, read from
+   * `authTokenFiles` and `authTokenDir` for each new session, so rotations
+   * apply without a restart. An unreadable or empty source is logged and
+   * contributes nothing; if none is left, every TCP session is refused.
+   */
+  private acceptedTokens(): AcceptedToken[] {
+    const tokens: AcceptedToken[] = [];
+    const add = (name: string, path: string) => {
+      let value: string;
+      try {
+        value = Deno.readTextFileSync(path).trim();
+      } catch (error) {
+        logger.error("Can't read the sidecar auth token file {file}: {error}", {
+          file: path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+      if (value) tokens.push({ name, value });
+      else {logger.warn("Ignoring empty sidecar auth token file {file}", {
+          file: path,
+        });}
+    };
+    for (const file of this.authTokenFiles) add(baseName(file), file);
+    if (this.authTokenDir) {
+      try {
+        for (const entry of Deno.readDirSync(this.authTokenDir)) {
+          // A Kubernetes Secret volume holds `..data` and `..<timestamp>`
+          // next to one symlink per key: hidden names aren't tokens.
+          if (entry.name.startsWith(".")) continue;
+          const path = `${this.authTokenDir}/${entry.name}`;
+          try {
+            // statSync follows the key symlinks into `..data`.
+            if (!Deno.statSync(path).isFile) continue;
+          } catch {
+            continue;
+          }
+          add(entry.name, path);
+        }
+      } catch (error) {
+        logger.error(
+          "Can't read the sidecar auth token directory {dir}: {error}",
+          {
+            dir: this.authTokenDir,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
     }
-    if (!expected) return false;
+    return tokens;
+  }
+
+  /**
+   * Checks a TCP session's bearer token against every accepted one. Returns
+   * the matching token's name (`""` when no token is configured), or
+   * `undefined` to refuse. Every token is compared, matched or not, so the
+   * time taken doesn't reveal which one matched.
+   */
+  private authorize(context: HandlerContext | undefined): string | undefined {
+    if (this.authTokenFiles.length === 0 && !this.authTokenDir) return "";
     const presented = context?.requestHeader.get("authorization") ?? "";
-    return safeEqual(presented, `Bearer ${expected}`);
+    let matched: string | undefined;
+    for (const token of this.acceptedTokens()) {
+      if (
+        safeEqual(presented, `Bearer ${token.value}`) && matched === undefined
+      ) {
+        matched = token.name;
+      }
+    }
+    return matched;
   }
 
   /**
@@ -823,7 +915,8 @@ export class SidecarGateway {
     context?: HandlerContext,
     policy: ListenerPolicy = UNIX_POLICY,
   ): AsyncIterable<SessionResponseMessage> {
-    if (policy.kind === "tcp" && !this.authorized(context)) {
+    const tokenName = policy.kind === "tcp" ? this.authorize(context) : "";
+    if (tokenName === undefined) {
       logger.warn("Refused a sidecar session with a missing or wrong token");
       throw new ConnectError(
         "missing or invalid bearer token",
@@ -841,6 +934,12 @@ export class SidecarGateway {
     }
 
     const worker = this.registerWorker(first.value.payload.value);
+    if (tokenName) {
+      logger.info("Worker {workerId} authenticated with token {token}", {
+        workerId: worker.workerId,
+        token: tokenName,
+      });
+    }
     worker.http2Session = this.currentHttp2Session.getStore();
     if (policy.kind === "tcp" && this.maxConnectionAgeMs > 0) {
       this.scheduleMaxAge(worker);

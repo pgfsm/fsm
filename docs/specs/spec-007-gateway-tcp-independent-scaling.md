@@ -191,8 +191,9 @@ Why the others lose on that driver:
      - The file is re-read on change, so a mounted Secret can be rotated without
        a restart.
      - Unix mode may omit the token.
-     - One token per gateway for now. Accepting several (overlapping rotation,
-       one token per language/service) is #429.
+     - Several tokens are accepted since #429: `--auth-token-file` is repeatable
+       and `--auth-token-dir` takes a directory of tokens, one per file. That
+       allows overlapping rotation and one token per language/service.
    - The gateway sets an HTTP/2 **max connection age**
      (`--max-connection-age-ms`, default 10 min ± 10 % jitter), then sends
      GOAWAY once in-flight invokes drain or a grace period ends.

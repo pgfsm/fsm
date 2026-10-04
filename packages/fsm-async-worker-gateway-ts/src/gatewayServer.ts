@@ -89,6 +89,10 @@ export interface GatewayServerOptions {
    * new session. Unix-socket workers aren't checked.
    */
   sidecarAuthTokenFile?: string;
+  /** More accepted tokens, one per file (#429). See `SidecarGatewayOptions.authTokenFiles`. */
+  sidecarAuthTokenFiles?: string[];
+  /** A directory of accepted tokens, one per file (#429). See `SidecarGatewayOptions.authTokenDir`. */
+  sidecarAuthTokenDir?: string;
   /** TCP workers' max connection age (±10 % jitter); 0 disables. */
   maxConnectionAgeMs?: number;
   /** HTTP/2 keepalive on TCP worker connections; 0 disables. */
@@ -224,6 +228,8 @@ export async function startActivityGatewayServer(
     socketPath: options.sidecarSocketPath,
     listeners: options.sidecarListeners,
     authTokenFile: options.sidecarAuthTokenFile,
+    authTokenFiles: options.sidecarAuthTokenFiles,
+    authTokenDir: options.sidecarAuthTokenDir,
     maxConnectionAgeMs: options.maxConnectionAgeMs,
     keepaliveIntervalMs: options.keepaliveIntervalMs,
     keepaliveTimeoutMs: options.keepaliveTimeoutMs,
