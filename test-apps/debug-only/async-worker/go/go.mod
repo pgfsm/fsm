@@ -6,7 +6,7 @@ require debug-only/go-actors-registry-generated v0.0.0
 
 require debug-only/creditcheck/v01/go/actors/checkreportstable v0.0.0 // indirect
 
-require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.0
+require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.1
 
 require (
 	github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go v0.2.0 // indirect
