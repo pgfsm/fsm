@@ -37,6 +37,33 @@ SUPABASE_WORKDIR=full-ext npm run supabase:start:env
 SUPABASE_WORKDIR=full-ext npm run supabase:restart:with:diff:withUpgradeScript:patch
 ```
 
+## Access control (`schemas/40_access_control/`, SPEC-009 §1–2)
+
+Roles `fsm_operator`, `fsm_admin`, `fsm_worker`, `fsm_authenticator`; the
+entry-point functions TypeScript calls are `SECURITY DEFINER` with a pinned
+`search_path`, and roles get `EXECUTE` on them (plus narrow table grants where
+`@pgfsm/db` touches a table directly). The folder is last in `schema_paths`, so
+its `ALTER FUNCTION`s run after every function is defined.
+
+**`supabase db diff` only half-captures it.** It emits table grants and the
+functions' `SECURITY DEFINER`/`search_path`, but drops `CREATE ROLE`, role
+memberships, function `EXECUTE` grants/revokes, schema `USAGE` and the pgmq
+grants (the same class of gap that kept the pg_cron job out of migrations,
+#468). So after a diff that touches this area, copy those blocks from
+`20261005120100_fsm_core_access_control.sql` into the new migration by hand: the
+roles block at the **top** (the diffed table grants need the roles), the rest at
+the end. `fsm_core--2.0.9--2.1.0.sql` shows the shape.
+
+**Adding a function that TypeScript calls:** add it to the right
+`ALTER FUNCTION … SECURITY DEFINER` and `GRANT EXECUTE` lists in that file, and
+copy the `REVOKE`/`GRANT` into your migration. `tests/40_access_control/` fails
+CI on any `fsm_core` function executable by `PUBLIC`, and on any
+`SECURITY DEFINER` function not granted to an `fsm_*` role.
+
+Gotcha: on Supabase (PG 15.8) `GRANT <role> TO CURRENT_USER` segfaults the
+backend. Grant to the role by name (`format('… TO %I', current_user)` in a `DO`
+block).
+
 ## Two local Supabase projects
 
 - `supabase/` — the main project (`SUPABASE_WORKDIR` unset/`.`), backing the API

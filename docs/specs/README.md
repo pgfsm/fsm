@@ -44,7 +44,7 @@ Flow:
 | [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md)         | CLI Consolidation — `@pgfsm/ctl` (`pgfsmctl`), Library-Only Sync Worker  | Accepted |
 | [SPEC-006](spec-006-fsm-definition-load-and-check.md)      | FSM Definition Loading as a Deploy Step, Checked at fsmlet Startup       | Accepted |
 | [SPEC-007](spec-007-gateway-tcp-independent-scaling.md)    | Activity Gateway as an Independently Scalable Deployment                 | Accepted |
-| [SPEC-009](spec-009-cli-surface-and-access-model.md)       | CLI Surface and Access Model — `pgfsmctl` via URL + Role-Scoped API Keys | Draft    |
+| [SPEC-009](spec-009-cli-surface-and-access-model.md)       | CLI Surface and Access Model — `pgfsmctl` via URL + Role-Scoped API Keys | Accepted |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to

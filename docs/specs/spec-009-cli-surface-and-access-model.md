@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                          |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status  | Draft                                                                                                                                                                          |
+| Status  | Accepted                                                                                                                                                                       |
 | Date    | 2026-10-05                                                                                                                                                                     |
 | Authors | Niraj, Claude                                                                                                                                                                  |
 | Issue   | #466                                                                                                                                                                           |
@@ -209,16 +209,35 @@ Supporting drivers:
 
 ### 1. Roles (migration in `packages/database-src`)
 
-| Role                | Login                | Granted                                                                                                                                | Used by                                            |
-| ------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `fsm_operator`      | NOLOGIN              | `EXECUTE` on instance and read functions (**phase 2**; empty in phase 1)                                                               | operator keys, via the API                         |
-| `fsm_admin`         | NOLOGIN              | `fsm_operator`, plus `EXECUTE` on the definition-load function (`LOAD_FSM_FROM_JSON_FN`) and the key-management functions              | admin keys, via the API; DB-direct break-glass     |
-| `fsm_worker`        | NOLOGIN              | `EXECUTE` on the claim/dispatch/ack functions that the fsmlet, `scheduler run` and the gateway call (enumerated during implementation) | deployment-created logins for workers and gateways |
-| `fsm_authenticator` | LOGIN, **NOINHERIT** | membership in `fsm_operator`; membership in `fsm_admin` **only** where admin is enabled; `EXECUTE` on `verify_api_key`                 | the Hono API's pool                                |
+| Role                | Login                | Granted                                                                                                                                                                                                                                                              | Used by                                            |
+| ------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `fsm_operator`      | NOLOGIN              | `EXECUTE` on the instance functions behind the `/fsm/*` routes and `pgfsmctl instance` (create, send, stop, resume, enqueue, get state); `SELECT` on `fsm_instance`, `async_operation_meta`                                                                          | operator keys, via the API                         |
+| `fsm_admin`         | NOLOGIN              | `fsm_operator`, plus `EXECUTE` on the three `load_fsm_*_from_json_v2` functions and the key-management functions; `SELECT` on `fsm_json`                                                                                                                             | admin keys, via the API; DB-direct break-glass     |
+| `fsm_worker`        | NOLOGIN              | `EXECUTE` on the claim/schedule/microstep/lock/archive functions the fsmlet, `scheduler run` and the gateway call; DML on the two workerlet tables; `SELECT` on `fsm_json`; pgmq `USAGE` + `SELECT`/`UPDATE` on queue tables (the fsmlet calls `pgmq.read` directly) | deployment-created logins for workers and gateways |
+| `fsm_authenticator` | LOGIN, **NOINHERIT** | membership in `fsm_operator`; membership in `fsm_admin` **only** where admin is enabled; `EXECUTE` on `verify_api_key`                                                                                                                                               | the Hono API's pool                                |
 
-- `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA fsm_core FROM PUBLIC`, plus
-  `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` for the
-  schema owner, so new functions are never public.
+- **Entry points are `SECURITY DEFINER`** with
+  `search_path = fsm_core, pgmq, public, extensions, pg_temp`. The 27 functions
+  TypeScript calls directly switched in 2.1.0 (#469). Database ADR-001 had
+  assumed they already were, but every `fsm_core` function ran as the caller, so
+  `EXECUTE` alone would not have been enough. Internal helpers stay invoker and
+  run as the owner when called from an entry point.
+- **Table privileges only where `@pgfsm/db` touches a table directly**
+  (workerlet heartbeats, instance listing, `fsm_json` reads), as listed above.
+  Every state-changing write to instances and events goes through a definer
+  function.
+- `EXECUTE` is revoked from `PUBLIC` on every `fsm_core` function the owner owns
+  (extension members such as `pg_jsonschema`'s are skipped). There's **no
+  `ALTER DEFAULT PRIVILEGES`**: per-schema defaults can only add privileges, and
+  a global revoke would also hit the owner's functions outside `fsm_core`. A
+  pgTAP test fails CI on any `fsm_core` function executable by `PUBLIC`.
+- `CREATE ROLE` and function grants aren't captured by `supabase db diff`, so
+  they're kept in `schemas/40_access_control/` and copied by hand into the
+  versioned migration. The pgTAP test catches drift.
+- The schema owner is granted membership in the four roles (granted by name: on
+  Supabase PG 15.8 `GRANT … TO CURRENT_USER` segfaults the backend). Supabase's
+  `postgres` isn't a superuser, so without membership it couldn't `SET ROLE` to
+  test them.
 - **pg_cron and migrations are not granted to any of these roles.** They run as
   the schema owner (Supabase: `postgres`) in the DB-direct tier.
 - The migration creates `fsm_authenticator` without a password.
@@ -234,19 +253,19 @@ Supporting drivers:
 fsm_core.api_keys(
   id uuid primary key, name text unique not null,
   role text not null check (role in ('fsm_admin','fsm_operator')),
-  prefix text not null,        -- first 12 chars, shown in `key list`
+  prefix text not null,        -- role prefix + 8 key chars, shown in `key list`
   key_hash bytea not null unique,  -- sha256(key)
   created_at timestamptz not null default now(),
   last_used_at timestamptz, revoked_at timestamptz)
 ```
 
-- **Format:** `pgfsm_admin_<32 random bytes, base62>` or `pgfsm_op_<…>`. The
-  plaintext is returned **once**, at creation, and never stored.
-- **Functions** (`SECURITY DEFINER`, the same pattern as the rest of
-  `fsm_core`):
+- **Format:** `pgfsm_admin_<64 hex chars>` or `pgfsm_op_<…>` (two
+  `gen_random_uuid()` values, 244 random bits). The plaintext is returned
+  **once**, at creation, and never stored.
+- **Functions** (`SECURITY DEFINER`, `search_path = fsm_core, pg_temp`):
   - `create_api_key(name, role)` returns the plaintext. Admin only. Randomness
-    comes from a CSPRNG (`gen_random_bytes`, or core `gen_random_uuid()`
-    material where pgcrypto is unavailable), and the hash uses core `sha256()`.
+    comes from core `gen_random_uuid()` and the hash from core `sha256()`, so
+    pgcrypto isn't needed.
   - `revoke_api_key(id_or_name)` and `list_api_keys()`. Admin only.
   - `verify_api_key(key_hash)` returns the role, or null when the key is unknown
     or revoked. It's granted to `fsm_authenticator` only, and it updates
@@ -443,7 +462,7 @@ and the same stdout/stderr split. Generated projects change as follows:
       definition-load function or `create_api_key`. A login granted `fsm_admin`
       succeeds.
 - [ ] `create_api_key` returns a `pgfsm_admin_…`/`pgfsm_op_…` plaintext exactly
-      once. `api_keys` stores only its SHA-256 and a 12-char prefix.
+      once. `api_keys` stores only its SHA-256 and a display prefix.
       `verify_api_key` returns null after `revoke_api_key`.
 - [ ] The API returns `401` without a key or with an unknown or revoked key
       (revoked keys within ≤ 30 s), and `403` for an operator key on an admin
