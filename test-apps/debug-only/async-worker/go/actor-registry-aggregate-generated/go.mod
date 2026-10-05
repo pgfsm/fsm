@@ -1,4 +1,4 @@
-module debug-only/go-actors-registry-generated
+module debug-only/actor-registry-aggregate-generated
 
 go 1.19
 

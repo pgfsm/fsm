@@ -2,7 +2,7 @@ module pgfsm/async-worker-go
 
 go 1.25.0
 
-require debug-only/go-actors-registry-generated v0.0.0
+require debug-only/actor-registry-aggregate-generated v0.0.0
 
 require debug-only/creditcheck/v01/go/actors/checkreportstable v0.0.0 // indirect
 
@@ -18,6 +18,6 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace debug-only/go-actors-registry-generated => ./go-actors-registry-generated
+replace debug-only/actor-registry-aggregate-generated => ./actor-registry-aggregate-generated
 
 replace debug-only/creditcheck/v01/go/actors/checkreportstable => ./creditCheck/v01/actors/CheckReportsTable

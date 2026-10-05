@@ -14,17 +14,13 @@ import {
   RAISE_CANCEL,
 } from "./util.ts";
 import { ensureImportMapResolution } from "./import-resolution.ts";
-import {
-  operationFileBaseName,
-  operationLayout,
-} from "./operation-logic-scaffold.ts";
+import { operationFileBaseName } from "./operation-logic-scaffold.ts";
 import type { Json } from "@pgfsm/db/database.types";
 import type {
   ActorReference,
   FailedMethod,
   FsmMachineJson,
   FsmPluginValidationResult,
-  OperationLang,
 } from "./types/index.ts";
 
 type AnyFunction = (...args: unknown[]) => unknown;
@@ -77,16 +73,12 @@ export async function validateLanguageModules(
   for (const modType of moduleTypes) {
     const modDir =
       `${Deno.cwd()}/sync-worker/${lang}/${fsmName}/${fsmVersion}/${modType.type}`;
-    // Each kind folder is either one index.ts or one <name>/<name>.ts per
-    // operation (#460); `exported` collects what the stubs export, by name.
-    const singleFile =
-      await operationLayout(modDir, lang as OperationLang) === "single-file";
+    // One <name>/<name>.ts per operation (#460); `exported` collects what the
+    // stubs export, by name.
     const exported: Record<string, unknown> = {};
     for (const op of modType.ops) {
       const base = operationFileBaseName(op.name);
-      const modulePath = singleFile
-        ? `${modDir}/index.ts`
-        : `${modDir}/${base}/${base}.ts`;
+      const modulePath = `${modDir}/${base}/${base}.ts`;
       try {
         const mod = await import(`file://${modulePath}`);
         if (typeof mod[op.fnName] !== "function") {

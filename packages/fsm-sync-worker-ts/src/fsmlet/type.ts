@@ -79,7 +79,7 @@ export type FsmletHandle = {
 
 /**
  * One entry of the compiler-generated aggregate sync-operation registry
- * (`sync-worker/typescript/aggregate-generated-sync-operation-registry.ts` —
+ * (`sync-worker/typescript/sync-operation-registry-aggregate.generated.ts` —
  * see fsm-compiler-ts #338), mirroring the `SyncOperationRegistration` type
  * that generated file itself declares. Not imported from `@pgfsm/compiler`
  * directly — that generated file is per-project output living under the

@@ -37,11 +37,11 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   );
   assert(syncStat.isFile);
   const registryStat = await Deno.stat(
-    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/sync-operation-registry.generated.ts`,
   );
   assert(registryStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${APP_ROOT}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${APP_ROOT}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });
@@ -79,7 +79,7 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json to <writeRo
   );
   assert(
     await pathExists(
-      `${writeRoot}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${writeRoot}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     ),
   );
 });
@@ -101,7 +101,7 @@ Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and w
   );
   assert(actorStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${writeRoot}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${writeRoot}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });

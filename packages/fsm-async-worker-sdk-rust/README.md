@@ -22,14 +22,14 @@ depends on this crate:
 
 ```rust
 // async-worker/rust/src/main.rs (generated, abridged)
-#[path = "../rust-actors-registry.generated.rs"]
-mod generated_registry;
+#[path = "../actor_registry_aggregate.generated.rs"]
+mod actor_registry_aggregate;
 
 use pgfsm_async_worker_sdk::{run_actor_worker_cli, ActorRegistration};
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let registrations = generated_registry::actor_registrations()
+    let registrations = actor_registry_aggregate::actor_registrations()
         .into_iter()
         .map(|reg| ActorRegistration::new(
             reg.parent_fsm_name, reg.parent_fsm_version, reg.async_operation_type,

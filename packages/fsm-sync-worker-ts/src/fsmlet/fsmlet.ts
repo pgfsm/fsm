@@ -120,7 +120,7 @@ export async function startFsmlet(
   // pass options third) get told before any connection is opened (SPEC-006).
   if (!Array.isArray(fsmDefinitions)) {
     throw new TypeError(
-      "startFsmlet/runFsmlet: the third argument, fsmDefinitions, is required. Import FSM_DEFINITIONS from the generated aggregate-generated-sync-operation-registry.ts and call runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, options).",
+      "startFsmlet/runFsmlet: the third argument, fsmDefinitions, is required. Import FSM_DEFINITIONS from the generated sync-operation-registry-aggregate.generated.ts and call runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, options).",
     );
   }
 

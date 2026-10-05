@@ -20,7 +20,7 @@ const queueName = `${fsm_name}_${fsm_version}`;
 // The fsmlet's own handler lookup: every action/guard/delay of this version,
 // as generated for test-apps/debug-only.
 const { SYNC_OPERATION_REGISTRATIONS } = await import(
-  "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts"
+  "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/sync-operation-registry.generated.ts"
 );
 
 // Journey 1: initialTransition_event — FSM starts, no prior state

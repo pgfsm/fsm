@@ -7,7 +7,7 @@ import { runActorWorkerCli } from "@pgfsm/async-worker-sdk";
 // `npx @pgfsm/compiler -c generate-async-logic -f <plugin-root>` after actors
 // change; this import path is a build-time coupling to that one app's
 // FSM definitions by design (see #84 for why).
-import { ACTOR_REGISTRATIONS } from "./typescript-actors-registry.generated.ts";
+import { ACTOR_REGISTRATIONS } from "./actor-registry-aggregate.generated.ts";
 
 await configureLogging({
   levels: { [CATEGORY.worker]: isTerminal ? "debug" : "info" },
