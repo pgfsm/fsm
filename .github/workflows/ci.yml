@@ -245,6 +245,14 @@ jobs:
       - name: Apply schema (db reset)
         run: npm run supabase:db:reset
 
+      # cron.schedule() is a data-level call, so `supabase db diff` never puts
+      # it in migrations/ and `db reset` doesn't register the job. Run the real
+      # deploy step (SPEC-005), so the pg_cron pgTAP test checks what a deploy
+      # actually does (#468).
+      - name: Register pg_cron job (pgfsmctl)
+        working-directory: packages/fsm-ctl-ts
+        run: deno task pgfsmctl pgcron register --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
       # Runs the pgTAP suite in supabase/tests/ (see docs/guides/development.md).
       - name: Run pgTAP tests
         run: npm run supabase:test:db
