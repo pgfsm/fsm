@@ -9,6 +9,39 @@ export type Json =
 export type Database = {
   fsm_core: {
     Tables: {
+      api_keys: {
+        Row: {
+          created_at: string;
+          id: string;
+          key_hash: string;
+          last_used_at: string | null;
+          name: string;
+          prefix: string;
+          revoked_at: string | null;
+          role: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          key_hash: string;
+          last_used_at?: string | null;
+          name: string;
+          prefix: string;
+          revoked_at?: string | null;
+          role: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          key_hash?: string;
+          last_used_at?: string | null;
+          name?: string;
+          prefix?: string;
+          revoked_at?: string | null;
+          role?: string;
+        };
+        Relationships: [];
+      };
       async_operation_instance_and_async_operation_workerlet: {
         Row: {
           async_operation_instance_and_async_operation_workerlet_id: string;
@@ -794,6 +827,10 @@ export type Database = {
         };
         Returns: string[];
       };
+      create_api_key: {
+        Args: { input_name: string; input_role: string };
+        Returns: Json;
+      };
       create_async_op_queue_and_send_event_from_fsm_instance_id_v2: {
         Args: {
           action_type: string;
@@ -1094,6 +1131,18 @@ export type Database = {
         Args: { instance: Json; schema: Json };
         Returns: string[];
       };
+      list_api_keys: {
+        Args: never;
+        Returns: {
+          created_at: string;
+          id: string;
+          last_used_at: string;
+          name: string;
+          prefix: string;
+          revoked_at: string;
+          role: string;
+        }[];
+      };
       load_async_operation_meta_v2: {
         Args: {
           input_async_operation_language: string;
@@ -1230,6 +1279,7 @@ export type Database = {
         Args: { input_fsm_instance_id: string };
         Returns: Json;
       };
+      revoke_api_key: { Args: { input_id_or_name: string }; Returns: boolean };
       sanitize_text_array_to_ltree_array: {
         Args: { input_array: string[] };
         Returns: unknown[];
@@ -1418,6 +1468,7 @@ export type Database = {
         Args: { input_fsm_instance_id: string };
         Returns: boolean;
       };
+      verify_api_key: { Args: { input_key_hash: string }; Returns: string };
     };
     Enums: {
       async_operation_language: "typescript" | "python" | "rust" | "go" | "llm";

@@ -58,7 +58,9 @@ schema_paths = [
     "./../../supabase/schemas/25_async_operation_worker_v1/*.sql",
     "./../../supabase/schemas/30_async_operation_worker_v2/*.sql",
     "./../../supabase/schemas/35_fsm_sync_operation_worker_v1/*.sql",
-    "./../../supabase/schemas/*.sql"
+    "./../../supabase/schemas/*.sql",
+    # After every other folder: ALTERs and GRANTs on functions defined above (#469).
+    "./../../supabase/schemas/40_access_control/*.sql"
 ]
 
 [db.seed]
