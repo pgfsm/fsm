@@ -133,11 +133,13 @@ Gotchas:
   through `withoutKept`, otherwise `deno fmt`/`rustfmt`/`gofmt` would still
   rewrite the developer's file the run just kept. `go mod tidy` only ever runs
   in generated module directories.
-- **Missing-export report is a text check.** `requiredNames` are the stub
-  function names (`deriveTemplateInput(...).fnName`, so delay prefixes and Go
-  capitalization apply); a kept file that doesn't contain one as a whole
-  identifier is reported via `missingNames`. It's advisory —
-  `validate-sync-operation` is the real check.
+- **Missing-export report is a text check**, and since #460 it only matters for
+  a kept single-file `index.ts` (a per-operation stub is kept as is; a new
+  operation gets a new file). `requiredNames` are the stub function names
+  (`deriveTemplateInput(...).fnName`, so delay prefixes and Go capitalization
+  apply); a kept file that doesn't contain one as a whole identifier is reported
+  via `missingNames`. It's advisory — `validate-sync-operation` is the real
+  check.
 - **Scaffolded templates say "yours to edit"**, not "Do not edit"
   (`run-sync-worker.eta`, `run-async-worker.eta` ×2, `worker-sdk-main.eta` for
   Rust, `worker-sdk-cargo-toml.eta`, `worker-sdk-pyproject.eta`).
@@ -333,8 +335,8 @@ more files as its siblings at `<writeRootAbsPath>/sync-worker/typescript/`:
   (`deno run --allow-all --watch=. run-sync-worker.ts` — the explicit `=.`
   watches the whole `sync-worker/typescript/` directory, not just
   `run-sync-worker.ts`'s own import graph, so editing an
-  `<fsmName>/<fsmVersion>/actions|guards|delays/index.ts` stub restarts the
-  worker too, not only edits to files already wired into that graph).
+  `<fsmName>/<fsmVersion>/actions|guards|delays/` stub restarts the worker too,
+  not only edits to files already wired into that graph).
 
 `name` is `writeSyncWorkerRunner`'s optional `projectName` argument
 (`generate-sync-logic --project-name <name>`) when given, or else a random
@@ -654,6 +656,33 @@ needed a real FSM source tree (`realPluginRootAbsPath`) for its
 that reason is gone, but the behavior hasn't changed: a worker SDK build still
 needs a `generate-async-logic`/`generate-all` run at least once; only the
 aggregate _registry_ files are kept fresh by `create-async-logic` alone.
+
+## One stub per sync operation, layout chosen per folder (#460)
+
+`writeOperationModule` writes `<kind>/<name>/<name>.<ext>` per action, guard or
+delay (same shape as actors, so sync operations can later gain other languages,
+which need a directory per operation), unless the `<kind>/` folder already has
+its index module (`operationModuleFileName`: `index.ts`/`index.py`/`mod.rs`/
+`index.go`), in which case it keeps writing that one file (the pre-#460 layout).
+`operationLayout(kindDir, lang)` is the single check, read back from disk by
+every consumer:
+
+- `writeSyncOperationRegistry` builds each kind's `imports` from it (one import
+  per stub, or one from `index.ts`), so it must run after the stubs are written.
+- `validateLanguageModules` (`validate-sync-operation`) imports each
+  `<name>/<name>.ts`, or `index.ts`; `modules[kind]` is now the map of found
+  exports rather than the module object.
+- The folder name is `operationFileBaseName(name)` (the fsm.json name, sanitized
+  like `actorFileBaseName`); the export is still
+  `deriveTemplateInput(...).fnName`, so a delay `cooldown` lives in
+  `delays/cooldown/cooldown.ts` and exports `delaycooldown`.
+- `assertDistinctOperationFileNames` rejects two names of one kind that map to
+  the same folder ignoring case, before anything is written. Only in the
+  per-operation layout; a single file can hold both.
+- A kind with no operations writes nothing (the single-file layout wrote an
+  empty `index.ts`), so the folder stays per-operation.
+- No migration: removing a folder's `index.ts` (after moving the functions out)
+  is what switches it.
 
 ## Per-actor `maxConcurrency` in stubs (#435)
 

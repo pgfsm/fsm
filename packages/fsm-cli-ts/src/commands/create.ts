@@ -128,8 +128,12 @@ A pgfsm project, created by \`@pgfsm/cli\`.
 - \`sync-worker/typescript/\`: actions, guards and delays.
 - \`async-worker/{typescript,python,rust,go}/\`: actors, one project per language.
 
-Stub files under the worker folders are yours to implement. Re-running
-\`add\` never overwrites them.
+Stub files under the worker folders are yours to implement. Each action,
+guard, delay and actor has its own, e.g.
+\`sync-worker/typescript/<name>/<version>/guards/<guard>/<guard>.ts\`.
+Re-running \`add\` never overwrites them, and creates a new stub for each
+operation an FSM gains. Code shared by several operations can go in a sibling
+module such as \`guards/_shared.ts\`.
 
 ## Add an FSM
 

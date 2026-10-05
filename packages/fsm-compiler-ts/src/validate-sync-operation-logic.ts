@@ -14,12 +14,17 @@ import {
   RAISE_CANCEL,
 } from "./util.ts";
 import { ensureImportMapResolution } from "./import-resolution.ts";
+import {
+  operationFileBaseName,
+  operationLayout,
+} from "./operation-logic-scaffold.ts";
 import type { Json } from "@pgfsm/db/database.types";
 import type {
   ActorReference,
   FailedMethod,
   FsmMachineJson,
   FsmPluginValidationResult,
+  OperationLang,
 } from "./types/index.ts";
 
 type AnyFunction = (...args: unknown[]) => unknown;
@@ -41,11 +46,21 @@ export async function validateLanguageModules(
   const failedMethods: FailedMethod[] = [];
 
   const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
-  const prefixedDelays = delays.map((d) => `${DELAY_ACTION_NAME_PREFIX}${d}`);
+  // `name` is the fsm.json reference (and, in the per-operation layout, the
+  // stub's folder/file name); `fnName` is the export, delay-prefixed.
   const moduleTypes = [
-    { type: "actions", names: filteredActions },
-    { type: "guards", names: guards },
-    { type: "delays", names: prefixedDelays },
+    {
+      type: "actions",
+      ops: filteredActions.map((n) => ({ name: n, fnName: n })),
+    },
+    { type: "guards", ops: guards.map((n) => ({ name: n, fnName: n })) },
+    {
+      type: "delays",
+      ops: delays.map((n) => ({
+        name: n,
+        fnName: `${DELAY_ACTION_NAME_PREFIX}${n}`,
+      })),
+    },
   ];
 
   const modules: Record<string, Json> = {
@@ -58,46 +73,52 @@ export async function validateLanguageModules(
   // generate-sync-logic always writes to {cwd}/sync-worker/<lang>/<fsmName>/
   // <fsmVersion>/, independent of the source FSM tree's own location -- see
   // generate-sync-operation-logic.ts.
+  await ensureImportMapResolution();
   for (const modType of moduleTypes) {
     const modDir =
       `${Deno.cwd()}/sync-worker/${lang}/${fsmName}/${fsmVersion}/${modType.type}`;
-    const modulePath = `${modDir}/index.ts`;
-    try {
-      await ensureImportMapResolution();
-      const mod = await import(`file://${modulePath}`);
-      modules[modType.type] = mod;
-      for (const name of modType.names) {
-        if (typeof mod[name] !== "function") {
+    // Each kind folder is either one index.ts or one <name>/<name>.ts per
+    // operation (#460); `exported` collects what the stubs export, by name.
+    const singleFile =
+      await operationLayout(modDir, lang as OperationLang) === "single-file";
+    const exported: Record<string, unknown> = {};
+    for (const op of modType.ops) {
+      const base = operationFileBaseName(op.name);
+      const modulePath = singleFile
+        ? `${modDir}/index.ts`
+        : `${modDir}/${base}/${base}.ts`;
+      try {
+        const mod = await import(`file://${modulePath}`);
+        if (typeof mod[op.fnName] !== "function") {
           logger.info("{moduleType} does not export {name} as a function", {
             moduleType: modType.type,
-            name,
+            name: op.fnName,
           });
           failedMethods.push({
-            method: name,
+            method: op.fnName,
             moduleType: modType.type,
             modulePath: modulePath,
           });
         } else {
           logger.info("{moduleType} exports {name} as a function", {
             moduleType: modType.type,
-            name,
+            name: op.fnName,
           });
+          exported[op.fnName] = mod[op.fnName];
         }
-      }
-    } catch (err) {
-      logger.error(
-        "Failed to import module for {moduleType} from {modulePath}: {error}",
-        { moduleType: modType.type, modulePath, error: err },
-      );
-      modules[modType.type] = null;
-      for (const name of modType.names) {
+      } catch (err) {
+        logger.error(
+          "Failed to import module for {moduleType} from {modulePath}: {error}",
+          { moduleType: modType.type, modulePath, error: err },
+        );
         failedMethods.push({
-          method: name,
+          method: op.fnName,
           moduleType: modType.type,
           modulePath: modulePath,
         });
       }
     }
+    modules[modType.type] = exported as Json;
   }
 
   return {

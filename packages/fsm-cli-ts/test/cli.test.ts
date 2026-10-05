@@ -99,7 +99,7 @@ Deno.test("create lays out the project with all four async-worker languages and 
       "README.md",
       "fsm/creditCheck/v01/fsm.json",
       "sync-worker/typescript/run-sync-worker.ts",
-      "sync-worker/typescript/creditCheck/v01/actions/index.ts",
+      "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
       "async-worker/typescript/run-async-worker.ts",
       "async-worker/python/run_async_worker.py",
       "async-worker/python/python_actors_registry_generated.py",
@@ -201,7 +201,7 @@ Deno.test("add without a name/version it can't infer fails in --no-input mode, n
 Deno.test("add from a subdirectory targets the project root and never touches existing stubs", async () => {
   const stub = join(
     APP,
-    "sync-worker/typescript/creditCheck/v01/actions/index.ts",
+    "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
   );
   const edited = (await Deno.readTextFile(stub)) + "// implemented\n";
   await Deno.writeTextFile(stub, edited);
@@ -233,7 +233,10 @@ Deno.test("add from a subdirectory targets the project root and never touches ex
   assertEquals(await exists(join(APP, "fsm/checkout/v01/machine.ts")), false);
   assert(
     await exists(
-      join(APP, "sync-worker/typescript/checkout/v01/actions/index.ts"),
+      join(
+        APP,
+        "sync-worker/typescript/checkout/v01/actions/assignSSN/assignSSN.ts",
+      ),
     ),
   );
   assertEquals(await Deno.readTextFile(stub), edited);
@@ -291,7 +294,10 @@ Deno.test("add --dry-run writes nothing, not even pgfsm.config.json", async () =
 });
 
 Deno.test("add --force regenerates a version after its source changes and keeps an edited stub", async () => {
-  const stub = join(APP, "sync-worker/typescript/checkout/v01/guards/index.ts");
+  const stub = join(
+    APP,
+    "sync-worker/typescript/checkout/v01/guards/allSucceeded/allSucceeded.ts",
+  );
   const edited = (await Deno.readTextFile(stub)) + "// mine\n";
   await Deno.writeTextFile(stub, edited);
   const fsmJson = join(APP, "fsm/checkout/v01/fsm.json");
@@ -312,6 +318,37 @@ Deno.test("add --force regenerates a version after its source changes and keeps 
   assertEquals(code, 0, out);
   assertEquals(await Deno.readTextFile(stub), edited);
   assert((await Deno.readTextFile(fsmJson)).length > 10);
+});
+
+Deno.test("add --force after the source gains a guard creates its stub and imports it, with nothing to add by hand (#460)", async () => {
+  const source = join(DESIGNS, "grows.json");
+  await copy(`${EXAMPLE}/creditCheck/v01/fsm.json`, source);
+  const argv = ["add", source, "-N", "grows", "-V", "v01"];
+  assertEquals((await pgfsm(argv, APP)).code, 0);
+
+  // The design now references a guard no stub exists for yet.
+  const json = await Deno.readTextFile(source);
+  await Deno.writeTextFile(
+    source,
+    json.replaceAll('"allSucceeded"', '"allChecksPassed"'),
+  );
+  const { code, out } = await pgfsm([...argv, "--force"], APP);
+  assertEquals(code, 0, out);
+  assertEquals(out.includes("missing exports"), false, out);
+
+  const version = join(APP, "sync-worker/typescript/grows/v01");
+  assertStringIncludes(
+    await Deno.readTextFile(
+      join(version, "guards/allChecksPassed/allChecksPassed.ts"),
+    ),
+    "export function allChecksPassed(",
+  );
+  assertStringIncludes(
+    await Deno.readTextFile(
+      join(version, "generated-sync-operation-registry.ts"),
+    ),
+    'import { allChecksPassed } from "./guards/allChecksPassed/allChecksPassed.ts";',
+  );
 });
 
 Deno.test("sync is not a command in v1", async () => {

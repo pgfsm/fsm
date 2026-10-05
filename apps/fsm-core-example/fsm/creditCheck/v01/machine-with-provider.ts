@@ -5,34 +5,29 @@ import { determineMiddleScore } from "../../../../../test-apps/debug-only/async-
 import { generateInterestRates } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/generateInterestRates/generateInterestRates.ts";
 import { verifyCredentials } from "../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts";
 
-import {
-  assignEquiGavinScore,
-  assignEquiGavinScoreFetch,
-  assignErrorMessage,
-  assignFirstName,
-  assignGavperianScore,
-  assignGavperianScoreFetch,
-  assignGavUnionScore,
-  assignGavUnionScoreFetch,
-  assignInterestRateOptions,
-  assignLastName,
-  assignMiddleScore,
-  assignSSN,
-  emailSalesTeam,
-  emailUser,
-  saveCreditProfile,
-  saveReportEquiGavin,
-  saveReportGavperian,
-  saveReportGavUnion,
-  // assignCreditScoreError,
-} from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/index.ts";
+import { assignEquiGavinScore } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignEquiGavinScore/assignEquiGavinScore.ts";
+import { assignEquiGavinScoreFetch } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignEquiGavinScoreFetch/assignEquiGavinScoreFetch.ts";
+import { assignErrorMessage } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignErrorMessage/assignErrorMessage.ts";
+import { assignFirstName } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignFirstName/assignFirstName.ts";
+import { assignGavperianScore } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignGavperianScore/assignGavperianScore.ts";
+import { assignGavperianScoreFetch } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignGavperianScoreFetch/assignGavperianScoreFetch.ts";
+import { assignGavUnionScore } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignGavUnionScore/assignGavUnionScore.ts";
+import { assignGavUnionScoreFetch } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignGavUnionScoreFetch/assignGavUnionScoreFetch.ts";
+import { assignInterestRateOptions } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignInterestRateOptions/assignInterestRateOptions.ts";
+import { assignLastName } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignLastName/assignLastName.ts";
+import { assignMiddleScore } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignMiddleScore/assignMiddleScore.ts";
+import { assignSSN } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts";
+import { emailSalesTeam } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/emailSalesTeam/emailSalesTeam.ts";
+import { emailUser } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/emailUser/emailUser.ts";
+import { saveCreditProfile } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/saveCreditProfile/saveCreditProfile.ts";
+import { saveReportEquiGavin } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/saveReportEquiGavin/saveReportEquiGavin.ts";
+import { saveReportGavperian } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/saveReportGavperian/saveReportGavperian.ts";
+import { saveReportGavUnion } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/saveReportGavUnion/saveReportGavUnion.ts";
 
-import {
-  allSucceeded,
-  equiGavinReportFound,
-  gavperianReportFound,
-  gavUnionReportFound,
-} from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/index.ts";
+import { allSucceeded } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/allSucceeded/allSucceeded.ts";
+import { equiGavinReportFound } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/equiGavinReportFound/equiGavinReportFound.ts";
+import { gavperianReportFound } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/gavperianReportFound/gavperianReportFound.ts";
+import { gavUnionReportFound } from "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/gavUnionReportFound/gavUnionReportFound.ts";
 import { machine } from "./machine.ts";
 export const machineWithProvider = machine.provide({
   // types: {
