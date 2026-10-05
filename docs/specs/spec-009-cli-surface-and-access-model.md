@@ -350,17 +350,19 @@ For each command:
 | 2    | Usage error (bad flags or arguments, unsupported tier)                |
 | 3    | Authentication or authorization failed (401/403, or Postgres `42501`) |
 | 4    | Not found (404, or unknown FSM/instance/key)                          |
-| 5    | Check failed: a status command ran and found an unhealthy state       |
+| 5    | Check failed: a status or check command ran and found a problem       |
 | 130  | Interrupted (Ctrl-C)                                                  |
 
-SPEC-008's `actors status` therefore exits **5**, not 2, when an actor is
-`no_worker`/`backlogged`. #420 should adopt this before it merges.
+SPEC-008 (#420) follows this: `pgfsmctl actors status` exits **5**, not 2, when
+an actor is `no_worker`/`backlogged`, and `pgfsm check` exits 5 when it finds
+stale files, missing actors or placeholders. Both take `-o json` instead of
+`--json`.
 
 ### 7. `pgfsm` (project CLI) and generated projects
 
 `pgfsm`'s commands are unchanged (SPEC-004). It adopts the same exit-code table
-(0/1/2/130, and 4 for a missing project) and the same stdout/stderr split.
-Generated projects change as follows:
+(0/1/2/130, 4 for a missing project, and 5 for a failed `pgfsm check`, SPEC-008)
+and the same stdout/stderr split. Generated projects change as follows:
 
 - `package.json` scripts:
   - `db:load` → `pgfsmctl fsm load fsm`. It picks its tier by §5.
