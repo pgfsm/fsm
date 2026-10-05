@@ -122,7 +122,8 @@ A2 + B1 + C1, plus a non-fatal fsmlet warning. The deciding drivers:
 
 ### D2 — `pgfsm check` (`@pgfsm/cli`)
 
-`pgfsm check [--allow-placeholders] [--json]`, run from within a pgfsm project:
+`pgfsm check [--allow-placeholders] [-o table|json]`, run from within a pgfsm
+project:
 
 1. **Staleness.** For every FSM version under `fsm/`, run the same generation
    `pgfsm add --force` would, into memory, for **generated-only** files: sync
@@ -136,10 +137,10 @@ A2 + B1 + C1, plus a non-fatal fsmlet warning. The deciding drivers:
    (`creditCheck/v01 actor checkBureauRust (rust): not in rust manifest`).
 3. **Placeholders.** Every actor implementation file matching D1's marker or
    legacy rule is listed as `placeholder`.
-4. **Exit code:** non-zero if anything in 1 or 2 fails, or if any placeholder
-   exists, unless `--allow-placeholders` is passed (for local development).
-   `--json` emits the same findings as machine-readable output for CI
-   annotations.
+4. **Exit code:** `5` (check failed, SPEC-009 §6) if anything in 1 or 2 fails,
+   or if any placeholder exists, unless `--allow-placeholders` is passed (for
+   local development). `-o json` emits the same findings as machine-readable
+   output on stdout for CI annotations.
 
 `pgfsm check` needs no database and doesn't read any other pgfsm project.
 
@@ -193,14 +194,16 @@ one row per actor identity:
 
 ### D5 — `pgfsmctl actors status` (`@pgfsm/ctl`)
 
-`pgfsmctl actors status [--max-age <seconds, default 60>] [--fsm <name>[/<version>]] [--json] [--db-url]`:
+`pgfsmctl actors status [--max-age <seconds, default 60>] [--fsm <name>[/<version>]] [-o table|json] [--db-url]`:
 
 - Prints one row per actor: identity, status, workers, capacity, in-flight,
   queue length, oldest age.
-- **Exit code:** `0` when every actor is `ok` or `unserved`, and `2` when any is
-  `no_worker` or `backlogged`. So `pgfsmctl actors status` in a cron or
-  Kubernetes CronJob _is_ the stuck-queue alert, with no extra infrastructure.
-  Other failures (DB unreachable) exit `1`.
+- **Exit code:** `0` when every actor is `ok` or `unserved`, and `5` (check
+  failed, SPEC-009 §6) when any is `no_worker` or `backlogged`. So
+  `pgfsmctl actors status` in a cron or Kubernetes CronJob _is_ the stuck-queue
+  alert, with no extra infrastructure. Other failures (DB unreachable) exit `1`,
+  and usage errors exit `2`, so a mistyped flag in a CronJob can't be mistaken
+  for an unhealthy actor.
 
 ### D6 — fsmlet startup warning (`@pgfsm/sync-worker`)
 
@@ -260,13 +263,13 @@ one row per actor identity:
 
 - [ ] New actor stubs in TS, Python, Rust and Go contain
       `pgfsm:placeholder-stub` and keep their current dummy return.
-- [ ] `pgfsm check` reports a stale file, and exits non-zero, when `fsm.json`
-      has changed without regeneration (for example, an actor's
+- [ ] `pgfsm check` reports a stale file, and exits 5, when `fsm.json` has
+      changed without regeneration (for example, an actor's
       `asyncOperationLanguage` changed).
 - [ ] `pgfsm check` names each actor in `fsm.json` that is missing from its
       language's manifest.
 - [ ] `pgfsm check` lists every actor file that has the marker, or the legacy
-      `TODO: implement actor logic` text, and exits non-zero unless
+      `TODO: implement actor logic` text, and exits 5 unless
       `--allow-placeholders` is passed.
 - [ ] `pgfsm check` on a freshly regenerated project with all actors implemented
       exits 0 and needs no database.
@@ -276,9 +279,9 @@ one row per actor identity:
       status within 3 heartbeat intervals. Its row is removed after 10 minutes.
 - [ ] A graceful gateway stop deletes its heartbeat row.
 - [ ] With messages in an actor's queue and no live worker for it,
-      `pgfsmctl actors status` reports `no_worker` and exits 2.
+      `pgfsmctl actors status` reports `no_worker` and exits 5.
 - [ ] With live workers and an oldest message older than `--max-age`, the status
-      is `backlogged` and the exit code is 2.
+      is `backlogged` and the exit code is 5.
 - [ ] An actor declared in a loaded definition that has no worker and no queued
       messages reports `unserved` and exit 0.
 - [ ] The gateway's heartbeat is one statement per interval per replica,
