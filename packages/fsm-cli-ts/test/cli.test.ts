@@ -102,11 +102,11 @@ Deno.test("create lays out the project with all four async-worker languages and 
       "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
       "async-worker/typescript/run-async-worker.ts",
       "async-worker/python/run_async_worker.py",
-      "async-worker/python/python_actors_registry_generated.py",
+      "async-worker/python/actor_registry_aggregate_generated.py",
       "async-worker/rust/src/main.rs",
-      "async-worker/rust/rust-actors-registry.generated.rs",
+      "async-worker/rust/actor_registry_aggregate.generated.rs",
       "async-worker/go/main.go",
-      "async-worker/go/go-actors-registry-generated/registry.go",
+      "async-worker/go/actor-registry-aggregate-generated/registry.go",
     ]
   ) {
     assert(await exists(join(APP, f)), `missing ${f}`);
@@ -345,7 +345,7 @@ Deno.test("add --force after the source gains a guard creates its stub and impor
   );
   assertStringIncludes(
     await Deno.readTextFile(
-      join(version, "generated-sync-operation-registry.ts"),
+      join(version, "sync-operation-registry.generated.ts"),
     ),
     'import { allChecksPassed } from "./guards/allChecksPassed/allChecksPassed.ts";',
   );

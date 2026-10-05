@@ -21,13 +21,13 @@ Deno.test("generate-sync-logic writes FSM_DEFINITION with the fsm.json's canonic
     const tsDir = `${dir}/sync-worker/typescript`;
 
     const registry = await Deno.readTextFile(
-      `${tsDir}/creditCheck/v01/generated-sync-operation-registry.ts`,
+      `${tsDir}/creditCheck/v01/sync-operation-registry.generated.ts`,
     );
     const digest = registry.match(/fsmJsonSha256:\s*"([0-9a-f]{64})"/)?.[1];
     assertEquals(digest, await fsmJsonDigest(JSON.parse(text)));
 
     const aggregate = await Deno.readTextFile(
-      `${tsDir}/aggregate-generated-sync-operation-registry.ts`,
+      `${tsDir}/sync-operation-registry-aggregate.generated.ts`,
     );
     assertMatch(aggregate, /FSM_DEFINITION as creditcheck_v01_definition/);
     assertMatch(

@@ -6,7 +6,7 @@ import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
 import {
   FSM_DEFINITIONS,
   SYNC_OPERATION_REGISTRATIONS,
-} from "./aggregate-generated-sync-operation-registry.ts";
+} from "./sync-operation-registry-aggregate.generated.ts";
 import { runFsmlet } from "@pgfsm/sync-worker";
 
 dotenv.config({ path: ".env" });

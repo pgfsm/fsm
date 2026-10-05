@@ -23,7 +23,7 @@ import { runFsmlet } from "@pgfsm/sync-worker";
 import {
   FSM_DEFINITIONS,
   SYNC_OPERATION_REGISTRATIONS,
-} from "./aggregate-generated-sync-operation-registry.ts";
+} from "./sync-operation-registry-aggregate.generated.ts";
 
 await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
@@ -50,7 +50,7 @@ The check is mandatory; there's no option to turn it off.
 
 Upgrading from 0.2: `runFsmlet`/`startFsmlet` take `fsmDefinitions` as a
 required third argument, before `options`. Add `FSM_DEFINITIONS` to the import
-from `aggregate-generated-sync-operation-registry.ts` and pass it as above.
+from `sync-operation-registry-aggregate.generated.ts` and pass it as above.
 
 Other exports:
 

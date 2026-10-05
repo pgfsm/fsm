@@ -319,7 +319,7 @@ Deno.test("cli generate-async-logic folder mode writes actors + aggregate regist
   );
   assert(actorStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${cwd}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${cwd}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assertStringIncludes(aggregateContent, "creditcheck_v01");
 });
@@ -335,7 +335,7 @@ Deno.test("cli generate-sync-logic runs successfully on example folder, output a
   assertEquals(code, 0);
   // sync-worker/ is a direct child of cwd, never inside FSM_FOLDER/--folder.
   const registryContent = await Deno.readTextFile(
-    `${cwd}/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts`,
+    `${cwd}/sync-worker/typescript/creditCheck/v01/sync-operation-registry.generated.ts`,
   );
   assertStringIncludes(registryContent, 'fsmName: "creditCheck"');
   assertStringIncludes(registryContent, 'fsmVersion: "v01"');
@@ -440,7 +440,7 @@ Deno.test("cli generate-sync-logic --folder fsm.json + --fsm-name/--fsm-version 
   }
   assertEquals(await pathExists(`${outDir}/actions/index.ts`), false);
   const registryStat = await Deno.stat(
-    `${outDir}/generated-sync-operation-registry.ts`,
+    `${outDir}/sync-operation-registry.generated.ts`,
   );
   assert(registryStat.isFile);
   const fsmJsonCopyStat = await Deno.stat(`${outDir}/fsm.json`);
@@ -532,7 +532,7 @@ Deno.test("cli generate-async-logic --folder fsm.json + --fsm-name/--fsm-version
   );
   await Deno.stat(`${outDir}/actors/index.ts`);
   const registryStat = await Deno.stat(
-    `${outDir}/generated-registry.ts`,
+    `${outDir}/actor-registry.generated.ts`,
   );
   assert(registryStat.isFile);
 });
@@ -556,7 +556,7 @@ Deno.test("cli generate-async-logic single-fsm.json mode refreshes the aggregate
   );
   assertEquals(code, 0);
   const aggregateContent = await Deno.readTextFile(
-    `${cwd}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${cwd}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   // SINGLE_FSM_JSON is creditCheck/v01 -- its actors should be in the
   // rebuilt aggregate even though this run only scaffolded this one fsm.json,
@@ -566,7 +566,7 @@ Deno.test("cli generate-async-logic single-fsm.json mode refreshes the aggregate
   // cwd-anchored tree, not back-referenced into FSM_FOLDER's own location.
   assertStringIncludes(
     aggregateContent,
-    "./creditCheck/v01/generated-registry.ts",
+    "./creditCheck/v01/actor-registry.generated.ts",
   );
 });
 
@@ -602,7 +602,7 @@ Deno.test("cli generate-all folder mode runs generate-fsm-json, generate-async-l
   );
   assert(syncStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${APP_ROOT}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${APP_ROOT}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assertStringIncludes(aggregateContent, "creditcheck_v01");
 });
@@ -699,7 +699,7 @@ Deno.test("cli generate-all machine.ts mode writes fsm.json to {cwd}/fsm/<N>/<V>
   );
   assert(
     await pathExists(
-      `${cwd}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${cwd}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     ),
   );
 });
@@ -773,7 +773,7 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
     ),
   );
   const aggregateContent = await Deno.readTextFile(
-    `${cwd}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${cwd}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assertStringIncludes(aggregateContent, "creditcheck_v01");
 });

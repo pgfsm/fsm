@@ -24,7 +24,7 @@ from pgfsm.async_worker_sdk import run_actor_worker_cli
 # definitions by design (see #84 for why). A plain static import works
 # because this module is always a sibling of run_async_worker.py, which
 # Python puts on sys.path automatically for the running script.
-from python_actors_registry_generated import ACTOR_REGISTRATIONS
+from actor_registry_aggregate_generated import ACTOR_REGISTRATIONS
 
 if __name__ == "__main__":
     logging.basicConfig(

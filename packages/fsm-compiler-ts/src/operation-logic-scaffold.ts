@@ -23,7 +23,7 @@ import { withoutKept, writeOwnedFile } from "./write-policy.ts";
 import { getPreamble, getTemplate } from "./scaffold-templates/registry.ts";
 import { render as renderTsActorsRegistry } from "./scaffold-templates/eta/typescript/actors-registry.generated.ts";
 import { render as renderTsSyncOperationRegistry } from "./scaffold-templates/eta/typescript/sync-operation-registry.generated.ts";
-import { render as renderTsSyncOperationRegistryAggregate } from "./scaffold-templates/eta/typescript/aggregate-generated-sync-operation-registry.generated.ts";
+import { render as renderTsSyncOperationRegistryAggregate } from "./scaffold-templates/eta/typescript/sync-operation-registry-aggregate.generated.ts";
 import { render as renderTsRunSyncWorker } from "./scaffold-templates/eta/typescript/run-sync-worker.generated.ts";
 import { render as renderTsSyncWorkerDenoJson } from "./scaffold-templates/eta/typescript/sync-worker-deno-json.generated.ts";
 import { render as renderTsActorsRegistryAggregate } from "./scaffold-templates/eta/typescript/actors-registry-aggregate.generated.ts";
@@ -55,20 +55,6 @@ export const SUPPORTED_OPERATION_LANGS: OperationLang[] = [
 
 export function isOperationLang(value: string): value is OperationLang {
   return (SUPPORTED_OPERATION_LANGS as string[]).includes(value);
-}
-
-/** The index-module filename written for a given language. */
-export function operationModuleFileName(lang: OperationLang): string {
-  switch (lang) {
-    case "typescript":
-      return "index.ts";
-    case "python":
-      return "index.py";
-    case "rust":
-      return "mod.rs";
-    case "go":
-      return "index.go";
-  }
 }
 
 /** The source-file extension for a given language. */
@@ -128,41 +114,8 @@ export function renderOperationModule(
 }
 
 /**
- * How one `<kind>/` folder holds its operation stubs (#460):
- *
- * - `"per-operation"` — one scaffolded file per operation at
- *   `<kind>/<name>/<name>.<ext>`, the same shape as actors, so a new operation
- *   gets its own new stub under `--overwrite generated-only`.
- * - `"single-file"` — every operation of the kind in one scaffolded
- *   `<kind>/index.<ext>` (the layout before #460).
- *
- * Chosen per folder by {@linkcode operationLayout}: an existing index module
- * means single-file, so a project scaffolded before #460 keeps working
- * unchanged; anything else gets the per-operation layout.
- */
-export type OperationLayout = "per-operation" | "single-file";
-
-/**
- * The layout of the `<kind>/` folder at `kindDir`: `"single-file"` when its
- * index module (`index.ts`, `index.py`, `mod.rs`, `index.go`) exists,
- * `"per-operation"` otherwise — including when the folder doesn't exist yet.
- */
-export async function operationLayout(
-  kindDir: string,
-  lang: OperationLang,
-): Promise<OperationLayout> {
-  try {
-    await Deno.stat(`${kindDir}/${operationModuleFileName(lang)}`);
-    return "single-file";
-  } catch (err) {
-    if (isNotFoundError(err)) return "per-operation";
-    throw err;
-  }
-}
-
-/**
- * Base name (folder and file, without extension) of one operation's stub in
- * the per-operation layout: `<kind>/<base>/<base>.<ext>`. Sanitized the same
+ * Base name (folder and file, without extension) of one operation's stub:
+ * `<kind>/<base>/<base>.<ext>`. Sanitized the same
  * way as an actor's {@linkcode actorFileBaseName}.
  */
 export function operationFileBaseName(name: string): string {
@@ -170,7 +123,7 @@ export function operationFileBaseName(name: string): string {
 }
 
 /**
- * Throws when two of `names` would get the same per-operation folder on a
+ * Throws when two of `names` would get the same stub folder on a
  * case-insensitive file system (macOS, Windows) — e.g. `checkBattery` and
  * `CheckBattery` — or the same folder after sanitizing. One would silently
  * overwrite the other's stub there.
@@ -195,15 +148,12 @@ export function assertDistinctOperationFileNames(
 }
 
 /**
- * Writes one kind's operation stubs to `<absFolderPath>/<lang>/<kind>/`, or
- * `<absFolderPath>/<lang>/<subPath>/<kind>/` when `subPath` is given —
- * `generate-sync-logic`'s own caller uses this to insert
- * `<fsmName>/<fsmVersion>` between the language and the kind, so multiple
- * FSMs/versions writing under the same `<lang>` root don't collide.
- *
- * The folder's {@linkcode OperationLayout} decides the shape: one
- * `<name>/<name>.<ext>` stub per operation, or the single index module when
- * that already exists. Returns the layout used.
+ * Writes one kind's operation stubs (#460): one scaffolded
+ * `<name>/<name>.<ext>` per operation — the same shape as actors — under
+ * `<absFolderPath>/<lang>/<kind>/`, or `<absFolderPath>/<lang>/<subPath>/<kind>/`
+ * when `subPath` is given (`generate-sync-logic`'s own caller inserts
+ * `<fsmName>/<fsmVersion>` there, so multiple FSMs/versions writing under the
+ * same `<lang>` root don't collide). A kind with no operations writes nothing.
  */
 export async function writeOperationModule(
   absFolderPath: string,
@@ -211,23 +161,10 @@ export async function writeOperationModule(
   kind: OperationKind,
   names: string[],
   subPath?: string,
-): Promise<OperationLayout> {
+): Promise<void> {
   const dir = subPath
     ? `${absFolderPath}/${lang}/${subPath}/${kind}`
     : `${absFolderPath}/${lang}/${kind}`;
-  const layout = await operationLayout(dir, lang);
-
-  if (layout === "single-file") {
-    const file = `${dir}/${operationModuleFileName(lang)}`;
-    await writeOwnedFile(
-      file,
-      renderOperationModule(lang, kind, names),
-      "scaffolded",
-      [...new Set(names)].map((n) => deriveTemplateInput(kind, n, lang).fnName),
-    );
-    return layout;
-  }
-
   assertDistinctOperationFileNames(kind, names);
   for (const name of new Set(names)) {
     const base = operationFileBaseName(name);
@@ -237,14 +174,12 @@ export async function writeOperationModule(
       `${opDir}/${base}.${operationFileExtension(lang)}`,
       renderOperationModule(lang, kind, [name]),
       "scaffolded",
-      [deriveTemplateInput(kind, name, lang).fnName],
     );
   }
-  return layout;
 }
 
 const SYNC_OPERATION_REGISTRY_FILE_NAME =
-  "generated-sync-operation-registry.ts";
+  "sync-operation-registry.generated.ts";
 
 /** One `SyncOperationRegistration` entry's import-vs-registered-name pair. */
 type SyncOperationEntry = { name: string; importName: string };
@@ -256,9 +191,7 @@ type SyncOperationImport = { names: string[]; path: string };
  * One `writeOperationModule` kind's contribution to the registry: its
  * singular {@linkcode SyncOperationType} (what a registration entry's
  * `syncOperationType` is), the `import` statements that bring its handlers in
- * (one per stub file in the per-operation layout, one for the index module in
- * the single-file layout — see {@linkcode OperationLayout}), and the names to
- * register from it. Delay handlers are exported under a
+ * (one per stub file), and the names to register from it. Delay handlers are exported under a
  * `${DELAY_ACTION_NAME_PREFIX}`-prefixed name (see `derive-template-input.ts`)
  * — `importName` carries that prefix, `name`/`syncOperationName` stays the
  * original `fsm.json` reference.
@@ -274,20 +207,11 @@ type SyncOperationModuleKind = Extract<
   "actions" | "guards" | "delays"
 >;
 
-async function syncOperationImports(
-  absSyncWorkerLangFolderPath: string,
+function syncOperationImports(
   lang: OperationLang,
   moduleKind: SyncOperationModuleKind,
   entries: SyncOperationEntry[],
-): Promise<SyncOperationImport[]> {
-  if (entries.length === 0) return [];
-  const kindDir = `${absSyncWorkerLangFolderPath}/${moduleKind}`;
-  if (await operationLayout(kindDir, lang) === "single-file") {
-    return [{
-      names: entries.map((e) => e.importName),
-      path: `./${moduleKind}/${operationModuleFileName(lang)}`,
-    }];
-  }
+): SyncOperationImport[] {
   return entries.map((e) => {
     const base = operationFileBaseName(e.name);
     return {
@@ -298,13 +222,11 @@ async function syncOperationImports(
 }
 
 /**
- * Writes one version's `generated-sync-operation-registry.ts` — the
+ * Writes one version's `sync-operation-registry.generated.ts` — the
  * sync-logic counterpart of {@linkcode writeActorsRegistry}, combining that
  * version's action/guard/delay stubs (already written under
- * `<absSyncWorkerLangFolderPath>/{actions,guards,delays}/` by
- * {@linkcode writeOperationModule}, whose per-folder
- * {@linkcode OperationLayout} decides each kind's import paths — read back
- * from disk here) into one self-describing
+ * `<absSyncWorkerLangFolderPath>/{actions,guards,delays}/<name>/<name>.ts` by
+ * {@linkcode writeOperationModule}) into one self-describing
  * `SyncOperationRegistration[]` a worker can iterate without importing each
  * kind's module separately. Written as a sibling of those three kind folders
  * — i.e. into `absSyncWorkerLangFolderPath` itself, not a `<kind>/` beneath
@@ -350,17 +272,12 @@ export async function writeSyncOperationRegistry(
       })),
     },
   ];
-  const groups: SyncOperationGroup[] = await Promise.all(
-    kinds.map(async ({ kind, moduleKind, entries }) => ({
+  const groups: SyncOperationGroup[] = kinds.map(
+    ({ kind, moduleKind, entries }) => ({
       kind,
-      imports: await syncOperationImports(
-        absSyncWorkerLangFolderPath,
-        lang,
-        moduleKind,
-        entries,
-      ),
+      imports: syncOperationImports(lang, moduleKind, entries),
       entries,
-    })),
+    }),
   );
 
   await Deno.mkdir(absSyncWorkerLangFolderPath, { recursive: true });
@@ -381,13 +298,13 @@ export async function writeSyncOperationRegistry(
 }
 
 const AGGREGATE_SYNC_OPERATION_REGISTRY_FILE_NAME =
-  "aggregate-generated-sync-operation-registry.ts";
+  "sync-operation-registry-aggregate.generated.ts";
 
 /**
  * Discovers every `<fsmName>/<fsmVersion>` group already written under
  * `absSyncWorkerTypescriptDir` — i.e. that has its own
  * {@linkcode writeSyncOperationRegistry} output
- * (`generated-sync-operation-registry.ts`) — the sync-logic counterpart of
+ * (`sync-operation-registry.generated.ts`) — the sync-logic counterpart of
  * `generate-async-operation-logic.ts`'s
  * {@linkcode collectRegisteredActorsFromAsyncWorkerDir}, simplified: sync
  * logic writes no manifest of its own, so `fsmName`/`fsmVersion` are read
@@ -445,9 +362,9 @@ async function collectSyncOperationRegistryGroups(
 
 /**
  * Writes ONE aggregate sync-operation registry at
- * `<absSyncWorkerTypescriptDir>/aggregate-generated-sync-operation-registry.ts`
+ * `<absSyncWorkerTypescriptDir>/sync-operation-registry-aggregate.generated.ts`
  * — combining every `<fsmName>/<fsmVersion>`'s own
- * `generated-sync-operation-registry.ts` (see
+ * `sync-operation-registry.generated.ts` (see
  * {@linkcode writeSyncOperationRegistry}) into one
  * `SYNC_OPERATION_REGISTRATIONS` array, the same "one fixed file a worker
  * build imports" shape {@linkcode writeAggregateActorsRegistry} gives async
@@ -491,7 +408,7 @@ const SYNC_WORKER_DENO_JSON_FILE_NAME = "deno.json";
  * `<absSyncWorkerTypescriptDir>/run-sync-worker.ts`, plus the `deno.json`
  * declaring `@pgfsm/sync-worker` as an npm import so that entry point's bare
  * specifier resolves — both siblings of
- * `aggregate-generated-sync-operation-registry.ts`
+ * `sync-operation-registry-aggregate.generated.ts`
  * (see {@linkcode writeAggregateSyncOperationRegistry}), which `run-sync-worker.ts`
  * imports by relative path. `run-sync-worker.ts` itself is static content, no
  * per-project templating: it just imports `SYNC_OPERATION_REGISTRATIONS` and
@@ -884,9 +801,9 @@ export async function writeActorsBarrel(
 }
 
 const ACTORS_REGISTRY_FILE_NAME: Record<ActorsBarrelLang, string> = {
-  typescript: "generated-registry.ts",
-  python: "generated_registry.py",
-  rust: "generated_registry.rs",
+  typescript: "actor-registry.generated.ts",
+  python: "actor_registry_generated.py",
+  rust: "actor_registry.generated.rs",
 };
 
 /**
@@ -1028,7 +945,7 @@ export async function formatRustFilesBestEffort(
  * cli/main, sdk) and per-`<fsmName>/<fsmVersion>` actor output
  * alike — one shared root per language so the whole worker SDK ships from a
  * single self-contained directory, e.g.
- * `async-worker/typescript/{run-async-worker.ts,deno.json,typescript-actors-registry.generated.ts,<fsmName>/<fsmVersion>/actors/...}`.
+ * `async-worker/typescript/{run-async-worker.ts,deno.json,actor-registry-aggregate.generated.ts,<fsmName>/<fsmVersion>/actors/...}`.
  * Exported so `generate-async-operation-logic.ts` can build the same
  * `<writeRootAbsPath>/async-worker/<lang>/<fsmName>/<fsmVersion>` paths for
  * its own per-version writes (`writeActorFile`/`writeActorsBarrel`/
@@ -1038,10 +955,10 @@ export async function formatRustFilesBestEffort(
 export const ASYNC_WORKER_DIR_NAME = "async-worker";
 
 const AGGREGATE_ACTORS_REGISTRY_FILE_NAME: Record<ActorsBarrelLang, string> = {
-  typescript: "typescript-actors-registry.generated.ts",
+  typescript: "actor-registry-aggregate.generated.ts",
   // Must be a valid Python module identifier (no dashes).
-  python: "python_actors_registry_generated.py",
-  rust: "rust-actors-registry.generated.rs",
+  python: "actor_registry_aggregate_generated.py",
+  rust: "actor_registry_aggregate.generated.rs",
 };
 
 /** Groups actors by their parent `<fsmName>/<fsmVersion>`, preserving first-seen order. */
@@ -1116,7 +1033,7 @@ export function relativeImportDir(fromDir: string, toDir: string): string {
  * arbitrarily-nested sibling file (Python via a dotted `sys.path`-relative
  * import, see {@linkcode assertPythonAggregateImportPathsAreValid}; TS via a
  * plain relative specifier). Rust can't do the equivalent (each per-version
- * `generated_registry.rs` defines its own nominally distinct
+ * `actor_registry.generated.rs` defines its own nominally distinct
  * `ActorRegistration` type, so `Vec`s of them can't be concatenated) —
  * instead it `#[path]`-includes each FSM-version's actor barrel (`mod.rs`,
  * functions only, no competing type) under a unique per-group module alias,
@@ -1224,7 +1141,7 @@ function goImportAlias(a: RegisteredActor): string {
     .toLowerCase();
 }
 
-const GO_AGGREGATE_DIR_NAME = "go-actors-registry-generated";
+const GO_AGGREGATE_DIR_NAME = "actor-registry-aggregate-generated";
 
 /** Runs `gofmt -w` once across every path passed in. See {@linkcode formatTsFilesBestEffort} for the batching rationale; same best-effort tolerance (empty `paths`, missing `gofmt`, npm/npx build). */
 export async function formatGoFilesBestEffort(
@@ -1277,7 +1194,7 @@ export async function goModTidyManyBestEffort(dirs: string[]): Promise<void> {
 /**
  * Writes a standalone Go module aggregating every Go actor across the whole
  * run into one `ActorRegistrations()` function, at
- * `<writeRootAbsPath>/async-worker/go/go-actors-registry-generated/`
+ * `<writeRootAbsPath>/async-worker/go/actor-registry-aggregate-generated/`
  * (`go.mod` + `registry.go`) — nested inside the `go/` worker-sdk directory
  * (see {@linkcode writeWorkerSdk}), alongside `main.go`. Returns `undefined`
  * (writes nothing) when there are no Go actors.
@@ -1289,7 +1206,7 @@ export async function goModTidyManyBestEffort(dirs: string[]): Promise<void> {
  * wiring here means a *consumer's* `go.mod` (worker-sdk/go, one directory up)
  * only ever needs ONE `require`/`replace`, pointing at this module, instead
  * of being hand-edited every time a Go actor is added or removed. The
- * module's own logical name (`<goModuleAppRoot>/go-actors-registry-generated`)
+ * module's own logical name (`<goModuleAppRoot>/actor-registry-aggregate-generated`)
  * is unrelated to its on-disk nesting — Go resolves it via this module's
  * `require`+`replace`, so it doesn't need to change even though the
  * directory now sits three levels below the app root instead of one.
@@ -1496,7 +1413,7 @@ export async function writeWorkerSdk(
     await writeOwnedFile(
       runFile,
       renderTsRunAsyncWorker({
-        registryImportPath: "./typescript-actors-registry.generated.ts",
+        registryImportPath: "./actor-registry-aggregate.generated.ts",
       }),
       "scaffolded",
     );
@@ -1555,7 +1472,7 @@ export async function writeWorkerSdk(
     await writeOwnedFile(
       mainFile,
       renderRustWorkerSdkMain({
-        registryRelativePath: "../rust-actors-registry.generated.rs",
+        registryRelativePath: "../actor_registry_aggregate.generated.rs",
       }),
       "scaffolded",
       // A main.rs kept from before #435 doesn't pass each actor's own
@@ -1803,7 +1720,7 @@ export async function collectRegisteredActorsFromAsyncWorkerDir(
     for await (const groupEntry of Deno.readDir(langDir)) {
       // Skips non-directory siblings the aggregate step itself writes into
       // this same `<lang>/` dir (run-async-worker.ts, deno.json,
-      // typescript-actors-registry.generated.ts, ...) -- only
+      // actor-registry-aggregate.generated.ts, ...) -- only
       // `<fsmName>/`/`shared-async-op/`-style subdirectories are walked.
       if (!groupEntry.isDirectory) continue;
       const groupDir = `${langDir}/${groupEntry.name}`;

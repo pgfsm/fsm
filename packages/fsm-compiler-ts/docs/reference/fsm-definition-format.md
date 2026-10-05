@@ -126,8 +126,7 @@ parent notification if a parent queue is present.
 
 Actions are referenced by name in `entry`, `exit`, and transition `actions`
 arrays. The compiler resolves each name against
-`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/actions/<name>/<name>.ts`
-(or that folder's `index.ts`, in a project created before #460).
+`{cwd}/sync-worker/typescript/<fsmName>/<fsmVersion>/actions/<name>/<name>.ts`.
 
 ```json
 { "type": "myActionName" }

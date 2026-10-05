@@ -2,31 +2,31 @@
 import {
   FSM_DEFINITION as carvitals_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as carvitals_v01,
-} from "./carVitals/v01/generated-sync-operation-registry.ts";
+} from "./carVitals/v01/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as creditcheck_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as creditcheck_v01,
-} from "./creditCheck/v01/generated-sync-operation-registry.ts";
+} from "./creditCheck/v01/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as creditcheck_v02_definition,
   SYNC_OPERATION_REGISTRATIONS as creditcheck_v02,
-} from "./creditCheck/v02/generated-sync-operation-registry.ts";
+} from "./creditCheck/v02/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as taskmachineconfig_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as taskmachineconfig_v01,
-} from "./taskMachineConfig/v01/generated-sync-operation-registry.ts";
+} from "./taskMachineConfig/v01/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as taskmachineconfig_v02_definition,
   SYNC_OPERATION_REGISTRATIONS as taskmachineconfig_v02,
-} from "./taskMachineConfig/v02/generated-sync-operation-registry.ts";
+} from "./taskMachineConfig/v02/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as vitalsworkflow_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as vitalsworkflow_v01,
-} from "./vitalsWorkflow/v01/generated-sync-operation-registry.ts";
+} from "./vitalsWorkflow/v01/sync-operation-registry.generated.ts";
 import {
   FSM_DEFINITION as vitalsworkflow_v02_definition,
   SYNC_OPERATION_REGISTRATIONS as vitalsworkflow_v02,
-} from "./vitalsWorkflow/v02/generated-sync-operation-registry.ts";
+} from "./vitalsWorkflow/v02/sync-operation-registry.generated.ts";
 
 export const SYNC_OPERATION_REGISTRATIONS = [
   ...carvitals_v01,

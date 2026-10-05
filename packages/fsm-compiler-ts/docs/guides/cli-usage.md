@@ -113,7 +113,7 @@ sits right beside that language's aggregate registry/worker SDK (TypeScript:
 `run_async_worker.py` + `pyproject.toml` pinning `pgfsm-async-worker-sdk`; Rust:
 `src/main.rs` + `Cargo.toml` depending on the `pgfsm-async-worker-sdk` crate;
 Go: `main.go` + `go.mod` requiring the `fsm-async-worker-sdk-go` module;
-`<lang>-actors-registry.generated.ts`, etc. — written once per language at
+`actor-registry-aggregate.generated.ts`, etc. — written once per language at
 `async-worker/<lang>/`, refreshed on every run from the real FSM tree's own
 walk, not re-walked from the output itself).
 
@@ -155,7 +155,7 @@ working directory, nested `<lang>/<fsmName>/<fsmVersion>/` deep (folder mode
 derives `<fsmName>/<fsmVersion>` per FSM while walking; single-file mode uses
 `--fsm-name`/`--fsm-version` directly) — so multiple FSMs/versions scaffolded
 from the same working directory don't collide. For `typescript`, also writes
-`generated-sync-operation-registry.ts` (combining every action/guard/delay stub
+`sync-operation-registry.generated.ts` (combining every action/guard/delay stub
 into one array) and a copy of that version's `fsm.json`, both at the same
 `<fsmName>/<fsmVersion>` level.
 
@@ -248,7 +248,7 @@ created, and rewrites only compiler-owned ones:
 
 | Class      | Files                                                                                                                                                                                                                                        | With `generated-only`   |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| Generated  | `fsm.json`/`xstate-fsm.json`, every registry and aggregate registry, `actors-manifest.json`, actor barrels, `go-actors-registry-generated/`, and the Go worker's `go.mod` + `main.go`                                                        | Always rewritten        |
+| Generated  | `fsm.json`/`xstate-fsm.json`, every registry and aggregate registry, `actors-manifest.json`, actor barrels, `actor-registry-aggregate-generated/`, and the Go worker's `go.mod` + `main.go`                                                  | Always rewritten        |
 | Scaffolded | `actions`/`guards`/`delays` `index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s | Written only if missing |
 
 The Go worker module is generated because its `go.mod` lists every actor module
@@ -290,22 +290,23 @@ Rust's aggregate to `#[path]`-include). Go gets no barrel, same as no registry
 below.
 
 For `typescript`/`python`/`rust`, also rewrites that language's registry at
-`{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/generated-registry.<ext>`
-(`generated_registry.py` for Python — its dotted `import` syntax can't reference
-a hyphenated module name) from every shared-async-op actor currently on disk for
-that language _at that one `functionVersion`_ (this run's actor included, same
-as `actors-manifest.json` above) — so repeated `create-async-logic` calls at the
-same `functionVersion` accumulate into one file instead of clobbering each
-other; a different `functionVersion` gets its own separate file. This never
-touches the FSM-scoped aggregate (`<lang>-actors-registry.generated.ts`), which
-stays fully separate. Every entry's identity is fixed: `parentFsmName` and
-`asyncOperationType` are always `"sharedAsyncOperation"` (these actors have no
-owning FSM), `asyncOperationName` is the function name, and
-`parentFsmVersion`/`asyncOperationVersion` are both `--function-version`. Since
-the same function name can recur across different `functionVersion`s, each
-import in the registry is aliased (`<functionName>_<functionVersion>`) to avoid
-collisions. Go has no shared registry — each Go actor is already its own Go
-module (see its own `go.mod`), so only the actor file is written for `go`.
+`{cwd}/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actor-registry.generated.<ext>`
+(`actor_registry_generated.py` for Python — its dotted `import` syntax can't
+reference a hyphenated module name) from every shared-async-op actor currently
+on disk for that language _at that one `functionVersion`_ (this run's actor
+included, same as `actors-manifest.json` above) — so repeated
+`create-async-logic` calls at the same `functionVersion` accumulate into one
+file instead of clobbering each other; a different `functionVersion` gets its
+own separate file. This never touches the FSM-scoped aggregate
+(`actor-registry-aggregate.generated.ts`), which stays fully separate. Every
+entry's identity is fixed: `parentFsmName` and `asyncOperationType` are always
+`"sharedAsyncOperation"` (these actors have no owning FSM), `asyncOperationName`
+is the function name, and `parentFsmVersion`/`asyncOperationVersion` are both
+`--function-version`. Since the same function name can recur across different
+`functionVersion`s, each import in the registry is aliased
+(`<functionName>_<functionVersion>`) to avoid collisions. Go has no shared
+registry — each Go actor is already its own Go module (see its own `go.mod`), so
+only the actor file is written for `go`.
 
 ```bash
 cd apps

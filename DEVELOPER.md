@@ -264,7 +264,7 @@ before wiring up the real socket.
 
 The generated `run-sync-worker.ts` starts an `fsmlet` with the project's
 compiled sync-operation registry
-(`aggregate-generated-sync-operation-registry.ts`) and connects with
+(`sync-operation-registry-aggregate.generated.ts`) and connects with
 `DATABASE_URL` (from the environment, or a `.env` in that directory):
 
 ```bash
