@@ -128,11 +128,82 @@ export function renderOperationModule(
 }
 
 /**
- * Writes one operation-logic index module to
- * `<absFolderPath>/<lang>/<kind>/`, or `<absFolderPath>/<lang>/<subPath>/<kind>/`
- * when `subPath` is given — `generate-sync-logic`'s own caller uses this to
- * insert `<fsmName>/<fsmVersion>` between the language and the kind, so
- * multiple FSMs/versions writing under the same `<lang>` root don't collide.
+ * How one `<kind>/` folder holds its operation stubs (#460):
+ *
+ * - `"per-operation"` — one scaffolded file per operation at
+ *   `<kind>/<name>/<name>.<ext>`, the same shape as actors, so a new operation
+ *   gets its own new stub under `--overwrite generated-only`.
+ * - `"single-file"` — every operation of the kind in one scaffolded
+ *   `<kind>/index.<ext>` (the layout before #460).
+ *
+ * Chosen per folder by {@linkcode operationLayout}: an existing index module
+ * means single-file, so a project scaffolded before #460 keeps working
+ * unchanged; anything else gets the per-operation layout.
+ */
+export type OperationLayout = "per-operation" | "single-file";
+
+/**
+ * The layout of the `<kind>/` folder at `kindDir`: `"single-file"` when its
+ * index module (`index.ts`, `index.py`, `mod.rs`, `index.go`) exists,
+ * `"per-operation"` otherwise — including when the folder doesn't exist yet.
+ */
+export async function operationLayout(
+  kindDir: string,
+  lang: OperationLang,
+): Promise<OperationLayout> {
+  try {
+    await Deno.stat(`${kindDir}/${operationModuleFileName(lang)}`);
+    return "single-file";
+  } catch (err) {
+    if (isNotFoundError(err)) return "per-operation";
+    throw err;
+  }
+}
+
+/**
+ * Base name (folder and file, without extension) of one operation's stub in
+ * the per-operation layout: `<kind>/<base>/<base>.<ext>`. Sanitized the same
+ * way as an actor's {@linkcode actorFileBaseName}.
+ */
+export function operationFileBaseName(name: string): string {
+  return sanitizeFileComponent(name);
+}
+
+/**
+ * Throws when two of `names` would get the same per-operation folder on a
+ * case-insensitive file system (macOS, Windows) — e.g. `checkBattery` and
+ * `CheckBattery` — or the same folder after sanitizing. One would silently
+ * overwrite the other's stub there.
+ */
+export function assertDistinctOperationFileNames(
+  kind: OperationKind,
+  names: string[],
+): void {
+  const seen = new Map<string, string>();
+  for (const name of new Set(names)) {
+    const key = operationFileBaseName(name).toLowerCase();
+    const other = seen.get(key);
+    if (other !== undefined) {
+      throw new Error(
+        `${kind} "${other}" and "${name}" would share the stub folder ${kind}/${
+          operationFileBaseName(name)
+        }/ on a case-insensitive file system; rename one of them.`,
+      );
+    }
+    seen.set(key, name);
+  }
+}
+
+/**
+ * Writes one kind's operation stubs to `<absFolderPath>/<lang>/<kind>/`, or
+ * `<absFolderPath>/<lang>/<subPath>/<kind>/` when `subPath` is given —
+ * `generate-sync-logic`'s own caller uses this to insert
+ * `<fsmName>/<fsmVersion>` between the language and the kind, so multiple
+ * FSMs/versions writing under the same `<lang>` root don't collide.
+ *
+ * The folder's {@linkcode OperationLayout} decides the shape: one
+ * `<name>/<name>.<ext>` stub per operation, or the single index module when
+ * that already exists. Returns the layout used.
  */
 export async function writeOperationModule(
   absFolderPath: string,
@@ -140,18 +211,36 @@ export async function writeOperationModule(
   kind: OperationKind,
   names: string[],
   subPath?: string,
-): Promise<void> {
+): Promise<OperationLayout> {
   const dir = subPath
     ? `${absFolderPath}/${lang}/${subPath}/${kind}`
     : `${absFolderPath}/${lang}/${kind}`;
-  await Deno.mkdir(dir, { recursive: true });
-  const file = `${dir}/${operationModuleFileName(lang)}`;
-  await writeOwnedFile(
-    file,
-    renderOperationModule(lang, kind, names),
-    "scaffolded",
-    [...new Set(names)].map((n) => deriveTemplateInput(kind, n, lang).fnName),
-  );
+  const layout = await operationLayout(dir, lang);
+
+  if (layout === "single-file") {
+    const file = `${dir}/${operationModuleFileName(lang)}`;
+    await writeOwnedFile(
+      file,
+      renderOperationModule(lang, kind, names),
+      "scaffolded",
+      [...new Set(names)].map((n) => deriveTemplateInput(kind, n, lang).fnName),
+    );
+    return layout;
+  }
+
+  assertDistinctOperationFileNames(kind, names);
+  for (const name of new Set(names)) {
+    const base = operationFileBaseName(name);
+    const opDir = `${dir}/${base}`;
+    await Deno.mkdir(opDir, { recursive: true });
+    await writeOwnedFile(
+      `${opDir}/${base}.${operationFileExtension(lang)}`,
+      renderOperationModule(lang, kind, [name]),
+      "scaffolded",
+      [deriveTemplateInput(kind, name, lang).fnName],
+    );
+  }
+  return layout;
 }
 
 const SYNC_OPERATION_REGISTRY_FILE_NAME =
@@ -160,27 +249,62 @@ const SYNC_OPERATION_REGISTRY_FILE_NAME =
 /** One `SyncOperationRegistration` entry's import-vs-registered-name pair. */
 type SyncOperationEntry = { name: string; importName: string };
 
+/** One `import { names } from "path"` statement in the registry. */
+type SyncOperationImport = { names: string[]; path: string };
+
 /**
  * One `writeOperationModule` kind's contribution to the registry: its
  * singular {@linkcode SyncOperationType} (what a registration entry's
- * `syncOperationType` is), its on-disk module folder (what the `import`
- * statement points at), and the names to register from it. Delay handlers are
- * exported under a `${DELAY_ACTION_NAME_PREFIX}`-prefixed name (see
- * `derive-template-input.ts`) — `importName` carries that prefix,
- * `name`/`syncOperationName` stays the original `fsm.json` reference.
+ * `syncOperationType` is), the `import` statements that bring its handlers in
+ * (one per stub file in the per-operation layout, one for the index module in
+ * the single-file layout — see {@linkcode OperationLayout}), and the names to
+ * register from it. Delay handlers are exported under a
+ * `${DELAY_ACTION_NAME_PREFIX}`-prefixed name (see `derive-template-input.ts`)
+ * — `importName` carries that prefix, `name`/`syncOperationName` stays the
+ * original `fsm.json` reference.
  */
 type SyncOperationGroup = {
   kind: SyncOperationType;
-  moduleFile: Extract<OperationKind, "actions" | "guards" | "delays">;
+  imports: SyncOperationImport[];
   entries: SyncOperationEntry[];
 };
+
+type SyncOperationModuleKind = Extract<
+  OperationKind,
+  "actions" | "guards" | "delays"
+>;
+
+async function syncOperationImports(
+  absSyncWorkerLangFolderPath: string,
+  lang: OperationLang,
+  moduleKind: SyncOperationModuleKind,
+  entries: SyncOperationEntry[],
+): Promise<SyncOperationImport[]> {
+  if (entries.length === 0) return [];
+  const kindDir = `${absSyncWorkerLangFolderPath}/${moduleKind}`;
+  if (await operationLayout(kindDir, lang) === "single-file") {
+    return [{
+      names: entries.map((e) => e.importName),
+      path: `./${moduleKind}/${operationModuleFileName(lang)}`,
+    }];
+  }
+  return entries.map((e) => {
+    const base = operationFileBaseName(e.name);
+    return {
+      names: [e.importName],
+      path: `./${moduleKind}/${base}/${base}.${operationFileExtension(lang)}`,
+    };
+  });
+}
 
 /**
  * Writes one version's `generated-sync-operation-registry.ts` — the
  * sync-logic counterpart of {@linkcode writeActorsRegistry}, combining that
- * version's action/guard/delay stubs (already written to
- * `<absSyncWorkerLangFolderPath>/{actions,guards,delays}/index.ts` by
- * {@linkcode writeOperationModule}) into one self-describing
+ * version's action/guard/delay stubs (already written under
+ * `<absSyncWorkerLangFolderPath>/{actions,guards,delays}/` by
+ * {@linkcode writeOperationModule}, whose per-folder
+ * {@linkcode OperationLayout} decides each kind's import paths — read back
+ * from disk here) into one self-describing
  * `SyncOperationRegistration[]` a worker can iterate without importing each
  * kind's module separately. Written as a sibling of those three kind folders
  * — i.e. into `absSyncWorkerLangFolderPath` itself, not a `<kind>/` beneath
@@ -202,26 +326,42 @@ export async function writeSyncOperationRegistry(
   delays: string[],
   fsmJsonSha256: string,
 ): Promise<string> {
-  const groups: SyncOperationGroup[] = [
+  const kinds: {
+    kind: SyncOperationType;
+    moduleKind: SyncOperationModuleKind;
+    entries: SyncOperationEntry[];
+  }[] = [
     {
       kind: "action",
-      moduleFile: "actions",
+      moduleKind: "actions",
       entries: actions.map((name) => ({ name, importName: name })),
     },
     {
       kind: "guard",
-      moduleFile: "guards",
+      moduleKind: "guards",
       entries: guards.map((name) => ({ name, importName: name })),
     },
     {
       kind: "delay",
-      moduleFile: "delays",
+      moduleKind: "delays",
       entries: delays.map((name) => ({
         name,
         importName: `${DELAY_ACTION_NAME_PREFIX}${name}`,
       })),
     },
   ];
+  const groups: SyncOperationGroup[] = await Promise.all(
+    kinds.map(async ({ kind, moduleKind, entries }) => ({
+      kind,
+      imports: await syncOperationImports(
+        absSyncWorkerLangFolderPath,
+        lang,
+        moduleKind,
+        entries,
+      ),
+      entries,
+    })),
+  );
 
   await Deno.mkdir(absSyncWorkerLangFolderPath, { recursive: true });
   const file =

@@ -33,7 +33,7 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   );
   assert(actorStat.isFile);
   const syncStat = await Deno.stat(
-    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
   );
   assert(syncStat.isFile);
   const registryStat = await Deno.stat(
@@ -74,7 +74,7 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json to <writeRo
   );
   assert(
     await pathExists(
-      `${writeRoot}/sync-worker/typescript/checkout/v02/actions/index.ts`,
+      `${writeRoot}/sync-worker/typescript/checkout/v02/actions/assignSSN/assignSSN.ts`,
     ),
   );
   assert(
@@ -151,7 +151,7 @@ Deno.test("generateAll - single fsm.json file mode uses the given fsmName/fsmVer
   );
   assert(
     await pathExists(
-      `${writeRoot}/sync-worker/typescript/checkout/v03/actions/index.ts`,
+      `${writeRoot}/sync-worker/typescript/checkout/v03/actions/assignSSN/assignSSN.ts`,
     ),
   );
 });

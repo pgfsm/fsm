@@ -428,10 +428,17 @@ Deno.test("cli generate-sync-logic --folder fsm.json + --fsm-name/--fsm-version 
   );
   assertEquals(code, 0);
   const outDir = `${cwd}/sync-worker/typescript/creditCheck/v01`;
-  for (const kind of ["actions", "guards", "delays"]) {
-    const stat = await Deno.stat(`${outDir}/${kind}/index.ts`);
+  // One stub per operation (#460); this FSM has no delays.
+  for (
+    const stub of [
+      "actions/assignSSN/assignSSN.ts",
+      "guards/allSucceeded/allSucceeded.ts",
+    ]
+  ) {
+    const stat = await Deno.stat(`${outDir}/${stub}`);
     assert(stat.isFile);
   }
+  assertEquals(await pathExists(`${outDir}/actions/index.ts`), false);
   const registryStat = await Deno.stat(
     `${outDir}/generated-sync-operation-registry.ts`,
   );
@@ -467,7 +474,7 @@ Deno.test("cli generate-sync-logic single-file mode: output moves with cwd, not 
   );
   assertEquals(code, 0);
   const stat = await Deno.stat(
-    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
   );
   assert(stat.isFile);
 });
@@ -591,7 +598,7 @@ Deno.test("cli generate-all folder mode runs generate-fsm-json, generate-async-l
   );
   assert(actorStat.isFile);
   const syncStat = await Deno.stat(
-    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
   );
   assert(syncStat.isFile);
   const aggregateContent = await Deno.readTextFile(
@@ -616,7 +623,7 @@ Deno.test("cli generate-all folder mode writes under cwd, not one level above --
   );
   assert(
     await pathExists(
-      `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+      `${cwd}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
     ),
   );
 });
@@ -687,7 +694,7 @@ Deno.test("cli generate-all machine.ts mode writes fsm.json to {cwd}/fsm/<N>/<V>
   );
   assert(
     await pathExists(
-      `${cwd}/sync-worker/typescript/checkout/v02/actions/index.ts`,
+      `${cwd}/sync-worker/typescript/checkout/v02/actions/assignSSN/assignSSN.ts`,
     ),
   );
   assert(
@@ -762,7 +769,7 @@ Deno.test("cli generate-all fsm.json mode skips generate-fsm-json and writes act
   );
   assert(
     await pathExists(
-      `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+      `${cwd}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
     ),
   );
   const aggregateContent = await Deno.readTextFile(
@@ -800,7 +807,7 @@ Deno.test("cli generate-all fsm.json mode uses --fsm-name/--fsm-version, not the
   );
   assert(
     await pathExists(
-      `${cwd}/sync-worker/typescript/checkout/v03/actions/index.ts`,
+      `${cwd}/sync-worker/typescript/checkout/v03/actions/assignSSN/assignSSN.ts`,
     ),
   );
 });
@@ -845,7 +852,7 @@ Deno.test("cli --overwrite generated-only keeps an edited stub on re-run and rep
   ];
   assertEquals((await runCli(argv, undefined, cwd)).code, 0);
   const actions =
-    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/index.ts`;
+    `${cwd}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`;
   const edited = (await Deno.readTextFile(actions)) + "// mine\n";
   await Deno.writeTextFile(actions, edited);
 

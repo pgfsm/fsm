@@ -236,10 +236,10 @@ exports are reported.
 
 Every file the compiler writes falls into one of two classes:
 
-| Class                                      | Files                                                                                                                                                                                                                                                                  | On re-run               |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`) | Always rewritten        |
-| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s         | Written only if missing |
+| Class                                      | Files                                                                                                                                                                                                                                                                                           | On re-run               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`)                          | Always rewritten        |
+| **Scaffolded** (user-owned after creation) | each action/guard/delay stub (`<kind>/<name>/<name>.ts`, or a pre-#460 `<kind>/index.ts`), each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s | Written only if missing |
 
 Implemented in #381, with one change from the original table: the Go worker's
 `go.mod` lists a `require`/`replace` for every Go actor module, so it can't be
@@ -253,6 +253,16 @@ CLI reports the missing export names for the developer to add (e.g. "3 new
 actions: add them to …/actions/index.ts") rather than regenerating the file.
 Compiler validation (`validate-sync-operation`) already catches a missing
 export.
+
+**Amended by #460:** actions, guards and delays now get one stub per operation,
+`<kind>/<name>/<name>.ts`, the same shape as actors — so a new operation gets
+its own new stub and nothing has to be added by hand. The folder-per-operation
+shape leaves room for sync operations in other languages, which need a directory
+per operation the way Go actors do. The layout is chosen per `<kind>/` folder:
+one that already has an `index.ts` keeps the single-file layout above, including
+the missing-export report, so projects created before #460 keep working. There
+is no migration command; to switch a folder, move its functions out and delete
+its `index.ts`.
 
 This becomes a compiler option (e.g. `overwrite: "generated-only" | "all"`) that
 defaults to `"all"`, so today's compiler CLI behaviour doesn't change.
