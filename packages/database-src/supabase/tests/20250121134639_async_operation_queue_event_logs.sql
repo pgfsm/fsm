@@ -12,8 +12,10 @@ select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'async_ope
 select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'event_name', 'has event_name column');
 select col_type_is('fsm_core', 'fsm_async_operation_queue_event_logs', 'event_data', 'jsonb', 'event_data is jsonb');
 select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'event_delay', 'has event_delay column');
-select fk_ok('fsm_core', 'fsm_async_operation_queue_event_logs', 'send_to_parent_queue_id', 'fsm_core', 'fsm_instance', 'id',
-  'send_to_parent_queue_id references fsm_core.fsm_instance(id)');
+-- No FK on purpose: system queues (pg_system_queue_uuid(), api_system_queue_uuid())
+-- aren't fsm_instance rows — see the column's comment in the schema file.
+select col_isnt_fk('fsm_core', 'fsm_async_operation_queue_event_logs', 'send_to_parent_queue_id',
+  'send_to_parent_queue_id has no FK, so system queue ids are allowed');
 select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'send_to_parent_queue_id_event_name', 'has send_to_parent_queue_id_event_name column');
 select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'execution_started_at', 'has execution_started_at column');
 select has_column('fsm_core', 'fsm_async_operation_queue_event_logs', 'execution_duration', 'has execution_duration column');
