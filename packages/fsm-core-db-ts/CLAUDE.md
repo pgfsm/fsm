@@ -41,6 +41,16 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   creation)
 - `30_async_operation_worker_v2/asyncOperationCtl.ts` —
   `archiveEventFromFsmAsyncOperationTypeWorker`
+- `40_access_control/apiKeys.ts` — API keys (SPEC-009 §2): `createApiKey`,
+  `revokeApiKey`, `listApiKeys`, `verifyApiKey` (takes the hex SHA-256 from
+  `hashApiKey`, so plaintext keys never reach the DB after creation)
+- `40_access_control/withRole.ts` — `withRole(deps, role, fn)`: runs `fn` in one
+  transaction under `SET LOCAL ROLE fsm_operator|fsm_admin|fsm_worker`
+  (allow-listed). Pooler-safe, and the role never outlives the transaction. A
+  wrapper that opens its own transaction (`loadFsmDefinitions`) still works
+  inside it, because its BEGIN/COMMIT/ROLLBACK are mapped to a savepoint. Tests
+  in `test/access-control.test.ts`; the DB tests need a `DATABASE_URL` whose
+  user is the schema owner (a member of every `fsm_*` role)
 - `pg-utils.ts` — small pg param helpers (e.g. `toJsonbParam`)
 - `const.ts` — schema/table name constants (`FSM_SCHEMA`,
   `FSM_SCHEMA_FN_VERSION`, `QUEUE_SCHEMA`, …)
@@ -75,6 +85,6 @@ with PG function names and parameter names.
 See `packages/database-src/docs/reference/pg-ts-function-mapping.md` for the
 complete PG→TS function mapping table, including:
 
-- All 18 direct 1:1 mappings (Table 1)
+- Every direct 1:1 mapping (Table 1)
 - TS functions not directly mapped to a PG function (Table 2)
 - Gap: PG functions with no TS wrapper (Table 3)
