@@ -57,6 +57,13 @@ process, add `[CATEGORY.x]: level` to that entry point's call — do **not** add
 second `configure()`. `isTerminal` is exported so a root can, e.g., force
 `"debug"` on a TTY.
 
+By default the console sink splits by level: `warning` and above go to stderr,
+`info`/`debug` to stdout. A CLI whose stdout is **data** (e.g.
+`pgfsmctl … -o json | jq`) passes `consoleStream: "stderr"` to send every level
+to stderr; attached data (`table()`/`dir()`/extra properties) is then written as
+one JSON line on stderr, since `console.table`/`console.dir` can only write
+stdout.
+
 ## Logging in a library
 
 Libraries import nothing from this package except `CATEGORY` — they use

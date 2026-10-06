@@ -73,6 +73,12 @@ function isPrimitive(v: unknown): boolean {
   return v === null || (typeof v !== "object" && typeof v !== "function");
 }
 
+/**
+ * Where the console sink writes. "split" (default): warning and above to
+ * stderr, the rest to stdout. "stderr": everything to stderr.
+ */
+export type ConsoleStream = "split" | "stderr";
+
 // warning/error/fatal are operational signal that process supervisors, log
 // routers, and test harnesses expect on stderr; trace/debug/info are normal
 // program output on stdout.
@@ -113,9 +119,17 @@ function interpolatedKeys(
 // Both are TTY-only. On a non-TTY the explicit payload is emitted as a single
 // JSON line (greppable); extra properties stay in the record for structured
 // sinks (OTel/files) and are not echoed.
-export function getTableConsoleSink(): Sink {
+//
+// `stream: "stderr"` sends every level to stderr, for CLIs whose stdout is
+// data (`pgfsmctl -o json | jq`). Attached data is then emitted as one JSON
+// line on stderr too, since console.table/console.dir can only write stdout.
+export function getTableConsoleSink(
+  options: { stream?: ConsoleStream } = {},
+): Sink {
+  const allStderr = options.stream === "stderr";
+  const rich = isTerminal && !allStderr;
   return (record: LogRecord) => {
-    const write = consoleForLevel(record.level);
+    const write = allStderr ? console.error : consoleForLevel(record.level);
     write(formatLine(record));
 
     const props = record.properties;
@@ -123,11 +137,11 @@ export function getTableConsoleSink(): Sink {
 
     const payload = props[RENDER_KEY] as RenderPayload | undefined;
     if (payload) {
-      if (isTerminal) renderPayload(payload);
+      if (rich) renderPayload(payload);
       else write(JSON.stringify(payload.value));
     }
 
-    if (!isTerminal) return;
+    if (!rich) return;
     const interpolated = interpolatedKeys(record.rawMessage);
     for (const [key, value] of Object.entries(props)) {
       if (key === RENDER_KEY || interpolated.has(key) || isPrimitive(value)) {

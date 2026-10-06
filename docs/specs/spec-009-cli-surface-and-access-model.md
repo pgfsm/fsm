@@ -339,7 +339,12 @@ For each command:
    - API tier: `PGFSM_URL` + `PGFSM_API_KEY`;
    - DB-direct tier: `PGFSM_DB_URL`, falling back to `DATABASE_URL`;
    - `./.env` is loaded first, as today.
-3. Otherwise the active profile (`--profile` / `PGFSM_PROFILE` / `config use`).
+3. Otherwise the active profile (`config use`).
+   - **Amended in #471:** a profile chosen explicitly (`--profile`, else
+     `PGFSM_PROFILE`) ranks _above_ step 2, just below `--db-url`/`--url`.
+     `./.env` is loaded automatically, so with env first, `--profile prod` run
+     inside a project would silently use the project's local `DATABASE_URL`.
+     Only the config's current profile stays below the environment.
 4. For a command that supports both tiers (`fsm load`; phase-2 `instance …`):
    the API wins whenever an API target resolves, and DB-direct is used only when
    no API target exists.
@@ -349,17 +354,21 @@ For each command:
 
 **Profiles:**
 
-- `~/.config/pgfsm/config.yaml` (OS config dir) holds `url` and/or `db_url`
-  without passwords.
+- `config.yaml` in `$PGFSM_CONFIG_DIR`, else the OS config dir + `/pgfsm`
+  (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support`
+  on macOS, `%APPDATA%` on Windows), holds `url` and/or `db_url` without
+  passwords.
 - `credentials.json` (mode 0600) holds API keys and DB passwords, written by
   `config set <p> --api-key-stdin` / `--db-password-stdin`.
-- Profile files never hold a secret passed on the command line.
+- Profile files never hold a secret passed on the command line: `config set`
+  refuses a `--db-url` that contains a password (exit 2).
 
 ### 6. Output and exit codes
 
-- **Output.** Data goes to stdout and logs go to stderr. `-o table` is the
-  default; `-o json` is the raw response and is never truncated; `-o ids` prints
-  one id per line. SPEC-008's `--json` becomes `-o json`.
+- **Output.** Data goes to stdout and logs go to stderr (`@pgfsm/logging`'s
+  `consoleStream: "stderr"`, added for this). `-o table` is the default;
+  `-o json` is the raw response and is never truncated; `-o ids` prints one id
+  per line. SPEC-008's `--json` becomes `-o json`.
 - **Exit codes** (dbosctl's table, plus one):
 
 | Code | Meaning                                                               |

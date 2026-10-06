@@ -23,7 +23,7 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts` —
   dispatch-queue scheduling op (`schedule_next_pending`) and the
   `fsm_schedule_all_pending` pg_cron job's register/unregister/get helpers
-  (behind `pgfsmctl pgcron …`)
+  (behind `pgfsmctl db cron …`)
 - `25_async_operation_worker_v1/asyncOperationWorkerCtl.ts` — async-operation
   dispatch-table ops (promise/callback workflows)
 - `25_async_operation_worker_v1/asyncOperationMeta.ts` — `async_operation_meta`

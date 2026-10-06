@@ -1,7 +1,7 @@
 import { configure, type Sink } from "@logtape/logtape";
 // import { getConsoleSink } from "@logtape/logtape"; --- IGNORE ---
 import { getOpenTelemetrySink } from "@logtape/otel";
-import { getTableConsoleSink } from "./sink.ts";
+import { type ConsoleStream, getTableConsoleSink } from "./sink.ts";
 import type { LogLevel } from "./types.ts";
 
 export interface ConfigureLoggingOptions {
@@ -14,6 +14,9 @@ export interface ConfigureLoggingOptions {
   otel?: boolean;
   // Level for LogTape's own meta logger (its internal diagnostics). Default "warning".
   metaLevel?: Exclude<LogLevel, "silent">;
+  // "split" (default): info/debug to stdout, warning+ to stderr. "stderr":
+  // all levels to stderr, for CLIs that print data on stdout.
+  consoleStream?: ConsoleStream;
 }
 
 type ActiveLevel = "debug" | "info" | "warning" | "error" | "fatal";
@@ -50,7 +53,7 @@ export async function configureLogging(
   const activeSinks = otelEnabled ? ["console", "otel"] : ["console"];
 
   const sinks: Record<string, Sink> = {
-    console: getTableConsoleSink(),
+    console: getTableConsoleSink({ stream: opts.consoleStream }),
     // console: getConsoleSink(), --- IGNORE ---
     noop: () => {},
   };

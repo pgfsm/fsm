@@ -4,7 +4,7 @@
   "scripts": {
     "fsm:add": "npx -y @pgfsm/cli@0.1.0 add",
     "db:load": "npx -y @pgfsm/ctl@0.1.0 fsm load fsm",
-    "db:pgcron": "npx -y @pgfsm/ctl@0.1.0 pgcron register",
+    "db:pgcron": "npx -y @pgfsm/ctl@0.1.0 db cron register",
     "gateway": "npx -y -p @pgfsm/async-worker-gateway@0.2.1 -- async-operation-worker-gateway --ensure-queue-on-register"
   }
 }
