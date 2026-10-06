@@ -44,9 +44,13 @@ handling, exit codes, output and profile precedence (read from the
 `PGFSMCTL_LOG_LEVEL=debug` "Database from …" line, against closed ports). The DB
 tests (`fsm load` end to end, exit `4` for an unknown instance,
 `db cron status`) run only when the test process has `DATABASE_URL` (e.g. local
-Supabase) and pass it as `--db-url`. Check `db cron` changes against local
-Supabase by hand (`status` → `unregister` → `register` → `status`), and put the
-job's original schedule back afterwards, since that database is shared.
+Supabase) and pass it as `--db-url`. `test/api-tier.test.ts` also starts the
+real API (`apps/fsm-core-ts-hono-deno/src/cli/index.ts --enable-admin-api`) on a
+free port against that database, to test `db key create`, `key …` and
+`fsm load`'s tier choice end to end; CI runs these in the pgTAP job. Check
+`db cron` changes against local Supabase by hand (`status` → `unregister` →
+`register` → `status`), and put the job's original schedule back afterwards,
+since that database is shared.
 
 ## Layout
 
@@ -73,6 +77,16 @@ job's original schedule back afterwards, since that database is shared.
   profile; an explicit profile beats the env on purpose, see the doc comment)
   and `withPool`, one single-connection Pool per one-shot command (root
   `CLAUDE.md` #4).
+- `src/api-target.ts` — `resolveApiTarget`: URL and key resolved separately
+  (`--url`/`--api-key` → explicit profile, which then replaces env and current
+  profile → `PGFSM_URL`/`PGFSM_API_KEY` → current profile). Undefined when no
+  URL resolves, so `fsm load` can fall back to DB-direct.
+- `src/api-client.ts` — `apiRequest`: bearer key, JSON, and HTTP status → exit
+  code (401/403 → 3, 404 → 4 with an `--enable-admin-api` hint on `/admin/*`,
+  else 1 with the server's message and `problems`).
+- `src/commands/key.ts` (`key create|list|revoke`, API tier) and `db key create`
+  in `db.ts` (DB-direct bootstrap key); `src/key-role.ts` maps
+  `--role admin|operator`.
 - `src/config.ts` — profiles: `config.yaml` (no secrets) and `credentials.json`
   (mode 0600) in `$PGFSM_CONFIG_DIR` or the OS config dir + `/pgfsm`.
 - `src/exit.ts` (`ExitCode`, `CtlError`), `src/output.ts` (`printList`,

@@ -265,9 +265,10 @@ jobs:
       # The DB-backed Deno suites skip themselves without DATABASE_URL, so the
       # Deno job above never runs them. Here the local Supabase is up, and its
       # postgres user is the schema owner (a member of every fsm_* role), which
-      # the role/API-key tests need (SPEC-009, #470, #472).
-      - name: DB-backed Deno tests (@pgfsm/db, API auth)
+      # the role/API-key tests need (SPEC-009, #470, #472). pgfsmctl's API-tier
+      # tests start the real API as a subprocess against this database (#473).
+      - name: DB-backed Deno tests (@pgfsm/db, API auth, pgfsmctl incl. API tier)
         working-directory: .
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: deno test --allow-all packages/fsm-core-db-ts/test apps/fsm-core-ts-hono-deno/test
+        run: deno test --allow-all packages/fsm-core-db-ts/test apps/fsm-core-ts-hono-deno/test packages/fsm-ctl-ts/test

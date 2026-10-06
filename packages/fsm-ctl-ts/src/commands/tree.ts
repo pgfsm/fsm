@@ -1,7 +1,7 @@
 // The command tree, shared by `--help` (tiers) and `completion`. Keep in step
 // with the command modules: cli.test.ts checks every noun here has --help.
 
-export type Tier = "DB-direct" | "local";
+export type Tier = "API" | "API or DB-direct" | "DB-direct" | "local";
 
 export type NounSpec = {
   tier: Tier;
@@ -11,14 +11,27 @@ export type NounSpec = {
 };
 
 const DB_FLAGS = ["--db-url", "--profile", "--output", "--help"];
+const API_FLAGS = ["--url", "--api-key", "--profile", "--output", "--help"];
 
 export const COMMAND_TREE: Record<string, NounSpec> = {
   db: {
     tier: "DB-direct",
-    verbs: { cron: ["register", "unregister", "status"] },
-    flags: ["--schedule", ...DB_FLAGS],
+    verbs: {
+      cron: ["register", "unregister", "status"],
+      key: ["create"],
+    },
+    flags: ["--schedule", "--name", "--role", ...DB_FLAGS],
   },
-  fsm: { tier: "DB-direct", verbs: ["load"], flags: DB_FLAGS },
+  fsm: {
+    tier: "API or DB-direct",
+    verbs: ["load"],
+    flags: ["--url", "--api-key", ...DB_FLAGS],
+  },
+  key: {
+    tier: "API",
+    verbs: ["create", "list", "revoke"],
+    flags: ["--name", "--role", ...API_FLAGS],
+  },
   instance: {
     tier: "DB-direct",
     verbs: ["create", "resume", "send", "stop"],

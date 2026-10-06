@@ -2,9 +2,12 @@ import { getLogger } from "@logtape/logtape";
 import {
   type FsmDefinition,
   FsmDefinitionLoadError,
+  type LoadFsmDefinitionResult,
   loadFsmDefinitions,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
+import { apiRequest } from "../api-client.ts";
+import { resolveApiTarget } from "../api-target.ts";
 import { parseCommandArgs, verbOf } from "../args.ts";
 import { resolveDbUrl, withPool } from "../db-target.ts";
 import { CtlError, ExitCode, exitCodeFor, usageError } from "../exit.ts";
@@ -28,13 +31,20 @@ VERBS
          definition fails.
 
 OPTIONS
-  -d, --db-url <url>    Postgres URL (else --profile, PGFSM_DB_URL, DATABASE_URL, current profile)
-      --profile <name>  Use this profile's db_url
+      --url <url>       API base URL incl. its path prefix, e.g. http://localhost:9999/fsm
+      --api-key <key>   Admin key for the API
+  -d, --db-url <url>    Postgres URL: forces DB-direct (break-glass)
+      --profile <name>  Use this profile's url/api_key, or its db_url
   -o, --output <fmt>    table (default), json or ids (<fsmName>/<version>)
   -h, --help            Show this help
 
-  DB-direct for now. #473 adds the REST API tier (admin key), with --db-url
-  as break-glass.
+TIER
+  API when an API target resolves (--url, else the profile's url, else
+  PGFSM_URL, each with its key): POST /admin/fsm/load with an admin key, on an
+  API running with --enable-admin-api. Otherwise DB-direct (PGFSM_DB_URL or
+  DATABASE_URL, or the profile's db_url), so a project's local .env with only
+  DATABASE_URL works with no API running. --db-url always means DB-direct.
+  The tier used is logged.
 
 DESCRIPTION
   A deploy step (SPEC-006): run it after applying migrations and before
@@ -87,7 +97,11 @@ export async function readFsmDefinitionsFromFolder(
 }
 
 export async function fsmCommand(argv: string[]): Promise<void> {
-  const args = parseCommandArgs(argv, { common: ["db", "output"] }, HELP);
+  const args = parseCommandArgs(
+    argv,
+    { common: ["db", "api", "output"] },
+    HELP,
+  );
   if (args.help) return console.log(HELP);
 
   verbOf("fsm", args.positionals, ["load"], HELP);
@@ -111,22 +125,19 @@ export async function fsmCommand(argv: string[]): Promise<void> {
     );
   }
 
-  const dbUrl = await resolveDbUrl(args);
-  let results;
-  try {
-    results = await withPool(
-      dbUrl,
-      (deps) => loadFsmDefinitions(deps, definitions),
-    );
-  } catch (err) {
-    if (!(err instanceof FsmDefinitionLoadError)) throw err;
-    throw new CtlError(
-      exitCodeFor(err) === ExitCode.AUTH ? ExitCode.AUTH : ExitCode.GENERAL,
-      ["fsm load: nothing loaded.", ...err.problems.map((p) => `  - ${p}`)]
-        .join("\n"),
-      undefined,
-      { cause: err },
-    );
+  // --db-url forces DB-direct; otherwise the API wins whenever it resolves.
+  const api = args.dbUrl ? undefined : await resolveApiTarget(args);
+  let results: LoadFsmDefinitionResult[];
+  if (api) {
+    logger.info(`fsm load: via the API at ${api.url} (${api.source})`);
+    ({ data: results } = await apiRequest<{ data: LoadFsmDefinitionResult[] }>(
+      api,
+      "POST",
+      "/admin/fsm/load",
+      { definitions },
+    ));
+  } else {
+    results = await loadDbDirect(args, definitions);
   }
 
   const loaded = results.filter((r) => r.status === "loaded").length;
@@ -146,4 +157,27 @@ export async function fsmCommand(argv: string[]): Promise<void> {
       id: (r) => `${r.fsm_name}/${r.fsm_version}`,
     },
   );
+}
+
+async function loadDbDirect(
+  args: { dbUrl?: string; profile?: string },
+  definitions: FsmDefinition[],
+): Promise<LoadFsmDefinitionResult[]> {
+  const dbUrl = await resolveDbUrl(args);
+  logger.info("fsm load: DB-direct");
+  try {
+    return await withPool(
+      dbUrl,
+      (deps) => loadFsmDefinitions(deps, definitions),
+    );
+  } catch (err) {
+    if (!(err instanceof FsmDefinitionLoadError)) throw err;
+    throw new CtlError(
+      exitCodeFor(err) === ExitCode.AUTH ? ExitCode.AUTH : ExitCode.GENERAL,
+      ["fsm load: nothing loaded.", ...err.problems.map((p) => `  - ${p}`)]
+        .join("\n"),
+      undefined,
+      { cause: err },
+    );
+  }
 }

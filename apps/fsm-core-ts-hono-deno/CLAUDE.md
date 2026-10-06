@@ -56,8 +56,9 @@ in the Deno job (blocking).
   `--enable-admin-api`)
 - `test/api-key-auth.test.ts` — auth, roles, rollback, admin routes, `createApp`
   startup checks
-- `src/cli/index.ts` — CLI entry: flags are copied into the env before
-  `env.ts`/`logger.ts` load
+- `src/cli/index.ts` — CLI entry. SIGTERM/Ctrl-C drain in-flight requests
+  (`server.shutdown()`), close the pool and exit 0; a second signal exits 130.
+  Flags are copied into the env before `env.ts`/`logger.ts` load
 - `stoker-src/` — OpenAPI helper utilities
 
 ## Key Dependencies
@@ -100,6 +101,7 @@ control") are what's enforced, not route code. A handler that throws or answers
   grants `fsm_admin` to it only on the internal, admin-enabled Deployment).
   Logging in as `postgres` works, but the API warns at startup that the login
   inherits privileges.
-- The first admin key comes from the database side (`pgfsmctl db key create`,
-  #473; until then `SELECT fsm_core.create_api_key('name', 'fsm_admin')` as the
-  owner). After that, keys are managed through `/admin/keys`.
+- The first admin key comes from the database side:
+  `pgfsmctl db key create --name <n> --role admin` (as the schema owner). After
+  that, keys are managed through `/admin/keys`
+  (`pgfsmctl key create|list|revoke`).
