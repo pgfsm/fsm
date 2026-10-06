@@ -245,6 +245,35 @@ Deno.test({
 });
 
 Deno.test({
+  name: "TLS: a refused connection is retried, not left hanging (#457)",
+  ...opts,
+  fn: async () => {
+    // A port nothing listens on: the worker started before the gateway.
+    const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+    const { port } = listener.addr as Deno.NetAddr;
+    listener.close();
+    const tls = await makeTestTls();
+    try {
+      const worker = new ActorWorker(
+        {
+          workerId: "early",
+          language: "typescript",
+          gatewayAddress: `https://localhost:${port}`,
+          caFile: tls.caFile,
+          reconnectMaxAttempts: 2,
+          reconnectInitialDelayMs: 10,
+          reconnectMaxDelayMs: 20,
+        },
+        [DOUBLE],
+      );
+      await assertRejects(() => worker.run(), Error, "giving up");
+    } finally {
+      await Deno.remove(tls.dir, { recursive: true });
+    }
+  },
+});
+
+Deno.test({
   name: "plaintext http:// reaches a gateway in --insecure-plaintext mode",
   ...opts,
   fn: () =>

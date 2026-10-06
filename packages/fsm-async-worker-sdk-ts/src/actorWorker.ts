@@ -581,11 +581,17 @@ export class ActorWorker {
       // and crashed the process. Instead, log it and close the socket
       // without an error: the session sees a plain close, the call fails,
       // and run() retries with backoff like any other dropped connection.
+      // Only after the handshake, though: an error before it (e.g.
+      // ECONNREFUSED while the gateway is still starting) must reach
+      // connect-node, which is still listening then. Swallowed, its connect
+      // never settled and the worker hung instead of retrying (#457).
       tlsOptions.createConnection = () => {
         const socket = tls.connect(secure);
+        let handshaken = false;
+        socket.once("secureConnect", () => handshaken = true);
         const emit = socket.emit.bind(socket);
         socket.emit = ((event: string | symbol, ...args: unknown[]) => {
-          if (event === "error") {
+          if (event === "error" && handshaken) {
             logger.warn("Gateway TLS connection failed: {error}", {
               error: args[0] instanceof Error
                 ? args[0].message
