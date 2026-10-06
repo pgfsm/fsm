@@ -69,6 +69,21 @@ plus alerting for 3–4.
 - **SPEC-005 boundaries.** Project-aware commands go in `@pgfsm/cli` (`pgfsm`).
   Database-only ops commands go in `@pgfsm/ctl` (`pgfsmctl`).
 - **Schema changes follow `docs/schema-change-propagation.md`.**
+- **SPEC-009's access model** (merged in #469–#474). Access to `fsm_core` is
+  enforced at the function boundary by the `fsm_operator`, `fsm_admin`,
+  `fsm_worker` and `fsm_authenticator` roles:
+  - Functions that clients call are `SECURITY DEFINER` with a pinned
+    `search_path`, granted to the role that needs them. No `fsm_core` function
+    is executable by `PUBLIC`, and roles get table access only where `@pgfsm/db`
+    reads or writes a table directly.
+  - `supabase db diff` doesn't capture role grants, so they're copied into the
+    migration by hand from `schemas/40_access_control/`
+    (`packages/database-src/CLAUDE.md`, "Access control"). The pgTAP tests in
+    `tests/40_access_control/` fail on any `PUBLIC`-executable function and on
+    any `SECURITY DEFINER` function not granted to an `fsm_*` role.
+  - `pgfsmctl` conventions apply: targets (`--db-url`, `--profile`), `-o`, and
+    the exit-code table in `packages/fsm-ctl-ts/src/exit.ts`.
+  - New TypeScript that imports `pg` carries `// @ts-types="@types/pg"` (#479).
 
 ## Options considered
 
@@ -139,8 +154,9 @@ project:
    legacy rule is listed as `placeholder`.
 4. **Exit code:** `5` (check failed, SPEC-009 §6) if anything in 1 or 2 fails,
    or if any placeholder exists, unless `--allow-placeholders` is passed (for
-   local development). `-o json` emits the same findings as machine-readable
-   output on stdout for CI annotations.
+   local development). As with the rest of `pgfsm` (#474): `4` outside a
+   project, `2` for bad arguments. `-o json` emits the same findings as
+   machine-readable output on stdout for CI annotations.
 
 `pgfsm check` needs no database and doesn't read any other pgfsm project.
 
@@ -164,6 +180,15 @@ project:
 - A row is **live** while `last_heartbeat > now() - 3 × interval`. Rows older
   than 10 minutes are deleted by the status function's caller path (D4), so
   crashed replicas don't accumulate.
+- **Access (SPEC-009).** The gateway writes through two functions, not table
+  grants, matching the function boundary:
+  - `fsm_core.upsert_async_operation_gateway_heartbeat_v2(input_gateway_id,
+    input_gateway_pid, input_actors)`
+    and
+    `fsm_core.delete_async_operation_gateway_heartbeat_v2(input_gateway_id)`;
+  - both `SECURITY DEFINER` with the pinned `search_path`, `EXECUTE` granted to
+    `fsm_worker` (the role a gateway's login is granted, SPEC-007);
+  - no role gets table privileges on `async_operation_gateway_heartbeat`.
 - The v1 tables and the `checkRegistry*` helpers are untouched. They're
   deprecated with the v1 async worker and are not reused.
 
@@ -191,10 +216,15 @@ one row per actor identity:
 - It is one read-only statement, plus the stale-row cleanup from D3. `@pgfsm/db`
   wraps it as `asyncOperationActorStatus(deps, maxAgeSeconds)`, following the
   PG→TS naming rules.
+- **Access (SPEC-009).** `SECURITY DEFINER` with the pinned `search_path`,
+  because it reads `fsm_json`, the heartbeat table and `pgmq.metrics`, and
+  deletes stale heartbeat rows, none of which the calling roles can touch
+  directly. `EXECUTE` is granted to `fsm_operator` (`actors status`; admins
+  inherit it) and `fsm_worker` (D6's startup warning runs in the sync worker).
 
 ### D5 — `pgfsmctl actors status` (`@pgfsm/ctl`)
 
-`pgfsmctl actors status [--max-age <seconds, default 60>] [--fsm <name>[/<version>]] [-o table|json] [--db-url]`:
+`pgfsmctl actors status [--max-age <seconds, default 60>] [--fsm <name>[/<version>]] [-o table|json|ids] [--db-url <url> | --profile <name>]`:
 
 - Prints one row per actor: identity, status, workers, capacity, in-flight,
   queue length, oldest age.
@@ -203,7 +233,17 @@ one row per actor identity:
   `pgfsmctl actors status` in a cron or Kubernetes CronJob _is_ the stuck-queue
   alert, with no extra infrastructure. Other failures (DB unreachable) exit `1`,
   and usage errors exit `2`, so a mistyped flag in a CronJob can't be mistaken
-  for an unhealthy actor.
+  for an unhealthy actor. A database login that may not run the status function
+  exits `3`.
+- **Tier (SPEC-009).** DB-direct for now, like `instance …`. The target resolves
+  as for every DB-direct `pgfsmctl` command: `--db-url`, then an explicit
+  `--profile`/`PGFSM_PROFILE`, then `PGFSM_DB_URL`/`DATABASE_URL`, then the
+  current profile. The login needs `fsm_operator`; a CronJob doesn't need the
+  schema owner. SPEC-009 phase 2 moves it to the REST API with an operator key,
+  keeping `--db-url` as break-glass.
+- `-o ids` prints the actor keys (`<parentFsm>/<version>/<actor>`) with status
+  `no_worker` or `backlogged`, one per line, so a CronJob can list exactly
+  what's stuck.
 
 ### D6 — fsmlet startup warning (`@pgfsm/sync-worker`)
 
@@ -238,8 +278,11 @@ one row per actor identity:
 
 **Migration**
 
-1. `database-src` + `@pgfsm/db`: heartbeat table, status function, TS wrappers
-   (schema-change propagation doc).
+1. `database-src` + `@pgfsm/db`: heartbeat table, heartbeat and status
+   functions, TS wrappers (schema-change propagation doc). Add the functions to
+   `schemas/40_access_control/`'s `ALTER FUNCTION … SECURITY DEFINER` and
+   `GRANT` lists, and copy those blocks into the migration by hand (SPEC-009;
+   `packages/database-src/CLAUDE.md`, "Access control").
 2. `@pgfsm/async-worker-gateway`: publish heartbeats. This is independent of
    SPEC-007: a single-replica gateway today works the same, with capacity
    counted as 1 per worker until SPEC-007 adds `max_concurrency`.
@@ -292,6 +335,16 @@ one row per actor identity:
 - [ ] `warnOnUnservedAsyncActors: false` suppresses that warning.
 - [ ] Nothing in the dispatch or claim path reads
       `async_operation_gateway_heartbeat` or the status function.
+- [ ] Access (SPEC-009):
+  - [ ] The new functions are `SECURITY DEFINER` with a pinned `search_path` and
+        not executable by `PUBLIC`; the existing `tests/40_access_control/`
+        pgTAP tests pass unchanged.
+  - [ ] A login granted only `fsm_worker` can upsert and delete heartbeats.
+  - [ ] A login granted only `fsm_operator` can run `actors status`, gets
+        `42501` on the heartbeat functions, and has no privileges on the
+        heartbeat table.
+  - [ ] `pgfsmctl actors status` against an `fsm_operator`-only login works, and
+        exits `3` against a login without it.
 
 ## Implementation
 
