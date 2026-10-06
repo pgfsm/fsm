@@ -18,6 +18,13 @@ import { inSandbox } from "../sandbox.ts";
 import { type Ask, resolveSources, SourceError } from "../source.ts";
 import { PACKAGE_VERSION } from "../version.ts";
 
+/** Exit codes, shared with pgfsmctl (SPEC-009 §6–7). */
+const EXIT = {
+  GENERAL: 1,
+  USAGE: 2,
+  NOT_FOUND: 4,
+  INTERRUPTED: 130,
+} as const;
 const LOG_CATEGORY = "@pgfsm/cli";
 
 const args = parseArgs(Deno.args, {
@@ -182,10 +189,18 @@ if (args.version) {
   console.log(PACKAGE_VERSION);
   Deno.exit(0);
 }
-if (args.help || !command) {
+if (args.help) {
   console.log(HELP);
   Deno.exit(0);
 }
+if (!command) {
+  // Help on a usage error goes to stderr, like pgfsmctl (SPEC-009 §7).
+  console.error(HELP);
+  Deno.exit(EXIT.USAGE);
+}
+
+// Ctrl-C (also during an interactive prompt) exits 130.
+Deno.addSignalListener("SIGINT", () => Deno.exit(EXIT.INTERRUPTED));
 
 try {
   switch (command) {
@@ -197,19 +212,34 @@ try {
       break;
     default:
       console.error(`Unknown command: ${command}\n\n${HELP}`);
-      Deno.exit(1);
+      Deno.exit(EXIT.USAGE);
   }
 } catch (err) {
   // Expected, user-facing failures get their message only; anything else
   // gets the full error (with cause) through the logger.
-  if (
-    err instanceof CreateError || err instanceof SourceError ||
-    err instanceof NoProjectError || err instanceof FsmExistsError ||
-    err instanceof MachineImportError
-  ) {
-    console.error(`error: ${err.message}`);
+  const code = exitCodeFor(err);
+  if (code !== undefined) {
+    console.error(`error: ${(err as Error).message}`);
   } else {
     logger.error("{command} failed: {error}", { command, error: err });
   }
-  Deno.exit(1);
+  Deno.exit(code ?? EXIT.GENERAL);
+}
+
+/**
+ * The exit code for an expected, user-facing error (SPEC-009 §7, the same
+ * table as pgfsmctl's); undefined for an unexpected one (exit 1).
+ */
+function exitCodeFor(err: unknown): number | undefined {
+  // Bad arguments: create's target or project name, a source that doesn't
+  // exist or whose FSM identity can't be worked out.
+  if (err instanceof CreateError || err instanceof SourceError) {
+    return EXIT.USAGE;
+  }
+  if (err instanceof NoProjectError) return EXIT.NOT_FOUND;
+  // A version that exists without --force, or a machine.ts that won't import.
+  if (err instanceof FsmExistsError || err instanceof MachineImportError) {
+    return EXIT.GENERAL;
+  }
+  return undefined;
 }

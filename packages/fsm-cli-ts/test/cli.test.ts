@@ -119,6 +119,7 @@ Deno.test("create lays out the project with all four async-worker languages and 
     "fsm:add",
     "db:load",
     "db:pgcron",
+    "db:key",
     "gateway",
   ]);
   // Sibling tools are pinned to the versions this CLI was built with.
@@ -132,6 +133,19 @@ Deno.test("create lays out the project with all four async-worker languages and 
     pkg.scripts["db:pgcron"],
     `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} db cron register`,
   );
+  assertEquals(
+    pkg.scripts["db:key"],
+    `npx -y @pgfsm/ctl@${await versionOf(
+      "fsm-ctl-ts",
+    )} db key create --name local-admin --role admin`,
+  );
+  // .env.example (SPEC-009 §7): local dev needs only the database URL; the
+  // API variables are listed but commented out.
+  const envExample = await Deno.readTextFile(join(APP, ".env.example"));
+  assert(/^DATABASE_URL=postgresql:/m.test(envExample), envExample);
+  for (const name of ["PGFSM_DB_URL", "PGFSM_URL", "PGFSM_API_KEY"]) {
+    assert(new RegExp(`^# ${name}=`, "m").test(envExample), name);
+  }
   assertStringIncludes(
     pkg.scripts.gateway,
     `npx -y -p @pgfsm/async-worker-gateway@${await versionOf(
@@ -161,12 +175,12 @@ Deno.test("create lays out the project with all four async-worker languages and 
 
 Deno.test("create refuses an existing project and a directory inside one", async () => {
   const again = await pgfsm(["create", "my-app"]);
-  assertEquals(again.code, 1);
+  assertEquals(again.code, 2);
   assertStringIncludes(again.out, "already a pgfsm project");
   assertStringIncludes(again.out, "add");
 
   const nested = await pgfsm(["create", "my-app/sub"]);
-  assertEquals(nested.code, 1);
+  assertEquals(nested.code, 2);
   assertStringIncludes(nested.out, "inside the pgfsm project");
 });
 
@@ -175,13 +189,13 @@ Deno.test("create refuses a non-empty directory", async () => {
   await Deno.mkdir(dir);
   await Deno.writeTextFile(join(dir, "notes.txt"), "hi\n");
   const { code, out } = await pgfsm(["create", "busy"]);
-  assertEquals(code, 1);
+  assertEquals(code, 2);
   assertStringIncludes(out, "isn't empty");
 });
 
 Deno.test("add outside a project fails with the create hint and writes nothing", async () => {
   const { code, out } = await pgfsm(["add", "designs/credit.json"], DESIGNS);
-  assertEquals(code, 1);
+  assertEquals(code, 4, "no project: not found");
   assertStringIncludes(out, "No pgfsm project found");
   assertStringIncludes(out, "create");
   assertEquals(await exists(join(DESIGNS, "fsm")), false);
@@ -192,7 +206,7 @@ Deno.test("add without a name/version it can't infer fails in --no-input mode, n
     ["add", join(DESIGNS, "a", "machine.ts")],
     APP,
   );
-  assertEquals(code, 1);
+  assertEquals(code, 2, "a source it can't name is a usage error");
   assertStringIncludes(out, "--fsm-name");
   assertStringIncludes(out, "--fsm-version");
   assertEquals(await exists(join(APP, "fsm/a")), false);
@@ -351,9 +365,16 @@ Deno.test("add --force after the source gains a guard creates its stub and impor
   );
 });
 
+Deno.test("no command is a usage error; --help is not", async () => {
+  const none = await pgfsm([], APP);
+  assertEquals(none.code, 2);
+  assertStringIncludes(none.out, "create");
+  assertEquals((await pgfsm(["--help"], APP)).code, 0);
+});
+
 Deno.test("sync is not a command in v1", async () => {
   const { code, out } = await pgfsm(["sync"], APP);
-  assertEquals(code, 1);
+  assertEquals(code, 2);
   assertStringIncludes(out, "Unknown command: sync");
 });
 
