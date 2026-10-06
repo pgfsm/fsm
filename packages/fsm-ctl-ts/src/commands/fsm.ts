@@ -1,4 +1,3 @@
-import { parseArgs } from "@std/cli/parse-args";
 import { getLogger } from "@logtape/logtape";
 import {
   type FsmDefinition,
@@ -6,9 +5,12 @@ import {
   loadFsmDefinitions,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
+import { parseCommandArgs, verbOf } from "../args.ts";
+import { resolveDbUrl, withPool } from "../db-target.ts";
+import { CtlError, ExitCode, exitCodeFor, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
 import { CTL_CATEGORY } from "../logger.ts";
-import { resolveDbUrl, withPool } from "./db.ts";
+import { printList } from "../output.ts";
 
 const logger = getLogger([CTL_CATEGORY, "fsm"]);
 
@@ -26,8 +28,13 @@ VERBS
          definition fails.
 
 OPTIONS
-  -d, --db-url <url>  Database connection URL (overrides DATABASE_URL from .env)
-  -h, --help          Show this help
+  -d, --db-url <url>    Postgres URL (else --profile, PGFSM_DB_URL, DATABASE_URL, current profile)
+      --profile <name>  Use this profile's db_url
+  -o, --output <fmt>    table (default), json or ids (<fsmName>/<version>)
+  -h, --help            Show this help
+
+  DB-direct for now. #473 adds the REST API tier (admin key), with --db-url
+  as break-glass.
 
 DESCRIPTION
   A deploy step (SPEC-006): run it after applying migrations and before
@@ -80,73 +87,63 @@ export async function readFsmDefinitionsFromFolder(
 }
 
 export async function fsmCommand(argv: string[]): Promise<void> {
-  const args = parseArgs(argv, {
-    string: ["db-url"],
-    boolean: ["help"],
-    alias: { h: "help", d: "db-url" },
-  });
-  const [verb, folder] = args._.map(String);
+  const args = parseCommandArgs(argv, { common: ["db", "output"] }, HELP);
+  if (args.help) return console.log(HELP);
 
-  if (args.help) {
-    console.log(HELP);
-    Deno.exit(0);
-  }
-  if (verb !== "load") {
-    logger.error(
-      verb === undefined
-        ? "fsm needs a verb: load"
-        : `Unknown fsm verb: ${verb}`,
-    );
-    console.log(HELP);
-    Deno.exit(1);
-  }
+  verbOf("fsm", args.positionals, ["load"], HELP);
+  const folder = args.positionals[1];
   if (folder === undefined) {
-    logger.error("fsm load needs a folder, e.g. `fsm load fsm`");
-    console.log(HELP);
-    Deno.exit(1);
+    throw usageError("fsm load needs a folder, e.g. `fsm load fsm`", HELP);
   }
 
   let definitions: FsmDefinition[];
   try {
     definitions = await readFsmDefinitionsFromFolder(folder);
   } catch (err) {
-    logger.error(
+    throw new CtlError(
+      err instanceof Deno.errors.NotFound ? ExitCode.USAGE : ExitCode.GENERAL,
       `fsm load: ${err instanceof Error ? err.message : String(err)}`,
     );
-    Deno.exit(1);
   }
   if (definitions.length === 0) {
-    logger.error(
-      "fsm load: no <fsmName>/<version>/fsm.json found under {folder}",
-      { folder },
+    throw usageError(
+      `fsm load: no <fsmName>/<version>/fsm.json found under ${folder}`,
     );
-    Deno.exit(1);
   }
 
-  const dbUrl = resolveDbUrl(args["db-url"]);
+  const dbUrl = await resolveDbUrl(args);
+  let results;
   try {
-    const results = await withPool(
+    results = await withPool(
       dbUrl,
       (deps) => loadFsmDefinitions(deps, definitions),
     );
-    for (const r of results) {
-      // Built as plain text: LogTape quotes interpolated strings.
-      logger.info(`${r.status} ${r.fsmName}/${r.fsmVersion}`);
-    }
-    const loaded = results.filter((r) => r.status === "loaded").length;
-    logger.info(
-      "fsm load: {loaded} loaded, {unchanged} unchanged.",
-      { loaded, unchanged: results.length - loaded },
-    );
   } catch (err) {
-    if (err instanceof FsmDefinitionLoadError) {
-      logger.error(
-        ["fsm load: nothing loaded.", ...err.problems.map((p) => `  - ${p}`)]
-          .join("\n"),
-      );
-    } else {
-      logger.error("fsm load failed: {error}", { error: err });
-    }
-    Deno.exit(1);
+    if (!(err instanceof FsmDefinitionLoadError)) throw err;
+    throw new CtlError(
+      exitCodeFor(err) === ExitCode.AUTH ? ExitCode.AUTH : ExitCode.GENERAL,
+      ["fsm load: nothing loaded.", ...err.problems.map((p) => `  - ${p}`)]
+        .join("\n"),
+      undefined,
+      { cause: err },
+    );
   }
+
+  const loaded = results.filter((r) => r.status === "loaded").length;
+  logger.info("fsm load: {loaded} loaded, {unchanged} unchanged.", {
+    loaded,
+    unchanged: results.length - loaded,
+  });
+  printList(
+    results.map((r) => ({
+      fsm_name: r.fsmName,
+      fsm_version: r.fsmVersion,
+      status: r.status,
+    })),
+    args.output,
+    {
+      columns: ["fsm_name", "fsm_version", "status"],
+      id: (r) => `${r.fsm_name}/${r.fsm_version}`,
+    },
+  );
 }

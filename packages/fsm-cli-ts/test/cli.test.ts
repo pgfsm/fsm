@@ -130,7 +130,7 @@ Deno.test("create lays out the project with all four async-worker languages and 
   );
   assertEquals(
     pkg.scripts["db:pgcron"],
-    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} pgcron register`,
+    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} db cron register`,
   );
   assertStringIncludes(
     pkg.scripts.gateway,

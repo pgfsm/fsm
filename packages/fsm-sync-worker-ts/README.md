@@ -78,7 +78,7 @@ import type {
 
 | Before (`npx -p @pgfsm/sync-worker -- …`) | Now (`npx @pgfsm/ctl …`)                |
 | ----------------------------------------- | --------------------------------------- |
-| `pgcron [-s <cron>]`                      | `pgcron register [-s <cron>]`           |
+| `pgcron [-s <cron>]`                      | `db cron register [-s <cron>]`          |
 | `fsmctl -c create -n <fsm> -V <v>`        | `instance create -n <fsm> -V <v>`       |
 | `fsmctl -c resume\|send\|stop -q <id> …`  | `instance resume\|send\|stop -q <id> …` |
 | `fsmscheduler [-p <ms>] [-s <secs>]`      | `scheduler run [-p <ms>] [-s <secs>]`   |
@@ -89,7 +89,7 @@ import type {
 ## Prerequisites
 
 - **A Postgres database** with the pgfsm schema applied, the scheduler job
-  registered once (`npx @pgfsm/ctl pgcron register`), and the project's FSM
+  registered once (`npx @pgfsm/ctl db cron register`), and the project's FSM
   definitions loaded (`npx @pgfsm/ctl fsm load fsm`, on every deploy)
 
 ## License

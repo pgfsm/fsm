@@ -87,7 +87,7 @@ function packageJson(name: string, toolVersion: string): string {
       scripts: {
         "fsm:add": `${cli} add`,
         "db:load": `npx -y @pgfsm/ctl@${CTL_VERSION} fsm load fsm`,
-        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} pgcron register`,
+        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} db cron register`,
         "gateway":
           `npx -y -p @pgfsm/async-worker-gateway@${GATEWAY_VERSION} -- async-operation-worker-gateway --ensure-queue-on-register`,
       },

@@ -1,7 +1,7 @@
 -- Precondition: the job is registered by the deploy step, not by migrations
 -- (cron.schedule() is data-level, so `supabase db diff` never captures it).
 -- After `supabase db reset`, run from packages/fsm-ctl-ts:
---   deno task pgfsmctl pgcron register --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
+--   deno task pgfsmctl db cron register --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
 -- CI does this before `supabase test db` (#468).
 begin;
 select plan(3);
