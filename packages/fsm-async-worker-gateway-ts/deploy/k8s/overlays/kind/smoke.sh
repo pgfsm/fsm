@@ -83,12 +83,24 @@ log "Postgres (test-only) + migrations"
 kubectl apply -f "$HERE/postgres.yaml"
 kubectl -n pgfsm-db rollout status deploy/postgres --timeout=300s
 pg_pod=$(kubectl -n pgfsm-db get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')
-for migration in "$ROOT"/packages/database-src/supabase/migrations/*.sql; do
-  # As `postgres` over TCP with its password, like `supabase db reset`
-  # (the image asks for a password on the local socket too).
+# As `postgres` over TCP with its password, like `supabase db reset` (the
+# image asks for a password on the local socket too). Timeouts turn a lock
+# still held by the image's own init into an error instead of a hang.
+pg_psql() {
   kubectl -n pgfsm-db exec -i "$pg_pod" -- env PGPASSWORD=postgres \
-    psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d postgres <"$migration" >/dev/null
+    PGOPTIONS="-c lock_timeout=60s -c statement_timeout=120s" \
+    psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d postgres "$@"
+}
+for _ in $(seq 1 60); do
+  pg_psql -c 'select 1' >/dev/null 2>&1 && break
+  sleep 2
 done
+# One exec for every migration (not one stdin stream each), naming each file.
+for migration in "$ROOT"/packages/database-src/supabase/migrations/*.sql; do
+  printf '\\echo %s\n' "$(basename "$migration")"
+  cat "$migration"
+  printf '\n'
+done | pg_psql
 
 log "Namespace, TLS material, tokens and database Secrets"
 kubectl apply -f "$ROOT/packages/fsm-async-worker-gateway-ts/deploy/k8s/base/namespace.yaml"
