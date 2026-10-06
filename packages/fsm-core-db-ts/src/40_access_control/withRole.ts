@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+// @ts-types="@types/pg"
 import type { Pool, PoolClient } from "pg";
 import type { DBDeps } from "../custom.types.ts";
 
