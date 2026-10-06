@@ -69,7 +69,7 @@ export default async function createApp(
   pool.on("connect", () => {
     logger.debug("Database pool: new connection established");
   });
-  pool.on("error", (err) => {
+  pool.on("error", (err: Error) => {
     logger.error("Database pool error: {error}", { error: err });
   });
 

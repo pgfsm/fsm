@@ -87,7 +87,7 @@ export async function unregisterScheduleAllPendingCronJob(
        FROM cron.job WHERE jobname = $1`,
     [CRON_JOB_NAME],
   );
-  const removed = res.rows.some((r) => r.removed);
+  const removed = res.rows.some((r: { removed: boolean }) => r.removed);
   logger.info("unregisterScheduleAllPendingCronJob: {jobName} {outcome}", {
     jobName: CRON_JOB_NAME,
     outcome: removed ? "removed" : "was not registered",

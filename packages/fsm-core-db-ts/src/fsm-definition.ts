@@ -307,7 +307,7 @@ export async function loadFsmDefinitions(
     await client.query("COMMIT");
     return results;
   } catch (err) {
-    await client.query("ROLLBACK").catch((rollbackErr) =>
+    await client.query("ROLLBACK").catch((rollbackErr: unknown) =>
       logger.error("ROLLBACK failed: {error}", { error: rollbackErr })
     );
     const reason = err instanceof Error ? err.message : String(err);
