@@ -97,3 +97,20 @@ export type {
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 
 export { archiveEventFromFsmAsyncOperationTypeWorker } from "./30_async_operation_worker_v2/asyncOperationCtl.ts";
+
+export {
+  API_KEY_ROLES,
+  createApiKey,
+  hashApiKey,
+  listApiKeys,
+  revokeApiKey,
+  verifyApiKey,
+} from "./40_access_control/apiKeys.ts";
+export type {
+  ApiKeyRole,
+  ApiKeyRow,
+  CreatedApiKey,
+} from "./40_access_control/apiKeys.ts";
+
+export { FSM_DB_ROLES, withRole } from "./40_access_control/withRole.ts";
+export type { FsmDbRole } from "./40_access_control/withRole.ts";

@@ -23,7 +23,7 @@ package main
 import (
 	"os"
 
-	generatedregistry "debug-only/go-actors-registry-generated"
+	generatedregistry "debug-only/actor-registry-aggregate-generated"
 	asyncworkersdk "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go"
 )
 

@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { copy } from "@std/fs/copy";
+import { exists } from "@std/fs/exists";
 import { generateAll } from "../src/generate-all.ts";
 import {
   type FileWriteEvent,
@@ -109,15 +110,15 @@ Deno.test("generateAll overwrite generated-only - a re-run keeps edited stubs/en
   await generateAll(opts);
 
   const sync = `${root}/sync-worker/typescript`;
-  const actions = `${sync}/creditCheck/v01/actions/index.ts`;
+  const actions = `${sync}/creditCheck/v01/actions/assignSSN/assignSSN.ts`;
   const runSync = `${sync}/run-sync-worker.ts`;
   const syncDenoJson = `${sync}/deno.json`;
   const actor =
     `${root}/async-worker/typescript/creditCheck/v01/actors/verifyCredentials/verifyCredentials.ts`;
   const syncRegistry =
-    `${sync}/creditCheck/v01/generated-sync-operation-registry.ts`;
+    `${sync}/creditCheck/v01/sync-operation-registry.generated.ts`;
   const aggregate =
-    `${root}/async-worker/typescript/typescript-actors-registry.generated.ts`;
+    `${root}/async-worker/typescript/actor-registry-aggregate.generated.ts`;
 
   // Deliberately unformatted edits: a deno fmt pass over them would change
   // them, so byte-equality also proves the formatter skipped kept files.
@@ -152,8 +153,8 @@ Deno.test("generateAll overwrite generated-only - a re-run keeps edited stubs/en
   );
 });
 
-Deno.test("generateAll overwrite generated-only - reports exports a kept stub module is missing", async () => {
-  const root = `${FIXTURE_ROOT}/e2e-missing`;
+Deno.test("generateAll overwrite generated-only - an existing guards/index.ts is ignored: per-operation stubs are written and imported (#462)", async () => {
+  const root = `${FIXTURE_ROOT}/e2e-ignores-index`;
   const opts = {
     folder: SINGLE_FSM_JSON,
     writeRootAbsPath: root,
@@ -162,22 +163,65 @@ Deno.test("generateAll overwrite generated-only - reports exports a kept stub mo
     overwrite: "generated-only" as const,
   };
   await generateAll(opts);
-  const guards =
-    `${root}/sync-worker/typescript/creditCheck/v01/guards/index.ts`;
-  const original = await Deno.readTextFile(guards);
-  const firstGuard = original.match(/export function (\w+)/)?.[1];
-  assert(firstGuard, "fixture FSM should have at least one guard");
-  // Simulate an FSM that gained a guard after the developer's stub was
-  // written: the existing file lacks that export.
-  await Deno.writeTextFile(guards, "// the developer's guards\n");
+  const version = `${root}/sync-worker/typescript/creditCheck/v01`;
+  const guardsDir = `${version}/guards`;
+  await Deno.remove(guardsDir, { recursive: true });
+  await Deno.mkdir(guardsDir);
+  await Deno.writeTextFile(`${guardsDir}/index.ts`, "// old layout\n");
+
+  await generateAll(opts);
+
+  assert(await exists(`${guardsDir}/allSucceeded/allSucceeded.ts`));
+  assertEquals(
+    await Deno.readTextFile(`${guardsDir}/index.ts`),
+    "// old layout\n",
+  );
+  const registry = await Deno.readTextFile(
+    `${version}/sync-operation-registry.generated.ts`,
+  );
+  assertEquals(registry.includes("./guards/index.ts"), false);
+  assertStringIncludes(
+    registry,
+    'import { allSucceeded } from "./guards/allSucceeded/allSucceeded.ts";',
+  );
+});
+
+Deno.test("generateAll overwrite generated-only - creates a stub for a new sync operation and keeps the edited ones (#460)", async () => {
+  const root = `${FIXTURE_ROOT}/e2e-per-operation`;
+  const opts = {
+    folder: SINGLE_FSM_JSON,
+    writeRootAbsPath: root,
+    fsmName: "creditCheck",
+    fsmVersion: "v01",
+    overwrite: "generated-only" as const,
+  };
+  await generateAll(opts);
+  const guardsDir = `${root}/sync-worker/typescript/creditCheck/v01/guards`;
+  const edited = `${guardsDir}/allSucceeded/allSucceeded.ts`;
+  await Deno.writeTextFile(edited, "export function allSucceeded() {}\n");
+  // Simulate a guard the FSM gained since the last run: its stub is missing.
+  const added = `${guardsDir}/gavUnionReportFound/gavUnionReportFound.ts`;
+  await Deno.remove(`${guardsDir}/gavUnionReportFound`, { recursive: true });
 
   const events: FileWriteEvent[] = [];
   await generateAll({ ...opts, onFileWrite: (e) => events.push(e) });
 
-  const kept = events.find((e) => e.path === guards);
+  assertEquals(
+    events.find((e) => e.path === added)?.action,
+    "created",
+  );
+  assertStringIncludes(
+    await Deno.readTextFile(added),
+    "export function gavUnionReportFound(",
+  );
+  const kept = events.find((e) => e.path === edited);
   assertEquals(kept?.action, "kept");
-  assert(kept?.missingNames?.includes(firstGuard));
-  assertEquals(await Deno.readTextFile(guards), "// the developer's guards\n");
+  assertEquals(kept?.missingNames, undefined);
+  assertEquals(
+    await Deno.readTextFile(edited),
+    "export function allSucceeded() {}\n",
+  );
+  assertEquals(await exists(`${guardsDir}/index.ts`), false);
 });
 
 Deno.test("generateAll default overwrite - a re-run still rewrites scaffolded files (unchanged behaviour)", async () => {

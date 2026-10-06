@@ -34,7 +34,7 @@ const SYNC_WORKER_DIR_NAME = "sync-worker";
  * Writes action/guard/delay stubs for one already-parsed fsm.json into
  * `<writeRootAbsPath>/sync-worker/<lang>/<fsmName>/<fsmVersion>/`, in each of
  * `langs` — plus, for `typescript`, that version's
- * `generated-sync-operation-registry.ts` (see
+ * `sync-operation-registry.generated.ts` (see
  * {@linkcode writeSyncOperationRegistry}) and a copy of `fsm.json` itself
  * (re-serialized from the already-parsed `fsmData` via the same
  * `JSON.stringify(fsmData, null, 2) + "\n"` convention `generate-fsm-json.ts`
@@ -122,7 +122,7 @@ async function scaffoldSyncLogicForVersion(
 
 /**
  * Refreshes the aggregate sync-operation registry
- * (`aggregate-generated-sync-operation-registry.ts`) at
+ * (`sync-operation-registry-aggregate.generated.ts`) at
  * `<writeRootAbsPath>/sync-worker/typescript/`, alongside every
  * `<fsmName>/<fsmVersion>/` {@linkcode scaffoldSyncLogicForVersion} wrote —
  * the sync-logic counterpart of `generate-async-operation-logic.ts`'s own

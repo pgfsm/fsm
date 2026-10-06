@@ -1,22 +1,21 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
-import { configureApiLogger } from "../../logger.ts";
-import type { FsmStartupConfig } from "../../lib/types.ts";
 
+// logger.ts imports env.ts, which reads the environment once at import time,
+// so it's loaded below, only after the flags have been copied into the env.
 const logger = getLogger(["@pgfsm/api", "cli"]);
-await configureApiLogger();
 
 const args = parseArgs(Deno.args, {
   string: [
     "db-url",
     "url-path-prefix",
     "port",
-    "shared-async-operation-path",
-    "fsm-path",
     "env-file",
   ],
-  boolean: ["help"],
+  boolean: ["help", "auth", "enable-admin-api"],
+  negatable: ["auth"],
+  default: { auth: true },
   alias: {
     h: "help",
     d: "db-url",
@@ -26,38 +25,39 @@ const args = parseArgs(Deno.args, {
 });
 
 function printHelp(): void {
-  logger.info(`
+  console.log(`
 fsm-server — FSM Hono server CLI
+
+The API serves HTTP only. Run fsmlets as separate workers (a generated worker
+project's sync-worker), not in this process.
 
 USAGE
   deno run --allow-all src/cli/index.ts [options]
 
 OPTIONS
-  -d, --db-url <url>                Database connection URL (overrides DATABASE_URL env var)
+  -d, --db-url <url>                Database connection URL (overrides DATABASE_URL env var).
+                                    With auth on, log in as fsm_authenticator in production.
   -u, --url-path-prefix <prefix>    URL path prefix for all routes (default: /fsm)
   -p, --port <port>                 Port to listen on (default: 9999)
-      --shared-async-operation-path <path>  Absolute path to sharedAsyncOperation FSM folder
-      --fsm-path <path>             Absolute path to fsm FSM folder
+      --no-auth                     Don't require API keys; every request runs as the
+                                    database login. Local development only: refused when
+                                    NODE_ENV=production. (env: PGFSM_NO_AUTH=true)
+      --enable-admin-api            Mount /admin/* (FSM definition load, API keys). The
+                                    database login must be able to act as fsm_admin.
+                                    (env: PGFSM_ENABLE_ADMIN_API=true)
       --env-file <path>             Path to .env file (default: ./.env)
   -h, --help                        Show this help message
 
 EXAMPLES
-  # Minimal — DATABASE_URL and other vars come from .env
+  # Minimal — DATABASE_URL and other vars come from .env; requires API keys
   deno run --allow-all src/cli/index.ts
 
-  # Override DB URL and port
-  deno run --allow-all src/cli/index.ts --db-url postgres://user:pass@localhost/db --port 8080
+  # Local development without keys
+  deno run --allow-all src/cli/index.ts --no-auth
 
-  # Full config with FSM folder paths and custom prefix
-  deno run --allow-all src/cli/index.ts \\
-    --db-url postgres://user:pass@localhost/db \\
-    --url-path-prefix /api/fsm \\
-    --port 8080 \\
-    --shared-async-operation-path /abs/path/to/sharedAsyncOperation \\
-    --fsm-path /abs/path/to/fsm
-
-  # Use a custom env file
-  deno run --allow-all src/cli/index.ts --env-file /path/to/.env --fsm-path /abs/path/to/fsm
+  # Internal admin deployment
+  deno run --allow-all src/cli/index.ts --enable-admin-api \\
+    --db-url postgres://fsm_authenticator:pass@db/postgres
 `);
 }
 
@@ -80,31 +80,18 @@ const urlPathPrefix = args["url-path-prefix"] ?? "/fsm";
 
 if (args["db-url"]) Deno.env.set("DATABASE_URL", args["db-url"]);
 if (args["port"]) Deno.env.set("PORT", String(port));
+if (!args.auth) Deno.env.set("PGFSM_NO_AUTH", "true");
+if (args["enable-admin-api"]) Deno.env.set("PGFSM_ENABLE_ADMIN_API", "true");
 
 if (!dbUrl) {
-  logger.error("--db-url is required (or set DATABASE_URL in the env file).");
+  console.error("--db-url is required (or set DATABASE_URL in the env file).");
   printHelp();
   Deno.exit(1);
 }
+Deno.env.set("DATABASE_URL", dbUrl);
 
-// Validate that FSM paths exist if provided
-const pathsToCheck: Array<[string, string]> = [];
-if (args["shared-async-operation-path"]) {
-  pathsToCheck.push([
-    "--shared-async-operation-path",
-    args["shared-async-operation-path"],
-  ]);
-}
-if (args["fsm-path"]) pathsToCheck.push(["--fsm-path", args["fsm-path"]]);
-
-for (const [flag, path] of pathsToCheck) {
-  try {
-    await Deno.stat(path);
-  } catch {
-    logger.error("{flag} path does not exist: {path}", { flag, path });
-    Deno.exit(1);
-  }
-}
+const { configureApiLogger } = await import("../../logger.ts");
+await configureApiLogger();
 
 // ── Dynamic imports (after env vars are fully set) ───────────────────────────
 // env.ts evaluates process.env at import time, so all overrides must be set first.
@@ -113,41 +100,17 @@ const { default: createApp } = await import("../../lib/create-app.ts");
 const { Pool } = await import("pg");
 const { Hono } = await import("hono");
 
-// ── Build FSM config from CLI flags ─────────────────────────────────────────
-
-const fsmConfig: FsmStartupConfig = {};
-if (args["shared-async-operation-path"]) {
-  fsmConfig.sharedAsyncOperation = {
-    folderPath: args["shared-async-operation-path"],
-    skipDirs: [],
-  };
-}
-if (args["fsm-path"]) {
-  fsmConfig.fsm = { folderPath: args["fsm-path"], skipDirs: [] };
-}
-
-// ── Graceful / force shutdown ────────────────────────────────────────────────
-
-let shutdownRequested = false;
-
-const onSignal = () => {
-  if (shutdownRequested) {
-    logger.info("Force exit.");
-    Deno.exit(0);
-  }
-  shutdownRequested = true;
-  logger.info(
-    "Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...",
-  );
-};
-
-Deno.addSignalListener("SIGINT", onSignal);
-Deno.addSignalListener("SIGTERM", onSignal);
-
 // ── Start server ─────────────────────────────────────────────────────────────
 
 const pool = new Pool({ connectionString: dbUrl });
-const fsmRouter = await createApp(pool, urlPathPrefix, fsmConfig);
+let fsmRouter;
+try {
+  fsmRouter = await createApp(urlPathPrefix, { pool });
+} catch (err) {
+  logger.error("{error}", { error: (err as Error).message });
+  await pool.end();
+  Deno.exit(1);
+}
 const host = new Hono();
 host.route(urlPathPrefix, fsmRouter);
 
@@ -155,7 +118,32 @@ logger.info("Starting FSM server on port {port} with prefix {prefix}", {
   port,
   prefix: urlPathPrefix,
 });
-Deno.serve({ port }, host.fetch);
+const server = Deno.serve({ port }, host.fetch);
+
+// ── Graceful / force shutdown ────────────────────────────────────────────────
+// SIGTERM (Kubernetes) or Ctrl-C: stop accepting connections, let in-flight
+// requests finish, close the pool, exit 0. A second signal force-exits (130).
+
+let shutdownRequested = false;
+
+const onSignal = async () => {
+  if (shutdownRequested) {
+    logger.info("Force exit.");
+    Deno.exit(130);
+  }
+  shutdownRequested = true;
+  logger.info(
+    "Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...",
+  );
+  await server.shutdown();
+  await pool.end();
+  logger.info("Server stopped.");
+  Deno.exit(0);
+};
+
+Deno.addSignalListener("SIGINT", onSignal);
+// Windows only delivers SIGINT (and SIGBREAK) to Deno.
+if (Deno.build.os !== "windows") Deno.addSignalListener("SIGTERM", onSignal);
 
 self.addEventListener("error", (event) => {
   logger.error("Uncaught exception: {error}", { error: event.error });

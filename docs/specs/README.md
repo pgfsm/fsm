@@ -36,14 +36,16 @@ Flow:
 
 ## Index
 
-| Spec                                                       | Title                                                                   | Status   |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------- | -------- |
-| [SPEC-002](spec-002-proto-contracts-in-codegen-package.md) | Proto Contract Ownership Moves to `fsm-proto-codegen`                   | Accepted |
-| [SPEC-003](spec-003-pgcron-fsm-scheduler.md)               | Replace the fsmscheduler TS Process with pg_cron                        | Accepted |
-| [SPEC-004](spec-004-pgfsm-cli-create-add.md)               | `@pgfsm/cli` — npx `create` / `add` for FSM Worker Projects             | Accepted |
-| [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md)         | CLI Consolidation — `@pgfsm/ctl` (`pgfsmctl`), Library-Only Sync Worker | Accepted |
-| [SPEC-006](spec-006-fsm-definition-load-and-check.md)      | FSM Definition Loading as a Deploy Step, Checked at fsmlet Startup      | Accepted |
-| [SPEC-007](spec-007-gateway-tcp-independent-scaling.md)    | Activity Gateway as an Independently Scalable Deployment                | Accepted |
+| Spec                                                       | Title                                                                    | Status   |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------ | -------- |
+| [SPEC-002](spec-002-proto-contracts-in-codegen-package.md) | Proto Contract Ownership Moves to `fsm-proto-codegen`                    | Accepted |
+| [SPEC-003](spec-003-pgcron-fsm-scheduler.md)               | Replace the fsmscheduler TS Process with pg_cron                         | Accepted |
+| [SPEC-004](spec-004-pgfsm-cli-create-add.md)               | `@pgfsm/cli` — npx `create` / `add` for FSM Worker Projects              | Accepted |
+| [SPEC-005](spec-005-cli-consolidation-pgfsmctl.md)         | CLI Consolidation — `@pgfsm/ctl` (`pgfsmctl`), Library-Only Sync Worker  | Accepted |
+| [SPEC-006](spec-006-fsm-definition-load-and-check.md)      | FSM Definition Loading as a Deploy Step, Checked at fsmlet Startup       | Accepted |
+| [SPEC-007](spec-007-gateway-tcp-independent-scaling.md)    | Activity Gateway as an Independently Scalable Deployment                 | Accepted |
+| [SPEC-008](spec-008-async-actor-coverage-and-liveness.md)  | Async Actor Coverage and Liveness                                        | Draft    |
+| [SPEC-009](spec-009-cli-surface-and-access-model.md)       | CLI Surface and Access Model — `pgfsmctl` via URL + Role-Scoped API Keys | Accepted |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to

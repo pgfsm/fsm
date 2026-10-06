@@ -24,7 +24,7 @@ import logging
 import sys
 
 from pgfsm.async_worker_sdk import run_actor_worker_cli
-from python_actors_registry_generated import ACTOR_REGISTRATIONS
+from actor_registry_aggregate_generated import ACTOR_REGISTRATIONS
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

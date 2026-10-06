@@ -161,13 +161,13 @@ Within Option C, the drift check could take several forms:
 
 ### D2 — Compiler emits definition digests
 
-- Each per-FSM `generated-sync-operation-registry.ts` also exports
+- Each per-FSM `sync-operation-registry.generated.ts` also exports
   `FSM_DEFINITION: FsmDefinitionDigest` =
   `{ fsmName, fsmVersion, fsmJsonSha256 }`. It's computed from that version's
   `fsm.json` at generate time, via the `sync-operation-registry.eta` template.
-- `aggregate-generated-sync-operation-registry.ts` also exports
+- `sync-operation-registry-aggregate.generated.ts` also exports
   `FSM_DEFINITIONS: FsmDefinitionDigest[]`, via
-  `aggregate-generated-sync-operation-registry.eta`.
+  `sync-operation-registry-aggregate.eta`.
 - The `run-sync-worker.ts` scaffold passes `FSM_DEFINITIONS` into `runFsmlet`
   (see D3).
 

@@ -133,11 +133,12 @@ Gotchas:
   through `withoutKept`, otherwise `deno fmt`/`rustfmt`/`gofmt` would still
   rewrite the developer's file the run just kept. `go mod tidy` only ever runs
   in generated module directories.
-- **Missing-export report is a text check.** `requiredNames` are the stub
-  function names (`deriveTemplateInput(...).fnName`, so delay prefixes and Go
-  capitalization apply); a kept file that doesn't contain one as a whole
-  identifier is reported via `missingNames`. It's advisory —
-  `validate-sync-operation` is the real check.
+- **Missing-export report is a text check.** `writeOwnedFile`'s `requiredNames`
+  are identifiers a kept scaffolded file must mention; one it doesn't contain as
+  a whole identifier is reported via `missingNames`. Since #460/#462 sync stubs
+  don't use it (each operation is its own file, so a new one gets a new stub);
+  its remaining caller is Rust's `main.rs` (`.with_max_concurrency`, #435). It's
+  advisory.
 - **Scaffolded templates say "yours to edit"**, not "Do not edit"
   (`run-sync-worker.eta`, `run-async-worker.eta` ×2, `worker-sdk-main.eta` for
   Rust, `worker-sdk-cargo-toml.eta`, `worker-sdk-pyproject.eta`).
@@ -269,9 +270,9 @@ needed grouping+aliasing derived from a `RegisteredActor[]`), so there was no
 manifest to add — `writeAggregateSyncOperationRegistry`
 (`operation-logic-scaffold.ts`) just walks
 `<writeRootAbsPath>/sync-worker/typescript/` for every `<fsmName>/<fsmVersion>`
-directory that already has its own `generated-sync-operation-registry.ts` (see
+directory that already has its own `sync-operation-registry.generated.ts` (see
 {@linkcode writeSyncOperationRegistry}), and writes
-`aggregate-generated-sync-operation-registry.ts` as its sibling, combining every
+`sync-operation-registry-aggregate.generated.ts` as its sibling, combining every
 group's `SYNC_OPERATION_REGISTRATIONS` into one array — the same "one fixed file
 a worker build imports" shape the async aggregate gives actors.
 
@@ -333,8 +334,8 @@ more files as its siblings at `<writeRootAbsPath>/sync-worker/typescript/`:
   (`deno run --allow-all --watch=. run-sync-worker.ts` — the explicit `=.`
   watches the whole `sync-worker/typescript/` directory, not just
   `run-sync-worker.ts`'s own import graph, so editing an
-  `<fsmName>/<fsmVersion>/actions|guards|delays/index.ts` stub restarts the
-  worker too, not only edits to files already wired into that graph).
+  `<fsmName>/<fsmVersion>/actions|guards|delays/` stub restarts the worker too,
+  not only edits to files already wired into that graph).
 
 `name` is `writeSyncWorkerRunner`'s optional `projectName` argument
 (`generate-sync-logic --project-name <name>`) when given, or else a random
@@ -654,6 +655,50 @@ needed a real FSM source tree (`realPluginRootAbsPath`) for its
 that reason is gone, but the behavior hasn't changed: a worker SDK build still
 needs a `generate-async-logic`/`generate-all` run at least once; only the
 aggregate _registry_ files are kept fresh by `create-async-logic` alone.
+
+## One stub per sync operation (#460, #462)
+
+`writeOperationModule` writes `<kind>/<name>/<name>.<ext>` per action, guard or
+delay (same shape as actors, so sync operations can later gain other languages,
+which need a directory per operation). #460 kept a pre-existing
+`<kind>/index.ts` as a single-file layout; #462 removed that fallback, so an old
+`index.ts` is now simply ignored.
+
+- `writeSyncOperationRegistry` imports each handler from its own stub file;
+  `validateLanguageModules` (`validate-sync-operation`) imports each
+  `<name>/<name>.ts`, and `modules[kind]` is the map of found exports.
+- The folder name is `operationFileBaseName(name)` (the fsm.json name, sanitized
+  like `actorFileBaseName`); the export is still
+  `deriveTemplateInput(...).fnName`, so a delay `cooldown` lives in
+  `delays/cooldown/cooldown.ts` and exports `delaycooldown`.
+- `assertDistinctOperationFileNames` rejects two names of one kind that map to
+  the same folder ignoring case, before anything is written.
+- A kind with no operations writes nothing.
+
+## Registry file names (#462)
+
+One pattern, `<thing>-registry[-aggregate].generated.<ext>`; sections above that
+predate #462 use the old names (left as written, since they're history):
+
+| Old                                                                                                                         | New                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `generated-sync-operation-registry.ts`                                                                                      | `sync-operation-registry.generated.ts`                                                                                      |
+| `aggregate-generated-sync-operation-registry.ts`                                                                            | `sync-operation-registry-aggregate.generated.ts`                                                                            |
+| `generated-registry.ts` / `generated_registry.py` / `generated_registry.rs` (`create-async-logic`: `generated-registry.rs`) | `actor-registry.generated.ts` / `actor_registry_generated.py` / `actor_registry.generated.rs`                               |
+| `typescript-actors-registry.generated.ts` / `python_actors_registry_generated.py` / `rust-actors-registry.generated.rs`     | `actor-registry-aggregate.generated.ts` / `actor_registry_aggregate_generated.py` / `actor_registry_aggregate.generated.rs` |
+| `go-actors-registry-generated/`                                                                                             | `actor-registry-aggregate-generated/`                                                                                       |
+
+- Python can't use `-` or `.` in a module name, hence `_generated`. Rust keeps
+  `.generated.rs` because no registry is found by module lookup: `main.rs`
+  `#[path]`-includes the aggregate as `mod actor_registry_aggregate`, and the
+  per-version file isn't part of the worker build at all (the aggregate includes
+  each version's `actors/` barrel instead).
+- The entry-file templates (`run-sync-worker.eta`, `run-async-worker.eta` ×2,
+  `worker-sdk-main.eta`) and Go's generated `main.go`/`go.mod` import the new
+  names. No shims and no stale-file cleanup: a project generated before #462
+  keeps its old files and its kept entry files still import the old names.
+- The sync aggregate's template is `sync-operation-registry-aggregate.eta`
+  (renamed from `aggregate-generated-sync-operation-registry.eta`).
 
 ## Per-actor `maxConcurrency` in stubs (#435)
 

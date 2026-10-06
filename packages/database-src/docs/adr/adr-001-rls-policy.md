@@ -25,6 +25,16 @@ Key facts about the `fsm_core` access model:
 - Functions use `SECURITY DEFINER`, meaning they execute as the extension owner,
   not the calling role. Row access always happens as the owner, bypassing any
   per-role filtering.
+  - **Correction (2026-10-05, #469):** when this ADR was written, no `fsm_core`
+    function was actually `SECURITY DEFINER`; every one ran as the caller, which
+    in practice was always the owner (`postgres`). Since migration 2.1.0 the
+    entry points that clients call are `SECURITY DEFINER` with a pinned
+    `search_path`, and the `fsm_operator`/`fsm_admin`/`fsm_worker` roles get
+    `EXECUTE` on them (SPEC-009 §1). Internal helpers stay invoker and run as
+    the owner when called from an entry point. A few tables that `@pgfsm/db`
+    reads or writes directly (workerlet heartbeats, instance listing,
+    `fsm_json`) are also granted to roles, so "no table is directly accessible"
+    holds for every table except those.
 - Tenant/user isolation is enforced at the API layer
   (`apps/fsm-core-ts-hono-deno/`) and within function logic, not at the database
   row level.

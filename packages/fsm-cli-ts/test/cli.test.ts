@@ -99,14 +99,14 @@ Deno.test("create lays out the project with all four async-worker languages and 
       "README.md",
       "fsm/creditCheck/v01/fsm.json",
       "sync-worker/typescript/run-sync-worker.ts",
-      "sync-worker/typescript/creditCheck/v01/actions/index.ts",
+      "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
       "async-worker/typescript/run-async-worker.ts",
       "async-worker/python/run_async_worker.py",
-      "async-worker/python/python_actors_registry_generated.py",
+      "async-worker/python/actor_registry_aggregate_generated.py",
       "async-worker/rust/src/main.rs",
-      "async-worker/rust/rust-actors-registry.generated.rs",
+      "async-worker/rust/actor_registry_aggregate.generated.rs",
       "async-worker/go/main.go",
-      "async-worker/go/go-actors-registry-generated/registry.go",
+      "async-worker/go/actor-registry-aggregate-generated/registry.go",
     ]
   ) {
     assert(await exists(join(APP, f)), `missing ${f}`);
@@ -119,6 +119,7 @@ Deno.test("create lays out the project with all four async-worker languages and 
     "fsm:add",
     "db:load",
     "db:pgcron",
+    "db:key",
     "gateway",
   ]);
   // Sibling tools are pinned to the versions this CLI was built with.
@@ -130,8 +131,21 @@ Deno.test("create lays out the project with all four async-worker languages and 
   );
   assertEquals(
     pkg.scripts["db:pgcron"],
-    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} pgcron register`,
+    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} db cron register`,
   );
+  assertEquals(
+    pkg.scripts["db:key"],
+    `npx -y @pgfsm/ctl@${await versionOf(
+      "fsm-ctl-ts",
+    )} db key create --name local-admin --role admin`,
+  );
+  // .env.example (SPEC-009 §7): local dev needs only the database URL; the
+  // API variables are listed but commented out.
+  const envExample = await Deno.readTextFile(join(APP, ".env.example"));
+  assert(/^DATABASE_URL=postgresql:/m.test(envExample), envExample);
+  for (const name of ["PGFSM_DB_URL", "PGFSM_URL", "PGFSM_API_KEY"]) {
+    assert(new RegExp(`^# ${name}=`, "m").test(envExample), name);
+  }
   assertStringIncludes(
     pkg.scripts.gateway,
     `npx -y -p @pgfsm/async-worker-gateway@${await versionOf(
@@ -161,12 +175,12 @@ Deno.test("create lays out the project with all four async-worker languages and 
 
 Deno.test("create refuses an existing project and a directory inside one", async () => {
   const again = await pgfsm(["create", "my-app"]);
-  assertEquals(again.code, 1);
+  assertEquals(again.code, 2);
   assertStringIncludes(again.out, "already a pgfsm project");
   assertStringIncludes(again.out, "add");
 
   const nested = await pgfsm(["create", "my-app/sub"]);
-  assertEquals(nested.code, 1);
+  assertEquals(nested.code, 2);
   assertStringIncludes(nested.out, "inside the pgfsm project");
 });
 
@@ -175,13 +189,13 @@ Deno.test("create refuses a non-empty directory", async () => {
   await Deno.mkdir(dir);
   await Deno.writeTextFile(join(dir, "notes.txt"), "hi\n");
   const { code, out } = await pgfsm(["create", "busy"]);
-  assertEquals(code, 1);
+  assertEquals(code, 2);
   assertStringIncludes(out, "isn't empty");
 });
 
 Deno.test("add outside a project fails with the create hint and writes nothing", async () => {
   const { code, out } = await pgfsm(["add", "designs/credit.json"], DESIGNS);
-  assertEquals(code, 1);
+  assertEquals(code, 4, "no project: not found");
   assertStringIncludes(out, "No pgfsm project found");
   assertStringIncludes(out, "create");
   assertEquals(await exists(join(DESIGNS, "fsm")), false);
@@ -192,7 +206,7 @@ Deno.test("add without a name/version it can't infer fails in --no-input mode, n
     ["add", join(DESIGNS, "a", "machine.ts")],
     APP,
   );
-  assertEquals(code, 1);
+  assertEquals(code, 2, "a source it can't name is a usage error");
   assertStringIncludes(out, "--fsm-name");
   assertStringIncludes(out, "--fsm-version");
   assertEquals(await exists(join(APP, "fsm/a")), false);
@@ -201,7 +215,7 @@ Deno.test("add without a name/version it can't infer fails in --no-input mode, n
 Deno.test("add from a subdirectory targets the project root and never touches existing stubs", async () => {
   const stub = join(
     APP,
-    "sync-worker/typescript/creditCheck/v01/actions/index.ts",
+    "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
   );
   const edited = (await Deno.readTextFile(stub)) + "// implemented\n";
   await Deno.writeTextFile(stub, edited);
@@ -233,7 +247,10 @@ Deno.test("add from a subdirectory targets the project root and never touches ex
   assertEquals(await exists(join(APP, "fsm/checkout/v01/machine.ts")), false);
   assert(
     await exists(
-      join(APP, "sync-worker/typescript/checkout/v01/actions/index.ts"),
+      join(
+        APP,
+        "sync-worker/typescript/checkout/v01/actions/assignSSN/assignSSN.ts",
+      ),
     ),
   );
   assertEquals(await Deno.readTextFile(stub), edited);
@@ -291,7 +308,10 @@ Deno.test("add --dry-run writes nothing, not even pgfsm.config.json", async () =
 });
 
 Deno.test("add --force regenerates a version after its source changes and keeps an edited stub", async () => {
-  const stub = join(APP, "sync-worker/typescript/checkout/v01/guards/index.ts");
+  const stub = join(
+    APP,
+    "sync-worker/typescript/checkout/v01/guards/allSucceeded/allSucceeded.ts",
+  );
   const edited = (await Deno.readTextFile(stub)) + "// mine\n";
   await Deno.writeTextFile(stub, edited);
   const fsmJson = join(APP, "fsm/checkout/v01/fsm.json");
@@ -314,9 +334,47 @@ Deno.test("add --force regenerates a version after its source changes and keeps 
   assert((await Deno.readTextFile(fsmJson)).length > 10);
 });
 
+Deno.test("add --force after the source gains a guard creates its stub and imports it, with nothing to add by hand (#460)", async () => {
+  const source = join(DESIGNS, "grows.json");
+  await copy(`${EXAMPLE}/creditCheck/v01/fsm.json`, source);
+  const argv = ["add", source, "-N", "grows", "-V", "v01"];
+  assertEquals((await pgfsm(argv, APP)).code, 0);
+
+  // The design now references a guard no stub exists for yet.
+  const json = await Deno.readTextFile(source);
+  await Deno.writeTextFile(
+    source,
+    json.replaceAll('"allSucceeded"', '"allChecksPassed"'),
+  );
+  const { code, out } = await pgfsm([...argv, "--force"], APP);
+  assertEquals(code, 0, out);
+  assertEquals(out.includes("missing exports"), false, out);
+
+  const version = join(APP, "sync-worker/typescript/grows/v01");
+  assertStringIncludes(
+    await Deno.readTextFile(
+      join(version, "guards/allChecksPassed/allChecksPassed.ts"),
+    ),
+    "export function allChecksPassed(",
+  );
+  assertStringIncludes(
+    await Deno.readTextFile(
+      join(version, "sync-operation-registry.generated.ts"),
+    ),
+    'import { allChecksPassed } from "./guards/allChecksPassed/allChecksPassed.ts";',
+  );
+});
+
+Deno.test("no command is a usage error; --help is not", async () => {
+  const none = await pgfsm([], APP);
+  assertEquals(none.code, 2);
+  assertStringIncludes(none.out, "create");
+  assertEquals((await pgfsm(["--help"], APP)).code, 0);
+});
+
 Deno.test("sync is not a command in v1", async () => {
   const { code, out } = await pgfsm(["sync"], APP);
-  assertEquals(code, 1);
+  assertEquals(code, 2);
   assertStringIncludes(out, "Unknown command: sync");
 });
 

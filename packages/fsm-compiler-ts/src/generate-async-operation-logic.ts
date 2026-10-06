@@ -323,8 +323,8 @@ async function writeAggregateArtifacts(
  * language's actors — `{ src, asyncOperationLanguage, filePath, exportedName }`,
  * written only for languages this version actually used), a barrel
  * (`index.ts`/`__init__.py`/`mod.rs`, TS/Python/Rust only) re-exporting each
- * actor by name, and a generated registry (`generated-registry.ts`/
- * `generated_registry.py`/`generated_registry.rs`) carrying each actor's full
+ * actor by name, and a generated registry (`actor-registry.generated.ts`/
+ * `actor_registry_generated.py`/`actor_registry.generated.rs`) carrying each actor's full
  * activity-registration identity + handler — written only when at least one
  * actor exists for that language. Go has neither barrel nor registry — see
  * {@linkcode ActorsBarrelLang}'s doc comment.
@@ -332,9 +332,9 @@ async function writeAggregateArtifacts(
  * Once, at `<writeRootAbsPath>/async-worker/<lang>/` (alongside that
  * language's compiler-generated worker SDK — see {@linkcode writeWorkerSdk}):
  * a per-language **aggregate** registry
- * (`typescript-actors-registry.generated.ts`/
- * `python_actors_registry_generated.py`/`rust-actors-registry.generated.rs`/
- * `go-actors-registry-generated/`) combining every FSM-version's registry —
+ * (`actor-registry-aggregate.generated.ts`/
+ * `actor_registry_aggregate_generated.py`/`actor_registry_aggregate.generated.rs`/
+ * `actor-registry-aggregate-generated/`) combining every FSM-version's registry —
  * what a worker SDK build imports, since a single worker process serves its
  * language's actors across every FSM, not just one (see
  * {@linkcode writeAggregateActorsRegistry}, {@linkcode writeAggregateGoRegistry}).

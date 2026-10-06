@@ -30,7 +30,7 @@ apps/fsm-core-example/fsm/<asyncOperationName>/
     ...
 
 # In test-apps/debug-only/ (a @pgfsm/cli project generated from this fsm/ — see its README):
-sync-worker/typescript/<fsmName>/<vNN>/{actions,guards,delays}/index.ts
+sync-worker/typescript/<fsmName>/<vNN>/{actions,guards,delays}/<name>/<name>.ts
 async-worker/<lang>/<fsmName>/<vNN>/actors/          ← one subtree per language used
 ```
 

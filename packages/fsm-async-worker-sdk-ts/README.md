@@ -21,7 +21,7 @@ that pins this package:
 // async-worker/typescript/run-async-worker.ts (generated)
 import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
 import { runActorWorkerCli } from "@pgfsm/async-worker-sdk";
-import { ACTOR_REGISTRATIONS } from "./typescript-actors-registry.generated.ts";
+import { ACTOR_REGISTRATIONS } from "./actor-registry-aggregate.generated.ts";
 
 await configureLogging({
   levels: { [CATEGORY.worker]: isTerminal ? "debug" : "info" },

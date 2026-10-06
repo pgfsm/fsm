@@ -9,6 +9,8 @@ pnpm-debug.log*
 dist/
 build/
 .env*
+# Templates hold no secrets: commit them (e.g. a pgfsm project's .env.example).
+!.env.example
 .next/
 .vercel/
 .turbo/

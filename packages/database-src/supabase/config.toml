@@ -58,7 +58,9 @@ schema_paths = [
     "./schemas/25_async_operation_worker_v1/*.sql",
     "./schemas/30_async_operation_worker_v2/*.sql",
     "./schemas/35_fsm_sync_operation_worker_v1/*.sql",
-    "./schemas/*.sql"
+    "./schemas/*.sql",
+    # After every other folder: ALTERs and GRANTs on functions defined above (#469).
+    "./schemas/40_access_control/*.sql"
 ]
 
 [db.seed]

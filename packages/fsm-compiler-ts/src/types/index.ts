@@ -175,7 +175,7 @@ export type SyncOperationType = "action" | "guard" | "delay";
 
 /**
  * One entry {@linkcode writeSyncOperationRegistry} (`operation-logic-scaffold.ts`)
- * emits into a version's `generated-sync-operation-registry.ts` — the
+ * emits into a version's `sync-operation-registry.generated.ts` — the
  * sync-logic counterpart of {@linkcode RegisteredActor}, self-describing
  * enough for a worker to register + invoke a stub without a separate
  * name -> callable lookup of its own.

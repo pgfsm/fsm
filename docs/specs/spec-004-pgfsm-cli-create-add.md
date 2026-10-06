@@ -168,7 +168,7 @@ single `fsm.json`, or a single `machine.ts`. The CLI detects which one it is.
     ├── typescript/            # deno.json, run-async-worker.ts, registry, <fsmName>/<vNN>/actors/...
     ├── python/                # pyproject.toml, run_async_worker.py, registry, ...
     ├── rust/                  # Cargo.toml, src/main.rs, registry, ...
-    └── go/                    # go.mod, main.go, go-actors-registry-generated/, ...
+    └── go/                    # go.mod, main.go, actor-registry-aggregate-generated/, ...
 ```
 
 All four async-worker language projects are created at `create` time and must
@@ -236,10 +236,10 @@ exports are reported.
 
 Every file the compiler writes falls into one of two classes:
 
-| Class                                      | Files                                                                                                                                                                                                                                                                  | On re-run               |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`generated-*registry*`, `*-actors-registry.generated.*`, `go-actors-registry-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`) | Always rewritten        |
-| **Scaffolded** (user-owned after creation) | `actions/index.ts`, `guards/index.ts`, `delays/index.ts`, each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s         | Written only if missing |
+| Class                                      | Files                                                                                                                                                                                                                                                                                                | On re-run               |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **Generated** (compiler-owned)             | `fsm.json`, `xstate-fsm.json`, per-version and aggregate registries (`*-registry.generated.*`, `*_registry_generated.py`, `*_registry*.generated.rs`, `actor-registry-aggregate-generated/`), `actors-manifest.json`, actor barrels, and the Go worker module (`async-worker/go/go.mod` + `main.go`) | Always rewritten        |
+| **Scaffolded** (user-owned after creation) | each action/guard/delay stub (`<kind>/<name>/<name>.ts`), each actor stub, each Go actor's own `go.mod`, `run-sync-worker.ts`, `run-async-worker.ts`, `run_async_worker.py`, `src/main.rs`, their `deno.json`/`pyproject.toml`/`Cargo.toml`, and `.gitignore`s                                       | Written only if missing |
 
 Implemented in #381, with one change from the original table: the Go worker's
 `go.mod` lists a `require`/`replace` for every Go actor module, so it can't be
@@ -253,6 +253,24 @@ CLI reports the missing export names for the developer to add (e.g. "3 new
 actions: add them to …/actions/index.ts") rather than regenerating the file.
 Compiler validation (`validate-sync-operation`) already catches a missing
 export.
+
+**Amended by #460:** actions, guards and delays now get one stub per operation,
+`<kind>/<name>/<name>.ts`, the same shape as actors — so a new operation gets
+its own new stub and nothing has to be added by hand. The folder-per-operation
+shape leaves room for sync operations in other languages, which need a directory
+per operation the way Go actors do. #460 kept the single-file layout for a
+`<kind>/` folder that already had an `index.ts`; #462 removed that fallback, so
+the per-operation layout is the only one and an old `index.ts` is ignored.
+
+**Amended by #462:** generated registry files follow one naming pattern,
+`<thing>-registry[-aggregate].generated.<ext>`: per version
+`sync-operation-registry.generated.ts` / `actor-registry.generated.ts`
+(`actor_registry_generated.py`, `actor_registry.generated.rs`), and at the
+worker root `sync-operation-registry-aggregate.generated.ts` /
+`actor-registry-aggregate.generated.ts`
+(`actor_registry_aggregate_generated.py`,
+`actor_registry_aggregate.generated.rs`, Go
+`actor-registry-aggregate-generated/`).
 
 This becomes a compiler option (e.g. `overwrite: "generated-only" | "all"`) that
 defaults to `"all"`, so today's compiler CLI behaviour doesn't change.

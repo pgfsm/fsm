@@ -275,10 +275,10 @@ process to deploy. Register it once per database, after migrations apply (a
 generated project runs this as `npm run db:pgcron`):
 
 ```bash
-npx @pgfsm/ctl pgcron register
+npx @pgfsm/ctl db cron register
   # -d <db-url>    # overrides DATABASE_URL
   # -s <schedule>  # pg_cron schedule expression (default "5 seconds")
-npx @pgfsm/ctl pgcron status     # check it; exits 1 if not registered
+npx @pgfsm/ctl db cron status    # check it; exits 5 if not registered
 ```
 
 `register` is idempotent — re-run it to change the schedule. It calls

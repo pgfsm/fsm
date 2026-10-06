@@ -1,4 +1,3 @@
-import { parseArgs } from "@std/cli/parse-args";
 import { getLogger } from "@logtape/logtape";
 import {
   API_SYSTEM_EVENT_NAME,
@@ -11,14 +10,16 @@ import {
   stopEventForFsmWorker,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
+import { parseCommandArgs, verbOf } from "../args.ts";
+import { resolveDbUrl, withPool } from "../db-target.ts";
+import { CtlError, ExitCode, notFound, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
 import { CTL_CATEGORY } from "../logger.ts";
-import { resolveDbUrl, withPool } from "./db.ts";
+import { printRecord } from "../output.ts";
 
 const logger = getLogger([CTL_CATEGORY, "instance"]);
 
 const VERBS = ["create", "resume", "send", "stop"] as const;
-type Verb = typeof VERBS[number];
 
 const HELP = `pgfsmctl instance — FSM instance control (kubectl equivalent)
 
@@ -36,75 +37,63 @@ OPTIONS
   -n, --fsm-name <name>          FSM name (required for create)
   -V, --fsm-version <version>    FSM version (required for create)
   -e, --event-type <type>        Event type to send (required for send)
-      --context <json>           Initial FSM context as JSON string (optional, create only)
+      --input <json>             Initial FSM context as JSON (optional, create only; xstate's input)
       --event-data <json>        Event payload as JSON string (optional, send only)
-  -d, --db-url <url>             Database connection URL (overrides DATABASE_URL from .env)
+  -d, --db-url <url>             Postgres URL (else --profile, PGFSM_DB_URL, DATABASE_URL, current profile)
+      --profile <name>           Use this profile's db_url
+  -o, --output <fmt>             table (default), json or ids
   -h, --help                     Show this help
 
-  Talks to the database directly (@pgfsm/db), not to the REST API.
+  DB-direct for now (@pgfsm/db). SPEC-009 phase 2 moves instance commands to
+  the REST API with an operator key, keeping --db-url as break-glass.
+
+EXIT CODES
+  2 bad or missing flags, 4 unknown instance, 3 permission denied
 
 EXAMPLES
   ${CLI_INVOCATION} instance create -n creditCheck -V v01
-  ${CLI_INVOCATION} instance create -n creditCheck -V v01 --context '{"userId":"abc"}'
+  ${CLI_INVOCATION} instance create -n creditCheck -V v01 --input '{"userId":"abc"}'
   ${CLI_INVOCATION} instance resume -q <instance-uuid>
   ${CLI_INVOCATION} instance send -q <instance-uuid> -e APPROVE
   ${CLI_INVOCATION} instance send -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
   ${CLI_INVOCATION} instance stop -q <instance-uuid>
 `;
 
-function parseJsonFlag(flag: string, value: string | undefined): Json {
-  if (!value) return {};
+function parseJsonFlag(flag: string, value: unknown): Json {
+  if (typeof value !== "string" || value === "") return {};
   try {
     return JSON.parse(value);
   } catch {
-    logger.error(`${flag} is not valid JSON: {value}`, { value });
-    Deno.exit(1);
+    throw usageError(`${flag} is not valid JSON: ${value}`, HELP);
   }
 }
 
 export async function instanceCommand(argv: string[]): Promise<void> {
-  const args = parseArgs(argv, {
+  const args = parseCommandArgs(argv, {
     string: [
       "queue-name",
       "fsm-name",
       "fsm-version",
-      "context",
+      "input",
       "event-type",
       "event-data",
-      "db-url",
     ],
-    boolean: ["help"],
     alias: {
-      h: "help",
       q: "queue-name",
       n: "fsm-name",
       V: "fsm-version",
       e: "event-type",
-      d: "db-url",
     },
-  });
+    common: ["db", "output"],
+  }, HELP);
+  if (args.help) return console.log(HELP);
 
-  if (args.help) {
-    console.log(HELP);
-    Deno.exit(0);
-  }
-
-  const verbArg = args._[0] === undefined ? undefined : String(args._[0]);
-  if (!VERBS.includes(verbArg as Verb)) {
-    logger.error(
-      verbArg === undefined
-        ? "instance needs a verb: create, resume, send or stop"
-        : `Unknown instance verb: ${verbArg}`,
-    );
-    console.log(HELP);
-    Deno.exit(1);
-  }
-  const verb = verbArg as Verb;
-
-  const queueName = args["queue-name"];
-  const fsmName = args["fsm-name"];
-  const fsmVersion = args["fsm-version"];
-  const eventType = args["event-type"];
+  const verb = verbOf("instance", args.positionals, VERBS, HELP);
+  const flag = (name: string) => args.flags[name] as string | undefined;
+  const queueName = flag("queue-name");
+  const fsmName = flag("fsm-name");
+  const fsmVersion = flag("fsm-version");
+  const eventType = flag("event-type");
 
   const missing: string[] = [];
   if (verb === "create") {
@@ -115,92 +104,106 @@ export async function instanceCommand(argv: string[]): Promise<void> {
   }
   if (verb === "send" && !eventType) missing.push("--event-type");
   if (missing.length > 0) {
-    logger.error("Missing required arguments: {missing}", {
-      missing: missing.join(", "),
-    });
-    console.log(HELP);
-    Deno.exit(1);
+    throw usageError(`Missing required arguments: ${missing.join(", ")}`, HELP);
+  }
+  const UUID =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (queueName !== undefined && !UUID.test(queueName)) {
+    throw usageError(
+      `--queue-name must be an instance UUID, got: ${queueName}`,
+      HELP,
+    );
   }
 
-  const context = verb === "create"
-    ? parseJsonFlag("--context", args.context)
+  const input = verb === "create"
+    ? parseJsonFlag("--input", flag("input"))
     : {};
   const eventData = verb === "send"
-    ? parseJsonFlag("--event-data", args["event-data"])
+    ? parseJsonFlag("--event-data", flag("event-data"))
     : {};
-  const dbUrl = resolveDbUrl(args["db-url"]);
+  const dbUrl = await resolveDbUrl(args);
+  const id = (r: { fsm_instance_id: string }) => r.fsm_instance_id;
 
-  let failure: string | undefined;
-  try {
-    await withPool(dbUrl, async (deps) => {
-      switch (verb) {
-        case "create": {
-          // true = also create the instance's pgmq queue and send
-          // initialTransition_event; the fsm_dispatch_queue enqueue alone
-          // only gets a worker started for this instance — the worker then
-          // reads from the per-instance pgmq queue, so that queue must exist
-          // and have a message.
-          const result = await createFsmInstanceFromName(
-            deps,
-            fsmName!,
-            fsmVersion!,
-            context,
-            true,
-          ) as Record<string, string> | null;
-          if (!result?.fsm_instance_id) {
-            failure = "Failed to create FSM instance.";
-            return;
-          }
-          logger.info("Created FSM instance: {result}", { result });
-          break;
-        }
-
-        case "resume": {
-          const result = await resumeEventForFsmWorker(deps, queueName!);
-          if (result.status === "fsm_not_found") {
-            failure = `FSM instance not found: ${queueName}`;
-          }
-          break;
-        }
-
-        case "send": {
-          const fsmInstance = await getFSMData(deps, queueName!);
-          if (!fsmInstance) {
-            failure = `FSM instance not found: ${queueName}`;
-            return;
-          }
-          await sendEventToFsmQueueWithEventLogs(
-            deps,
-            queueName!,
-            fsmInstance.fsm_type ?? null,
-            fsmInstance.fsm_version ?? null,
-            API_SYSTEM_QUEUE_UUID,
-            API_SYSTEM_QUEUE_TYPE,
-            API_SYSTEM_EVENT_NAME,
-            eventType!,
-            "external",
-            { ...eventData as object, type: eventType } as Json,
-            0,
+  await withPool(dbUrl, async (deps) => {
+    switch (verb) {
+      case "create": {
+        // true = also create the instance's pgmq queue and send
+        // initialTransition_event; the fsm_dispatch_queue enqueue alone
+        // only gets a worker started for this instance — the worker then
+        // reads from the per-instance pgmq queue, so that queue must exist
+        // and have a message.
+        const result = await createFsmInstanceFromName(
+          deps,
+          fsmName!,
+          fsmVersion!,
+          input,
+          true,
+        ) as Record<string, string> | null;
+        if (!result?.fsm_instance_id) {
+          throw new CtlError(
+            ExitCode.GENERAL,
+            "Failed to create FSM instance.",
           );
-          break;
         }
-
-        case "stop":
-          await stopEventForFsmWorker(deps, queueName!);
-          logger.info("Stop signal sent for worker: {queueName}", {
-            queueName,
-          });
-          break;
+        logger.info("Created FSM instance {id}", {
+          id: result.fsm_instance_id,
+        });
+        printRecord(
+          result as Record<string, string> & { fsm_instance_id: string },
+          args.output,
+          { id },
+        );
+        break;
       }
-    });
-  } catch (err) {
-    logger.error("instance {verb} failed: {error}", { verb, error: err });
-    Deno.exit(1);
-  }
 
-  if (failure) {
-    logger.error(failure);
-    Deno.exit(1);
-  }
-  logger.info("instance {verb} completed.", { verb });
+      case "resume": {
+        const result = await resumeEventForFsmWorker(deps, queueName!);
+        if (result.status === "fsm_not_found") {
+          throw notFound(`FSM instance not found: ${queueName}`);
+        }
+        printRecord(result, args.output, { id });
+        break;
+      }
+
+      case "send": {
+        const fsmInstance = await getFSMData(deps, queueName!);
+        if (!fsmInstance) {
+          throw notFound(`FSM instance not found: ${queueName}`);
+        }
+        await sendEventToFsmQueueWithEventLogs(
+          deps,
+          queueName!,
+          fsmInstance.fsm_type ?? null,
+          fsmInstance.fsm_version ?? null,
+          API_SYSTEM_QUEUE_UUID,
+          API_SYSTEM_QUEUE_TYPE,
+          API_SYSTEM_EVENT_NAME,
+          eventType!,
+          "external",
+          { ...eventData as object, type: eventType } as Json,
+          0,
+        );
+        printRecord(
+          { fsm_instance_id: queueName!, event_type: eventType!, sent: true },
+          args.output,
+          { id },
+        );
+        break;
+      }
+
+      case "stop": {
+        if (!(await getFSMData(deps, queueName!))) {
+          throw notFound(`FSM instance not found: ${queueName}`);
+        }
+        await stopEventForFsmWorker(deps, queueName!);
+        logger.info("Stop signal sent for worker: {queueName}", { queueName });
+        printRecord(
+          { fsm_instance_id: queueName!, stop_signal_sent: true },
+          args.output,
+          { id },
+        );
+        break;
+      }
+    }
+  });
 }

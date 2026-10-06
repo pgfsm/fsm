@@ -17,35 +17,11 @@ const fsm_name = "creditCheck";
 const fsm_version = "v01";
 const queueName = `${fsm_name}_${fsm_version}`;
 
-async function loadModule(path: string, label: string): Promise<any> {
-  try {
-    const mod = await import(path);
-    console.log(`📦 Loaded ${label}`);
-    return mod;
-  } catch (err: any) {
-    console.warn(`⚠️ Could not load ${label}:`, err?.message || err);
-    return null;
-  }
-}
-
-const fsmModuleDefinition = {
-  actions: await loadModule(
-    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
-    "actions",
-  ),
-  guards: await loadModule(
-    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/guards/index.ts`,
-    "guards",
-  ),
-  delays: await loadModule(
-    `../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/delays/index.ts`,
-    "delays",
-  ),
-  actors: await loadModule(
-    `../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actors/index.ts`,
-    "actors",
-  ),
-};
+// The fsmlet's own handler lookup: every action/guard/delay of this version,
+// as generated for test-apps/debug-only.
+const { SYNC_OPERATION_REGISTRATIONS } = await import(
+  "../../../../../test-apps/debug-only/sync-worker/typescript/creditCheck/v01/sync-operation-registry.generated.ts"
+);
 
 // Journey 1: initialTransition_event — FSM starts, no prior state
 Deno.test({
@@ -105,7 +81,7 @@ Deno.test({
         resolved_state_value,
         fsm_name,
         fsm_version,
-        fsmModuleDefinition,
+        SYNC_OPERATION_REGISTRATIONS,
       );
 
       const macroStepValueWithSpaces = replaceUnderscoresWithSpaces(
@@ -194,7 +170,7 @@ Deno.test({
         resolved_state_value,
         fsm_name,
         fsm_version,
-        fsmModuleDefinition,
+        SYNC_OPERATION_REGISTRATIONS,
       );
 
       const macroStepValueWithSpaces = replaceUnderscoresWithSpaces(
@@ -305,7 +281,7 @@ Deno.test({
         resolved_state_value,
         fsm_name,
         fsm_version,
-        fsmModuleDefinition,
+        SYNC_OPERATION_REGISTRATIONS,
       );
 
       // Compare state

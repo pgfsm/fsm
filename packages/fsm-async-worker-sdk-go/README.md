@@ -30,7 +30,7 @@ package main
 import (
 	"os"
 
-	generatedregistry "fsm-core-example/go-actors-registry-generated"
+	generatedregistry "fsm-core-example/actor-registry-aggregate-generated"
 	asyncworkersdk "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go"
 )
 

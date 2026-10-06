@@ -87,7 +87,9 @@ function packageJson(name: string, toolVersion: string): string {
       scripts: {
         "fsm:add": `${cli} add`,
         "db:load": `npx -y @pgfsm/ctl@${CTL_VERSION} fsm load fsm`,
-        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} pgcron register`,
+        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} db cron register`,
+        "db:key":
+          `npx -y @pgfsm/ctl@${CTL_VERSION} db key create --name local-admin --role admin`,
         "gateway":
           `npx -y -p @pgfsm/async-worker-gateway@${GATEWAY_VERSION} -- async-operation-worker-gateway --ensure-queue-on-register`,
       },
@@ -114,6 +116,26 @@ function rootDenoJson(): string {
   ) + "\n";
 }
 
+// SPEC-009 §7. `pgfsmctl` (npm run db:*) and the workers read these from
+// .env in the directory they run in; .env itself is gitignored.
+const ENV_EXAMPLE =
+  `# Copy to .env (gitignored). Each tool reads .env from the directory it runs
+# in: here for npm run db:* (pgfsmctl) and npm run gateway; the sync worker
+# runs in sync-worker/typescript/, so copy it there too (or export the vars).
+
+# Local development needs only the database. pgfsmctl prefers PGFSM_DB_URL
+# over DATABASE_URL; the workers read DATABASE_URL.
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+# PGFSM_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+# The pgfsm REST API (optional). With both set, \`npm run db:load\` loads through
+# the API (an admin key, on an API started with --enable-admin-api) instead
+# of straight into the database. The URL includes the API's path prefix.
+# \`npm run db:key\` prints an admin key, once.
+# PGFSM_URL=http://localhost:9999/fsm
+# PGFSM_API_KEY=pgfsm_admin_...
+`;
+
 const GITIGNORE = `node_modules/
 .env
 .venv/
@@ -128,8 +150,12 @@ A pgfsm project, created by \`@pgfsm/cli\`.
 - \`sync-worker/typescript/\`: actions, guards and delays.
 - \`async-worker/{typescript,python,rust,go}/\`: actors, one project per language.
 
-Stub files under the worker folders are yours to implement. Re-running
-\`add\` never overwrites them.
+Stub files under the worker folders are yours to implement. Each action,
+guard, delay and actor has its own, e.g.
+\`sync-worker/typescript/<name>/<version>/guards/<guard>/<guard>.ts\`.
+Re-running \`add\` never overwrites them, and creates a new stub for each
+operation an FSM gains. Code shared by several operations can go in a sibling
+module such as \`guards/_shared.ts\`.
 
 ## Add an FSM
 
@@ -153,9 +179,10 @@ holds a different definition than the one it was generated from.
 
 ## Run the stack
 
-Every command below reads \`DATABASE_URL\` from the environment or from a
-\`.env\` in the directory it runs in. Start them in this order, one terminal
-each:
+Copy \`.env.example\` to \`.env\` (it's gitignored), here and in
+\`sync-worker/typescript/\`. Every command below reads \`DATABASE_URL\` from the
+environment or from a \`.env\` in the directory it runs in; locally that's all
+you need. Start them in this order, one terminal each:
 
 \`\`\`bash
 npm run db:load      # every deploy: loads fsm/ into the database (before the sync worker)
@@ -167,6 +194,14 @@ cd async-worker/python && uv run run_async_worker.py start
 cd async-worker/rust && cargo run --release -- start
 cd async-worker/go && go run . start
 \`\`\`
+
+## With the pgfsm REST API
+
+\`npm run db:key\` creates an admin API key straight in the database (once:
+it's printed only then; only its hash is stored). Put it and the API's URL
+in \`.env\` as \`PGFSM_API_KEY\` and \`PGFSM_URL\`: \`npm run db:load\` then loads
+through the API instead of straight into the database. More keys, and
+revoking them, go through the API: \`npx @pgfsm/ctl key create|list|revoke\`.
 `;
 }
 
@@ -205,6 +240,9 @@ export async function createProject(
   await writeOwnFile(join(dir, "deno.json"), rootDenoJson(), report);
   if (!(await fileExists(join(dir, ".gitignore")))) {
     await writeOwnFile(join(dir, ".gitignore"), GITIGNORE, report);
+  }
+  if (!(await fileExists(join(dir, ".env.example")))) {
+    await writeOwnFile(join(dir, ".env.example"), ENV_EXAMPLE, report);
   }
   if (!(await fileExists(join(dir, "README.md")))) {
     await writeOwnFile(join(dir, "README.md"), readme(name), report);

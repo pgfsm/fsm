@@ -10,10 +10,10 @@ import type { FsmletHandle } from "@pgfsm/sync-worker";
 import {
   FSM_DEFINITIONS,
   SYNC_OPERATION_REGISTRATIONS,
-} from "../../../../../../test-apps/debug-only/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+} from "../../../../../../test-apps/debug-only/sync-worker/typescript/sync-operation-registry-aggregate.generated.ts";
 import { startActivityGatewayServer } from "@pgfsm/async-worker-gateway";
 import { ActorWorker } from "@pgfsm/async-worker-sdk";
-import { ACTOR_REGISTRATIONS } from "../../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/generated-registry.ts";
+import { ACTOR_REGISTRATIONS } from "../../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actor-registry.generated.ts";
 import {
   createFsmInstanceFromName,
   getFsmDataResolveStateValue,
