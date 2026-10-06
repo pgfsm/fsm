@@ -142,21 +142,34 @@ if [[ -n "$warnings" ]]; then
 fi
 
 log "Every worker registered with its own token"
+# The current pod's worker id (each SDK logs "<lang>-<8 hex>" at start), so a
+# replaced pod's registration doesn't count.
+worker_id() {
+  local pod
+  pod=$(kubectl -n "$NS" get pods -l "app.kubernetes.io/name=async-worker-$1" \
+    -o jsonpath='{range .items[*]}{.metadata.deletionTimestamp}|{.metadata.name}{"\n"}{end}' |
+    sed -n 's/^|//p' | head -1) # skip terminating pods (deletionTimestamp set)
+  kubectl -n "$NS" logs "$pod" 2>/dev/null | grep -o "$1-[0-9a-f]\{8\}" | head -1
+}
 gateway_pods=$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=activity-gateway -o jsonpath='{.items[*].metadata.name}')
 for lang in "${LANGS[@]}"; do
   found=""
+  id=""
   for _ in $(seq 1 60); do
-    for pod in $gateway_pods; do
-      if kubectl -n "$NS" logs "$pod" | grep -q "authenticated with token \"$lang\""; then
-        found=$pod
-        break 2
-      fi
-    done
+    id=$(worker_id "$lang" || true)
+    if [[ -n "$id" ]]; then
+      for pod in $gateway_pods; do
+        if kubectl -n "$NS" logs "$pod" | grep -qF "Worker \"$id\" authenticated with token \"$lang\""; then
+          found=$pod
+          break 2
+        fi
+      done
+    fi
     sleep 2
   done
-  [[ -n "$found" ]] || { echo "no gateway log shows the $lang worker authenticating"; exit 1; }
+  [[ -n "$found" ]] || { echo "no gateway log shows the $lang worker (${id:-no id yet}) authenticating"; exit 1; }
   echo "$found" >"$WORK/pod-$lang"
-  echo "$lang: authenticated on $found"
+  echo "$lang: $id authenticated on $found"
 done
 if kubectl -n "$NS" logs -l app.kubernetes.io/name=activity-gateway --tail=-1 |
   grep -qFf <(cat "$WORK"/token-*); then
@@ -171,7 +184,7 @@ for lang in "${LANGS[@]}"; do
     --parent-fsm-name creditCheck --parent-fsm-version v01 \
     --async-operation-type internalAsyncOperation \
     --async-operation-name "$(actor_for "$lang")" --async-operation-version v01 \
-    --async-operation-language "$lang" --input '{"smoke":true}' --timeout-ms 15000 2>&1)
+    --async-operation-language "$lang" --input '{"smoke":true}' --timeout-ms 15000 2>&1 || true)
   echo "$out" | grep -q "Result:" || { echo "$lang invoke failed: $out"; exit 1; }
   echo "$lang: $(echo "$out" | grep -o 'Result: .*' | cut -c1-100)"
 done
