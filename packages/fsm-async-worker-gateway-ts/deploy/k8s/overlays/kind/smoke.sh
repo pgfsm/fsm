@@ -121,8 +121,16 @@ kubectl -n "$NS" create secret generic activity-gateway-db \
 
 log "Applying the manifests (overlays/kind)"
 kubectl apply -k "$HERE"
-for deploy in pgbouncer activity-gateway "${LANGS[@]/#/async-worker-}"; do
+for deploy in pgbouncer activity-gateway; do
   kubectl -n "$NS" rollout status "deploy/$deploy" --timeout=300s
+done
+# Restart the workers against a gateway that is already listening: a
+# TypeScript worker on @pgfsm/async-worker-sdk 0.3.0 hangs instead of retrying
+# when its first TLS connection is refused (#484). Drop this once the
+# debug-only project is on a release with the fix.
+kubectl -n "$NS" rollout restart deploy -l app.kubernetes.io/component=async-worker
+for lang in "${LANGS[@]}"; do
+  kubectl -n "$NS" rollout status "deploy/async-worker-$lang" --timeout=300s
 done
 
 log "Pod Security: the namespace admits every pod under \"restricted\""
