@@ -19,6 +19,9 @@ spec:
     metadata:
       labels: { app: postgres }
     spec:
+      # Otherwise the Service named "postgres" injects POSTGRES_PORT=tcp://...,
+      # which the image's init scripts take as the port.
+      enableServiceLinks: false
       containers:
         - name: postgres
           image: public.ecr.aws/supabase/postgres:15.8.1.085
