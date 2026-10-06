@@ -45,6 +45,9 @@ cleanup() {
     kubectl get pods -A -o wide || true
     kubectl -n "$NS" describe pods || true
     kubectl -n "$NS" logs -l app.kubernetes.io/part-of=pgfsm --all-containers --tail=80 --prefix || true
+    kubectl -n pgfsm-db describe pods || true
+    kubectl -n pgfsm-db logs deploy/postgres --tail=80 || true
+    kubectl -n pgfsm-db logs deploy/postgres --previous --tail=80 || true
   fi
   rm -rf "$WORK"
   if [[ "${KEEP:-0}" != 1 && "${SKIP_CLUSTER:-0}" != 1 ]]; then
@@ -81,8 +84,10 @@ kubectl apply -f "$HERE/postgres.yaml"
 kubectl -n pgfsm-db rollout status deploy/postgres --timeout=300s
 pg_pod=$(kubectl -n pgfsm-db get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')
 for migration in "$ROOT"/packages/database-src/supabase/migrations/*.sql; do
-  kubectl -n pgfsm-db exec -i "$pg_pod" -- \
-    psql -q -v ON_ERROR_STOP=1 -U postgres -d postgres <"$migration" >/dev/null
+  # As `postgres` over TCP with its password, like `supabase db reset`
+  # (the image asks for a password on the local socket too).
+  kubectl -n pgfsm-db exec -i "$pg_pod" -- env PGPASSWORD=postgres \
+    psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d postgres <"$migration" >/dev/null
 done
 
 log "Namespace, TLS material, tokens and database Secrets"

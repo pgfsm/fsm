@@ -22,13 +22,24 @@ spec:
       containers:
         - name: postgres
           image: public.ecr.aws/supabase/postgres:15.8.1.085
+          # How the Supabase CLI starts this image (`supabase start`): its init
+          # scripts need these, and the image's config lives in /etc/postgresql.
+          args: ["postgres", "-D", "/etc/postgresql"]
           env:
+            - { name: POSTGRES_HOST, value: /var/run/postgresql }
+            - { name: POSTGRES_USER, value: supabase_admin }
+            - { name: POSTGRES_DB, value: postgres }
             - { name: POSTGRES_PASSWORD, value: postgres }
+            - {
+                name: JWT_SECRET,
+                value: test-only-jwt-secret-with-at-least-32-characters,
+              }
+            - { name: JWT_EXP, value: "3600" }
           ports:
             - { name: postgres, containerPort: 5432 }
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+              command: ["pg_isready", "-U", "supabase_admin", "-h", "127.0.0.1"]
             periodSeconds: 3
 ---
 apiVersion: v1
