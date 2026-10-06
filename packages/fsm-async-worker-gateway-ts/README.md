@@ -139,7 +139,16 @@ TLS with its own token, under Pod Security "restricted":
 [`deploy/k8s/`](https://github.com/pgfsm/fsm/tree/main/packages/fsm-async-worker-gateway-ts/deploy/k8s)
 (see its README) and
 [`deploy/docker/`](https://github.com/pgfsm/fsm/tree/main/packages/fsm-async-worker-gateway-ts/deploy/docker).
-Images aren't published; build them from those Dockerfiles.
+Each release also publishes the gateway image, built for amd64 and arm64:
+
+```bash
+docker pull ghcr.io/pgfsm/async-worker-gateway:<version>   # or :<major>.<minor>, :latest
+```
+
+It runs the same CLI as the npm package (`ENTRYPOINT` is
+`async-operation-worker-gateway`; `async-operation-worker-gateway-ctl` is in
+`/usr/local/bin` too), as non-root on a distroless base. Worker images depend on
+your project's actors, so build those from the worker Dockerfiles.
 
 ## Prerequisites
 

@@ -32,7 +32,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: gateway
-          image: pgfsm/async-worker-gateway:dev
+          image: ghcr.io/pgfsm/async-worker-gateway:0.4.0
           args:
             - --sidecar-socket=/sockets/workers.sock
             - --ensure-queue-on-register

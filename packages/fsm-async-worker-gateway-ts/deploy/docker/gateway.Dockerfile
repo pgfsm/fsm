@@ -24,6 +24,8 @@
 ARG DENO_VERSION=2.9.4
 
 FROM denoland/deno:${DENO_VERSION} AS build
+# The release version (gateway-release.yml sets it); the binary must report it.
+ARG VERSION=
 WORKDIR /src
 COPY packages/fsm-logging-ts packages/fsm-logging-ts
 COPY packages/fsm-core-db-ts packages/fsm-core-db-ts
@@ -42,9 +44,19 @@ RUN set -eux; \
         --include packages/fsm-async-worker-gateway-ts/deno.json \
         --output /out/$bin $cli/$bin.ts; \
     done; \
-    /out/async-operation-worker-gateway --version
+    reported=$(/out/async-operation-worker-gateway --version); \
+    echo "$reported"; \
+    if [ -n "$VERSION" ]; then \
+      case "$reported" in *"$VERSION"*) ;; *) echo "expected version $VERSION" >&2; exit 1 ;; esac; \
+    fi
 
 FROM gcr.io/distroless/cc-debian12:nonroot
+ARG VERSION=dev
+LABEL org.opencontainers.image.title="pgfsm Activity Gateway" \
+      org.opencontainers.image.description="pgfsm Activity Gateway (async-operation worker gateway)" \
+      org.opencontainers.image.source="https://github.com/pgfsm/fsm" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${VERSION}"
 COPY --from=build /out/ /usr/local/bin/
 USER nonroot
 # Sidecar listener for TCP workers (--sidecar-listen tcp://0.0.0.0:7443).
