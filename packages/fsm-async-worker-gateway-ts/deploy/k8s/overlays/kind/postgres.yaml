@@ -42,7 +42,15 @@ spec:
             - { name: postgres, containerPort: 5432 }
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "supabase_admin", "-d", "postgres", "-h", "127.0.0.1"]
+              command: [
+                "pg_isready",
+                "-U",
+                "supabase_admin",
+                "-d",
+                "postgres",
+                "-h",
+                "127.0.0.1",
+              ]
             periodSeconds: 3
 ---
 apiVersion: v1
