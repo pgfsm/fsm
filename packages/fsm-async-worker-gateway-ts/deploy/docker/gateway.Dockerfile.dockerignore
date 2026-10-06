@@ -1,0 +1,9 @@
+# Context is the repository root; the Dockerfile copies only what the gateway
+# imports, so keep the context small too.
+**/node_modules
+**/target
+**/dist
+**/.venv
+**/__pycache__
+.git
+.claude

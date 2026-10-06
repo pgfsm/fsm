@@ -1,0 +1,15 @@
+# Settings every async worker reads through its PGFSM_* environment
+# variables (#438), whatever its language. The gateway's TLS certificate must
+# name the Service host below (see README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: async-worker-config
+data:
+  PGFSM_GATEWAY_ADDRESS: https://activity-gateway.pgfsm.svc:7443
+  PGFSM_GATEWAY_CA_FILE: /etc/pgfsm/ca/ca.crt
+  PGFSM_GATEWAY_TOKEN_FILE: /etc/pgfsm/token/token
+  # Each actor's own maxConcurrency (from its stub) wins over this.
+  PGFSM_MAX_CONCURRENCY: "1"
+  # Must stay below the pods' terminationGracePeriodSeconds (30 s).
+  PGFSM_SHUTDOWN_GRACE_MS: "25000"

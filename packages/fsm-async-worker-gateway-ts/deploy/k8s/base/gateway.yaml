@@ -1,0 +1,105 @@
+# Activity Gateway as its own Deployment (SPEC-007, option C): workers dial in
+# over TLS on the Service, each with its own language's bearer token.
+#
+# Secrets (create before applying; see README.md):
+#   activity-gateway-tls     kubernetes.io/tls  tls.crt, tls.key
+#   activity-gateway-tokens  Opaque             one key per language (typescript, python, rust, go)
+#   activity-gateway-db      Opaque             DATABASE_URL (point it at the pooler)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: activity-gateway
+  labels: {
+    app.kubernetes.io/name: activity-gateway,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: activity-gateway }
+  template:
+    metadata:
+      labels: {
+        app.kubernetes.io/name: activity-gateway,
+        app.kubernetes.io/part-of: pgfsm,
+      }
+    spec:
+      # In-flight invokes drain on SIGTERM; workers reconnect to another
+      # replica through the Service.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: activity-gateway }
+      containers:
+        - name: gateway
+          image: pgfsm/async-worker-gateway:dev # replace with your registry's image
+          args:
+            - --sidecar-listen=tcp://0.0.0.0:7443
+            - --tls-cert=/etc/pgfsm/tls/tls.crt
+            - --tls-key=/etc/pgfsm/tls/tls.key
+            # Every key of the token Secret is one accepted token (#429).
+            - --auth-token-dir=/etc/pgfsm/tokens
+            - --ensure-queue-on-register
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: activity-gateway-db, key: DATABASE_URL }
+          ports:
+            - { name: sidecar, containerPort: 7443 }
+          readinessProbe:
+            tcpSocket: { port: sidecar }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: sidecar }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tls, mountPath: /etc/pgfsm/tls, readOnly: true }
+            - { name: tokens, mountPath: /etc/pgfsm/tokens, readOnly: true }
+            # The gateway's own Unix sockets (gRPC API, local sidecar) live here.
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tls
+          secret: { secretName: activity-gateway-tls }
+        - name: tokens
+          secret: { secretName: activity-gateway-tokens }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: activity-gateway
+  labels: {
+    app.kubernetes.io/name: activity-gateway,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  selector: { app.kubernetes.io/name: activity-gateway }
+  ports:
+    - { name: sidecar, port: 7443, targetPort: sidecar }
+---
+# Keep at least one gateway serving during node drains and rolling upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: activity-gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: activity-gateway }

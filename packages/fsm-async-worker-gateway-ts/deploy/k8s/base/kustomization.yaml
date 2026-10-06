@@ -1,0 +1,14 @@
+# Reference manifests for the Activity Gateway as its own Deployment
+# (SPEC-007). `kubectl apply -k` this directory after creating the Secrets and
+# the CA ConfigMap described in ../README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pgfsm
+resources:
+  - namespace.yaml
+  - gateway.yaml
+  - worker-config.yaml
+  - worker-typescript.yaml
+  - worker-python.yaml
+  - worker-rust.yaml
+  - worker-go.yaml

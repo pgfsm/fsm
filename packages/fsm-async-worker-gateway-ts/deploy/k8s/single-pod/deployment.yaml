@@ -1,0 +1,80 @@
+# The small / local topology: the gateway and one worker per language in ONE
+# pod, talking over a Unix socket on a shared emptyDir. No TLS, tokens or
+# Service are needed (only processes in the pod can reach the socket), but all
+# languages scale together and a gateway restart restarts the pod.
+# Rollback target for the separate-Deployment layout (../base): point workers
+# back at the socket. Uses the activity-gateway-db Secret only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgfsm-activity
+  namespace: pgfsm
+  labels: {
+    app.kubernetes.io/name: pgfsm-activity,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: pgfsm-activity }
+  template:
+    metadata:
+      labels: {
+        app.kubernetes.io/name: pgfsm-activity,
+        app.kubernetes.io/part-of: pgfsm,
+      }
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: gateway
+          image: pgfsm/async-worker-gateway:dev
+          args:
+            - --sidecar-socket=/sockets/workers.sock
+            - --ensure-queue-on-register
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: activity-gateway-db, key: DATABASE_URL }
+          securityContext: &restricted
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: sockets, mountPath: /sockets }
+            - { name: tmp, mountPath: /tmp }
+        - name: worker-typescript
+          image: pgfsm/async-worker-typescript:dev
+          args: ["start"]
+          env: [{ name: PGFSM_GATEWAY_SOCKET, value: /sockets/workers.sock }]
+          securityContext: *restricted
+          volumeMounts: &worker-mounts
+            - { name: sockets, mountPath: /sockets }
+            - { name: tmp, mountPath: /tmp }
+        - name: worker-python
+          image: pgfsm/async-worker-python:dev
+          args: ["start"]
+          env: [{ name: PGFSM_GATEWAY_SOCKET, value: /sockets/workers.sock }]
+          securityContext: *restricted
+          volumeMounts: *worker-mounts
+        - name: worker-rust
+          image: pgfsm/async-worker-rust:dev
+          args: ["start"]
+          env: [{ name: PGFSM_GATEWAY_SOCKET, value: /sockets/workers.sock }]
+          securityContext: *restricted
+          volumeMounts: *worker-mounts
+        - name: worker-go
+          image: pgfsm/async-worker-go:dev
+          args: ["start"]
+          env: [{ name: PGFSM_GATEWAY_SOCKET, value: /sockets/workers.sock }]
+          securityContext: *restricted
+          volumeMounts: *worker-mounts
+      volumes:
+        - name: sockets
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
