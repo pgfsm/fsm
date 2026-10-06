@@ -67,7 +67,7 @@ export async function listFsmInstances(
     const text = `
       SELECT *
       FROM ${FSM_INSTANCE_TABLE}
-      ORDER BY created_at DESC;
+      ORDER BY started_at DESC NULLS LAST;
     `;
     const result = await deps.db.query<FsmInstanceRow>(text);
     return Array.isArray(result.rows) ? result.rows : [];

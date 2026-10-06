@@ -56,7 +56,7 @@ export async function withRole<T>(
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK").catch((rollbackError) => {
+    await client.query("ROLLBACK").catch((rollbackError: unknown) => {
       // The connection's state is unknown; don't hand it back to the pool.
       destroy = true;
       logger.warn("withRole: ROLLBACK failed: {error}", {

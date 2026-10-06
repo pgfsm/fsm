@@ -4,17 +4,9 @@ import createApp from "../fsm-core-ts-hono-deno/lib/create-app.ts";
 
 const urlPathPrefix = "/fsm";
 
-const fsmRouter = await createApp(urlPathPrefix, {
-  sharedAsyncOperation: {
-    folderPath: new URL("../fsm-core-example/shared-async-op", import.meta.url)
-      .pathname,
-    skipDirs: [],
-  },
-  fsm: {
-    folderPath: new URL("../fsm-core-example/fsm", import.meta.url).pathname,
-    skipDirs: [],
-  },
-});
+// The API serves HTTP only; run fsmlets as separate workers (a generated
+// worker project's sync-worker, or the reference K8s manifests).
+const fsmRouter = await createApp(urlPathPrefix);
 
 const host = new Hono();
 host.route(urlPathPrefix, fsmRouter);
