@@ -2,18 +2,20 @@
 
 `@pgfsm/ctl` ships one bin, `pgfsmctl`, for operating a pgfsm deployment
 (SPEC-005, conventions from SPEC-009). Commands are `<noun> <verb>`, and each
-noun has a **tier**: DB-direct commands talk to Postgres, local ones touch only
-your machine. (SPEC-009 adds API-tier commands in #473.)
+noun has a **tier**: DB-direct commands talk to Postgres, API commands to the
+pgfsm REST API with an API key, and local ones touch only your machine.
 
-| Command                                     | Tier      | Kind     | Role                                                                                       | Replaces (`@pgfsm/sync-worker` ≤ 0.2) |
-| ------------------------------------------- | --------- | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
-| `fsm load <folder>`                         | DB-direct | one-shot | Load FSM definitions (`fsm.json`) into the database — a deploy step (SPEC-006)             | `@pgfsm/compiler -c load`             |
-| `db cron register \| unregister \| status`  | DB-direct | one-shot | Manage the `pg_cron` job that drains the dispatch queue — the primary scheduler (SPEC-003) | `pgcron`                              |
-| `instance create \| resume \| send \| stop` | DB-direct | one-shot | Instance control (kubectl equivalent) against the dispatch-queue model, straight to the DB | `fsmctl -c <command>`                 |
-| `scheduler run`                             | DB-direct | long-run | The standing fsmscheduler process (kube-scheduler equivalent) — **fallback only**          | `fsmscheduler`                        |
-| `config set \| use \| list \| show`         | local     | one-shot | Named targets (profiles): database and API URLs, secrets kept apart                        | —                                     |
-| `completion bash \| zsh \| fish`            | local     | one-shot | Print a shell completion script                                                            | —                                     |
-| `version`                                   | local     | one-shot | Print the version (`-o json` for `{ "version": … }`)                                       | —                                     |
+| Command                                     | Tier             | Kind     | Role                                                                                       | Replaces (`@pgfsm/sync-worker` ≤ 0.2) |
+| ------------------------------------------- | ---------------- | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `fsm load <folder>`                         | API or DB-direct | one-shot | Load FSM definitions (`fsm.json`) into the database — a deploy step (SPEC-006)             | `@pgfsm/compiler -c load`             |
+| `db cron register \| unregister \| status`  | DB-direct        | one-shot | Manage the `pg_cron` job that drains the dispatch queue — the primary scheduler (SPEC-003) | `pgcron`                              |
+| `db key create --name <n> --role <r>`       | DB-direct        | one-shot | Mint an API key in the database: the bootstrap admin key (SPEC-009 §2)                     | —                                     |
+| `key create \| list \| revoke`              | API              | one-shot | Manage API keys through the API (admin key)                                                | —                                     |
+| `instance create \| resume \| send \| stop` | DB-direct        | one-shot | Instance control (kubectl equivalent) against the dispatch-queue model, straight to the DB | `fsmctl -c <command>`                 |
+| `scheduler run`                             | DB-direct        | long-run | The standing fsmscheduler process (kube-scheduler equivalent) — **fallback only**          | `fsmscheduler`                        |
+| `config set \| use \| list \| show`         | local            | one-shot | Named targets (profiles): database and API URLs, secrets kept apart                        | —                                     |
+| `completion bash \| zsh \| fish`            | local            | one-shot | Print a shell completion script                                                            | —                                     |
+| `version`                                   | local            | one-shot | Print the version (`-o json` for `{ "version": … }`)                                       | —                                     |
 
 No command needs a pgfsm project (`pgfsm.config.json`). The `db` noun is always
 DB-direct: its commands are deploy steps that must work before the REST API is
@@ -56,6 +58,23 @@ otherwise quietly use that project's local `DATABASE_URL`. Run with
 `PGFSMCTL_LOG_LEVEL=debug` to see which source was used. With none of them set,
 a command exits `2` before connecting.
 
+### Which API (API-tier commands)
+
+The URL and the key are resolved separately, first match wins:
+
+1. `--url` / `--api-key`
+2. a profile chosen explicitly (`--profile`, else `$PGFSM_PROFILE`): its `url`
+   and `api_key`. An explicit profile **replaces** the environment and the
+   current profile, so picking a database-only profile can't be overridden by a
+   stray `$PGFSM_URL`.
+3. `$PGFSM_URL` / `$PGFSM_API_KEY` (`./.env` is read)
+4. the current profile's `url` / `api_key`
+
+The URL is the API's base **including its path prefix**, e.g.
+`http://localhost:9999/fsm` for an API started with the default `/fsm`. A URL
+without a key exits `2`. Store a key with
+`echo "$KEY" | pgfsmctl config set <profile> --api-key-stdin`.
+
 ### Output
 
 `-o/--output table|json|ids` (default `table`). Data goes to **stdout**, logs to
@@ -75,7 +94,16 @@ pgfsmctl fsm load <folder>   # e.g. `fsm` in a pgfsm project
 
 Loads every `<folder>/<fsmName>/<version>/fsm.json` (version folders are `v01`,
 `v02`, …) into `fsm_core.fsm_json` and the state/transition tables, as one batch
-(SPEC-006):
+(SPEC-006).
+
+**Tier.** When an API target resolves (see
+[Which API](#which-api-api-tier-commands)), the batch goes to the API's
+`POST /admin/fsm/load` with an admin key (the API must run with
+`--enable-admin-api`). Otherwise it loads DB-direct, so a project's local `.env`
+with only `DATABASE_URL` keeps working with no API running. `--db-url` always
+forces DB-direct (break-glass). The tier used is logged on stderr.
+
+Either way:
 
 1. **Validated before anything is written.** A child FSM that a definition
    invokes (`asyncOperationType: "fsm"`) must be in the folder or already
@@ -96,12 +124,14 @@ worker refuses to start while an FSM version it serves is missing from the
 database, or differs from the `fsm.json` it was compiled from. It replaces
 `@pgfsm/compiler`'s deprecated `-c load`.
 
-| Flag               | Alias | Description                                                             |
-| ------------------ | ----- | ----------------------------------------------------------------------- |
-| `--db-url <url>`   | `-d`  | Postgres URL (see [Which database](#which-database-db-direct-commands)) |
-| `--profile <name>` |       | Use this profile's `db_url`                                             |
-| `--output <fmt>`   | `-o`  | `table` (FSM, version, status), `json` or `ids`                         |
-| `--help`           | `-h`  | Print help and exit                                                     |
+| Flag               | Alias | Description                                                                               |
+| ------------------ | ----- | ----------------------------------------------------------------------------------------- |
+| `--url <url>`      |       | API base URL (see [Which API](#which-api-api-tier-commands))                              |
+| `--api-key <key>`  |       | Admin key for the API                                                                     |
+| `--db-url <url>`   | `-d`  | Postgres URL; forces DB-direct (see [Which database](#which-database-db-direct-commands)) |
+| `--profile <name>` |       | Use this profile's `url`/`api_key`, or its `db_url`                                       |
+| `--output <fmt>`   | `-o`  | `table` (FSM, version, status), `json` or `ids`                                           |
+| `--help`           | `-h`  | Print help and exit                                                                       |
 
 ---
 
@@ -136,6 +166,45 @@ registered, so it doubles as a deploy check.
 | `--profile <name>`  |       | Use this profile's `db_url`                                |
 | `--output <fmt>`    | `-o`  | `table`, `json` or `ids` (the job name)                    |
 | `--help`            | `-h`  | Print help and exit                                        |
+
+---
+
+## `db key create` and `key` — API keys
+
+```bash
+# Bootstrap: the first admin key, straight in the database, as the schema owner
+pgfsmctl db key create --name ops-admin --role admin -o json
+
+# After that, through the API with an admin key
+export PGFSM_URL=http://localhost:9999/fsm PGFSM_API_KEY=pgfsm_admin_…
+pgfsmctl key create --name ci --role operator
+pgfsmctl key list
+pgfsmctl key revoke ci
+```
+
+Keys are `pgfsm_admin_…` or `pgfsm_op_…`. Only their SHA-256 and a display
+prefix are stored, so **`create` prints the key once** (and warns on stderr).
+`key list` never shows a key, only its prefix, role, last use and revocation.
+
+`db key create` is DB-direct because no key can call the API before the first
+admin key exists, the same way a Supabase project's keys are minted outside its
+API. `key …` needs the API to run with `--enable-admin-api`.
+
+| Exit | When                                                                          |
+| ---- | ----------------------------------------------------------------------------- |
+| `2`  | Missing `--name`/`--role`, an unknown role, no API target, a URL with no key  |
+| `3`  | The key was rejected: unknown or revoked (`401`), or not an admin key (`403`) |
+| `4`  | `revoke` matched no live key, or `/admin/*` doesn't exist (admin API off)     |
+| `1`  | A duplicate key name (`409`), or the API is unreachable                       |
+
+| Flag                 | Alias | Description                             |
+| -------------------- | ----- | --------------------------------------- |
+| `--name <name>`      |       | Key name, unique (`create`)             |
+| `--role <role>`      |       | `admin` or `operator` (`create`)        |
+| `--url`, `--api-key` |       | API target (`key …`)                    |
+| `--db-url <url>`     | `-d`  | Postgres URL (`db key create`)          |
+| `--profile <name>`   |       | Use this profile                        |
+| `--output <fmt>`     | `-o`  | `table`, `json` or `ids` (the key's id) |
 
 ---
 
@@ -280,7 +349,7 @@ SPEC-009 §6 (dbosctl's table, plus `5`):
 | `0`   | Success (or `scheduler run` stopped cleanly)                                                  |
 | `1`   | General error: database unreachable, an `fsm load` the database rejected, anything unexpected |
 | `2`   | Usage: unknown noun/verb/option, missing or invalid arguments, bad `-o`, no database target   |
-| `3`   | Authentication or authorization failed (SQLSTATE `42501` or `28xxx`)                          |
-| `4`   | Not found: unknown instance or profile                                                        |
+| `3`   | Authentication or authorization failed (HTTP `401`/`403`, SQLSTATE `42501` or `28xxx`)        |
+| `4`   | Not found: unknown instance, profile or key (HTTP `404`)                                      |
 | `5`   | Check failed: a status command ran and found a problem (`db cron status` with no job)         |
 | `130` | Interrupted (`Ctrl+C`)                                                                        |

@@ -27,19 +27,21 @@ creates already pins this package as `npm run db:load` and `npm run db:pgcron`.
 
 ## Commands
 
-| Command                                 | What it does                                                                                                                    |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `fsm load <folder>`                     | Load every `<folder>/<fsmName>/<version>/fsm.json` in one transaction, children first; exit `1` and load nothing on any failure |
-| `db cron register [-s <cron>]`          | (Re)register the `fsm_schedule_all_pending` pg_cron job (default schedule `"5 seconds"`). Idempotent                            |
-| `db cron unregister`                    | Remove the job; succeeds if it isn't registered                                                                                 |
-| `db cron status`                        | Print the registered job; exit `5` if none                                                                                      |
-| `instance create -n <fsm> -V <version>` | Create an instance (`--input <json>` for the initial context) and enqueue it                                                    |
-| `instance resume -q <id>`               | Re-enqueue an existing instance                                                                                                 |
-| `instance send -q <id> -e <event>`      | Send an event (`--event-data <json>` for its payload)                                                                           |
-| `instance stop -q <id>`                 | Stop the worker running the instance                                                                                            |
-| `scheduler run`                         | Standing scheduler process — a fallback only; the pg_cron job is the primary scheduler                                          |
-| `config set\|use\|list\|show`           | Named targets (profiles); passwords and API keys kept in a separate `credentials.json` (mode `0600`)                            |
-| `completion bash\|zsh\|fish`            | Print a shell completion script                                                                                                 |
+| Command                                           | What it does                                                                                                                                                                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fsm load <folder>`                               | Load every `<folder>/<fsmName>/<version>/fsm.json` in one transaction, children first; through the API when one is configured (admin key), else DB-direct; `--db-url` forces DB-direct. Exit `1` and load nothing on any failure |
+| `db cron register [-s <cron>]`                    | (Re)register the `fsm_schedule_all_pending` pg_cron job (default schedule `"5 seconds"`). Idempotent                                                                                                                             |
+| `db cron unregister`                              | Remove the job; succeeds if it isn't registered                                                                                                                                                                                  |
+| `db cron status`                                  | Print the registered job; exit `5` if none                                                                                                                                                                                       |
+| `db key create --name <n> --role admin\|operator` | Mint an API key in the database (the bootstrap admin key); printed once                                                                                                                                                          |
+| `key create\|list\|revoke`                        | Manage API keys through the REST API with an admin key (`--url`/`PGFSM_URL` + `--api-key`/`PGFSM_API_KEY`)                                                                                                                       |
+| `instance create -n <fsm> -V <version>`           | Create an instance (`--input <json>` for the initial context) and enqueue it                                                                                                                                                     |
+| `instance resume -q <id>`                         | Re-enqueue an existing instance                                                                                                                                                                                                  |
+| `instance send -q <id> -e <event>`                | Send an event (`--event-data <json>` for its payload)                                                                                                                                                                            |
+| `instance stop -q <id>`                           | Stop the worker running the instance                                                                                                                                                                                             |
+| `scheduler run`                                   | Standing scheduler process — a fallback only; the pg_cron job is the primary scheduler                                                                                                                                           |
+| `config set\|use\|list\|show`                     | Named targets (profiles); passwords and API keys kept in a separate `credentials.json` (mode `0600`)                                                                                                                             |
+| `completion bash\|zsh\|fish`                      | Print a shell completion script                                                                                                                                                                                                  |
 
 `pgfsmctl --help` and `pgfsmctl <command> --help` list every option;
 `pgfsmctl --version` prints the version. The full reference is

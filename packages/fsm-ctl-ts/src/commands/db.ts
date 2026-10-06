@@ -1,5 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import {
+  createApiKey,
   getScheduleAllPendingCronJob,
   registerScheduleAllPendingCronJob,
   unregisterScheduleAllPendingCronJob,
@@ -8,6 +9,7 @@ import { parseCommandArgs, verbOf } from "../args.ts";
 import { resolveDbUrl, withPool } from "../db-target.ts";
 import { CtlError, ExitCode, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
+import { KEY_ONCE_WARNING, parseKeyRole } from "../key-role.ts";
 import { CTL_CATEGORY } from "../logger.ts";
 import { printRecord } from "../output.ts";
 
@@ -21,10 +23,17 @@ USAGE
   ${CLI_INVOCATION} db cron register [--schedule <cron>] [options]
   ${CLI_INVOCATION} db cron unregister [options]
   ${CLI_INVOCATION} db cron status [options]
+  ${CLI_INVOCATION} db key create --name <name> --role admin|operator [options]
 
   Every \`db\` command talks to Postgres directly, never to the REST API:
   these are deploy steps (run from CI or a Kubernetes Job as the schema
   owner), so they must work before the API is up. \`db migrate\` is reserved.
+
+VERBS (db key)
+  create       Create an API key straight in the database, as the schema
+               owner: the way to mint the first admin key, before any key can
+               call the API (SPEC-009 §2). Prints the key once. After that,
+               manage keys over the API: \`${CLI_INVOCATION} key …\`.
 
 VERBS (db cron)
   register     Idempotently (re)register the fsm_schedule_all_pending pg_cron
@@ -34,6 +43,8 @@ VERBS (db cron)
 
 OPTIONS
   -s, --schedule <cron>  pg_cron schedule for register (default: "5 seconds")
+      --name <name>      Key name (db key create; unique)
+      --role <role>      admin or operator (db key create)
   -d, --db-url <url>     Postgres URL (else --profile, PGFSM_DB_URL, DATABASE_URL, current profile)
       --profile <name>   Use this profile's db_url
   -o, --output <fmt>     table (default), json or ids
@@ -49,16 +60,17 @@ DESCRIPTION
 
 export async function dbCommand(argv: string[]): Promise<void> {
   const args = parseCommandArgs(argv, {
-    string: ["schedule"],
+    string: ["schedule", "name", "role"],
     alias: { s: "schedule" },
     common: ["db", "output"],
   }, HELP);
   if (args.help) return console.log(HELP);
 
-  const sub = verbOf("db", args.positionals, ["cron", "migrate"], HELP);
+  const sub = verbOf("db", args.positionals, ["cron", "key", "migrate"], HELP);
   if (sub === "migrate") {
     throw usageError("db migrate is reserved and not implemented yet", HELP);
   }
+  if (sub === "key") return dbKey(args.positionals.slice(1), args);
   const verb = verbOf(
     "db cron",
     args.positionals.slice(1),
@@ -113,4 +125,23 @@ export async function dbCommand(argv: string[]): Promise<void> {
       }
     }
   });
+}
+
+async function dbKey(
+  positionals: string[],
+  args: Awaited<ReturnType<typeof parseCommandArgs>>,
+): Promise<void> {
+  verbOf("db key", positionals, ["create"], HELP);
+  const name = args.flags.name;
+  if (typeof name !== "string" || name === "") {
+    throw usageError("db key create needs --name", HELP);
+  }
+  const role = parseKeyRole(args.flags.role, HELP);
+  const dbUrl = await resolveDbUrl(args);
+  const created = await withPool(
+    dbUrl,
+    (deps) => createApiKey(deps, name, role),
+  );
+  logger.warning(KEY_ONCE_WARNING);
+  printRecord(created, args.output, { id: (r) => r.id });
 }

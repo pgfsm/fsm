@@ -100,24 +100,6 @@ const { default: createApp } = await import("../../lib/create-app.ts");
 const { Pool } = await import("pg");
 const { Hono } = await import("hono");
 
-// ── Graceful / force shutdown ────────────────────────────────────────────────
-
-let shutdownRequested = false;
-
-const onSignal = () => {
-  if (shutdownRequested) {
-    logger.info("Force exit.");
-    Deno.exit(0);
-  }
-  shutdownRequested = true;
-  logger.info(
-    "Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...",
-  );
-};
-
-Deno.addSignalListener("SIGINT", onSignal);
-Deno.addSignalListener("SIGTERM", onSignal);
-
 // ── Start server ─────────────────────────────────────────────────────────────
 
 const pool = new Pool({ connectionString: dbUrl });
@@ -136,7 +118,32 @@ logger.info("Starting FSM server on port {port} with prefix {prefix}", {
   port,
   prefix: urlPathPrefix,
 });
-Deno.serve({ port }, host.fetch);
+const server = Deno.serve({ port }, host.fetch);
+
+// ── Graceful / force shutdown ────────────────────────────────────────────────
+// SIGTERM (Kubernetes) or Ctrl-C: stop accepting connections, let in-flight
+// requests finish, close the pool, exit 0. A second signal force-exits (130).
+
+let shutdownRequested = false;
+
+const onSignal = async () => {
+  if (shutdownRequested) {
+    logger.info("Force exit.");
+    Deno.exit(130);
+  }
+  shutdownRequested = true;
+  logger.info(
+    "Shutdown requested — stopping server gracefully. Ctrl+C again to force exit...",
+  );
+  await server.shutdown();
+  await pool.end();
+  logger.info("Server stopped.");
+  Deno.exit(0);
+};
+
+Deno.addSignalListener("SIGINT", onSignal);
+// Windows only delivers SIGINT (and SIGBREAK) to Deno.
+if (Deno.build.os !== "windows") Deno.addSignalListener("SIGTERM", onSignal);
 
 self.addEventListener("error", (event) => {
   logger.error("Uncaught exception: {error}", { error: event.error });
