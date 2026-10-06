@@ -7,6 +7,11 @@ kind: Kustomization
 resources:
   - ../../base
   - ../../examples/pooler
+# The gateway image smoke.sh built from this checkout, not the published one.
+images:
+  - name: ghcr.io/pgfsm/async-worker-gateway
+    newName: pgfsm/async-worker-gateway
+    newTag: dev
 patches:
   - target:
       kind: Deployment

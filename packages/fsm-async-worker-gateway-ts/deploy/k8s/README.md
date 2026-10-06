@@ -37,17 +37,23 @@ every worker down.
 The gateway connects to Postgres; the workers never do. Each worker needs only
 the gateway's address, its CA and its own token.
 
-1. **Images.** Build them from the [Dockerfiles](../docker/) and push them to
-   your registry, then replace the `pgfsm/*:dev` image names (e.g. with
-   kustomize's `images:`). Nothing is published for you.
+1. **Images.** The gateway's is published with every release as
+   `ghcr.io/pgfsm/async-worker-gateway:<version>` (amd64 and arm64, with build
+   provenance), and `base/` already pulls the current one. Workers run your
+   project's actors, so build those from the [Dockerfiles](../docker/), push
+   them to your registry and replace the `pgfsm/async-worker-<lang>:dev` names
+   (e.g. with kustomize's `images:`).
 
    ```bash
-   # gateway: from this repository's root
-   docker build -f packages/fsm-async-worker-gateway-ts/deploy/docker/gateway.Dockerfile \
-     -t <registry>/async-worker-gateway:<tag> .
    # one per language: from your generated project's async-worker/<lang>/
    docker build -f .../deploy/docker/worker-python.Dockerfile -t <registry>/async-worker-python:<tag> async-worker/python
+   # the gateway too, if you'd rather build it: from this repository's root
+   docker build -f packages/fsm-async-worker-gateway-ts/deploy/docker/gateway.Dockerfile \
+     -t <registry>/async-worker-gateway:<tag> .
    ```
+
+   Check where a published gateway image came from with
+   `gh attestation verify oci://ghcr.io/pgfsm/async-worker-gateway:<version> --owner pgfsm`.
 
 2. **TLS certificate** for the gateway. It must name the Service host the
    workers dial: `activity-gateway.pgfsm.svc` (see `worker-config.yaml`).

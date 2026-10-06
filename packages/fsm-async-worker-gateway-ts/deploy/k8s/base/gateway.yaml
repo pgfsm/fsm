@@ -40,7 +40,7 @@ spec:
             matchLabels: { app.kubernetes.io/name: activity-gateway }
       containers:
         - name: gateway
-          image: pgfsm/async-worker-gateway:dev # replace with your registry's image
+          image: ghcr.io/pgfsm/async-worker-gateway:0.4.0 # published on each release (gateway-release.yml)
           args:
             - --sidecar-listen=tcp://0.0.0.0:7443
             - --tls-cert=/etc/pgfsm/tls/tls.crt

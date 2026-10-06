@@ -1,0 +1,355 @@
+# Releases the Activity Gateway from an async-worker-gateway-v<version> tag
+# (#486): the npm package @pgfsm/async-worker-gateway and the container image
+# ghcr.io/<owner>/async-worker-gateway, at one version, in a fixed order so
+# they can't go out of sync:
+#
+#   preflight → build image (pushed by digest, untagged) → npm publish
+#             → tag image + attest → verify
+#
+# - preflight fails before anything is published if the tag doesn't match
+#   deno.json, if a version of @pgfsm/db / @pgfsm/logging this release would
+#   depend on isn't on npm, or if either package changed since its own release
+#   tag. The image compiles those packages from source while the npm package
+#   depends on their published versions; this check makes both the same code.
+# - The image is built (and pushed by digest only) before the npm publish,
+#   since an npm version can't be republished; it's tagged only after npm
+#   succeeds, so no tagged image exists without its npm package.
+# - Every step is safe to re-run: the npm publish is skipped when the version
+#   is already there, and tagging/attesting again is harmless. Re-run failed
+#   jobs to finish a partial release.
+#
+# workflow_dispatch re-runs a release from its tag (e.g. to rebuild the image
+# after a base-image security fix). <major>.<minor> and `latest` only move when
+# the version is the newest of its line / overall, so rebuilding an old release
+# never moves them backwards; a prerelease gets only its own version tag (and
+# its own npm dist-tag).
+#
+# The image is compiled from the repository at the tag; each architecture
+# builds on a native runner (deno compile under QEMU is slow).
+#
+# The first push creates the GHCR package as private: make it public once in
+# its settings (Package settings → Change visibility).
+name: gateway release
+
+on:
+  push:
+    tags:
+      - "async-worker-gateway-v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to (re)run, e.g. async-worker-gateway-v0.4.0
+        required: true
+        type: string
+      allow_unreleased_deps:
+        description: Release even if @pgfsm/db or @pgfsm/logging changed since their release tags (only for changes that aren't shipped, e.g. comments)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/async-worker-gateway
+  PACKAGE: "@pgfsm/async-worker-gateway"
+  PACKAGE_DIR: packages/fsm-async-worker-gateway-ts
+  TAG_PREFIX: async-worker-gateway-v
+
+jobs:
+  preflight:
+    name: preflight
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      version: ${{ steps.plan.outputs.version }}
+      dist_tag: ${{ steps.plan.outputs.dist_tag }}
+      deno_version: ${{ steps.plan.outputs.deno_version }}
+      image_tags: ${{ steps.plan.outputs.image_tags }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0 # every release tag: dependency tags, newest release
+
+      - name: Version, npm dist-tag, image tags
+        id: plan
+        env:
+          GIT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_TAG" == "$TAG_PREFIX"* ]] || { echo "::error::$GIT_TAG is not a $TAG_PREFIX* tag"; exit 1; }
+          version=${GIT_TAG#"$TAG_PREFIX"}
+          package_version=$(jq -r .version "$PACKAGE_DIR/deno.json")
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::tag $GIT_TAG doesn't match $PACKAGE_DIR/deno.json ($package_version)"
+            exit 1
+          fi
+
+          # A prerelease (0.5.0-alpha.0) publishes under its own npm dist-tag
+          # and gets only its own image tag.
+          dist_tag=latest
+          if [[ "$version" =~ -([a-zA-Z]+)(\.|$) ]]; then dist_tag=${BASH_REMATCH[1]}; fi
+
+          image_tags="$IMAGE:$version"
+          if [[ "$version" != *-* ]]; then
+            # Released (non-prerelease) versions, newest first.
+            released=$(git tag -l "$TAG_PREFIX[0-9]*" | sed "s/^$TAG_PREFIX//" | grep -v -- - | sort -rV)
+            minor=${version%.*}
+            if [[ "$(grep "^${minor//./\\.}\." <<<"$released" | head -1)" == "$version" ]]; then
+              image_tags="$image_tags,$IMAGE:$minor"
+            fi
+            if [[ "$(head -1 <<<"$released")" == "$version" ]]; then
+              image_tags="$image_tags,$IMAGE:latest"
+            fi
+          fi
+
+          {
+            echo "ref=refs/tags/$GIT_TAG"
+            echo "version=$version"
+            echo "dist_tag=$dist_tag"
+            echo "deno_version=$(sed -n 's/^deno = "\(.*\)"/\1/p' .prototools)"
+            echo "image_tags=$image_tags"
+          } >>"$GITHUB_OUTPUT"
+          {
+            echo "npm: $PACKAGE@$version (dist-tag $dist_tag)"
+            echo "image: $image_tags"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      # build-npm.ts maps @pgfsm/db and @pgfsm/logging to `^<their deno.json
+      # version>`; the image compiles their source at this commit instead.
+      - name: Dependencies are released, and unchanged since
+        env:
+          ALLOW_UNRELEASED: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_unreleased_deps || false }}
+        run: |
+          set -euo pipefail
+          failed=0
+          check() { # <npm name> <package dir> <release tag prefix>
+            local name=$1 dir=$2 prefix=$3 version
+            version=$(jq -r .version "$dir/deno.json")
+            # Output, not exit status: some npm versions print nothing and
+            # exit 0 for a version that doesn't exist.
+            if [[ -z "$(npm view "$name@$version" version 2>/dev/null)" ]]; then
+              echo "::error::$name@$version (from $dir/deno.json) isn't on npm: release it first"
+              failed=1
+              return
+            fi
+            if ! git rev-parse -q --verify "refs/tags/$prefix$version" >/dev/null; then
+              echo "::error::no $prefix$version tag to compare $dir against"
+              failed=1
+              return
+            fi
+            # Tests and docs aren't shipped.
+            if ! git diff --quiet "$prefix$version" HEAD -- "$dir" ":!$dir/test" ":!$dir/*.md"; then
+              git diff --stat "$prefix$version" HEAD -- "$dir" ":!$dir/test" ":!$dir/*.md"
+              if [[ "$ALLOW_UNRELEASED" == true ]]; then
+                echo "::warning::$dir changed since $prefix$version (allowed by allow_unreleased_deps)"
+              else
+                echo "::error::$dir changed since $prefix$version, so the image (built from source) and the npm package (depending on $name@^$version) would differ: release $name first"
+                failed=1
+              fi
+              return
+            fi
+            echo "$name@$version: published, unchanged since $prefix$version"
+          }
+          check @pgfsm/db packages/fsm-core-db-ts db-v
+          check @pgfsm/logging packages/fsm-logging-ts logging-v
+          exit $failed
+
+  build:
+    name: build image ${{ matrix.platform }}
+    needs: preflight
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pushed by digest only (no tag): `image` tags the multi-arch index
+      # once the npm package is out.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ env.PACKAGE_DIR }}/deploy/docker/gateway.Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            DENO_VERSION=${{ needs.preflight.outputs.deno_version }}
+            VERSION=${{ needs.preflight.outputs.version }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Record digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 7 # long enough to re-run a failed npm/tag job
+
+  npm:
+    name: publish to npm
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+
+      # Installs proto and runs `proto install` against the root .prototools,
+      # so the Deno version comes from the repo pin.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Already published?
+        id: published
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          if [[ -n "$(npm view "$PACKAGE@$VERSION" version 2>/dev/null)" ]]; then
+            echo "$PACKAGE@$VERSION is already on npm; skipping the publish."
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (dnt)
+        if: steps.published.outputs.skip != 'true'
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: deno task build:npm "${{ needs.preflight.outputs.version }}" --copy-readme
+
+      - name: Publish
+        if: steps.published.outputs.skip != 'true'
+        working-directory: ${{ env.PACKAGE_DIR }}/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag "${{ needs.preflight.outputs.dist_tag }}"
+
+  image:
+    name: tag and attest image
+    needs: [preflight, build, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The index annotations are what GHCR shows for a multi-arch image
+      # (source repository link, description, license).
+      - name: Create the multi-arch index
+        id: index
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ needs.preflight.outputs.image_tags }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag_args=()
+          IFS=, read -ra tags <<<"$TAGS"
+          for tag in "${tags[@]}"; do tag_args+=(-t "$tag"); done
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${tag_args[@]}" \
+            --annotation "index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --annotation "index:org.opencontainers.image.description=pgfsm Activity Gateway (async-operation worker gateway)" \
+            --annotation "index:org.opencontainers.image.licenses=Apache-2.0" \
+            --annotation "index:org.opencontainers.image.version=$VERSION" \
+            "${sources[@]}"
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
+          echo "digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)" >>"$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+
+  verify:
+    name: verify both report ${{ needs.preflight.outputs.version }}
+    needs: [preflight, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # the package is private until made public
+    steps:
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The registry can take a minute to serve a just-published version.
+      - name: npm package
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            if reported=$(npx -y -p "$PACKAGE@$VERSION" -- async-operation-worker-gateway --version 2>/dev/null); then
+              echo "npm: $reported"
+              [[ "$reported" == *"$VERSION"* ]] || { echo "::error::npm package reports $reported"; exit 1; }
+              exit 0
+            fi
+            echo "not installable yet (attempt $attempt); retrying in 15s"
+            sleep 15
+          done
+          echo "::error::$PACKAGE@$VERSION didn't become installable"
+          exit 1
+
+      - name: Image
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          reported=$(docker run --rm "$IMAGE:$VERSION" --version)
+          echo "image: $reported"
+          [[ "$reported" == *"$VERSION"* ]] || { echo "::error::image reports $reported"; exit 1; }

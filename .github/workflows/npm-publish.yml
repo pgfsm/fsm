@@ -4,6 +4,10 @@ name: npm publish
 # its PyPI / crates.io / Go counterparts from one proto-v* tag, in
 # proto-publish.yml (whose npm job mirrors the deno pack steps below — keep
 # the two in step).
+#
+# @pgfsm/async-worker-gateway isn't here either: gateway-release.yml publishes
+# it together with its container image from the async-worker-gateway-v* tag
+# (#486), so the two can't go out of sync.
 
 on:
   push:
@@ -12,7 +16,6 @@ on:
       - "cli-v[0-9]*"
       - "db-v[0-9]*"
       - "sync-worker-v[0-9]*"
-      - "async-worker-gateway-v[0-9]*"
       - "async-worker-sdk-v[0-9]*"
       - "logging-v[0-9]*"
       - "ctl-v[0-9]*"
@@ -27,7 +30,6 @@ on:
           - cli
           - db
           - sync-worker
-          - async-worker-gateway
           - async-worker-sdk
           - logging
           - ctl
@@ -81,10 +83,6 @@ jobs:
           - id: sync-worker
             path: packages/fsm-sync-worker-ts
             tag_prefix: sync-worker-v
-            dnt: true
-          - id: async-worker-gateway
-            path: packages/fsm-async-worker-gateway-ts
-            tag_prefix: async-worker-gateway-v
             dnt: true
           # No CLI bin — on dnt to declare @pgfsm/proto-codegen as a real npm
           # dependency (build-npm.ts maps its subpath imports) instead of

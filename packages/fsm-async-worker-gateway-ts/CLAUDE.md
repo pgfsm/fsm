@@ -55,8 +55,46 @@ Deno version is managed by `.prototools`: `proto install deno --pin local`.
   workflow on PRs touching `deploy/` and on demand; a local run needs ~8 GB of
   free Docker disk). kustomize only loads directories from outside an overlay,
   hence `examples/pooler/` with its own kustomization.
-- Nothing is published: images are built locally or by the workflow and
-  `kind load`ed. The acceptance E2E suite on top of this is #458.
+- The gateway image is published to GHCR together with the npm package; see
+  "Releasing" below. `base/gateway.yaml` and `single-pod/` pin
+  `ghcr.io/pgfsm/async-worker-gateway:<deno.json version>`
+  (`test/deploy_manifests_test.ts` enforces it, so bump them with the version);
+  the kind overlay maps that name back to the locally built `:dev` image, so the
+  smoke test still tests the checkout. The Dockerfile fails if the binary's
+  `--version` doesn't report its `VERSION` build arg. Worker images aren't
+  published (they're per project). The acceptance E2E suite on top of this is
+  #458.
+
+## Releasing (`gateway-release.yml`, #486)
+
+One workflow publishes both the npm package and the image from an
+`async-worker-gateway-v<version>` tag, in a fixed order so they can't go out of
+sync: **preflight → build image (pushed by digest, untagged) → npm publish → tag
+image + attest → verify**. (`npm-publish.yml` no longer handles this package.)
+
+- **preflight** fails before anything is published if the tag doesn't match
+  `deno.json`, if the `@pgfsm/db` / `@pgfsm/logging` versions in their
+  `deno.json` aren't on npm, or if either package's shipped files (not `test/`
+  or `*.md`) changed since its own `db-v*` / `logging-v*` tag. The image
+  compiles those packages from source while the npm package depends on
+  `^<their version>`, so this is what makes both the same code: release them
+  first. `workflow_dispatch` has `allow_unreleased_deps` for changes that don't
+  ship. `@pgfsm/proto-codegen` comes from the workspace and dnt inlines it, so
+  both builds take it from the same commit.
+- The image is built before the npm publish (an npm version can't be
+  republished) and tagged only after it, so no tagged image exists without its
+  npm package. `<version>` always; `<major>.<minor>` / `latest` only when it's
+  the newest release of that line / overall, so a dispatch rebuild of an old tag
+  (e.g. for a base-image fix) never moves them back. Prereleases get only their
+  own image tag and npm dist-tag. amd64 and arm64 build on native runners;
+  BuildKit SBOM + provenance, plus a GitHub attestation
+  (`gh attestation verify oci://ghcr.io/pgfsm/async-worker-gateway:<v> --owner pgfsm`).
+- Every job is safe to re-run (the npm publish is skipped when the version is
+  already there): re-run failed jobs to finish a partial release. **verify**
+  checks that `npx` and `docker run` both report the version.
+- Steps: bump `deno.json` **and** the two manifests' image tag (the test fails
+  otherwise) → PR → merge → push the tag. The first image push creates a private
+  GHCR package: make it public once in its settings.
 
 ## npm publish (`deno task build:npm`)
 
@@ -65,8 +103,9 @@ Deno version is managed by `.prototools`: `proto install deno --pin local`.
 `packages/fsm-compiler-ts/CLAUDE.md`'s "npm publish" section for why dnt (not
 `deno pack`) is required to ship CLI `bin` entries. Registers both the library
 export and the shebanged `async-operation-worker-gateway`/
-`async-operation-worker-gateway-ctl` bins. `.github/workflows/npm-publish.yml`'s
-`async-worker-gateway` matrix entry points at this package (repointed from
+`async-operation-worker-gateway-ctl` bins. Published by
+`.github/workflows/gateway-release.yml` (see "Releasing"; until #486 it was
+`npm-publish.yml`'s `async-worker-gateway` matrix entry, repointed from
 `fsm-async-worker-ts`/v1 in #175/#176, once this package took over the
 `@pgfsm/async-worker` name in #171). #361 renamed it to
 `@pgfsm/async-worker-gateway` (from 0.2.0; tag `async-worker-gateway-v*`), since
