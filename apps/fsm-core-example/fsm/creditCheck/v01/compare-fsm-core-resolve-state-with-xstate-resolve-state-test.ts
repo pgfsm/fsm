@@ -1,6 +1,7 @@
 import { initialTransition } from "xstate";
 import { assertEquals } from "@std/assert";
 import { diff } from "json-diff-ts";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 /// <reference lib="deno.ns" />
 

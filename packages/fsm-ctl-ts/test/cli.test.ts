@@ -262,6 +262,7 @@ Deno.test({
     } finally {
       await Deno.remove(good, { recursive: true });
       await Deno.remove(bad, { recursive: true });
+      // @ts-types="@types/pg"
       const { Pool } = await import("pg");
       const pool = new Pool({ connectionString: DATABASE_URL });
       for (const table of ["fsm_dependencies", "fsm_states", "fsm_json"]) {

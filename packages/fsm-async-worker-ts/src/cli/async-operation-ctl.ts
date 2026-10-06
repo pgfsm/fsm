@@ -1,5 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import dotenv from "dotenv";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { table } from "@pgfsm/logging";

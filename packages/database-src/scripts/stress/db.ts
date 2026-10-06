@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 
 // Matches the pattern in packages/fsm-compiler-ts/src/load-fsm-json-test.ts:

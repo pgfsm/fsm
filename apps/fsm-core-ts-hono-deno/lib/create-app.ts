@@ -1,5 +1,6 @@
 import { cors } from "hono/cors";
 import { getLogger } from "@logtape/logtape";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 
 import { requestId } from "hono/request-id";

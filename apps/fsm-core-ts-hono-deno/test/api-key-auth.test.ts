@@ -2,6 +2,7 @@
 // Needs a pgfsm database whose DATABASE_URL user is the schema owner (a member
 // of every fsm_* role), e.g. local Supabase; skipped otherwise.
 import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import { createApiKey, type Json, revokeApiKey } from "@pgfsm/db";
 

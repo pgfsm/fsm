@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+// @ts-types="@types/pg"
 import type { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { type ApiKeyRole, hashApiKey, verifyApiKey, withRole } from "@pgfsm/db";
