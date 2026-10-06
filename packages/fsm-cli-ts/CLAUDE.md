@@ -22,7 +22,11 @@ it), like `fsm-compiler-ts`'s.
 - `src/cli/pgfsm.ts` — arg parsing, prompting, output, exit codes. The plan and
   next steps are printed with `console.log` (they're the UI); `@pgfsm/logging`
   is configured once here (ADR-001) for diagnostics, with `@pgfsm/compiler`'s
-  own categories at `warning` unless `--verbose`.
+  own categories at `warning` unless `--verbose`. Exit codes follow `pgfsmctl`'s
+  table (SPEC-009 §7): `2` for bad arguments (`CreateError`, `SourceError`, no
+  or unknown command), `4` when there's no project (`NoProjectError`), `1` for a
+  version that exists without `--force` or a machine.ts that won't import, `130`
+  on Ctrl-C.
 - `src/commands/{create,add}.ts` — the operations, as library functions.
 - `src/project.ts` — `pgfsm.config.json` read/write and upward discovery.
 - `src/source.ts` — `<source>` → FSM versions with resolved identity.
@@ -51,11 +55,14 @@ it), like `fsm-compiler-ts`'s.
   `--force` skips the "version exists" refusal, whose job is catching a typo'd
   name/version or a clashing design.
 - **Generated `package.json` pins its tools, never depends on them.** `fsm:add`
-  pins this CLI (`toolVersion`); `db:pgcron` pins `@pgfsm/ctl` and `gateway`
-  pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the versions in
-  `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this build was
-  made from. The gateway is config, not a project directory: it has no user
-  code.
+  pins this CLI (`toolVersion`); `db:load`/`db:pgcron`/`db:key` pin `@pgfsm/ctl`
+  and `gateway` pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the
+  versions in `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this
+  build was made from. The gateway is config, not a project directory: it has no
+  user code. `create` also writes `.env.example` (SPEC-009 §7: `DATABASE_URL`
+  set for local Supabase, `PGFSM_DB_URL`/`PGFSM_URL`/`PGFSM_API_KEY` commented
+  out); the repo root `.gitignore` excludes `.env*` but re-includes
+  `.env.example`, so `test-apps/debug-only`'s copy is committed.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)
   into a temp dir named like the real root (the Go module root is derived from

@@ -7,9 +7,7 @@ import type { Database } from "@pgfsm/db/database.types";
 // @logtape/hono uses withContext() instead of injecting into c.var, so there is
 // no per-request logger variable here. Use getLogger() at module level in handlers.
 
-export type { FsmFolderConfig, FsmStartupConfig } from "@pgfsm/sync-worker";
-import type { FsmStartupConfig } from "@pgfsm/sync-worker";
-import type { FsmPluginValidationResult } from "@pgfsm/compiler";
+import type { ApiKeyRole } from "@pgfsm/db";
 
 export interface AppBindings {
   Bindings: {
@@ -18,8 +16,8 @@ export interface AppBindings {
   Variables: {
     db: Pool;
     supabase: SupabaseClient<Database>;
-    fsmConfig: FsmStartupConfig | undefined;
-    verifiedFsmModules: FsmPluginValidationResult[];
+    /** The API key's role; unset when auth is off (--no-auth). */
+    role: ApiKeyRole | undefined;
   };
 }
 

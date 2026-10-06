@@ -1,5 +1,5 @@
 begin;
-select plan(45);
+select plan(47);
 
 -- fsm_core.fsm_json
 select has_table('fsm_core', 'fsm_json', 'fsm_core.fsm_json exists');
@@ -8,6 +8,15 @@ select col_type_is('fsm_core', 'fsm_json', 'fsm_name', 'text', 'fsm_json.fsm_nam
 select col_type_is('fsm_core', 'fsm_json', 'fsm_type', 'text', 'fsm_json.fsm_type is text');
 select col_type_is('fsm_core', 'fsm_json', 'fsm_version', 'text', 'fsm_json.fsm_version is text');
 select col_type_is('fsm_core', 'fsm_json', 'fsm_json', 'jsonb', 'fsm_json.fsm_json is jsonb');
+select col_is_unique('fsm_core', 'fsm_json', ARRAY['fsm_name', 'fsm_version'],
+  'fsm_json (fsm_name, fsm_version) is unique (SPEC-006)');
+select throws_ok(
+  $$ insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json)
+     values ('uniqueTestFsm', 'v1', '{}'::jsonb), ('uniqueTestFsm', 'v1', '{"a": 1}'::jsonb) $$,
+  '23505',
+  NULL,
+  'a second fsm_json row for the same name/version is rejected'
+);
 
 -- fsm_core.fsm_state_type (enum)
 select has_type('fsm_core', 'fsm_state_type', 'fsm_core.fsm_state_type exists');

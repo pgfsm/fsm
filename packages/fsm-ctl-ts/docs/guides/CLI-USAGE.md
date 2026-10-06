@@ -1,15 +1,25 @@
 # pgfsmctl — CLI Usage Guide
 
-`@pgfsm/ctl` ships one bin, `pgfsmctl`, for everything that operates on a
-running pgfsm database (SPEC-005). Commands are `<noun> <verb>`:
+`@pgfsm/ctl` ships one bin, `pgfsmctl`, for operating a pgfsm deployment
+(SPEC-005, conventions from SPEC-009). Commands are `<noun> <verb>`, and each
+noun has a **tier**: DB-direct commands talk to Postgres, API commands to the
+pgfsm REST API with an API key, and local ones touch only your machine.
 
-| Command                                     | Kind     | Role                                                                                       | Replaces (`@pgfsm/sync-worker` ≤ 0.2) |
-| ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
-| `pgcron register \| unregister \| status`   | one-shot | Manage the `pg_cron` job that drains the dispatch queue — the primary scheduler (SPEC-003) | `pgcron`                              |
-| `instance create \| resume \| send \| stop` | one-shot | Instance control (kubectl equivalent) against the dispatch-queue model, straight to the DB | `fsmctl -c <command>`                 |
-| `scheduler run`                             | long-run | The standing fsmscheduler process (kube-scheduler equivalent) — **fallback only**          | `fsmscheduler`                        |
+| Command                                     | Tier             | Kind     | Role                                                                                       | Replaces (`@pgfsm/sync-worker` ≤ 0.2) |
+| ------------------------------------------- | ---------------- | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `fsm load <folder>`                         | API or DB-direct | one-shot | Load FSM definitions (`fsm.json`) into the database — a deploy step (SPEC-006)             | `@pgfsm/compiler -c load`             |
+| `db cron register \| unregister \| status`  | DB-direct        | one-shot | Manage the `pg_cron` job that drains the dispatch queue — the primary scheduler (SPEC-003) | `pgcron`                              |
+| `db key create --name <n> --role <r>`       | DB-direct        | one-shot | Mint an API key in the database: the bootstrap admin key (SPEC-009 §2)                     | —                                     |
+| `key create \| list \| revoke`              | API              | one-shot | Manage API keys through the API (admin key)                                                | —                                     |
+| `instance create \| resume \| send \| stop` | DB-direct        | one-shot | Instance control (kubectl equivalent) against the dispatch-queue model, straight to the DB | `fsmctl -c <command>`                 |
+| `scheduler run`                             | DB-direct        | long-run | The standing fsmscheduler process (kube-scheduler equivalent) — **fallback only**          | `fsmscheduler`                        |
+| `config set \| use \| list \| show`         | local            | one-shot | Named targets (profiles): database and API URLs, secrets kept apart                        | —                                     |
+| `completion bash \| zsh \| fish`            | local            | one-shot | Print a shell completion script                                                            | —                                     |
+| `version`                                   | local            | one-shot | Print the version (`-o json` for `{ "version": … }`)                                       | —                                     |
 
-No command needs a pgfsm project (`pgfsm.config.json`) — only a database.
+No command needs a pgfsm project (`pgfsm.config.json`). The `db` noun is always
+DB-direct: its commands are deploy steps that must work before the REST API is
+up. `db migrate` is reserved.
 
 > **`fsmlet`** (the kubelet-equivalent node agent) is not a `pgfsmctl` command:
 > it runs your sync-operation code, so a project embeds it —
@@ -20,28 +30,117 @@ No command needs a pgfsm project (`pgfsm.config.json`) — only a database.
 
 ## Prerequisites and invocation
 
-- **Database connection** — `-d/--db-url <url>`, else `DATABASE_URL` from the
-  environment or a `.env` in the directory you run from.
 - **Installed** (Node): `npx @pgfsm/ctl <noun> <verb> [options]` — the package
   has a single bin, so no `-p … --` form is needed. A pgfsm project pins it as
-  `npm run db:pgcron`.
+  `npm run db:load` and `npm run db:pgcron`.
 - **From this repo** (Deno, see `.prototools`): from `packages/fsm-ctl-ts/`,
   `deno task pgfsmctl <noun> <verb> [options]`; or from the repo root,
   `deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts …`.
 
 Examples below use `pgfsmctl` for whichever of these you use.
+`pgfsmctl --version` (or `pgfsmctl version`) prints the bare version;
+`pgfsmctl --help` and `pgfsmctl <noun> --help` print usage. Unknown options are
+an error (exit `2`), not ignored.
 
-`pgfsmctl --version` prints the bare version; `pgfsmctl --help` and
-`pgfsmctl <noun> --help` print usage.
+### Which database (DB-direct commands)
+
+First match wins:
+
+1. `-d/--db-url <url>`
+2. a profile chosen explicitly: `--profile <name>`, else `$PGFSM_PROFILE`
+3. `$PGFSM_DB_URL`, else `$DATABASE_URL` (a `.env` in the current directory is
+   read first)
+4. the current profile (`pgfsmctl config use <name>`)
+
+An explicitly chosen profile beats the environment variables on purpose: since
+`./.env` is read automatically, `--profile prod` run inside a project would
+otherwise quietly use that project's local `DATABASE_URL`. Run with
+`PGFSMCTL_LOG_LEVEL=debug` to see which source was used. With none of them set,
+a command exits `2` before connecting.
+
+### Which API (API-tier commands)
+
+The URL and the key are resolved separately, first match wins:
+
+1. `--url` / `--api-key`
+2. a profile chosen explicitly (`--profile`, else `$PGFSM_PROFILE`): its `url`
+   and `api_key`. An explicit profile **replaces** the environment and the
+   current profile, so picking a database-only profile can't be overridden by a
+   stray `$PGFSM_URL`.
+3. `$PGFSM_URL` / `$PGFSM_API_KEY` (`./.env` is read)
+4. the current profile's `url` / `api_key`
+
+The URL is the API's base **including its path prefix**, e.g.
+`http://localhost:9999/fsm` for an API started with the default `/fsm`. A URL
+without a key exits `2`. Store a key with
+`echo "$KEY" | pgfsmctl config set <profile> --api-key-stdin`.
+
+### Output
+
+`-o/--output table|json|ids` (default `table`). Data goes to **stdout**, logs to
+**stderr**, so `pgfsmctl … -o json | jq` and
+`ID=$(pgfsmctl instance create … -o ids)` always get clean data. `json` is never
+truncated; `ids` prints one identifier per line (`<fsmName>/<version>` for
+`fsm load`, the instance UUID for `instance`, the profile name for `config`).
+`scheduler run` prints logs only, so it takes no `-o`.
 
 ---
 
-## `pgcron` — the pg_cron scheduler job
+## `fsm load` — FSM definitions
 
 ```bash
-pgfsmctl pgcron register [-s <cron>]   # default schedule: "5 seconds"
-pgfsmctl pgcron unregister
-pgfsmctl pgcron status
+pgfsmctl fsm load <folder>   # e.g. `fsm` in a pgfsm project
+```
+
+Loads every `<folder>/<fsmName>/<version>/fsm.json` (version folders are `v01`,
+`v02`, …) into `fsm_core.fsm_json` and the state/transition tables, as one batch
+(SPEC-006).
+
+**Tier.** When an API target resolves (see
+[Which API](#which-api-api-tier-commands)), the batch goes to the API's
+`POST /admin/fsm/load` with an admin key (the API must run with
+`--enable-admin-api`). Otherwise it loads DB-direct, so a project's local `.env`
+with only `DATABASE_URL` keeps working with no API running. `--db-url` always
+forces DB-direct (break-glass). The tier used is logged on stderr.
+
+Either way:
+
+1. **Validated before anything is written.** A child FSM that a definition
+   invokes (`asyncOperationType: "fsm"`) must be in the folder or already
+   loaded, and the batch must have no dependency cycle.
+2. **Children first.** A definition is loaded after every child FSM it invokes,
+   whatever order the folders sort in.
+3. **One transaction.** Any failure rolls back the whole batch; the command
+   prints every problem and exits `1` (`3` if the database denied it).
+
+Re-running it is safe: a definition already loaded with identical content is
+reported `unchanged`. A definition is immutable per version, so changed content
+under a loaded version is refused; give the changed `fsm.json` a new version.
+Concurrent runs are serialized per name/version in the database. A missing
+folder, or one with no `fsm.json`, exits `2`.
+
+Run it on every deploy, after migrations and **before** starting sync workers: a
+worker refuses to start while an FSM version it serves is missing from the
+database, or differs from the `fsm.json` it was compiled from. It replaces
+`@pgfsm/compiler`'s deprecated `-c load`.
+
+| Flag               | Alias | Description                                                                               |
+| ------------------ | ----- | ----------------------------------------------------------------------------------------- |
+| `--url <url>`      |       | API base URL (see [Which API](#which-api-api-tier-commands))                              |
+| `--api-key <key>`  |       | Admin key for the API                                                                     |
+| `--db-url <url>`   | `-d`  | Postgres URL; forces DB-direct (see [Which database](#which-database-db-direct-commands)) |
+| `--profile <name>` |       | Use this profile's `url`/`api_key`, or its `db_url`                                       |
+| `--output <fmt>`   | `-o`  | `table` (FSM, version, status), `json` or `ids`                                           |
+| `--help`           | `-h`  | Print help and exit                                                                       |
+
+---
+
+## `db cron` — the pg_cron scheduler job
+
+```bash
+pgfsmctl db cron register [-s <cron>]   # default schedule: "5 seconds"
+pgfsmctl db cron unregister
+pgfsmctl db cron status
 ```
 
 `register` idempotently (re)registers the `fsm_schedule_all_pending` job, which
@@ -52,19 +151,60 @@ schedule) is safe.
 
 Neither `supabase db reset` (local dev) nor the applied `supabase/migrations/`
 (production) register the job on their own: `cron.schedule()` is a data-level
-side effect (a row in `cron.job`), which migra's structural diff can't capture.
-Run `register` once after migrations apply, in every environment — in
-Kubernetes, as a Job or init container.
+side effect (a row in `cron.job`), which `supabase db diff` can't capture. Run
+`register` once after migrations apply, in every environment — in Kubernetes, as
+a Job or init container. CI's pgTAP job does the same before its tests.
 
 `unregister` removes the job and succeeds whether or not it existed. `status`
-prints the job (id, schedule, active, command) and exits `1` when none is
+prints the job (id, schedule, active, command) and exits **`5`** when none is
 registered, so it doubles as a deploy check.
 
-| Flag                | Alias | Description                                                         |
-| ------------------- | ----- | ------------------------------------------------------------------- |
-| `--schedule <cron>` | `-s`  | `pg_cron` schedule for `register` (default: `"5 seconds"`)          |
-| `--db-url <url>`    | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL` from `.env`) |
-| `--help`            | `-h`  | Print help and exit                                                 |
+| Flag                | Alias | Description                                                |
+| ------------------- | ----- | ---------------------------------------------------------- |
+| `--schedule <cron>` | `-s`  | `pg_cron` schedule for `register` (default: `"5 seconds"`) |
+| `--db-url <url>`    | `-d`  | Postgres URL                                               |
+| `--profile <name>`  |       | Use this profile's `db_url`                                |
+| `--output <fmt>`    | `-o`  | `table`, `json` or `ids` (the job name)                    |
+| `--help`            | `-h`  | Print help and exit                                        |
+
+---
+
+## `db key create` and `key` — API keys
+
+```bash
+# Bootstrap: the first admin key, straight in the database, as the schema owner
+pgfsmctl db key create --name ops-admin --role admin -o json
+
+# After that, through the API with an admin key
+export PGFSM_URL=http://localhost:9999/fsm PGFSM_API_KEY=pgfsm_admin_…
+pgfsmctl key create --name ci --role operator
+pgfsmctl key list
+pgfsmctl key revoke ci
+```
+
+Keys are `pgfsm_admin_…` or `pgfsm_op_…`. Only their SHA-256 and a display
+prefix are stored, so **`create` prints the key once** (and warns on stderr).
+`key list` never shows a key, only its prefix, role, last use and revocation.
+
+`db key create` is DB-direct because no key can call the API before the first
+admin key exists, the same way a Supabase project's keys are minted outside its
+API. `key …` needs the API to run with `--enable-admin-api`.
+
+| Exit | When                                                                          |
+| ---- | ----------------------------------------------------------------------------- |
+| `2`  | Missing `--name`/`--role`, an unknown role, no API target, a URL with no key  |
+| `3`  | The key was rejected: unknown or revoked (`401`), or not an admin key (`403`) |
+| `4`  | `revoke` matched no live key, or `/admin/*` doesn't exist (admin API off)     |
+| `1`  | A duplicate key name (`409`), or the API is unreachable                       |
+
+| Flag                 | Alias | Description                             |
+| -------------------- | ----- | --------------------------------------- |
+| `--name <name>`      |       | Key name, unique (`create`)             |
+| `--role <role>`      |       | `admin` or `operator` (`create`)        |
+| `--url`, `--api-key` |       | API target (`key …`)                    |
+| `--db-url <url>`     | `-d`  | Postgres URL (`db key create`)          |
+| `--profile <name>`   |       | Use this profile                        |
+| `--output <fmt>`     | `-o`  | `table`, `json` or `ids` (the key's id) |
 
 ---
 
@@ -72,33 +212,39 @@ registered, so it doubles as a deploy check.
 
 ```bash
 pgfsmctl instance create -n creditCheck -V v01
-pgfsmctl instance create -n creditCheck -V v01 --context '{"userId":"abc"}'
+pgfsmctl instance create -n creditCheck -V v01 --input '{"userId":"abc"}'
 pgfsmctl instance resume -q <instance-uuid>
 pgfsmctl instance send   -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
 pgfsmctl instance stop   -q <instance-uuid>
+
+ID=$(pgfsmctl instance create -n creditCheck -V v01 -o ids)
 ```
 
 | Verb     | What it does                                                                                                         |
 | -------- | -------------------------------------------------------------------------------------------------------------------- |
 | `create` | Creates the instance and its pgmq queue, sends the initial transition event, and enqueues it to `fsm_dispatch_queue` |
-| `resume` | Re-enqueues an existing instance to `fsm_dispatch_queue` (exit `1` if it doesn't exist)                              |
-| `send`   | Sends an event to the instance's queue, with event logs (exit `1` if it doesn't exist)                               |
+| `resume` | Re-enqueues an existing instance to `fsm_dispatch_queue`                                                             |
+| `send`   | Sends an event to the instance's queue, with event logs                                                              |
 | `stop`   | Sends a stop signal to the fsmlet worker running the instance, via `pg_notify`                                       |
 
-| Flag            | Alias | Required by              | Description                                                    |
-| --------------- | ----- | ------------------------ | -------------------------------------------------------------- |
-| `--fsm-name`    | `-n`  | `create`                 | FSM definition name                                            |
-| `--fsm-version` | `-V`  | `create`                 | FSM version                                                    |
-| `--context`     |       | optional (`create`)      | Initial FSM context, JSON string                               |
-| `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (UUID)                                         |
-| `--event-type`  | `-e`  | `send`                   | Event type to send                                             |
-| `--event-data`  |       | optional (`send`)        | Event payload, JSON string                                     |
-| `--db-url`      | `-d`  | optional                 | Database connection URL (overrides `DATABASE_URL` from `.env`) |
-| `--help`        | `-h`  |                          | Print help and exit                                            |
+`resume`, `send` and `stop` exit **`4`** when the instance doesn't exist.
 
-`instance` talks to the database directly through `@pgfsm/db`, not to the REST
-API. Routing it through the API (as `kubectl` goes through the apiserver) is
-recorded as future work in SPEC-005.
+| Flag            | Alias | Required by              | Description                                                   |
+| --------------- | ----- | ------------------------ | ------------------------------------------------------------- |
+| `--fsm-name`    | `-n`  | `create`                 | FSM definition name                                           |
+| `--fsm-version` | `-V`  | `create`                 | FSM version                                                   |
+| `--input`       |       | optional (`create`)      | Initial FSM context, JSON (xstate's `input`; was `--context`) |
+| `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (a UUID; anything else exits `2`)             |
+| `--event-type`  | `-e`  | `send`                   | Event type to send                                            |
+| `--event-data`  |       | optional (`send`)        | Event payload, JSON                                           |
+| `--db-url`      | `-d`  | optional                 | Postgres URL                                                  |
+| `--profile`     |       | optional                 | Use this profile's `db_url`                                   |
+| `--output`      | `-o`  | optional                 | `table`, `json` or `ids` (the instance UUID)                  |
+| `--help`        | `-h`  |                          | Print help and exit                                           |
+
+`instance` talks to the database directly through `@pgfsm/db` for now. SPEC-009
+phase 2 moves it to the REST API with an operator key, keeping `--db-url` as
+break-glass.
 
 ---
 
@@ -108,19 +254,20 @@ recorded as future work in SPEC-005.
 pgfsmctl scheduler run [-p <ms>] [-s <secs>]
 ```
 
-pg_cron (`pgcron register`) is the primary scheduler. This long-running process
+pg_cron (`db cron register`) is the primary scheduler. This long-running process
 is kept only as SPEC-003's fallback safety net until pg_cron is trusted as the
 sole mechanism; running both is safe (`SELECT FOR UPDATE SKIP LOCKED`), just
 redundant. It polls `fsm_core.schedule_next_pending()` and LISTENs on
 `fsm_scheduler_work` (which nothing notifies since SPEC-003). Run it on the
 control plane, not on fsmlet nodes. `Ctrl+C` / `SIGTERM` stop it gracefully; a
-second `Ctrl+C` forces exit.
+second `Ctrl+C` forces exit (`130`).
 
 | Flag                       | Alias | Description                                                |
 | -------------------------- | ----- | ---------------------------------------------------------- |
 | `--poll-interval <ms>`     | `-p`  | Fallback poll interval in milliseconds (default: `30000`)  |
 | `--stale-threshold <secs>` | `-s`  | Seconds before a fsmlet is considered dead (default: `30`) |
-| `--db-url <url>`           | `-d`  | PostgreSQL connection string (overrides `DATABASE_URL`)    |
+| `--db-url <url>`           | `-d`  | Postgres URL                                               |
+| `--profile <name>`         |       | Use this profile's `db_url`                                |
 | `--help`                   | `-h`  | Print help and exit                                        |
 
 It holds a Pool of at most 4 connections (one dedicated LISTEN client).
@@ -129,10 +276,55 @@ in-process (the fleet journey tests do).
 
 ---
 
+## `config` — profiles
+
+```bash
+echo "$PGPASSWORD" | pgfsmctl config set prod \
+    --db-url postgresql://fsm_admin_login@db.internal:5432/postgres --db-password-stdin
+pgfsmctl config set prod --url https://pgfsm-api.internal   # API URL, for #473
+pgfsmctl config use prod
+pgfsmctl config list
+pgfsmctl config show prod -o json
+```
+
+| Verb   | What it does                                                                            |
+| ------ | --------------------------------------------------------------------------------------- |
+| `set`  | Create or update a profile; only the given fields change. The first one becomes current |
+| `use`  | Make a profile the current one (exit `4` if it doesn't exist)                           |
+| `list` | Every profile; `*` marks the current one                                                |
+| `show` | One profile (default: the current one); secrets show only as `set`                      |
+
+Files live in `$PGFSM_CONFIG_DIR`, else the OS config directory plus `pgfsm`
+(`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support` on
+macOS, `%APPDATA%` on Windows):
+
+- `config.yaml`: profiles (`db_url`, `url`) and `current`. **No secrets.**
+- `credentials.json`: per-profile `db_password` and `api_key`, mode `0600`.
+
+Secrets are read from stdin (`--db-password-stdin`, `--api-key-stdin`), never
+from arguments: a `--db-url` that contains a password is refused (exit `2`),
+because it would land in shell history and the profile file.
+
+---
+
+## `completion`
+
+```bash
+source <(pgfsmctl completion bash)                       # ~/.bashrc
+source <(pgfsmctl completion zsh)                        # ~/.zshrc
+pgfsmctl completion fish > ~/.config/fish/completions/pgfsmctl.fish
+```
+
+Completes nouns, verbs (including `db cron <verb>`) and each noun's flags.
+
+---
+
 ## HTTP API equivalents
 
 The API server (`apps/fsm-core-ts-hono-deno`) exposes the same dispatch-model
-operations over HTTP:
+operations over HTTP. They need an operator or admin key
+(`Authorization: Bearer pgfsm_…`, SPEC-009 §3) unless the server runs with
+`--no-auth`:
 
 | HTTP route                  | `pgfsmctl` equivalent | Body                                                                                            |
 | --------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
@@ -141,6 +333,7 @@ operations over HTTP:
 | `POST /fsm/resume-dispatch` | `instance resume`     | `{ queue }`                                                                                     |
 | `POST /fsm/send`            | `instance send`       | `{ fsm_instance_id, event_data }`                                                               |
 | `POST /fsm/stop`            | `instance stop`       | `{ queue }`                                                                                     |
+| `POST /admin/fsm/load`      | `fsm load`            | `{ definitions: [{ fsmName, fsmVersion, fsmJson }] }` — admin key, `--enable-admin-api`         |
 
 All of them need a scheduler (the pg_cron job, and optionally `scheduler run`)
 and a running fsmlet to pick the work up.
@@ -149,7 +342,14 @@ and a running fsmlet to pick the work up.
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                  |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | Command completed (or `scheduler run` stopped cleanly)                                                                                   |
-| `1`  | Unknown command/verb, missing or invalid arguments, no database URL, instance not found, `pgcron status` with no job, or a runtime error |
+SPEC-009 §6 (dbosctl's table, plus `5`):
+
+| Code  | Meaning                                                                                       |
+| ----- | --------------------------------------------------------------------------------------------- |
+| `0`   | Success (or `scheduler run` stopped cleanly)                                                  |
+| `1`   | General error: database unreachable, an `fsm load` the database rejected, anything unexpected |
+| `2`   | Usage: unknown noun/verb/option, missing or invalid arguments, bad `-o`, no database target   |
+| `3`   | Authentication or authorization failed (HTTP `401`/`403`, SQLSTATE `42501` or `28xxx`)        |
+| `4`   | Not found: unknown instance, profile or key (HTTP `404`)                                      |
+| `5`   | Check failed: a status command ran and found a problem (`db cron status` with no job)         |
+| `130` | Interrupted (`Ctrl+C`)                                                                        |

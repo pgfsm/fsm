@@ -3,7 +3,10 @@
 import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
-import { SYNC_OPERATION_REGISTRATIONS } from "./aggregate-generated-sync-operation-registry.ts";
+import {
+  FSM_DEFINITIONS,
+  SYNC_OPERATION_REGISTRATIONS,
+} from "./sync-operation-registry-aggregate.generated.ts";
 import { runFsmlet } from "@pgfsm/sync-worker";
 
 dotenv.config({ path: ".env" });
@@ -40,5 +43,8 @@ Deno.addSignalListener("SIGTERM", onSignal);
 await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
+  // Refuses to start unless the database holds exactly these fsm.json
+  // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).
+  FSM_DEFINITIONS,
   { signal: controller.signal },
 );

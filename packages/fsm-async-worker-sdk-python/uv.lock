@@ -114,7 +114,7 @@ wheels = [
 
 [[package]]
 name = "pgfsm-async-worker-sdk"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "pgfsm-proto-codegen" },
@@ -126,22 +126,22 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pgfsm-proto-codegen", specifier = ">=0.1.1,<0.2" }]
+requires-dist = [{ name = "pgfsm-proto-codegen", specifier = ">=0.2,<0.3" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "pgfsm-proto-codegen"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/fd/4a737e6c77b02b8d3da2fc9da1f9baeb67b73acb556dcd4d0ac08eeb1f94/pgfsm_proto_codegen-0.1.1.tar.gz", hash = "sha256:c759b2d4a3e5e298cc50f35cdf59757bea17af0df3d959041b64fc1800b112e0", size = 9180, upload-time = "2026-09-26T07:23:24.118Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/0f/77bf2e776ece54e9af9148e854e3a2785fca1b4a742a1a7e580018a4f968/pgfsm_proto_codegen-0.2.0.tar.gz", hash = "sha256:37c425cd8150107ae8a990b938faca37e50148801d1dc03d3c7ebecf4bd0ba3b", size = 9226, upload-time = "2026-09-29T14:50:09.538Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/ae/e68c9b09ddd4ebd702845aa3388a55a245b2b7138354ed52a561bc730f74/pgfsm_proto_codegen-0.1.1-py3-none-any.whl", hash = "sha256:d55e406484a4405e77b8697c46156b4716a3c1030cba00df949b2886629aa017", size = 11748, upload-time = "2026-09-26T07:23:22.941Z" },
+    { url = "https://files.pythonhosted.org/packages/70/28/aecf56694a9210fde3f893de3c954e53e5b45b48f7b128bf671d56b0b5ac/pgfsm_proto_codegen-0.2.0-py3-none-any.whl", hash = "sha256:dd4469270aa11a7ab03b1586748542f2f49af8cb060e49d7aa06bca2eb001d39", size = 11804, upload-time = "2026-09-29T14:50:08.267Z" },
 ]
 
 [[package]]

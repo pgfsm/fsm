@@ -1,4 +1,11 @@
 // <%~ it.label %>: <%~ it.name %>
+
+// How many invokes of this actor one worker runs at once. Above 1, the
+// handler must be safe to run concurrently (no unguarded shared state, only
+// concurrency-safe clients). Delivery is at-least-once, so the handler must
+// also be idempotent: the same invoke can arrive more than once.
+export const maxConcurrency = 1;
+
 export function <%~ it.fnName %>(input: unknown): unknown {
   // <%~ it.todo %>
   return { input, msg: "<%~ it.name %> actor invoked by <%~ it.lang %>" };

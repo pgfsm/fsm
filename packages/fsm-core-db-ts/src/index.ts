@@ -6,6 +6,7 @@ export * from "./const.ts";
 export * from "./custom.types.ts";
 export * from "./queue.ts";
 export * from "./fsm-helper.ts";
+export * from "./fsm-definition.ts";
 export * from "./fsm-instance-lock.ts";
 
 export type { Json } from "./database.types.ts";
@@ -85,12 +86,31 @@ export type {
 
 export {
   claimPendingAsyncOperationEventsForWorkers,
+  claimPendingAsyncOperationEventsWithCapacity,
   computeAsyncOperationQueueName,
   ensureAsyncOperationQueueForWorker,
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 export type {
+  AsyncOperationWorkerClaim,
   AsyncOperationWorkerIdentity,
   EnsureAsyncOperationQueueForWorkerResult,
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 
 export { archiveEventFromFsmAsyncOperationTypeWorker } from "./30_async_operation_worker_v2/asyncOperationCtl.ts";
+
+export {
+  API_KEY_ROLES,
+  createApiKey,
+  hashApiKey,
+  listApiKeys,
+  revokeApiKey,
+  verifyApiKey,
+} from "./40_access_control/apiKeys.ts";
+export type {
+  ApiKeyRole,
+  ApiKeyRow,
+  CreatedApiKey,
+} from "./40_access_control/apiKeys.ts";
+
+export { FSM_DB_ROLES, withRole } from "./40_access_control/withRole.ts";
+export type { FsmDbRole } from "./40_access_control/withRole.ts";

@@ -23,7 +23,7 @@ package main
 import (
 	"os"
 
-	generatedregistry "debug-only/go-actors-registry-generated"
+	generatedregistry "debug-only/actor-registry-aggregate-generated"
 	asyncworkersdk "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go"
 )
 
@@ -39,7 +39,7 @@ func main() {
 			reg.AsyncOperationVersion,
 			reg.AsyncOperationLanguage,
 			reg.Handler,
-		))
+		).WithMaxConcurrency(reg.MaxConcurrency)) // 0 = use --max-concurrency
 	}
 	os.Exit(asyncworkersdk.RunActorWorkerCLI(registrations, os.Args[1:], ""))
 }

@@ -33,6 +33,7 @@ import {
   actorKey,
   type RegisteredActor,
   SidecarGateway,
+  type SidecarListener,
 } from "./sidecar/gateway.ts";
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
@@ -75,8 +76,28 @@ interface RawActivityGatewayServiceImpl {
 export interface GatewayServerOptions {
   /** gRPC bind target, e.g. "unix:/tmp/pgfsm-activity-gateway.sock" or "127.0.0.1:50061". */
   bindTarget: string;
-  /** Unix socket the sidecar listens on for worker connections. */
-  sidecarSocketPath: string;
+  /**
+   * Unix socket the sidecar listens on for worker connections. Optional when
+   * `sidecarListeners` is given; the two can be combined (e.g. during a
+   * migration from the single-pod topology).
+   */
+  sidecarSocketPath?: string;
+  /** More places workers can connect, e.g. a TLS TCP port (SPEC-007). */
+  sidecarListeners?: SidecarListener[];
+  /**
+   * Bearer-token file TCP workers must authenticate with; re-read for every
+   * new session. Unix-socket workers aren't checked.
+   */
+  sidecarAuthTokenFile?: string;
+  /** More accepted tokens, one per file (#429). See `SidecarGatewayOptions.authTokenFiles`. */
+  sidecarAuthTokenFiles?: string[];
+  /** A directory of accepted tokens, one per file (#429). See `SidecarGatewayOptions.authTokenDir`. */
+  sidecarAuthTokenDir?: string;
+  /** TCP workers' max connection age (±10 % jitter); 0 disables. */
+  maxConnectionAgeMs?: number;
+  /** HTTP/2 keepalive on TCP worker connections; 0 disables. */
+  keepaliveIntervalMs?: number;
+  keepaliveTimeoutMs?: number;
   /** Default per-invoke timeout if the caller doesn't set one. */
   defaultInvokeTimeoutMs?: number;
   signal?: AbortSignal;
@@ -94,8 +115,15 @@ export interface GatewayServerOptions {
     deps: DBDeps;
     /** Poll interval in ms. Default 30_000, per GOAL.md. */
     intervalMs?: number;
-    /** Per-invoke timeout for poll-loop-triggered invokes. Default 10_000. */
+    /**
+     * Per-invoke timeout for poll-loop-triggered invokes of actors without
+     * their own `timeout_ms`. Default 10_000.
+     */
     invokeTimeoutMs?: number;
+    /** Visibility-timeout margin over the invoke timeout, in s. Default 10. */
+    vtMarginSeconds?: number;
+    /** Deliveries before a retriable failure is archived. Default 5. */
+    maxDeliveryAttempts?: number;
   };
   /**
    * When set, ensures a PGMQ queue exists (fsm_core.ensure_async_operation_queue_for_worker,
@@ -198,18 +226,31 @@ export async function startActivityGatewayServer(
 
   const sidecar = new SidecarGateway({
     socketPath: options.sidecarSocketPath,
+    listeners: options.sidecarListeners,
+    authTokenFile: options.sidecarAuthTokenFile,
+    authTokenFiles: options.sidecarAuthTokenFiles,
+    authTokenDir: options.sidecarAuthTokenDir,
+    maxConnectionAgeMs: options.maxConnectionAgeMs,
+    keepaliveIntervalMs: options.keepaliveIntervalMs,
+    keepaliveTimeoutMs: options.keepaliveTimeoutMs,
     onActorRegistered,
     shutdownGraceMs: options.shutdownGraceMs,
   });
   await sidecar.start();
-  logger.info("Sidecar worker gateway listening on unix:{path}", {
-    path: options.sidecarSocketPath,
-  });
+  for (const address of sidecar.addresses()) {
+    logger.info("Sidecar worker gateway listening on {address}", {
+      address: address.kind === "unix"
+        ? `unix:${address.path}`
+        : `${address.tls ? "https" : "http"}://${address.host}:${address.port}`,
+    });
+  }
 
   if (options.asyncOpPollLoop) {
     startAsyncOpPollLoop(sidecar, options.asyncOpPollLoop.deps, {
       intervalMs: options.asyncOpPollLoop.intervalMs,
       invokeTimeoutMs: options.asyncOpPollLoop.invokeTimeoutMs,
+      vtMarginSeconds: options.asyncOpPollLoop.vtMarginSeconds,
+      maxDeliveryAttempts: options.asyncOpPollLoop.maxDeliveryAttempts,
       signal: options.signal,
     });
   }

@@ -20,15 +20,15 @@
 // Rust can't load actor functions at runtime the way TypeScript/Python can,
 // so they're linked into this binary: a missing or mistyped actor fails the
 // build, not worker startup.
-#[path = "../rust-actors-registry.generated.rs"]
-mod generated_registry;
+#[path = "../actor_registry_aggregate.generated.rs"]
+mod actor_registry_aggregate;
 
 use pgfsm_async_worker_sdk::{run_actor_worker_cli, ActorRegistration};
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let registrations = generated_registry::actor_registrations()
+    let registrations = actor_registry_aggregate::actor_registrations()
         .into_iter()
         .map(|reg| {
             ActorRegistration::new(
@@ -40,6 +40,8 @@ fn main() {
                 reg.async_operation_language,
                 reg.handler,
             )
+            // The actor's own limit from its stub (0 = use --max-concurrency).
+            .with_max_concurrency(reg.max_concurrency)
         })
         .collect();
 

@@ -5,7 +5,7 @@
 // CATEGORY + getLogger (from @logtape/logtape) — never configureLogging().
 export { configureLogging, type ConfigureLoggingOptions } from "./configure.ts";
 export { CATEGORY, type Category } from "./categories.ts";
-export { getTableConsoleSink, isTerminal } from "./sink.ts";
+export { type ConsoleStream, getTableConsoleSink, isTerminal } from "./sink.ts";
 // Opt-in render helpers: attach a value to a log record so the console sink
 // prints it as a table / dir / log line. See render.ts for the decision table.
 export {

@@ -30,14 +30,20 @@ jobs:
         continue-on-error: true
 
       # DB-free unit suites only. The route/db integration tests
-      # (apps/fsm-core-ts-hono-deno/routes, packages/fsm-core-db-ts,
-      # apps/fsm-core-example) need a live Postgres + fsm_core extension and are
-      # excluded until a service container is wired up.
+      # (apps/fsm-core-ts-hono-deno/routes, apps/fsm-core-example) need a live
+      # Postgres + fsm_core extension and are excluded until a service
+      # container is wired up. The fsm-core-db-ts and fsm-sync-worker-ts test/
+      # dirs are included: their DB tests skip themselves without DATABASE_URL.
       # Non-blocking: 8 CLI exit-code tests in
       # packages/fsm-compiler-ts/test/cli.test.ts are currently red — remove
       # `continue-on-error` once they're fixed so tests gate merges again.
+      # Blocking: the API app stopped compiling after #341 and nobody noticed,
+      # because no job type-checked it (#472).
+      - name: Type-check API (apps/fsm-core-ts-hono-deno)
+        run: deno check apps/fsm-core-ts-hono-deno/deno.ts apps/fsm-core-ts-hono-deno/src/cli/index.ts apps/fsm-core-ts-hono-deno/test
+
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
         continue-on-error: true
 
   python-async-worker-sdk:
@@ -244,6 +250,25 @@ jobs:
       - name: Apply schema (db reset)
         run: npm run supabase:db:reset
 
+      # cron.schedule() is a data-level call, so `supabase db diff` never puts
+      # it in migrations/ and `db reset` doesn't register the job. Run the real
+      # deploy step (SPEC-005), so the pg_cron pgTAP test checks what a deploy
+      # actually does (#468).
+      - name: Register pg_cron job (pgfsmctl)
+        working-directory: packages/fsm-ctl-ts
+        run: deno task pgfsmctl db cron register --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
       # Runs the pgTAP suite in supabase/tests/ (see docs/guides/development.md).
       - name: Run pgTAP tests
         run: npm run supabase:test:db
+
+      # The DB-backed Deno suites skip themselves without DATABASE_URL, so the
+      # Deno job above never runs them. Here the local Supabase is up, and its
+      # postgres user is the schema owner (a member of every fsm_* role), which
+      # the role/API-key tests need (SPEC-009, #470, #472). pgfsmctl's API-tier
+      # tests start the real API as a subprocess against this database (#473).
+      - name: DB-backed Deno tests (@pgfsm/db, API auth, pgfsmctl incl. API tier)
+        working-directory: .
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all packages/fsm-core-db-ts/test apps/fsm-core-ts-hono-deno/test packages/fsm-ctl-ts/test

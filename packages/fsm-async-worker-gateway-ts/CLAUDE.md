@@ -94,8 +94,44 @@ Install section, which documents this. Same issue applies to
   `async-operation-worker-gateway-ctl.ts`)
 - `gatewayServer.ts` — sidecar + gRPC/Connect server, wired together
 - `gatewayClient.ts` — client for the gRPC/Connect API (`ActivityGatewayClient`)
-- `sidecar/` — worker registration + dispatch over the Unix socket
-  (`SidecarGateway`)
+- `sidecar/` — worker registration + dispatch (`SidecarGateway`), on one or more
+  listeners: Unix socket(s) and/or TCP (SPEC-007)
+  - Each listener is its own `http2` server with its own Connect adapter, so the
+    Session handler knows which kind it's serving (`ListenerPolicy`). Auth and
+    max connection age apply to **TCP sessions only**; Unix sessions are
+    unchecked and behave exactly as before.
+  - TCP: `createSecureServer` with the listener's cert/key, `minVersion`
+    (default TLSv1.3), and for mutual TLS `ca` + `requestCert` +
+    `rejectUnauthorized`, so a worker without a valid client certificate fails
+    the handshake before any gRPC call. Plaintext only via
+    `--insecure-plaintext`.
+  - Tokens (#429): `authTokenFile`/`authTokenFiles` and every non-hidden file in
+    `authTokenDir`, read **on every new session** (`acceptedTokens()`), so
+    tokens can be added and removed without a restart. Hidden entries are
+    skipped so a Kubernetes Secret volume's `..data`/`..<timestamp>` aren't
+    tokens; `statSync` follows the key symlinks. `authorize()` compares the
+    presented header with every token (`safeEqual`, no early exit, so timing
+    doesn't reveal which matched) and returns the match's name, which is logged
+    with the worker id after `Register`; values are never logged. Empty or
+    unreadable sources are skipped; with none left every TCP session is refused
+    (fail closed), and `start()` warns. `UNAUTHENTICATED` comes before the
+    `Register` is read. Authorization (which token may register which actors) is
+    out of scope.
+  - Max connection age: a timer per TCP worker (±10 % jitter) marks it
+    `draining` (no new invokes, no capacity in `listClaimableActors()`), waits
+    for its in-flight invokes up to `connectionDrainGraceMs`, then unregisters
+    it and closes its HTTP/2 session (GOAWAY). The handler gets that session
+    through an `AsyncLocalStorage` set in the per-listener request handler,
+    since Connect's `HandlerContext` doesn't expose the raw connection.
+  - Keepalive: per TCP session, a PING every `keepaliveIntervalMs`; no ack
+    within `keepaliveTimeoutMs` destroys the session, so the worker is
+    unregistered and its in-flight invokes fail as retriable.
+  - Tests: `test/sidecar_gateway_capacity_test.ts` (token checks and rotation,
+    draining) drives the handler in memory with a TCP policy;
+    `test/sidecar_gateway_tcp_test.ts` uses real sockets. Its TLS fixtures (a
+    CA, a server cert and a client cert) are generated with `openssl` at test
+    time, so no private key is committed (the pre-commit secrets scan would
+    reject one) and `openssl` must be on `PATH`.
   - Routing is one actor key → a **set** of workers (#391). Several replicas may
     register the same actor. `invoke()` picks the one with the fewest in-flight
     invokes, rotating on ties. Unregister removes only that worker, and only if
@@ -110,4 +146,22 @@ Install section, which documents this. Same issue applies to
     sessions still open after `shutdownGraceMs` (default 5 s). Plain
     `server.close()` waits forever on a client that keeps its connection.
     Covered by `test/sidecar_gateway_stop_test.ts`.
-- `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop
+  - Capacity (SPEC-007): each worker declares `max_concurrency` per actor at
+    `Register` (0 means 1). `invoke()` picks the worker with the most free slots
+    (max_concurrency − its in-flight invokes of that actor).
+    `listClaimableActors()` gives the poll loop each actor's free slots, and
+    `routingSnapshot()` reports per actor its live workers, Σ max_concurrency
+    and in-flight invokes (exposing it is SPEC-008's job). Covered by
+    `test/sidecar_gateway_capacity_test.ts`.
+- `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop. It claims at most
+  each actor's free slots via
+  `claim_pending_async_operation_events_with_capacity_v2`, with a visibility
+  timeout of the invoke timeout plus `vtMarginSeconds`. Retriable invoke
+  failures (`ActivityInvokeError.retriable`: `ACTOR_NOT_FOUND`,
+  `WORKER_UNAVAILABLE`, `WORKER_DISCONNECTED`, `TIMEOUT`, or a worker's
+  retriable error) are not archived; the message is redelivered after its
+  visibility timeout, until `readCount` reaches `maxDeliveryAttempts` (#396).
+  The old `claim_pending_async_operation_events_for_workers_v2` stays until
+  nothing calls it. Unit tests in `test/async_op_poll_loop_test.ts`; the
+  capacity bound and redelivery against a real database in
+  `test/poll_loop_capacity_db_test.ts` (needs `DATABASE_URL`).

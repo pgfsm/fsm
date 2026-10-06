@@ -1,6 +1,17 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { createAsyncOperationLogic } from "../src/create-async-logic.ts";
 
+// The per-actor concurrency setting every new actor stub declares (#435),
+// between the label comment and the function.
+const MC_TS =
+  "\n// How many invokes of this actor one worker runs at once. Above 1, the\n// handler must be safe to run concurrently (no unguarded shared state, only\n// concurrency-safe clients). Delivery is at-least-once, so the handler must\n// also be idempotent: the same invoke can arrive more than once.\nexport const maxConcurrency = 1;\n\n";
+const MC_PY =
+  "\n# How many invokes of this actor one worker runs at once. Above 1, the\n# handler runs on several threads at once and must be thread-safe (no\n# unguarded shared state, only thread-safe clients). Delivery is\n# at-least-once, so the handler must also be idempotent: the same invoke can\n# arrive more than once.\nMAX_CONCURRENCY = 1\n\n\n";
+const MC_RS =
+  "\n/// How many invokes of this actor one worker runs at once. Above 1, the\n/// handler runs on several threads at once: shared state needs a `Mutex` or\n/// atomics. Delivery is at-least-once, so the handler must also be\n/// idempotent: the same invoke can arrive more than once.\npub const MAX_CONCURRENCY: u32 = 1;\n\n";
+const MC_GO =
+  "\n// MaxConcurrency is how many invokes of this actor one worker runs at once.\n// Above 1, the handler runs on several goroutines at once: guard shared state\n// with a sync.Mutex, atomics or channels. Delivery is at-least-once, so the\n// handler must also be idempotent: the same invoke can arrive more than once.\nconst MaxConcurrency = 1\n\n";
+
 Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbsPath>/async-worker/<lang>/sharedAsyncOperation/<functionVersion>/actors/<functionName>/<functionName>.<ext>", async () => {
   const dir = await Deno.makeTempDir();
   try {
@@ -17,7 +28,8 @@ Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbs
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      '// Actor: checkCreditScore\nexport function checkCreditScore(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "checkCreditScore actor invoked by typescript" };\n}\n',
+      "// Actor: checkCreditScore\n" + MC_TS +
+        'export function checkCreditScore(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "checkCreditScore actor invoked by typescript" };\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -143,7 +155,7 @@ Deno.test("createAsyncOperationLogic - go also gets actors-manifest.json, with i
   }
 });
 
-Deno.test("createAsyncOperationLogic - writes generated-registry.ts under sharedAsyncOperation/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
+Deno.test("createAsyncOperationLogic - writes actor-registry.generated.ts under sharedAsyncOperation/<functionVersion>/ with the fixed sharedAsyncOperation identity", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await createAsyncOperationLogic(
@@ -153,11 +165,15 @@ Deno.test("createAsyncOperationLogic - writes generated-registry.ts under shared
       "checkCreditScore",
     );
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actor-registry.generated.ts`,
     );
     assertStringIncludes(
       registryContent,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./actors/checkCreditScore/checkCreditScore.ts";',
+      "checkCreditScore as checkCreditScore_v01,",
+    );
+    assertStringIncludes(
+      registryContent,
+      "maxConcurrency as checkCreditScore_v01_maxConcurrency,",
     );
     assertStringIncludes(
       registryContent,
@@ -194,7 +210,7 @@ Deno.test("createAsyncOperationLogic - a second call at the same functionVersion
     );
     await createAsyncOperationLogic(dir, "typescript", "v01", "verifyIdentity");
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actor-registry.generated.ts`,
     );
     assertStringIncludes(registryContent, "handler: checkCreditScore_v01,");
     assertStringIncludes(registryContent, "handler: verifyIdentity_v01,");
@@ -219,21 +235,29 @@ Deno.test("createAsyncOperationLogic - a different function-version gets its own
       "checkCreditScore",
     );
     const v01Registry = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v01/actor-registry.generated.ts`,
     );
     const v02Registry = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/sharedAsyncOperation/v02/generated-registry.ts`,
+      `${dir}/async-worker/typescript/sharedAsyncOperation/v02/actor-registry.generated.ts`,
     );
     assertStringIncludes(
       v01Registry,
-      'import { checkCreditScore as checkCreditScore_v01 } from "./actors/checkCreditScore/checkCreditScore.ts";',
+      "checkCreditScore as checkCreditScore_v01,",
+    );
+    assertStringIncludes(
+      v01Registry,
+      "maxConcurrency as checkCreditScore_v01_maxConcurrency,",
     );
     assertStringIncludes(v01Registry, "handler: checkCreditScore_v01,");
     assertEquals(v01Registry.includes("checkCreditScore_v02"), false);
 
     assertStringIncludes(
       v02Registry,
-      'import { checkCreditScore as checkCreditScore_v02 } from "./actors/checkCreditScore/checkCreditScore.ts";',
+      "checkCreditScore as checkCreditScore_v02,",
+    );
+    assertStringIncludes(
+      v02Registry,
+      "maxConcurrency as checkCreditScore_v02_maxConcurrency,",
     );
     assertStringIncludes(v02Registry, "handler: checkCreditScore_v02,");
     assertEquals(v02Registry.includes("checkCreditScore_v01"), false);
@@ -361,11 +385,11 @@ Deno.test("createAsyncOperationLogic - also refreshes the FSM-scoped aggregate r
       "checkCreditScore",
     );
     const aggregateContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${dir}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     );
     assertStringIncludes(
       aggregateContent,
-      'from "./sharedAsyncOperation/v01/generated-registry.ts";',
+      'from "./sharedAsyncOperation/v01/actor-registry.generated.ts";',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -388,22 +412,22 @@ Deno.test("createAsyncOperationLogic - a second call at a different functionVers
       "verifyIdentity",
     );
     const aggregateContent = await Deno.readTextFile(
-      `${dir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${dir}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     );
     assertStringIncludes(
       aggregateContent,
-      'from "./sharedAsyncOperation/v01/generated-registry.ts";',
+      'from "./sharedAsyncOperation/v01/actor-registry.generated.ts";',
     );
     assertStringIncludes(
       aggregateContent,
-      'from "./sharedAsyncOperation/v02/generated-registry.ts";',
+      'from "./sharedAsyncOperation/v02/actor-registry.generated.ts";',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
 });
 
-Deno.test("createAsyncOperationLogic - go also refreshes its FSM-scoped aggregate at async-worker/go/go-actors-registry-generated/ (#336)", async () => {
+Deno.test("createAsyncOperationLogic - go also refreshes its FSM-scoped aggregate at async-worker/go/actor-registry-aggregate-generated/ (#336)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const absAppRoot = `${dir}/fsm-core-example`;
@@ -415,7 +439,7 @@ Deno.test("createAsyncOperationLogic - go also refreshes its FSM-scoped aggregat
       "checkCreditScore",
     );
     const registryContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/go-actors-registry-generated/registry.go`,
+      `${absAppRoot}/async-worker/go/actor-registry-aggregate-generated/registry.go`,
     );
     assertStringIncludes(
       registryContent,
@@ -431,7 +455,7 @@ Deno.test("createAsyncOperationLogic - go writes no registry file (Go has no sha
   try {
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
     const registryExists = await Deno.stat(
-      `${dir}/async-worker/go/sharedAsyncOperation/generated-registry.go`,
+      `${dir}/async-worker/go/sharedAsyncOperation/actor-registry.generated.go`,
     ).then(() => true).catch(() => false);
     assertEquals(registryExists, false);
   } finally {
@@ -493,7 +517,7 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
     );
 
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/python/sharedAsyncOperation/v08/generated_registry.py`,
+      `${dir}/async-worker/python/sharedAsyncOperation/v08/actor_registry_generated.py`,
     );
     assertEquals(registryContent.includes("checkCreditScoreNirajx"), false);
     assertStringIncludes(registryContent, "verifyIdentity_v08");
@@ -502,7 +526,7 @@ Deno.test("createAsyncOperationLogic - a stale actor directory (file hand-remove
   }
 });
 
-Deno.test("createAsyncOperationLogic - go writes its own aggregate at sharedAsyncOperation/go-actors-registry-generated/ (#324)", async () => {
+Deno.test("createAsyncOperationLogic - go writes its own aggregate at sharedAsyncOperation/actor-registry-aggregate-generated/ (#324)", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const absAppRoot = `${dir}/fsm-core-example`;
@@ -515,17 +539,17 @@ Deno.test("createAsyncOperationLogic - go writes its own aggregate at sharedAsyn
     );
 
     const goModContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/go.mod`,
+      `${absAppRoot}/async-worker/go/sharedAsyncOperation/actor-registry-aggregate-generated/go.mod`,
     );
     assertEquals(
       goModContent,
-      "module fsm-core-example/sharedasyncoperation/go-actors-registry-generated\n\ngo 1.19\n\n" +
+      "module fsm-core-example/sharedasyncoperation/actor-registry-aggregate-generated\n\ngo 1.19\n\n" +
         "require fsm-core-example/sharedasyncoperation/v08/go/actors/checkcreditscorenirajx v0.0.0\n\n" +
         "replace fsm-core-example/sharedasyncoperation/v08/go/actors/checkcreditscorenirajx => ../v08/actors/checkCreditScoreNirajx\n",
     );
 
     const registryContent = await Deno.readTextFile(
-      `${absAppRoot}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/registry.go`,
+      `${absAppRoot}/async-worker/go/sharedAsyncOperation/actor-registry-aggregate-generated/registry.go`,
     );
     assertStringIncludes(
       registryContent,
@@ -554,7 +578,7 @@ Deno.test("createAsyncOperationLogic - go aggregate accumulates across repeated 
     await createAsyncOperationLogic(dir, "go", "v01", "checkCreditScore");
     await createAsyncOperationLogic(dir, "go", "v01", "verifyIdentity");
     const registryContent = await Deno.readTextFile(
-      `${dir}/async-worker/go/sharedAsyncOperation/go-actors-registry-generated/registry.go`,
+      `${dir}/async-worker/go/sharedAsyncOperation/actor-registry-aggregate-generated/registry.go`,
     );
     assertStringIncludes(
       registryContent,

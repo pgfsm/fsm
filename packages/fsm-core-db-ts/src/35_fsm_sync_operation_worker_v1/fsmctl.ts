@@ -67,7 +67,7 @@ export async function listFsmInstances(
     const text = `
       SELECT *
       FROM ${FSM_INSTANCE_TABLE}
-      ORDER BY created_at DESC;
+      ORDER BY started_at DESC NULLS LAST;
     `;
     const result = await deps.db.query<FsmInstanceRow>(text);
     return Array.isArray(result.rows) ? result.rows : [];
@@ -85,7 +85,7 @@ export async function isFSMInstancePresent(
     const text = `
       SELECT id
       FROM ${FSM_INSTANCE_TABLE}
-      WHERE id = $1::text;
+      WHERE id = $1::uuid;
     `;
     const result = await deps.db.query<{ id: string }>(text, [queue]);
     return Array.isArray(result.rows) ? result.rows.length > 0 : !!result.rows;
@@ -177,7 +177,7 @@ export async function getFSMData(
     const text = `
       SELECT *
       FROM ${FSM_INSTANCE_TABLE}
-      WHERE id = $1::text
+      WHERE id = $1::uuid
       LIMIT 1;
     `;
     const result = await deps.db.query<FsmInstanceRow>(text, [id]);

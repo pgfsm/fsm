@@ -28,6 +28,7 @@ in `packages/fsm-async-worker-ts/` — see their `CLAUDE.md` files.
 
 ```bash
 deno task check        # deno check src/index.ts
+deno task test         # deno test --allow-all test/ (DB tests need DATABASE_URL)
 deno task build:npm    # scripts/build-npm.ts (dnt npm build)
 ```
 
@@ -78,14 +79,14 @@ been removed too — see below), no `checkRegistryForAsyncActors`/
 `checkRegistryAndWorkingForAsyncActors` async-actor-registry verification
 (`asyncOperationVerificationMode` is assumed `"none"` for now — a project's FSMs
 and their actors are trusted once compiled), and no `loadFsmFromJson` call —
-FSMs must already be loaded into the database by whatever separately ran that
-step.
+FSMs are loaded by a separate deploy step, `pgfsmctl fsm load` (SPEC-006). What
+it does do (SPEC-006, see the next section) is check, read-only, that they were.
 
 Instead, `fsmlet.ts` statically imports the compiler-generated aggregate
 registry directly:
 
 ```ts
-import { SYNC_OPERATION_REGISTRATIONS } from "../../../../test-apps/debug-only/sync-worker/typescript/aggregate-generated-sync-operation-registry.ts";
+import { SYNC_OPERATION_REGISTRATIONS } from "../../../../test-apps/debug-only/sync-worker/typescript/sync-operation-registry-aggregate.generated.ts";
 ```
 
 (`SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[]` — see
@@ -127,3 +128,29 @@ meaningful per-invocation flag surface left for a CLI to expose. The library
 implementation (`runFsmlet`/`startFsmlet`, `src/fsmlet/fsmlet.ts`) is untouched
 and still exported from `index.ts` — embed it directly in your own process
 instead of shelling out to a CLI.
+
+## Startup FSM definition check (SPEC-006)
+
+Before `registerFsmlet`, `startFsmlet` calls `checkFsmDefinitions`
+(`src/fsmlet/fsm-definition-check.ts`): one `@pgfsm/db`
+`getFsmJsonForFsmModules` read for every served `{fsm_name, fsm_version}`,
+classified by `classifyFsmDefinitions` as `missing`, `ambiguous` (several rows
+with different content, from loads that raced before the unique constraint),
+`drifted` (the loaded JSONB's `fsmJsonDigest` differs from the compiled
+`FSM_DEFINITIONS` digest) or `undigested` (no digest given for a served module).
+Any problem throws one `FsmDefinitionCheckError` listing them all, after ending
+the pool, so the fsmlet never registers and the scheduler never routes work to
+it.
+
+- `fsmDefinitions` is `startFsmlet`/`runFsmlet`'s required third argument
+  (#422), after the registrations it's checked against. For JavaScript callers,
+  and 0.2-style calls that pass options third, `startFsmlet` also throws a
+  `TypeError` before creating the pool.
+- The check is mandatory: no existence-only mode, no opt-out flag. A false
+  refusal can only be fixed with a release.
+- It runs once per start, never per dispatch: definitions are immutable per
+  version, so a passing check stays valid for the process's lifetime.
+- Async actors are deliberately not checked here; see SPEC-008.
+
+Tests: `test/fsm-definition-check.test.ts` (unit tests for the classifier;
+`startFsmlet` refusal/drift/happy-path tests run only with `DATABASE_URL`).

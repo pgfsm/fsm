@@ -1,4 +1,10 @@
-import { assertEquals, assertExists } from "@std/assert";
+import {
+  assertEquals,
+  assertExists,
+  assertRejects,
+  assertStringIncludes,
+} from "@std/assert";
+import { exists } from "@std/fs/exists";
 import {
   formatTsFilesBestEffort,
   renderOperationModule,
@@ -11,6 +17,7 @@ import {
   writeAggregateActorsRegistry,
   writeAggregateGoRegistry,
   writeAggregateSyncOperationRegistry,
+  writeOperationModule,
   writeSyncOperationRegistry,
   writeSyncWorkerRunner,
   writeWorkerSdk,
@@ -22,6 +29,17 @@ import type {
   RegisteredActor,
   WrittenActor,
 } from "../src/types/index.ts";
+
+// The per-actor concurrency setting every new actor stub declares (#435),
+// between the label comment and the function.
+const MC_TS =
+  "\n// How many invokes of this actor one worker runs at once. Above 1, the\n// handler must be safe to run concurrently (no unguarded shared state, only\n// concurrency-safe clients). Delivery is at-least-once, so the handler must\n// also be idempotent: the same invoke can arrive more than once.\nexport const maxConcurrency = 1;\n\n";
+const MC_PY =
+  "\n# How many invokes of this actor one worker runs at once. Above 1, the\n# handler runs on several threads at once and must be thread-safe (no\n# unguarded shared state, only thread-safe clients). Delivery is\n# at-least-once, so the handler must also be idempotent: the same invoke can\n# arrive more than once.\nMAX_CONCURRENCY = 1\n\n\n";
+const MC_RS =
+  "\n/// How many invokes of this actor one worker runs at once. Above 1, the\n/// handler runs on several threads at once: shared state needs a `Mutex` or\n/// atomics. Delivery is at-least-once, so the handler must also be\n/// idempotent: the same invoke can arrive more than once.\npub const MAX_CONCURRENCY: u32 = 1;\n\n";
+const MC_GO =
+  "\n// MaxConcurrency is how many invokes of this actor one worker runs at once.\n// Above 1, the handler runs on several goroutines at once: guard shared state\n// with a sync.Mutex, atomics or channels. Delivery is at-least-once, so the\n// handler must also be idempotent: the same invoke can arrive more than once.\nconst MaxConcurrency = 1\n\n";
 
 type Case = {
   lang: OperationLang;
@@ -61,8 +79,8 @@ const cases: Case[] = [
     lang: "typescript",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '// Actor: creditCheck\nexport function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+    expected: "// Actor: creditCheck\n" + MC_TS +
+      'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
   },
   // python
   {
@@ -90,8 +108,8 @@ const cases: Case[] = [
     lang: "python",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '# Actor: creditCheck\ndef creditCheck(input):\n    # TODO: implement actor logic\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
+    expected: "# Actor: creditCheck\n" + MC_PY +
+      'def creditCheck(input):\n    # TODO: implement actor logic\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
   },
   // rust
   {
@@ -119,8 +137,8 @@ const cases: Case[] = [
     lang: "rust",
     kind: "actors",
     name: "creditCheck",
-    expected:
-      '// Actor: creditCheck\n#[allow(non_snake_case)]\npub fn creditCheck(input: serde_json::Value) -> serde_json::Value {\n    // TODO: implement actor logic\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
+    expected: "// Actor: creditCheck\n" + MC_RS +
+      '#[allow(non_snake_case)]\npub fn creditCheck(input: serde_json::Value) -> serde_json::Value {\n    // TODO: implement actor logic\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
   },
   // go (renderOperationModule prefixes the `package <kind>` header — accounted
   // for separately below, these cases cover the per-name stub only)
@@ -152,7 +170,8 @@ const cases: Case[] = [
     expected:
       // Go exports (capitalizes) actor function names for cross-package
       // access — see toGoExportedName / #83. Other kinds/languages don't.
-      '// Actor: creditCheck\nfunc CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      "// Actor: creditCheck\n" + MC_GO +
+      'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
   },
 ];
 
@@ -188,7 +207,8 @@ Deno.test("writeActorFile - go actor gets a package header, exported (capitalize
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      'package actors\n\n// Actor: creditCheck\nfunc CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      "package actors\n\n// Actor: creditCheck\n" + MC_GO +
+        'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -244,7 +264,8 @@ Deno.test("writeActorFile - typescript actor has no package header", async () =>
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      '// Actor: creditCheck\nexport function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+      "// Actor: creditCheck\n" + MC_TS +
+        'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -267,6 +288,7 @@ Deno.test("writeActorFile - typescript actor with a long name is wrapped to pass
     assertEquals(
       content,
       "// Actor: CheckingCreditScores3parallel\n" +
+        MC_TS +
         "export function CheckingCreditScores3parallel(input: unknown): unknown {\n" +
         "  // TODO: implement actor logic\n" +
         "  return {\n" +
@@ -428,7 +450,7 @@ Deno.test("writeActorsBarrel - rust writes a mod.rs with #[path] attributes", as
       content,
       '#[path = "checkBureau/checkBureau.rs"]\n' +
         "#[allow(non_snake_case)]\n" +
-        "mod checkBureau;\n" +
+        "pub mod checkBureau;\n" +
         "pub use checkBureau::checkBureau;\n",
     );
   } finally {
@@ -464,7 +486,7 @@ Deno.test("writeActorsRegistry - typescript carries the full activity-registrati
       actorsForBarrelTests,
       "typescript",
     );
-    assertEquals(file, `${dir}/typescript/generated-registry.ts`);
+    assertEquals(file, `${dir}/typescript/actor-registry.generated.ts`);
     const content = await Deno.readTextFile(file!);
     assertEquals(
       content,
@@ -479,6 +501,8 @@ Deno.test("writeActorsRegistry - typescript carries the full activity-registrati
         "  asyncOperationName: string;\n" +
         "  asyncOperationVersion: string;\n" +
         "  asyncOperationLanguage: string;\n" +
+        "  /** The actor's own limit, from its stub; unset falls back to the worker's --max-concurrency. */\n" +
+        "  maxConcurrency?: number;\n" +
         "  handler: (input: unknown) => unknown;\n" +
         "};\n" +
         "\n" +
@@ -516,7 +540,7 @@ Deno.test("writeActorsRegistry - python carries the full activity-registration i
       actorsForBarrelTests,
       "python",
     );
-    assertEquals(file, `${dir}/python/generated_registry.py`);
+    assertEquals(file, `${dir}/python/actor_registry_generated.py`);
     const content = await Deno.readTextFile(file!);
     assertEquals(
       content,
@@ -544,7 +568,7 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
   const dir = await Deno.makeTempDir();
   try {
     const file = await writeActorsRegistry(dir, actorsForBarrelTests, "rust");
-    assertEquals(file, `${dir}/rust/generated_registry.rs`);
+    assertEquals(file, `${dir}/rust/actor_registry.generated.rs`);
     const content = await Deno.readTextFile(file!);
     assertEquals(
       content,
@@ -559,6 +583,10 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
         "    pub async_operation_name: &'static str,\n" +
         "    pub async_operation_version: &'static str,\n" +
         "    pub async_operation_language: &'static str,\n" +
+        "    /// The actor's own limit, from its stub's `MAX_CONCURRENCY`; 0 falls back\n" +
+        "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
+        "    #[allow(dead_code)]\n" +
+        "    pub max_concurrency: u32,\n" +
         "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
@@ -571,6 +599,7 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
         '            async_operation_name: "checkBureau",\n' +
         '            async_operation_version: "v01",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: actors::checkBureau,\n" +
         "        },\n" +
         "    ]\n" +
@@ -603,7 +632,7 @@ Deno.test("writeActorsRegistry - writes nothing when there are no actors for tha
   }
 });
 
-Deno.test("writeSyncOperationRegistry - combines actions/guards/delays into one self-describing array, delay handlers use the prefixed import name", async () => {
+Deno.test("writeSyncOperationRegistry - combines actions/guards/delays into one self-describing array, delay handlers use the prefixed import name, one import per per-operation stub", async () => {
   const dir = await Deno.makeTempDir();
   try {
     const file = await writeSyncOperationRegistry(
@@ -614,15 +643,16 @@ Deno.test("writeSyncOperationRegistry - combines actions/guards/delays into one 
       ["assignSSN"],
       ["allSucceeded"],
       ["myDelay"],
+      "abababababababababababababababababababababababababababababababab",
     );
-    assertEquals(file, `${dir}/generated-sync-operation-registry.ts`);
+    assertEquals(file, `${dir}/sync-operation-registry.generated.ts`);
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
       "// AUTO-GENERATED by fsm-compiler-ts. Do not edit directly.\n" +
-        'import { assignSSN } from "./actions/index.ts";\n' +
-        'import { allSucceeded } from "./guards/index.ts";\n' +
-        'import { delaymyDelay } from "./delays/index.ts";\n' +
+        'import { assignSSN } from "./actions/assignSSN/assignSSN.ts";\n' +
+        'import { allSucceeded } from "./guards/allSucceeded/allSucceeded.ts";\n' +
+        'import { delaymyDelay } from "./delays/myDelay/myDelay.ts";\n' +
         "\n" +
         "export type SyncOperationRegistration = {\n" +
         "  fsmName: string;\n" +
@@ -631,6 +661,20 @@ Deno.test("writeSyncOperationRegistry - combines actions/guards/delays into one 
         "  syncOperationName: string;\n" +
         "  syncOperationLanguage: string;\n" +
         "  handler: (...args: unknown[]) => unknown;\n" +
+        "};\n" +
+        "\n" +
+        "export type FsmDefinitionDigest = {\n" +
+        "  fsmName: string;\n" +
+        "  fsmVersion: string;\n" +
+        "  fsmJsonSha256: string;\n" +
+        "};\n" +
+        "\n" +
+        "// Canonical (RFC 8785) SHA-256 of the fsm.json this registry was generated\n" +
+        "// from; the fsmlet refuses to start if the loaded definition differs.\n" +
+        "export const FSM_DEFINITION: FsmDefinitionDigest = {\n" +
+        '  fsmName: "creditCheck",\n' +
+        '  fsmVersion: "v01",\n' +
+        '  fsmJsonSha256: "abababababababababababababababababababababababababababababababab",\n' +
         "};\n" +
         "\n" +
         "export const SYNC_OPERATION_REGISTRATIONS: SyncOperationRegistration[] = [\n" +
@@ -676,14 +720,99 @@ Deno.test("writeSyncOperationRegistry - a kind with no names is skipped entirely
       ["assignSSN"],
       [],
       [],
+      "abababababababababababababababababababababababababababababababab",
     );
     const content = await Deno.readTextFile(file);
-    assertEquals(content.includes("guards/index.ts"), false);
-    assertEquals(content.includes("delays/index.ts"), false);
+    assertEquals(content.includes("./guards/"), false);
+    assertEquals(content.includes("./delays/"), false);
     assertEquals(
-      content.includes('import { assignSSN } from "./actions/index.ts";'),
+      content.includes(
+        'import { assignSSN } from "./actions/assignSSN/assignSSN.ts";',
+      ),
       true,
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeOperationModule - writes one <name>/<name>.ts stub per operation, deduplicated (#460)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeOperationModule(
+      dir,
+      "typescript",
+      "delays",
+      ["cooldown", "retry", "cooldown"],
+      "checkout/v01",
+    );
+    const kindDir = `${dir}/typescript/checkout/v01/delays`;
+    assertEquals(
+      [...Deno.readDirSync(kindDir)].map((e) => e.name).sort(),
+      ["cooldown", "retry"],
+    );
+    assertEquals(
+      await Deno.readTextFile(`${kindDir}/cooldown/cooldown.ts`),
+      "// Delay: cooldown\nexport function delaycooldown(context: any, event: any): number {\n  // TODO: implement delay logic (return ms)\n  return 0;\n}\n",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeOperationModule - writes nothing for a kind with no operations (#460)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await writeOperationModule(dir, "typescript", "guards", [], "c/v01");
+    assertEquals(await exists(`${dir}/typescript/c/v01/guards`), false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeOperationModule - ignores an existing index.ts and still writes per-operation stubs (#462)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const kindDir = `${dir}/typescript/c/v01/actions`;
+    await Deno.mkdir(kindDir, { recursive: true });
+    await Deno.writeTextFile(`${kindDir}/index.ts`, "// old\n");
+    await writeOperationModule(
+      dir,
+      "typescript",
+      "actions",
+      ["sendEmail", "notify"],
+      "c/v01",
+    );
+    assertEquals(
+      [...Deno.readDirSync(kindDir)].map((e) => e.name).sort(),
+      ["index.ts", "notify", "sendEmail"],
+    );
+    assertEquals(await Deno.readTextFile(`${kindDir}/index.ts`), "// old\n");
+    assertStringIncludes(
+      await Deno.readTextFile(`${kindDir}/sendEmail/sendEmail.ts`),
+      "export function sendEmail(",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("writeOperationModule - rejects names that differ only by case, writing nothing (#460)", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await assertRejects(
+      () =>
+        writeOperationModule(
+          dir,
+          "typescript",
+          "guards",
+          ["checkBattery", "CheckBattery"],
+          "c/v01",
+        ),
+      Error,
+      "case-insensitive",
+    );
+    assertEquals(await exists(`${dir}/typescript/c/v01/guards`), false);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -714,6 +843,7 @@ Deno.test("writeAggregateSyncOperationRegistry - combines every <fsmName>/<fsmVe
       [],
       ["allSucceeded"],
       [],
+      "abababababababababababababababababababababababababababababababab",
     );
     await writeSyncOperationRegistry(
       `${tsDir}/creditCheck/v01`,
@@ -723,23 +853,29 @@ Deno.test("writeAggregateSyncOperationRegistry - combines every <fsmName>/<fsmVe
       ["assignSSN"],
       [],
       [],
+      "abababababababababababababababababababababababababababababababab",
     );
 
     const file = await writeAggregateSyncOperationRegistry(tsDir);
     assertEquals(
       file,
-      `${tsDir}/aggregate-generated-sync-operation-registry.ts`,
+      `${tsDir}/sync-operation-registry-aggregate.generated.ts`,
     );
     const content = await Deno.readTextFile(file!);
     assertEquals(
       content,
       "// AUTO-GENERATED by fsm-compiler-ts. Do not edit directly.\n" +
-        'import { SYNC_OPERATION_REGISTRATIONS as creditcheck_v01 } from "./creditCheck/v01/generated-sync-operation-registry.ts";\n' +
-        'import { SYNC_OPERATION_REGISTRATIONS as otherfsm_v02 } from "./otherFsm/v02/generated-sync-operation-registry.ts";\n' +
+        'import { FSM_DEFINITION as creditcheck_v01_definition, SYNC_OPERATION_REGISTRATIONS as creditcheck_v01 } from "./creditCheck/v01/sync-operation-registry.generated.ts";\n' +
+        'import { FSM_DEFINITION as otherfsm_v02_definition, SYNC_OPERATION_REGISTRATIONS as otherfsm_v02 } from "./otherFsm/v02/sync-operation-registry.generated.ts";\n' +
         "\n" +
         "export const SYNC_OPERATION_REGISTRATIONS = [\n" +
         "  ...creditcheck_v01,\n" +
         "  ...otherfsm_v02,\n" +
+        "];\n" +
+        "\n" +
+        "export const FSM_DEFINITIONS = [\n" +
+        "  creditcheck_v01_definition,\n" +
+        "  otherfsm_v02_definition,\n" +
         "];\n",
     );
   } finally {
@@ -788,7 +924,19 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts with dotenv, @pgfsm
     // The aggregate + @pgfsm/sync-worker, with the signal threaded through.
     assertEquals(
       runContent.includes(
-        'import { SYNC_OPERATION_REGISTRATIONS } from "./aggregate-generated-sync-operation-registry.ts";',
+        '  FSM_DEFINITIONS,\n  SYNC_OPERATION_REGISTRATIONS,\n} from "./sync-operation-registry-aggregate.generated.ts";',
+      ),
+      true,
+    );
+    // SPEC-006: the compiled digests go to the fsmlet's startup check, as
+    // runFsmlet's required third argument.
+    assertEquals(
+      runContent.includes(
+        "  SYNC_OPERATION_REGISTRATIONS,\n" +
+          "  // Refuses to start unless the database holds exactly these fsm.json\n" +
+          "  // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).\n" +
+          "  FSM_DEFINITIONS,\n" +
+          "  { signal: controller.signal },\n",
       ),
       true,
     );
@@ -864,14 +1012,14 @@ Deno.test("writeAggregateActorsRegistry - typescript re-imports and flattens eac
     );
     assertEquals(
       file,
-      `${dir}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${dir}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     );
     const content = await Deno.readTextFile(file!);
     assertEquals(
       content,
       "// AUTO-GENERATED by fsm-compiler-ts. Do not edit directly.\n" +
-        'import { ACTOR_REGISTRATIONS as creditcheck_v01 } from "./creditCheck/v01/generated-registry.ts";\n' +
-        'import { ACTOR_REGISTRATIONS as otherfsm_v02 } from "./otherFsm/v02/generated-registry.ts";\n' +
+        'import { ACTOR_REGISTRATIONS as creditcheck_v01 } from "./creditCheck/v01/actor-registry.generated.ts";\n' +
+        'import { ACTOR_REGISTRATIONS as otherfsm_v02 } from "./otherFsm/v02/actor-registry.generated.ts";\n' +
         "\n" +
         "export const ACTOR_REGISTRATIONS = [\n" +
         "  ...creditcheck_v01,\n" +
@@ -893,7 +1041,7 @@ Deno.test("writeAggregateActorsRegistry - python statically imports each FSM-ver
     );
     assertEquals(
       file,
-      `${dir}/async-worker/python/python_actors_registry_generated.py`,
+      `${dir}/async-worker/python/actor_registry_aggregate_generated.py`,
     );
     const content = await Deno.readTextFile(file!);
     assertEquals(
@@ -916,8 +1064,8 @@ Deno.test("writeAggregateActorsRegistry - python statically imports each FSM-ver
         "if _PLUGIN_ROOT not in sys.path:\n" +
         "    sys.path.insert(0, _PLUGIN_ROOT)\n" +
         "\n" +
-        "from creditCheck.v01.generated_registry import ACTOR_REGISTRATIONS as creditcheck_v01\n" +
-        "from otherFsm.v02.generated_registry import ACTOR_REGISTRATIONS as otherfsm_v02\n" +
+        "from creditCheck.v01.actor_registry_generated import ACTOR_REGISTRATIONS as creditcheck_v01\n" +
+        "from otherFsm.v02.actor_registry_generated import ACTOR_REGISTRATIONS as otherfsm_v02\n" +
         "\n" +
         "ACTOR_REGISTRATIONS = [\n" +
         "    *creditcheck_v01,\n" +
@@ -939,7 +1087,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
     );
     assertEquals(
       file,
-      `${dir}/async-worker/rust/rust-actors-registry.generated.rs`,
+      `${dir}/async-worker/rust/actor_registry_aggregate.generated.rs`,
     );
     const content = await Deno.readTextFile(file!);
     assertEquals(
@@ -958,6 +1106,10 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         "    pub async_operation_name: &'static str,\n" +
         "    pub async_operation_version: &'static str,\n" +
         "    pub async_operation_language: &'static str,\n" +
+        "    /// The actor's own limit, from its stub's `MAX_CONCURRENCY`; 0 falls back\n" +
+        "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
+        "    #[allow(dead_code)]\n" +
+        "    pub max_concurrency: u32,\n" +
         "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
@@ -970,6 +1122,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         '            async_operation_name: "checkBureau",\n' +
         '            async_operation_version: "v01",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: creditcheck_v01::checkBureau,\n" +
         "        },\n" +
         "        ActorRegistration {\n" +
@@ -979,6 +1132,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         '            async_operation_name: "someActorRs",\n' +
         '            async_operation_version: "v02",\n' +
         '            async_operation_language: "rust",\n' +
+        "            max_concurrency: 0,\n" +
         "            handler: otherfsm_v02::someActorRs,\n" +
         "        },\n" +
         "    ]\n" +
@@ -1024,7 +1178,7 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
     );
     assertEquals(
       file,
-      `${appRootAbsPath}/async-worker/go/go-actors-registry-generated/registry.go`,
+      `${appRootAbsPath}/async-worker/go/actor-registry-aggregate-generated/registry.go`,
     );
     const registryContent = await Deno.readTextFile(file!);
     assertEquals(
@@ -1044,6 +1198,9 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
         "\tAsyncOperationName          string\n" +
         "\tAsyncOperationVersion       string\n" +
         "\tAsyncOperationLanguage      string\n" +
+        "\t// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;\n" +
+        "\t// 0 falls back to the worker's --max-concurrency.\n" +
+        "\tMaxConcurrency   uint32\n" +
         "\tHandler          func(input any) (any, error)\n" +
         "}\n" +
         "\n" +
@@ -1071,11 +1228,11 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
         "}\n",
     );
     const goModContent = await Deno.readTextFile(
-      `${appRootAbsPath}/async-worker/go/go-actors-registry-generated/go.mod`,
+      `${appRootAbsPath}/async-worker/go/actor-registry-aggregate-generated/go.mod`,
     );
     assertEquals(
       goModContent,
-      "module fsm-core-example/go-actors-registry-generated\n" +
+      "module fsm-core-example/actor-registry-aggregate-generated\n" +
         "\n" +
         "go 1.19\n" +
         "\n" +
@@ -1147,7 +1304,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     );
     assertEquals(
       tsRun.includes(
-        'import { ACTOR_REGISTRATIONS } from "./typescript-actors-registry.generated.ts";',
+        'import { ACTOR_REGISTRATIONS } from "./actor-registry-aggregate.generated.ts";',
       ),
       true,
     );
@@ -1164,14 +1321,14 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
       await Deno.readTextFile(`${base}/typescript/deno.json`),
     );
     assertEquals(tsDenoJson.imports, {
-      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.2.0",
+      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.3.0",
       "@pgfsm/logging": "npm:@pgfsm/logging@^0.1.0",
     });
 
     const pyRun = await Deno.readTextFile(`${base}/python/run_async_worker.py`);
     assertEquals(
       pyRun.includes(
-        "from python_actors_registry_generated import ACTOR_REGISTRATIONS",
+        "from actor_registry_aggregate_generated import ACTOR_REGISTRATIONS",
       ),
       true,
     );
@@ -1185,14 +1342,14 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // run_async_worker.py's only third-party import comes from this pin.
     const pyproject = await Deno.readTextFile(`${base}/python/pyproject.toml`);
     assertEquals(
-      pyproject.includes('"pgfsm-async-worker-sdk>=0.2.0,<0.3",'),
+      pyproject.includes('"pgfsm-async-worker-sdk>=0.3.0,<0.4",'),
       true,
     );
 
     const rustMain = await Deno.readTextFile(`${base}/rust/src/main.rs`);
     assertEquals(
       rustMain.includes(
-        '#[path = "../rust-actors-registry.generated.rs"]',
+        '#[path = "../actor_registry_aggregate.generated.rs"]',
       ),
       true,
     );
@@ -1206,7 +1363,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // main.rs's only external crates come from these; no monorepo `path =`
     // dependency (the SDK and its proto stubs come from crates.io).
     const cargoToml = await Deno.readTextFile(`${base}/rust/Cargo.toml`);
-    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.2"'), true);
+    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.3"'), true);
     assertEquals(cargoToml.includes('serde_json = "1"'), true);
     assertEquals(cargoToml.includes('env_logger = "0.11"'), true);
     assertEquals(cargoToml.includes("{ path ="), false);
@@ -1215,7 +1372,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     const goMain = await Deno.readTextFile(`${base}/go/main.go`);
     assertEquals(
       goMain.includes(
-        'generatedregistry "fsm-core-example/go-actors-registry-generated"',
+        'generatedregistry "fsm-core-example/actor-registry-aggregate-generated"',
       ),
       true,
     );
@@ -1230,11 +1387,11 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     assertEquals(
       goMod,
       "module pgfsm/async-worker-go\n\ngo 1.25.0\n\n" +
-        "require fsm-core-example/go-actors-registry-generated v0.0.0\n" +
+        "require fsm-core-example/actor-registry-aggregate-generated v0.0.0\n" +
         "require fsm-core-example/creditcheck/v01/go/actors/checkbureau v0.0.0\n" +
         "require fsm-core-example/otherfsm/v02/go/actors/someactor v0.0.0\n" +
-        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.2.0\n\n" +
-        "replace fsm-core-example/go-actors-registry-generated => ./go-actors-registry-generated\n" +
+        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.1\n\n" +
+        "replace fsm-core-example/actor-registry-aggregate-generated => ./actor-registry-aggregate-generated\n" +
         "replace fsm-core-example/creditcheck/v01/go/actors/checkbureau => ./creditCheck/v01/actors/checkBureau\n" +
         "replace fsm-core-example/otherfsm/v02/go/actors/someactor => ./otherFsm/v02/actors/someActor\n",
     );

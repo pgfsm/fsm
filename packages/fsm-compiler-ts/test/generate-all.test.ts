@@ -33,15 +33,15 @@ Deno.test("generateAll - folder mode runs generate-fsm-json, generate-async-logi
   );
   assert(actorStat.isFile);
   const syncStat = await Deno.stat(
-    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/index.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts`,
   );
   assert(syncStat.isFile);
   const registryStat = await Deno.stat(
-    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/generated-sync-operation-registry.ts`,
+    `${APP_ROOT}/sync-worker/typescript/creditCheck/v01/sync-operation-registry.generated.ts`,
   );
   assert(registryStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${APP_ROOT}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${APP_ROOT}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });
@@ -74,12 +74,12 @@ Deno.test("generateAll - single machine.ts file mode writes fsm.json to <writeRo
   );
   assert(
     await pathExists(
-      `${writeRoot}/sync-worker/typescript/checkout/v02/actions/index.ts`,
+      `${writeRoot}/sync-worker/typescript/checkout/v02/actions/assignSSN/assignSSN.ts`,
     ),
   );
   assert(
     await pathExists(
-      `${writeRoot}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+      `${writeRoot}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
     ),
   );
 });
@@ -101,7 +101,7 @@ Deno.test("generateAll - single fsm.json file mode skips generate-fsm-json and w
   );
   assert(actorStat.isFile);
   const aggregateContent = await Deno.readTextFile(
-    `${writeRoot}/async-worker/typescript/typescript-actors-registry.generated.ts`,
+    `${writeRoot}/async-worker/typescript/actor-registry-aggregate.generated.ts`,
   );
   assert(aggregateContent.includes("creditcheck_v01"));
 });
@@ -151,7 +151,7 @@ Deno.test("generateAll - single fsm.json file mode uses the given fsmName/fsmVer
   );
   assert(
     await pathExists(
-      `${writeRoot}/sync-worker/typescript/checkout/v03/actions/index.ts`,
+      `${writeRoot}/sync-worker/typescript/checkout/v03/actions/assignSSN/assignSSN.ts`,
     ),
   );
 });

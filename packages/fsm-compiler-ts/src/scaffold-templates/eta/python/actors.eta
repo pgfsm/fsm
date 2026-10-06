@@ -1,4 +1,13 @@
 # <%~ it.label %>: <%~ it.name %>
+
+# How many invokes of this actor one worker runs at once. Above 1, the
+# handler runs on several threads at once and must be thread-safe (no
+# unguarded shared state, only thread-safe clients). Delivery is
+# at-least-once, so the handler must also be idempotent: the same invoke can
+# arrive more than once.
+MAX_CONCURRENCY = 1
+
+
 def <%~ it.fnName %>(input):
     # <%~ it.todo %>
     return {"input": input, "msg": "<%~ it.name %> actor invoked by <%~ it.lang %>"}

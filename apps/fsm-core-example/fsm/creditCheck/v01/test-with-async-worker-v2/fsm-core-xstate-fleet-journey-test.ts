@@ -7,9 +7,13 @@ import { machineWithProvider } from "../machine-with-provider.ts";
 import { runFsmScheduler } from "@pgfsm/ctl";
 import { startFsmlet } from "@pgfsm/sync-worker";
 import type { FsmletHandle } from "@pgfsm/sync-worker";
+import {
+  FSM_DEFINITIONS,
+  SYNC_OPERATION_REGISTRATIONS,
+} from "../../../../../../test-apps/debug-only/sync-worker/typescript/sync-operation-registry-aggregate.generated.ts";
 import { startActivityGatewayServer } from "@pgfsm/async-worker-gateway";
 import { ActorWorker } from "@pgfsm/async-worker-sdk";
-import { ACTOR_REGISTRATIONS } from "../../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/generated-registry.ts";
+import { ACTOR_REGISTRATIONS } from "../../../../../../test-apps/debug-only/async-worker/typescript/creditCheck/v01/actor-registry.generated.ts";
 import {
   createFsmInstanceFromName,
   getFsmDataResolveStateValue,
@@ -20,11 +24,6 @@ import { replaceUnderscoresWithSpaces } from "@pgfsm/compiler";
 
 const fsm_name = "creditCheck";
 const fsm_version = "v01";
-
-// validateSyncOperationFromFolders expects the *parent* of per-FSM folders
-// (e.g. ".../fsm", containing "creditCheck/v01").
-const FSM_FOLDER_PATH = import.meta.dirname!.split("/").slice(0, -3).join("/");
-const SKIP_DIRS = ["carVitals", "taskMachineConfig"];
 
 const SUBMIT_EVENT = {
   type: "Submit" as const,
@@ -143,10 +142,15 @@ async function startFleet(): Promise<Fleet> {
   // signal separate from its (never-resolving-until-abort) run promise.
   await sleep(500);
 
+  // Only creditCheck/v01: the startup check (SPEC-006) requires every served
+  // FSM version to be loaded, and this journey only needs this one.
+  const isJourneyFsm = (d: { fsmName: string; fsmVersion: string }) =>
+    d.fsmName === fsm_name && d.fsmVersion === fsm_version;
   const fsmletHandle = await startFsmlet(
     dbConfig,
-    { fsm: { folderPath: FSM_FOLDER_PATH, skipDirs: SKIP_DIRS } },
-    { signal: controller.signal, asyncOperationVerificationMode: "none" },
+    SYNC_OPERATION_REGISTRATIONS.filter(isJourneyFsm),
+    FSM_DEFINITIONS.filter(isJourneyFsm),
+    { signal: controller.signal },
   );
 
   const runId = crypto.randomUUID();

@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "fsm:add": "npx -y @pgfsm/cli@0.1.0 add",
-    "db:pgcron": "npx -y @pgfsm/ctl@0.1.0 pgcron register",
-    "gateway": "npx -y -p @pgfsm/async-worker-gateway@0.2.1 -- async-operation-worker-gateway --ensure-queue-on-register"
+    "db:load": "npx -y @pgfsm/ctl@0.1.0 fsm load fsm",
+    "db:pgcron": "npx -y @pgfsm/ctl@0.1.0 db cron register",
+    "db:key": "npx -y @pgfsm/ctl@0.1.0 db key create --name local-admin --role admin",
+    "gateway": "npx -y -p @pgfsm/async-worker-gateway@0.3.0 -- async-operation-worker-gateway --ensure-queue-on-register"
   }
 }

@@ -26,6 +26,7 @@ export const RegisteredActor = /*@__PURE__*/ proto3.makeMessageType(
     { no: 6, name: "async_operation_language", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 7, name: "timeout_ms", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
     { no: 8, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 9, name: "max_concurrency", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
   ],
 );
 

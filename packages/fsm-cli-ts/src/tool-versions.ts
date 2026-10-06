@@ -13,7 +13,7 @@ async function siblingVersion(packageDir: string): Promise<string> {
   return denoJson.version;
 }
 
-/** @pgfsm/ctl, for the `db:pgcron` script. */
+/** @pgfsm/ctl, for the `db:load` and `db:pgcron` scripts. */
 export const CTL_VERSION: string = await siblingVersion("fsm-ctl-ts");
 /** @pgfsm/async-worker-gateway, for the `gateway` script. */
 export const GATEWAY_VERSION: string = await siblingVersion(

@@ -6,7 +6,7 @@ import { join } from "@std/path";
  * first, since the worker module requires it.
  */
 const GO_MODULE_DIRS = [
-  "async-worker/go/go-actors-registry-generated",
+  "async-worker/go/actor-registry-aggregate-generated",
   "async-worker/go",
 ];
 
