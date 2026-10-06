@@ -68,7 +68,7 @@ Who it affects:
   self-hosted Postgres.
 - **The Hono app embeds an fsmlet today.** `lib/create-app.ts` requires
   `fsmConfig` "to start the fsmlet and obtain a DB pool". The API currently
-  shares the fsmlet's pool.
+  shares the fsmlet's pool. (Removed by #472; see §3.)
 
 ## Options considered
 
@@ -297,11 +297,11 @@ fsm_core.api_keys(
 - **`--no-auth`** (local dev only) skips the middleware and runs handlers as the
   pool's own role. It logs a warning at startup and refuses to start when
   `NODE_ENV` (the variable `env.ts` already validates) is `production`.
-- **Embedded fsmlet.** The API pool logs in as `fsm_authenticator`, and the
-  embedded fsmlet keeps its own pool with a `fsm_worker` login. That means two
-  small pools in that process. This is an accepted, temporary cost to #4.
-  Splitting the fsmlet out of the API process is a follow-up and isn't part of
-  this spec.
+- **No embedded fsmlet.** The API serves HTTP only, on one pool that logs in as
+  `fsm_authenticator`; fsmlets run as separate worker processes (root
+  `CLAUDE.md` #3). The draft planned a second pool for an fsmlet embedded in the
+  API, but that embedding had stopped compiling once the fsmlet moved to
+  compiled registries (#341), so #472 removed it instead.
 - **Scope:** auth applies to the `DB_TYPE=postgres` path. Startup refuses
   `DB_TYPE=supabase*` with auth enabled until that path is migrated.
 
@@ -409,7 +409,6 @@ and the same stdout/stderr split. Generated projects change as follows:
   - the separate login-role pattern;
   - admin keys never being accepted on a process without admin.
 - Key management is new surface to test and document.
-- The embedded fsmlet temporarily needs a second pool.
 
 **Migration (all pre-release, no external users of the CLI yet):**
 
@@ -422,7 +421,7 @@ and the same stdout/stderr split. Generated projects change as follows:
    - auth middleware and the per-request role;
    - admin routes behind the flag;
    - `--no-auth`;
-   - the second pool for the embedded fsmlet.
+   - removing the embedded fsmlet: the API is HTTP-only on one pool.
 4. `pgfsmctl`:
    - `pgcron` → `db cron`;
    - `db key create`, `key …`, `config …`, `completion`;
@@ -449,7 +448,6 @@ and the same stdout/stderr split. Generated projects change as follows:
 - OIDC / `pgfsmctl login|logout|whoami`. Those verbs are reserved for a later
   spec, as another way to obtain a bearer token for a URL profile.
 - Per-tenant or per-FSM key scopes.
-- Splitting the fsmlet out of the API process.
 - SPEC-007's gateway tokens.
 
 ## Acceptance criteria

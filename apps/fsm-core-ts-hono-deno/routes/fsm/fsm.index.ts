@@ -1,4 +1,4 @@
-import { createRouter } from "../../lib/create-app.ts";
+import { createRouter } from "../../lib/create-router.ts";
 
 import * as handlers from "./fsm.handlers.ts";
 import * as dispatch from "./fsm.handlers.dispatch.ts";

@@ -34,6 +34,15 @@ const EnvSchema = z.object({
   OTEL_DENO: z.string().optional().default("false"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().default("pgfsm-api"),
+  // SPEC-009 §3. Auth is on unless PGFSM_NO_AUTH=true (refused in production).
+  PGFSM_NO_AUTH: z.enum(["true", "false"]).default("false").transform((v) =>
+    v === "true"
+  ),
+  PGFSM_ENABLE_ADMIN_API: z.enum(["true", "false"]).default("false")
+    .transform((v) => v === "true"),
+  // Key-verification cache; also the upper bound on revocation latency.
+  PGFSM_AUTH_CACHE_TTL_MS: z.coerce.number().int().min(0).max(30_000)
+    .default(30_000),
 }).superRefine((input, ctx) => {
   if (input.NODE_ENV === "production" && !input.DATABASE_AUTH_TOKEN) {
     ctx.addIssue({
