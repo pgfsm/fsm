@@ -131,6 +131,16 @@ async-operation-worker-gateway-ctl invoke \
   --async-operation-language rust --input '{"ssn":"123"}'
 ```
 
+## Running on Kubernetes
+
+The repository has reference manifests and Dockerfiles for running the gateway
+as its own Deployment, with one worker Deployment per language dialling in over
+TLS with its own token, under Pod Security "restricted":
+[`deploy/k8s/`](https://github.com/pgfsm/fsm/tree/main/packages/fsm-async-worker-gateway-ts/deploy/k8s)
+(see its README) and
+[`deploy/docker/`](https://github.com/pgfsm/fsm/tree/main/packages/fsm-async-worker-gateway-ts/deploy/docker).
+Images aren't published; build them from those Dockerfiles.
+
 ## Prerequisites
 
 - **A Postgres database** — `DATABASE_URL`, needed for the poll loop and/or
