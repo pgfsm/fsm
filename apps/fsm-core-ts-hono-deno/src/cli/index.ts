@@ -97,6 +97,7 @@ await configureApiLogger();
 // env.ts evaluates process.env at import time, so all overrides must be set first.
 
 const { default: createApp } = await import("../../lib/create-app.ts");
+// @ts-types="@types/pg"
 const { Pool } = await import("pg");
 const { Hono } = await import("hono");
 

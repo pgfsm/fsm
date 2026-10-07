@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import type { DBDeps } from "@pgfsm/db";

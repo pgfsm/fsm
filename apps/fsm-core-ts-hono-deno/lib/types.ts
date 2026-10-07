@@ -1,5 +1,6 @@
 import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
 import type { Schema } from "hono";
+// @ts-types="@types/pg"
 import type { Pool } from "pg";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@pgfsm/db/database.types";

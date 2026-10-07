@@ -34,6 +34,15 @@ versions — root `.prototools` (Deno), `packages/database-src/.prototools`
 source of truth; CI installs from them. Never hardcode toolchain versions here
 or in workflows.
 
+**Importing `pg`:** put `// @ts-types="@types/pg"` on the line above every
+`import … from "pg"` and `await import("pg")`. `pg` ships no types, and Deno
+attaches `@types/pg` only when the npm resolution already includes it, which
+depends on a gitignored `deno.lock` that CI never has. Without the directive
+`pg` silently becomes `any` there (#479). CI and a prek hook enforce it
+(`scripts/check-pg-types-directive.ts`), and
+`packages/fsm-core-db-ts/test/pg-types.check.ts` fails CI if the directive ever
+stops working.
+
 ## Architecture
 
 ```

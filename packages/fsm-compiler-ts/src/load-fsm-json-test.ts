@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { getLogger } from "@logtape/logtape";
 import { configureCompilerLogger } from "./logger.ts";
 import { loadFsmJSONFromFolders } from "./load-fsm-json.ts";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 
 dotenv.config({ path: "./../../.env" });

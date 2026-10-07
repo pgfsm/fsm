@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import {
   type FsmDefinitionDigest,

@@ -7,6 +7,7 @@
 // DATABASE_URL (e.g. local Supabase); skipped otherwise.
 
 import { assert, assertEquals } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import {
   InvokeResult,

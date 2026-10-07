@@ -187,6 +187,7 @@ const db = {
 };
 
 async function cleanup(prefix: string) {
+  // @ts-types="@types/pg"
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: DATABASE_URL, max: 1 });
   try {
