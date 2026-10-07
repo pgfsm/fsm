@@ -59,10 +59,14 @@ it), like `fsm-compiler-ts`'s.
   and `gateway` pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the
   versions in `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this
   build was made from. The gateway is config, not a project directory: it has no
-  user code. `create` also writes `.env.example` (SPEC-009 §7: `DATABASE_URL`
-  set for local Supabase, `PGFSM_DB_URL`/`PGFSM_URL`/`PGFSM_API_KEY` commented
-  out); the repo root `.gitignore` excludes `.env*` but re-includes
-  `.env.example`, so `test-apps/debug-only`'s copy is committed.
+  user code. `test/debug-only.test.ts` fails when `test-apps/debug-only`'s
+  committed `package.json` pins other versions than this checkout's
+  cli/ctl/gateway `deno.json` (#491): after a bump, `create` a scratch
+  `debug-only` with `deno task pgfsm create` and copy its `package.json` over.
+  `create` also writes `.env.example` (SPEC-009 §7: `DATABASE_URL` set for local
+  Supabase, `PGFSM_DB_URL`/`PGFSM_URL`/`PGFSM_API_KEY` commented out); the repo
+  root `.gitignore` excludes `.env*` but re-includes `.env.example`, so
+  `test-apps/debug-only`'s copy is committed.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)
   into a temp dir named like the real root (the Go module root is derived from
