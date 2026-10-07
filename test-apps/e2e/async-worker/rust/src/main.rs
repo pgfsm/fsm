@@ -1,0 +1,53 @@
+// Scaffolded by fsm-compiler-ts, yours to edit: `--overwrite generated-only`
+// (what @pgfsm/cli uses) never rewrites it once it exists.
+//! Rust worker for the Activity Gateway: wires this project's
+//! compiler-generated actor registry into pgfsm-async-worker-sdk's
+//! run_actor_worker_cli (see Cargo.toml for the pinned version).
+//!
+//! USAGE
+//!   cargo run --release -- <list|start> [options]
+//!
+//! EXAMPLE
+//!   cargo run --release -- start --gateway-socket /tmp/pgfsm-activity-gateway-workers.sock
+
+// Fixed, compiler-generated registry -- see fsm-compiler-ts's
+// writeAggregateActorsRegistry. Regenerate with
+// `npx @pgfsm/compiler -c generate-async-logic -f <plugin-root>` after actors
+// change; this path is a build-time coupling to that one app's FSM
+// definitions by design (see #84 for why). Nested `#[path]` declarations
+// inside the included file resolve relative to *that file's* own directory,
+// not this one, so its own `#[path = "fsm/..."]` mods still work correctly.
+// Rust can't load actor functions at runtime the way TypeScript/Python can,
+// so they're linked into this binary: a missing or mistyped actor fails the
+// build, not worker startup.
+#[path = "../actor_registry_aggregate.generated.rs"]
+mod actor_registry_aggregate;
+
+use pgfsm_async_worker_sdk::{run_actor_worker_cli, ActorRegistration};
+
+fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let registrations = actor_registry_aggregate::actor_registrations()
+        .into_iter()
+        .map(|reg| {
+            ActorRegistration::new(
+                reg.parent_fsm_name,
+                reg.parent_fsm_version,
+                reg.async_operation_type,
+                reg.async_operation_name,
+                reg.async_operation_version,
+                reg.async_operation_language,
+                reg.handler,
+            )
+            // The actor's own limit from its stub (0 = use --max-concurrency).
+            .with_max_concurrency(reg.max_concurrency)
+        })
+        .collect();
+
+    std::process::exit(run_actor_worker_cli(
+        registrations,
+        std::env::args().skip(1),
+        None,
+    ));
+}

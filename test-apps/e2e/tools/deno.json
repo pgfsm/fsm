@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@std/cli": "jsr:@std/cli@1",
+    "pg": "npm:pg@^8.20.0"
+  }
+}

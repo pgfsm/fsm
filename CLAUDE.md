@@ -42,6 +42,7 @@ apps/
   fsm-core-example/        # Example FSM definitions (sources for test-apps/debug-only) — see CLAUDE.md
 test-apps/
   debug-only/              # @pgfsm/cli-generated worker project (sync + TS/Python/Rust/Go async), for debugging — see README.md
+  e2e/                     # @pgfsm/cli-generated load project + tools/load.ts for SPEC-007's acceptance suite (#458) — see README.md
 packages/
   database-src/           # PostgreSQL migrations + Supabase config — see CLAUDE.md
   database-src-extension/ # Rust PostgreSQL extension (pgrx) using ltree + pgmq
