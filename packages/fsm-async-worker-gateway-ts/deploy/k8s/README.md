@@ -150,8 +150,9 @@ test-only Postgres (Supabase's image) with the repo's migrations, deploys
 `base/` plus the example pooler, and checks that:
 
 - every pod is admitted under Pod Security "restricted";
-- every language's worker registers over TLS with its own token, and no token
-  value appears in the gateway's logs;
+- every language's worker, started before any gateway replica exists, is refused
+  and keeps retrying, then registers over TLS with its own token once the
+  gateway is up, and no token value appears in the gateway's logs;
 - one invoke per language round-trips through the gateway replica its worker is
   connected to.
 
