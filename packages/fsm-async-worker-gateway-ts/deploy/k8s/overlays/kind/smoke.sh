@@ -133,17 +133,30 @@ kubectl -n "$NS" create secret generic activity-gateway-db \
 
 log "Applying the manifests (overlays/kind)"
 kubectl apply -k "$HERE"
-for deploy in pgbouncer activity-gateway; do
+for deploy in pgbouncer "${LANGS[@]/#/async-worker-}"; do
   kubectl -n "$NS" rollout status "deploy/$deploy" --timeout=300s
 done
-# Restart the workers against a gateway that is already listening: a
-# TypeScript worker on @pgfsm/async-worker-sdk 0.3.0 hangs instead of retrying
-# when its first TLS connection is refused (#484). Drop this once the
-# debug-only project is on a release with the fix.
-kubectl -n "$NS" rollout restart deploy -l app.kubernetes.io/component=async-worker
+
+# The overlay deploys the gateway with no replicas, so every worker starts
+# while nothing listens: each must be refused, keep retrying, and register once
+# the gateway is up. A worker that gives up or hangs after the first refusal
+# (#484) fails the registration check below.
+log "Every worker retries while no gateway is listening"
 for lang in "${LANGS[@]}"; do
-  kubectl -n "$NS" rollout status "deploy/async-worker-$lang" --timeout=300s
+  refused=""
+  for _ in $(seq 1 60); do
+    if kubectl -n "$NS" logs "deploy/async-worker-$lang" 2>/dev/null |
+      grep -qiE 'could not connect|connection failed'; then
+      refused=1
+      break
+    fi
+    sleep 2
+  done
+  [[ -n "$refused" ]] || { echo "the $lang worker logged no refused connection"; exit 1; }
+  echo "$lang: refused, retrying"
 done
+kubectl -n "$NS" scale deploy/activity-gateway --replicas=2
+kubectl -n "$NS" rollout status deploy/activity-gateway --timeout=300s
 
 log "Pod Security: the namespace admits every pod under \"restricted\""
 warnings=$(kubectl label --dry-run=server --overwrite ns "$NS" \
