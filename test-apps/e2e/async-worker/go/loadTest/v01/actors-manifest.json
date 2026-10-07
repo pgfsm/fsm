@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "loadTest",
+      "parentFsmVersion": "v01",
+      "src": "loadWork",
+      "asyncOperationName": "loadWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "go",
+      "filePath": "actors/loadWork/loadWork.go",
+      "exportedAsyncOperationName": "LoadWork"
+    }
+  ]
+}
