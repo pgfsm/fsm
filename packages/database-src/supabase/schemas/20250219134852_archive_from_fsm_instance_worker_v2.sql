@@ -336,7 +336,9 @@ BEGIN
             IF remove_schedule THEN
                 confirmed_removed_schedule_queue_data := array_append(confirmed_removed_schedule_queue_data, schedule_queue_entry);
             ELSE
-                new_total_schedule_queue_data := array_append(new_total_schedule_queue_data, schedule_queue_entry);
+                -- jsonb, not a SQL array: append with || (array_append failed on every
+                -- result, #495).
+                new_total_schedule_queue_data := new_total_schedule_queue_data || jsonb_build_array(schedule_queue_entry);
             END IF;
         END LOOP;
 
@@ -395,7 +397,8 @@ BEGIN
             IF remove_async_operation THEN
                 confirmed_removed_async_operation_queue_data := array_append(confirmed_removed_async_operation_queue_data, async_operation_queue_entry);
             ELSE
-                new_total_async_operation_queue_data := array_append(new_total_async_operation_queue_data, async_operation_queue_entry);
+                -- jsonb, not a SQL array: append with || (#495).
+                new_total_async_operation_queue_data := new_total_async_operation_queue_data || jsonb_build_array(async_operation_queue_entry);
             END IF;
         END LOOP;
 

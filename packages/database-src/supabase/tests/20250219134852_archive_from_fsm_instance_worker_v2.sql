@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(15);
 
 select has_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
   ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
@@ -118,6 +118,50 @@ select results_eq(
      ))->'parent_notify_result'->'queue_data'->'eventData'->>'eventType') $$,
   $$ values ('childDoneEvt'::text) $$,
   'a terminal status with a real parent queue id sends a completion event to the parent'
+);
+
+-- #495: an instance with outstanding actor invokes and scheduled events. This
+-- macrostep removes one invoke (its actor's queue message is cancelled) and
+-- keeps the other invoke and the scheduled event in the instance's totals.
+-- These totals are jsonb arrays; array_append on them used to fail every
+-- macrostep that had any outstanding invoke or scheduled event.
+delete from fsm_core.fsm_instance where fsm_name = 'archTotalsFsm' and fsm_version = 'v1';
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('22223333-4444-5555-6666-777788889999'::uuid, 'archTotalsFsm', 'v1');
+select pgmq.create(queue_name := '22223333-4444-5555-6666-777788889999');
+select pgmq.send(queue_name := '22223333-4444-5555-6666-777788889999', msg := '{"result": 1}'::jsonb);
+select pgmq.create(queue_name := 'archTotals_v1_i_work_t');
+select pgmq.send(queue_name := 'archTotals_v1_i_work_t', msg := '{"invoke": "a"}'::jsonb);
+
+select results_eq(
+  $$ select r->'new_total_async_operation_queue_data', r->'new_total_schedule_queue_data'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '22223333-4444-5555-6666-777788889999', 1::bigint,
+       NULL,
+       '[{"id": "a", "src": "work"}]'::jsonb,
+       NULL, NULL,
+       '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb,
+       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 1, "queueFnName": "work", "sendToParentQueueIdEventName": "a"},
+         {"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
+       '"active"'::jsonb, '{"s": 1}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb,
+       NULL, NULL, NULL) r $$,
+  $$ values (
+       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
+       '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb) $$,
+  'outstanding invokes and scheduled events this macrostep keeps stay in the new totals (#495)'
+);
+select results_eq(
+  $$ select total_async_operation_queue_data, total_schedule_queue_data
+     from fsm_core.fsm_instance where id = '22223333-4444-5555-6666-777788889999'::uuid $$,
+  $$ values (
+       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
+       '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb) $$,
+  'the instance row keeps the remaining invoke and scheduled event (#495)'
+);
+select is(
+  (select count(*)::int from pgmq.read('archTotals_v1_i_work_t', 0, 10)),
+  0,
+  'the removed invoke''s actor queue message is cancelled (#495)'
 );
 
 select * from finish();
