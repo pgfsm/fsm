@@ -1,0 +1,27 @@
+# Scaffolded by fsm-compiler-ts, yours to edit -- add your actors' own
+# dependencies here. `--overwrite generated-only` (what @pgfsm/cli uses)
+# never rewrites it once it exists.
+# Rust worker for the Activity Gateway. The SDK itself lives in the published
+# pgfsm-async-worker-sdk crate; this directory only holds the actors, their
+# compiler-generated registry and src/main.rs.
+#
+#   cargo run --release -- list    # print the actors in the registry
+#   cargo run --release -- start   # connect to the gateway and serve
+[package]
+name = "pgfsm-async-worker-rust"
+version = "0.0.0"
+edition = "2021"
+# An app, not a library: never published.
+publish = false
+
+[[bin]]
+name = "run-async-worker"
+path = "src/main.rs"
+
+[dependencies]
+pgfsm-async-worker-sdk = "0.3"
+# The actor handlers and the generated registry take and return
+# serde_json::Value.
+serde_json = "1"
+# main.rs configures logging once; the SDK only uses the `log` facade.
+env_logger = "0.11"
