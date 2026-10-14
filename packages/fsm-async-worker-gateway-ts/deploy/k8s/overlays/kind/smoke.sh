@@ -28,6 +28,10 @@ WORK=$(mktemp -d)
 
 log() { printf '\n==> %s\n' "$*"; }
 
+# Never `cmd | grep -q`: with pipefail, grep -q exiting at the first match can
+# kill a writer that has more output (SIGPIPE), failing the pipeline although
+# the line was there (#493). grep >/dev/null reads all of its input.
+
 # The actor each language's debug-only worker serves (no associative arrays:
 # macOS ships Bash 3.2).
 actor_for() {
@@ -45,6 +49,8 @@ cleanup() {
     kubectl get pods -A -o wide || true
     kubectl -n "$NS" describe pods || true
     kubectl -n "$NS" logs -l app.kubernetes.io/part-of=pgfsm --all-containers --tail=80 --prefix || true
+    # The gateways in full: their registrations are near the start.
+    kubectl -n "$NS" logs -l app.kubernetes.io/name=activity-gateway --tail=-1 --prefix || true
     kubectl -n pgfsm-db describe pods || true
     kubectl -n pgfsm-db logs deploy/postgres --tail=80 || true
     kubectl -n pgfsm-db logs deploy/postgres --previous --tail=80 || true
@@ -59,7 +65,7 @@ trap cleanup EXIT
 
 if [[ "${SKIP_CLUSTER:-0}" != 1 ]]; then
   log "Creating kind cluster $CLUSTER"
-  $KIND get clusters 2>/dev/null | grep -qx "$CLUSTER" || $KIND create cluster --name "$CLUSTER" --wait 120s
+  $KIND get clusters 2>/dev/null | grep -x "$CLUSTER" >/dev/null || $KIND create cluster --name "$CLUSTER" --wait 120s
   kubectl config use-context "kind-$CLUSTER" >/dev/null
 fi
 
@@ -146,7 +152,7 @@ for lang in "${LANGS[@]}"; do
   refused=""
   for _ in $(seq 1 60); do
     if kubectl -n "$NS" logs "deploy/async-worker-$lang" 2>/dev/null |
-      grep -qiE 'could not connect|connection failed'; then
+      grep -iE 'could not connect|connection failed' >/dev/null; then
       refused=1
       break
     fi
@@ -184,7 +190,7 @@ for lang in "${LANGS[@]}"; do
     id=$(worker_id "$lang" || true)
     if [[ -n "$id" ]]; then
       for pod in $gateway_pods; do
-        if kubectl -n "$NS" logs "$pod" | grep -qF "Worker \"$id\" authenticated with token \"$lang\""; then
+        if kubectl -n "$NS" logs "$pod" | grep -F "Worker \"$id\" authenticated with token \"$lang\"" >/dev/null; then
           found=$pod
           break 2
         fi
@@ -197,7 +203,7 @@ for lang in "${LANGS[@]}"; do
   echo "$lang: $id authenticated on $found"
 done
 if kubectl -n "$NS" logs -l app.kubernetes.io/name=activity-gateway --tail=-1 |
-  grep -qFf <(cat "$WORK"/token-*); then
+  grep -Ff <(cat "$WORK"/token-*) >/dev/null; then
   echo "a token value appears in the gateway logs"
   exit 1
 fi
@@ -210,7 +216,7 @@ for lang in "${LANGS[@]}"; do
     --async-operation-type internalAsyncOperation \
     --async-operation-name "$(actor_for "$lang")" --async-operation-version v01 \
     --async-operation-language "$lang" --input '{"smoke":true}' --timeout-ms 15000 2>&1 || true)
-  echo "$out" | grep -q "Result:" || { echo "$lang invoke failed: $out"; exit 1; }
+  grep "Result:" <<<"$out" >/dev/null || { echo "$lang invoke failed: $out"; exit 1; }
   echo "$lang: $(echo "$out" | grep -o 'Result: .*' | cut -c1-100)"
 done
 
