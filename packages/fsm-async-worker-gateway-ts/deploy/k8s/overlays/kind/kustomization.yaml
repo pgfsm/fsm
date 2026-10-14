@@ -20,3 +20,12 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: Never
+  # No gateway at first: smoke.sh starts it only after every worker has been
+  # refused, so each language's reconnect is tested (#484, #493).
+  - target:
+      kind: Deployment
+      name: activity-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
