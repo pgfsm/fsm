@@ -1386,7 +1386,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     const goMod = await Deno.readTextFile(`${base}/go/go.mod`);
     assertEquals(
       goMod,
-      "module pgfsm/async-worker-go\n\ngo 1.25.0\n\n" +
+      "module pgfsm/async-worker-go\n\ngo 1.26.0\n\n" +
         "require fsm-core-example/actor-registry-aggregate-generated v0.0.0\n" +
         "require fsm-core-example/creditcheck/v01/go/actors/checkbureau v0.0.0\n" +
         "require fsm-core-example/otherfsm/v02/go/actors/someactor v0.0.0\n" +
