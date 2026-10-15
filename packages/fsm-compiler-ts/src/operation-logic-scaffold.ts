@@ -1313,7 +1313,7 @@ const GO_ASYNC_WORKER_SDK_MODULE_PATH =
   "github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go";
 const GO_ASYNC_WORKER_SDK_VERSION = "v0.3.1";
 /** The generated worker `go.mod`'s `go` line: the SDK module's own minimum. */
-const GO_WORKER_GO_VERSION = "1.25.0";
+const GO_WORKER_GO_VERSION = "1.26.0";
 
 /**
  * This compiler's auto-generated header, as a `//` or `#` comment, optionally
