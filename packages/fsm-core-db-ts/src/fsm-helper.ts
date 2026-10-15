@@ -189,6 +189,11 @@ export async function microstep(
   entry_actions: Json;
   initial_actions: Json;
   transition_actions: Json;
+  /**
+   * The machine is now in a top-level final state (microstep_v2 from fsm_core
+   * 2.1.2, #500; absent on older databases, meaning not done).
+   */
+  done?: boolean;
 }> {
   try {
     const transitionRecordJson =
@@ -226,6 +231,7 @@ export async function microstep(
         entry_actions: Json;
         initial_actions: Json;
         transition_actions: Json;
+        done?: boolean;
       };
     }>(text, values);
     return (
@@ -236,6 +242,7 @@ export async function microstep(
         entry_actions: null,
         initial_actions: null,
         transition_actions: null,
+        done: false,
       }
     );
   } catch (err) {

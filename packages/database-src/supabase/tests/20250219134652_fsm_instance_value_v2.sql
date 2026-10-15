@@ -37,7 +37,9 @@ select results_eq(
 );
 select results_eq(
   $$ select r->'resolved_state_value' from fsm_core.get_fsm_data_resolve_state_value_v2('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb') r $$,
-  $$ values ('{"json": {"root": {"p1": "c1"}}, "all_nodes": ["root.p1.c1", "root.p1.c2", "root.p1.c1"]}'::jsonb) $$,
+  -- all_nodes is the full configuration: active leaves plus their ancestors
+  -- (root, root.p1), without duplicates (#503).
+  $$ values ('{"json": {"root": {"p1": "c1"}}, "all_nodes": ["root.p1.c2", "root.p1.c1", "root", "root.p1"]}'::jsonb) $$,
   'the result embeds resolve_state_value_v2''s output for the instance''s current state'
 );
 

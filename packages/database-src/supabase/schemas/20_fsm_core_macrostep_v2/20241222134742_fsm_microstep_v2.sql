@@ -27,6 +27,7 @@ DECLARE
 	entry_actions JSONB;
 	initial_actions JSONB;
 	result_json JSONB;
+	is_done BOOLEAN;
 BEGIN
 	RAISE NOTICE 'fsm_core.microstep_v2 called with event_name=%, fsm_name=%, fsm_version=%', event_name, fsm_name_param, fsm_version_param;
 	
@@ -75,14 +76,33 @@ BEGIN
 	updated_state_nodes_jsonb := fsm_core.build_nested_json_recursive(paths := updated_state_nodes);
 	RAISE NOTICE 'updated_state_nodes_jsonb: %', updated_state_nodes_jsonb;
 
-	-- 5. Return result as JSONB
+	-- 5. done: the machine is now in a top-level final state (a final child
+	--    of the root), so the instance has finished and the sync worker
+	--    marks it done (#500). The root is matched by parent_node rather
+	--    than by ltree depth: a root id with dots spans several labels.
+	is_done := EXISTS (
+		SELECT 1
+		FROM fsm_core.fsm_states fs
+		JOIN fsm_core.fsm_states root
+		  ON root.fsm_name = fs.fsm_name
+		 AND root.fsm_version = fs.fsm_version
+		 AND root.parent_node IS NULL
+		 AND fs.parent_node = root.computed_state_key_ltree::text
+		WHERE fs.fsm_name = fsm_name_param
+		  AND fs.fsm_version = fsm_version_param
+		  AND fs.type = 'final'
+		  AND fs.computed_state_key_ltree::text = ANY(updated_state_nodes)
+	);
+
+	-- 6. Return result as JSONB
 	result_json := jsonb_build_object(
 		'updated_state_value_node_set', updated_state_nodes,
 		'updated_state_value', updated_state_nodes_jsonb,
 		'exit_actions', exit_result->'exit_actions',
 		'entry_actions', entry_result->'entry_actions_for_states_to_enter',
 		'initial_actions', entry_result->'initial_actions_for_common_states',
-		'transition_actions', transition_actions
+		'transition_actions', transition_actions,
+		'done', is_done
 	);
 	RAISE NOTICE 'fsm_core.microstep_v2 result: %', result_json;
 	RETURN result_json;

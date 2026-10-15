@@ -9,6 +9,7 @@ const logger = getLogger(["@pgfsm/worker", "macrostep"]);
 const actionsLogger = getLogger(["@pgfsm/worker", "macrostep", "actions"]);
 import type { FsmQueueMessage } from "../types.ts";
 import type { MacrostepV2Result, SyncOperationRegistration } from "./type.ts";
+import { stateValueWithoutRoot } from "./state-value.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -381,15 +382,20 @@ export async function macrostepV2(
 
   macroSaveFnPayload.fsm_instance_data_save_fsm_context = current_context;
 
-  // BUG fixed microstepResult.updated_state_value will return json value with 'machine' as root key of object.
-  // while in xstate it will return state value without 'machine' as root key of object.
-  // example: microstepResult.updated_state_value = { machine: { creditCheck: 'Verifying_Credentials' } }
-  // while xstate nextState.value = { creditCheck: 'Verifying_Credentials' }
-  // so while returing state value from microstepResult we need to remove 'machine' root key to make it compatible with xstate state value.
-  macroSaveFnPayload.fsm_instance_data_save_fsm_state = microstepResult
-    .updated_state_value?.machine;
+  // microstepResult.updated_state_value is keyed by the machine's root
+  // (its id, `machine` by default); the saved state value is XState's, without
+  // it (#499).
+  macroSaveFnPayload.fsm_instance_data_save_fsm_state = stateValueWithoutRoot(
+    microstepResult.updated_state_value,
+  );
 
-  macroSaveFnPayload.fsm_instance_data_save_fsm_status = "active"; // "active" | "done" | "error" | "stopped"
+  // Done once the machine is in a top-level final state (microstep_v2 from
+  // fsm_core 2.1.2 reports it; an older database never does). Read
+  // defensively, so this doesn't need a newer @pgfsm/db's types (#500).
+  const done = (microstepResult as { done?: unknown }).done === true;
+  macroSaveFnPayload.fsm_instance_data_save_fsm_status = done
+    ? "done"
+    : "active"; // "active" | "done" | "error" | "stopped"
   macroSaveFnPayload.fsm_instance_data_save_fsm_error = {};
   macroSaveFnPayload.fsm_instance_data_save_fsm_output = {};
 
