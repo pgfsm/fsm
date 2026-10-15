@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import type { Json } from "../src/database.types.ts";
 import type { DBDeps } from "../src/custom.types.ts";

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 import type {
   ActiveWorker,

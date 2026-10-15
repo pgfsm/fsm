@@ -2,6 +2,7 @@
 // an fsm.json, a read of what fsm_core.fsm_json holds, and a batch loader that
 // validates, orders children before parents and loads in one transaction.
 import { getLogger } from "@logtape/logtape";
+// @ts-types="@types/pg"
 import type { PoolClient } from "pg";
 import type { Json } from "./database.types.ts";
 import type { DBDeps } from "./custom.types.ts";

@@ -51,5 +51,6 @@ hooks = [
 repo = "local"
 hooks = [
   { id = "branch-name", name = "branch naming convention", entry = "deno run --allow-run=git scripts/git-hooks/check-branch-name.ts", language = "system", pass_filenames = false, always_run = true },
+  { id = "pg-ts-types", name = "pg imports carry @ts-types (#479)", entry = "deno run --allow-read --allow-run=git scripts/check-pg-types-directive.ts", language = "system", pass_filenames = true, types = ["ts"] },
   { id = "commit-msg-issue-ref", name = "commit references issue", entry = "deno run --allow-read --allow-run=git scripts/git-hooks/check-commit-msg.ts", language = "system", stages = ["commit-msg"] },
 ]

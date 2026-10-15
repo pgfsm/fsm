@@ -1,5 +1,7 @@
 import { getLogger } from "@logtape/logtape";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
+// @ts-types="@types/pg"
 import type { PoolConfig } from "pg";
 import type { DBDeps } from "@pgfsm/db";
 import {
