@@ -89,6 +89,21 @@ export async function startFSMWorker(
               logger.info("Message archived with result: {result}", {
                 result: archiveResult,
               });
+              // A finished instance needs no worker: returning releases its
+              // lock and frees this fsmlet's slot for another instance
+              // (startFSMWorkerWithDBLock's cleanup), instead of holding it
+              // forever (#500).
+              if (
+                macrostepV2Result.fsm_instance_data_save_fsm_status === "done"
+              ) {
+                logger.info(
+                  "FSM instance {queueName} is done; stopping its worker",
+                  {
+                    queueName,
+                  },
+                );
+                return;
+              }
             }
             // await archiveMessage(deps, queueName, msg.msg_id || 1);
           } else {

@@ -118,6 +118,8 @@ DECLARE
     child_log TEXT;
     all_fsm_states fsm_core.fsm_states[];
     temp_flag BOOLEAN;
+    active_node text;
+    ancestor text;
 BEGIN
     RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] Input state_paths: %', input_state_paths;
     
@@ -169,24 +171,40 @@ BEGIN
         ELSIF node_rec.type = 'parallel' THEN
             
             RAISE NOTICE 'Parallel node % found, iterating children...', node_rec.computed_state_key_ltree;
-            IF node_rec.states IS NOT NULL THEN
-                FOR child_rec IN SELECT value FROM jsonb_each(node_rec.states) LOOP
-                    RAISE NOTICE 'Processing child node in parallel state: %', child_rec.value->>'id';
-                    
-                    initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version, input_state_path := fsm_core.sanitize_text_to_ltree(input_text := child_rec.value->>'id'));
-                    RAISE NOTICE 'Initial states with ancestors for child node %: %', child_rec.value->>'id', initialStates;
-                    
-                    IF initialStates IS NOT NULL THEN
-                        FOREACH initialStateNode IN ARRAY initialStates LOOP
-                            IF initialStateNode IS NOT NULL AND NOT (initialStateNode = ANY(resultNodeset)) THEN
-                                resultNodeset := array_append(resultNodeset, initialStateNode);
-                                RAISE NOTICE 'Added child initialStateNode: %', initialStateNode;
-                            END IF;
-                        END LOOP;
-                    END IF;
-                END LOOP;
-            END IF;
-        ELSEIF node_rec.type = 'atomic' THEN
+            -- Regions are this FSM version's child rows, by key path like every
+            -- other path here: a child's `id` (in `states`) is only its key path
+            -- when it has no custom id. History children are not regions.
+            FOR child_rec IN
+                SELECT fs.computed_state_key_ltree::text AS path
+                FROM fsm_core.fsm_states fs
+                WHERE fs.fsm_name = input_fsm_name
+                  AND fs.fsm_version = input_fsm_version
+                  AND fs.parent_node = node_rec.computed_state_key_ltree::text
+                  AND fs.type <> 'history'
+                ORDER BY fs.fsm_order
+            LOOP
+                -- A region in the saved state keeps its own states (it is a node of
+                -- its own here); only a region missing from it starts at its
+                -- initial state. Adding every region's initial chain reset parallel
+                -- states on every step (#503).
+                CONTINUE WHEN child_rec.path = ANY(input_state_paths);
+                RAISE NOTICE 'Processing child node in parallel state: %', child_rec.path;
+
+                initialStates := fsm_core.fsm_get_initial_state_nodes_with_ancestors_v2(input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version, input_state_path := child_rec.path::ltree);
+                RAISE NOTICE 'Initial states with ancestors for child node %: %', child_rec.path, initialStates;
+
+                IF initialStates IS NOT NULL THEN
+                    FOREACH initialStateNode IN ARRAY initialStates LOOP
+                        IF initialStateNode IS NOT NULL AND NOT (initialStateNode = ANY(resultNodeset)) THEN
+                            resultNodeset := array_append(resultNodeset, initialStateNode);
+                            RAISE NOTICE 'Added child initialStateNode: %', initialStateNode;
+                        END IF;
+                    END LOOP;
+                END IF;
+            END LOOP;
+        -- A final state is an active leaf too; skipping it dropped every
+        -- region that had finished (#503).
+        ELSEIF node_rec.type IN ('atomic', 'final') THEN
             
             RAISE NOTICE 'Atomic node % found, adding to resultNodeset...', node_rec.computed_state_key_ltree;
             resultNodeset := array_append(resultNodeset, node_rec.computed_state_key_ltree::text);
@@ -202,6 +220,18 @@ BEGIN
    
     RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] Log:%', log_text;
     RAISE NOTICE '[fsm_core.fsm_get_all_state_nodes_v2] ResultNodeset: %', resultNodeset;
+    -- An active node's ancestors are active too (XState's configuration), so
+    -- a transition defined on a compound or parallel state (its onDone, or an
+    -- event it handles) matches. Without them only leaves could (#503).
+    FOREACH active_node IN ARRAY COALESCE(resultNodeset, ARRAY[]::text[]) LOOP
+        FOR i IN 1 .. nlevel(active_node::ltree) - 1 LOOP
+            ancestor := subpath(active_node::ltree, 0, i)::text;
+            IF NOT (ancestor = ANY(resultNodeset)) THEN
+                resultNodeset := array_append(resultNodeset, ancestor);
+            END IF;
+        END LOOP;
+    END LOOP;
+
     RETURN COALESCE(resultNodeset, ARRAY[]::text[]);
 END;
 $$ LANGUAGE plpgsql;
