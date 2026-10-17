@@ -1,5 +1,5 @@
 begin;
-select plan(24);
+select plan(30);
 
 -- Tier 1: structural
 select has_function('fsm_core', 'remove_hashtag_from_text', ARRAY['text'], 'remove_hashtag_from_text(text) exists');
@@ -9,6 +9,7 @@ select has_function('fsm_core', 'sanitize_text_array_to_ltree_text_array', ARRAY
 select has_function('fsm_core', 'sql_lca_from_array', ARRAY['ltree[]'], 'sql_lca_from_array(ltree[]) exists');
 select has_function('fsm_core', 'get_proper_ancestors_ltree', ARRAY['ltree', 'ltree'], 'get_proper_ancestors_ltree(ltree, ltree) exists');
 select has_function('fsm_core', 'get_proper_ancestors', ARRAY['text', 'text'], 'get_proper_ancestors(text, text) exists');
+select has_function('fsm_core', 'is_descendant', ARRAY['ltree', 'ltree'], 'is_descendant(ltree, ltree) exists');
 
 -- Tier 2: fsm_core.remove_hashtag_from_text
 -- Current behavior: the function reads its local `sanitized_text` variable before
@@ -109,6 +110,13 @@ select results_eq(
   $$ values (ARRAY['a.b.c', 'a.b']::text[]) $$,
   'the text-typed variant matches the ltree-typed variant'
 );
+
+-- is_descendant: XState's isDescendant (#506).
+select ok(fsm_core.is_descendant('r.a'::ltree, 'r'::ltree), 'a child is a descendant of its parent');
+select ok(fsm_core.is_descendant('r.a.b'::ltree, 'r'::ltree), 'a grandchild is a descendant too');
+select ok(not fsm_core.is_descendant('r'::ltree, 'r'::ltree), 'a state is not its own descendant');
+select ok(not fsm_core.is_descendant('r'::ltree, 'r.a'::ltree), 'a parent is not a descendant of its child');
+select ok(fsm_core.is_descendant('r'::ltree, NULL), 'with no parent every state is a descendant, the root included (isDescendant(node, undefined))');
 
 select * from finish();
 rollback;

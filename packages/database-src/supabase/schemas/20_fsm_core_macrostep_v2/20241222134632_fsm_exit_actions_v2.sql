@@ -57,44 +57,24 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 
-CREATE OR REPLACE FUNCTION fsm_core.compute_child_exit_set_v2(
-  transition_domain_lca ltree,
-  state_node_set ltree[]
-) RETURNS TEXT[] AS $$
-DECLARE
-  st ltree;
-  result TEXT[] := ARRAY[]::TEXT[];
-BEGIN
-  
-  FOREACH st IN ARRAY state_node_set LOOP
-    -- use ltree descendant operator: left <@ right (st <@ domain) means st is contained by domain
-    IF st <@ transition_domain_lca THEN
-      result := result || st::text;
-    END IF;
-  END LOOP;
-
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
--- Example usage:
-SELECT fsm_core.compute_child_exit_set_v2('machine.creditCheck.Entering_Information'::ltree, ARRAY[
-  'machine.creditCheck.Entering_Information.CheckingCreditScores'::ltree,
-  'machine.creditCheck.Entering_Information.CheckingCreditScores.CheckingEquiGavin'::ltree,
-  'machine.okay'::ltree,
-  'machine.creditCheck'::ltree
-]);
-
-
-
 CREATE OR REPLACE FUNCTION fsm_core.compute_full_exit_set_v2(
   transition_record fsm_core.fsm_transitions,
   state_node_set TEXT[]
 ) RETURNS TEXT[] AS $$
+-- XState's computeExitSet (packages/core/src/stateUtils.ts) for one
+-- transition, step by step:
+--
+--   if (t.target?.length) {
+--     const domain = getTransitionDomain(t, historyValue);
+--     if (t.reenter && t.source === domain) statesToExit.add(domain);
+--     for (const stateNode of stateNodeSet) {
+--       if (isDescendant(stateNode, domain)) statesToExit.add(stateNode);
+--     }
+--   }
 DECLARE
   transition_domain_lca ltree;
-  state_node_set_ltree ltree[];
-  sanitized_source TEXT;
+  sanitized_source ltree;
+  state_node ltree;
   exit_set TEXT[] := ARRAY[]::TEXT[];
   child_exit TEXT[] := ARRAY[]::TEXT[];
   combined TEXT[];
@@ -103,33 +83,41 @@ BEGIN
     RETURN ARRAY[]::TEXT[];
   END IF;
 
-
-  RAISE NOTICE 'Skipped Calculating Transition Domain LCA from transition_record: %', transition_record;
-
-  RAISE NOTICE 'Fetching Transition Domain LCA from transition_record: %', transition_record;
-
-  transition_domain_lca := transition_record.computed_transition_domain_lca;
-
-  state_node_set_ltree = fsm_core.sanitize_text_array_to_ltree_array(input_array := state_node_set);
-  -- call child exit set using the domain text (fsm_core.compute_child_exit_set_v2 will sanitize)
-  child_exit := fsm_core.compute_child_exit_set_v2(transition_domain_lca := transition_domain_lca, state_node_set := state_node_set_ltree);
-
-  -- sanitize source to compare with LCA in the same normalized form
-  sanitized_source := transition_record.computed_sanitized_source_ltree;
-
-  IF sanitized_source IS NOT NULL AND sanitized_source <> '' THEN
-    IF transition_domain_lca IS NOT NULL THEN
-      IF transition_domain_lca::TEXT = sanitized_source::TEXT THEN
-        -- Only add the source_text when the transition JSON has a truthy
-        -- "reenter" flag. Use COALESCE to safely cast NULL to false.
-        IF COALESCE(transition_record.reenter, 'false')::boolean = true THEN
-          exit_set := exit_set || sanitized_source;
-        END IF;
-      END IF;
-    END IF;
+  -- if (t.target?.length): a targetless transition exits nothing; XState only
+  -- runs its actions (#506).
+  IF COALESCE(array_length(transition_record.computed_sanitized_target_ltree_array, 1), 0) = 0 THEN
+    RETURN ARRAY[]::TEXT[];
   END IF;
 
-  -- combine and deduplicate
+  -- const domain = getTransitionDomain(t, historyValue): stored by the loader
+  -- in computed_transition_domain_lca (get_transition_domain_v2). NULL means
+  -- no domain (a re-entering transition at the root).
+  transition_domain_lca := transition_record.computed_transition_domain_lca;
+  sanitized_source := transition_record.computed_sanitized_source_ltree;
+
+  -- if (t.reenter && t.source === domain) statesToExit.add(domain)
+  IF COALESCE(transition_record.reenter, false) AND sanitized_source = transition_domain_lca THEN
+    exit_set := exit_set || transition_domain_lca::TEXT;
+  END IF;
+
+  -- for (const stateNode of stateNodeSet) {
+  --   if (isDescendant(stateNode, domain)) statesToExit.add(stateNode);
+  -- }
+  -- The domain itself stays active unless the transition re-enters it (added
+  -- above); no domain (NULL) exits every active state (#506).
+  --
+  -- Written as a loop to match XState line by line. The same filter as one
+  -- query (no faster for an instance's handful of active states):
+  --   SELECT COALESCE(array_agg(st::TEXT), ARRAY[]::TEXT[]) INTO child_exit
+  --   FROM unnest(fsm_core.sanitize_text_array_to_ltree_array(input_array := state_node_set)) AS st
+  --   WHERE fsm_core.is_descendant(input_child := st, input_parent := transition_domain_lca);
+  FOREACH state_node IN ARRAY COALESCE(fsm_core.sanitize_text_array_to_ltree_array(input_array := state_node_set), ARRAY[]::ltree[]) LOOP
+    IF fsm_core.is_descendant(input_child := state_node, input_parent := transition_domain_lca) THEN
+      child_exit := child_exit || state_node::TEXT;
+    END IF;
+  END LOOP;
+
+  -- statesToExit is a Set: combine and deduplicate.
   combined := exit_set || child_exit;
   SELECT array_agg(DISTINCT x) INTO combined FROM unnest(combined) AS x WHERE x IS NOT NULL;
 
@@ -148,13 +136,26 @@ CREATE OR REPLACE FUNCTION fsm_core.compute_exit_actions_v2(
 RETURNS JSONB
 LANGUAGE plpgsql
 AS $BODY$
+-- XState's exitStates (packages/core/src/stateUtils.ts) for one transition:
+--
+--   const statesToExit = computeExitSet(transitions, mutStateNodeSet, historyValue);
+--   statesToExit.sort((a, b) => b.order - a.order);
+--   // (record history for each exited state's history children)
+--   for (const s of statesToExit) {
+--     ... [...s.exit, ...s.invoke.map((def) => stopChild(def.id))] ...
+--     mutStateNodeSet.delete(s);
+--   }
+--
+-- Returns exit_nodes (statesToExit; microstep_v2 removes them from the active
+-- states) and exit_actions in that order. History states are not supported, so
+-- nothing is recorded for them.
 DECLARE
   exit_set_result TEXT[];
   actions_result JSONB;
 BEGIN
 
   
-  -- If no transition found, return empty array
+  -- No transition: nothing exits.
   IF transition_record IS NULL THEN
       RETURN jsonb_build_object(
               'exit_nodes', '[]'::JSONB,
@@ -165,17 +166,19 @@ BEGIN
 
 
   RAISE NOTICE 'Transition Record: %', transition_record;
-  -- Step 1: Call compute_full_exit_set function
+  -- const statesToExit = computeExitSet(transitions, mutStateNodeSet, historyValue);
   SELECT fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := input_state_node_set) INTO exit_set_result;
 
   RAISE NOTICE 'Exit Set Result: %', exit_set_result;
 
-  -- Step 2: Call fsm_core.get_exit_actions_v2 with the result from step 1
+  -- statesToExit.sort((a, b) => b.order - a.order), then per state its exit
+  -- actions and a stopChild per invoke: get_exit_actions_v2 returns them in
+  -- that order (fsm_order DESC, exit before invoke).
   SELECT fsm_core.get_exit_actions_v2(input_state_paths := exit_set_result, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version) INTO actions_result;
 
   RAISE NOTICE 'exit_actions Result: %', actions_result;
 
-  -- Return both exit_nodes and exit_actions as a JSON object
+  -- exit_nodes: what microstep_v2 removes (mutStateNodeSet.delete(s)).
   RETURN jsonb_build_object(
     'exit_nodes', exit_set_result,
     'exit_actions', actions_result->'actions'

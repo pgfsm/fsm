@@ -29,7 +29,8 @@ BEGIN
             fs.computed_state_key_ltree = ANY(input_state_paths::ltree[])
             AND fs.fsm_name = input_fsm_name
             AND fs.fsm_version = input_fsm_version
-        ORDER BY fs.fsm_order DESC
+        -- Parents before children, like get_entry_actions_v2 (#506).
+        ORDER BY fs.fsm_order ASC
     LOOP
         initial_record := rec.initial_data;
         
@@ -54,7 +55,7 @@ BEGIN
     END LOOP;
     
     -- Return single JSON with combined actions array
-    -- Actions are already sorted by fsm_order DESC due to the ORDER BY in the query
+    -- Actions are already sorted by fsm_order ASC due to the ORDER BY in the query
     -- RETURN jsonb_build_object('actions', all_actions);
     RETURN all_actions;
 END;
@@ -86,7 +87,8 @@ BEGIN
             fs.computed_state_key_ltree = ANY(input_state_paths::ltree[])
             AND fs.fsm_name = input_fsm_name
             AND fs.fsm_version = input_fsm_version
-        ORDER BY fs.fsm_order DESC
+        -- Parents before children, as XState enters states (#506).
+        ORDER BY fs.fsm_order ASC
     LOOP
         -- Process entry actions and add to combined array
         IF jsonb_array_length(rec.entry_actions) > 0 THEN
@@ -118,7 +120,7 @@ BEGIN
     END LOOP;
     
     -- Return single JSON with combined actions array
-    -- Actions are already sorted by fsm_order DESC due to the ORDER BY in the query
+    -- Actions are already sorted by fsm_order ASC due to the ORDER BY in the query
     -- RETURN jsonb_build_object('actions', all_actions);
     RETURN all_actions;
 END;
@@ -135,9 +137,36 @@ CREATE TYPE fsm_core.descendant_states_result_v2 AS (
     descendant_states_for_default_entry TEXT[]
 );
 
--- Function to add descendant states and return the complete array
 CREATE OR REPLACE FUNCTION fsm_core.get_descendant_states_for_entry_v2(input_state_id TEXT, fsm_name_param TEXT, fsm_version_param TEXT)
 RETURNS fsm_core.descendant_states_result_v2 AS $$
+-- XState's addDescendantStatesToEnter (packages/core/src/stateUtils.ts) for one
+-- state, without history:
+--
+--   if (stateNode.type === 'compound') {
+--     const [initialState] = stateNode.initial.target;
+--     statesToEnter.add(initialState);
+--     statesForDefaultEntry.add(initialState);
+--     addDescendantStatesToEnter(initialState, historyValue, statesForDefaultEntry, statesToEnter);
+--     addProperAncestorStatesToEnter(initialState, stateNode, statesToEnter, historyValue, statesForDefaultEntry);
+--   } else if (stateNode.type === 'parallel') {
+--     for (const child of getChildren(stateNode).filter((sn) => !isHistoryNode(sn))) {
+--       if (![...statesToEnter].some((s) => isDescendant(s, child))) {
+--         statesToEnter.add(child);
+--         statesForDefaultEntry.add(child);
+--         addDescendantStatesToEnter(child, historyValue, statesForDefaultEntry, statesToEnter);
+--       }
+--     }
+--   }
+--
+-- XState adds to the caller's sets; this returns the two lists
+-- (descendant_states_to_enter = statesToEnter, descendant_states_for_default_entry
+-- = statesForDefaultEntry) for the caller to merge. Differences:
+--   * The parallel branch has no `some(isDescendant)` check. It sees only its
+--     own lists, not the caller's statesToEnter, so it enters every region at
+--     its initial state even when another target of the same transition is
+--     already inside that region (only a transition with several targets can
+--     do that). It does not skip history children either (#507).
+--   * The initial target is looked up by id (#507).
 DECLARE
     result fsm_core.descendant_states_result_v2;
     descendant_states_to_enter TEXT[] := ARRAY[]::TEXT[];
@@ -174,50 +203,31 @@ BEGIN
     
     -- Process based on state type
     IF state_record.type = 'compound' THEN
-        -- For compound states: add initial target and recurse with it
+        -- if (stateNode.type === 'compound')
         IF state_record.initial IS NOT NULL AND state_record.initial->'target' IS NOT NULL THEN
             initial_state := state_record.initial->'target'->>0;
             RAISE NOTICE 'Initial state: %', initial_state;
-            -- Sanitize initial_state
+            -- const [initialState] = stateNode.initial.target: an id, mapped to its key path
             sanitized_initial_state := fsm_core.sanitize_text_to_ltree(input_text := initial_state)::TEXT;
             SELECT computed_state_key_ltree INTO sanitized_initial_state_ltree
             FROM fsm_core.fsm_states
             WHERE computed_state_id_ltree = sanitized_initial_state::ltree;
             
             
-            -- Add sanitized initial state to both arrays
+            -- statesToEnter.add(initialState); statesForDefaultEntry.add(initialState);
             descendant_states_to_enter := array_append(descendant_states_to_enter, sanitized_initial_state_ltree::text);
             descendant_states_for_default_entry := array_append(descendant_states_for_default_entry, sanitized_initial_state_ltree::text);
             
-            -- Recursive call with sanitized initial target and merge results
+            -- addDescendantStatesToEnter(initialState, historyValue, statesForDefaultEntry, statesToEnter);
             child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_initial_state_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
 
             descendant_states_to_enter := array_cat(descendant_states_to_enter, child_result.descendant_states_to_enter);
             descendant_states_for_default_entry := array_cat(descendant_states_for_default_entry, child_result.descendant_states_for_default_entry);
 
-            -- TODO: add all inbetween states nodes from target node and its' initial node
-            -- addProperAncestorStatesToEnter(
-            --     initialState,
-            --     stateNode,
-            --     statesToEnter,
-            --     historyValue,
-            --     statesForDefaultEntry
-            -- );
-
-            -- function addProperAncestorStatesToEnter(
-            --     stateNode: AnyStateNode,
-            --     toStateNode: AnyStateNode | undefined,
-            --     statesToEnter: Set<AnyStateNode>,
-            --     historyValue: HistoryValue<any, any>,
-            --     statesForDefaultEntry: Set<AnyStateNode>
-            --     ) {
-            --         fsm_core.get_ancestor_states_for_entry_v2(
-            --             statesToEnter,
-            --             historyValue,
-            --             statesForDefaultEntry,
-            --             get_proper_ancestors(stateNode, toStateNode)
-            --         );
-            --     }
+            -- addProperAncestorStatesToEnter(initialState, stateNode, ...):
+            -- addAncestorStatesToEnter(..., getProperAncestors(initialState, stateNode)),
+            -- the states between stateNode and its initial target. There are none
+            -- when the initial target is a direct child, as it is in XState v5.
 
             ancestors := fsm_core.get_proper_ancestors(state_path_ltree := sanitized_initial_state_ltree::TEXT, to_state_path_ltree := state_record.computed_state_key_ltree::TEXT);
             ancestors_result := fsm_core.get_ancestor_states_for_entry_v2(
@@ -227,14 +237,17 @@ BEGIN
                 fsm_version_param := fsm_version_param
             );
 
-            -- TODO: DIFF::  for  descendant_states_to_enter and descendant_states_for_default_entry
+            -- Only its states to enter are kept. Its default entries would come
+            -- from a parallel state between stateNode and the initial target;
+            -- there is none when the target is a direct child.
             descendant_states_to_enter := array_cat(descendant_states_to_enter, ancestors_result.ancestor_states_to_enter);
             
 
         END IF;
         
     ELSIF state_record.type = 'parallel' THEN
-        -- For parallel states: recurse with all child states
+        -- else if (stateNode.type === 'parallel'): every child, with no
+        -- some(isDescendant) check and no history filter (see above).
         child_states := state_record.states;
         
         IF child_states IS NOT NULL THEN
@@ -242,29 +255,28 @@ BEGIN
             LOOP
                 child_id := child_state->>'id';
                 
-                -- Sanitize child_id
+                -- the child's id, mapped to its key path
                 sanitized_child_id := fsm_core.sanitize_text_to_ltree(input_text := child_id)::TEXT;
                 SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                 FROM fsm_core.fsm_states
                 WHERE computed_state_id_ltree = sanitized_child_id::ltree;
 
-                -- Add sanitized child state to both arrays
+                -- statesToEnter.add(child); statesForDefaultEntry.add(child);
                 descendant_states_to_enter := array_append(descendant_states_to_enter, sanitized_child_id_ltree::text);
                 descendant_states_for_default_entry := array_append(descendant_states_for_default_entry, sanitized_child_id_ltree::text);
                 
-                -- Recursive call with sanitized child state and merge results
+                -- addDescendantStatesToEnter(child, historyValue, statesForDefaultEntry, statesToEnter);
                 child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_child_id_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
                 descendant_states_to_enter := array_cat(descendant_states_to_enter, child_result.descendant_states_to_enter);
                 descendant_states_for_default_entry := array_cat(descendant_states_for_default_entry, child_result.descendant_states_for_default_entry);
             END LOOP;
         END IF;
     ELSIF state_record.type = 'atomic' OR state_record.type = 'final' THEN
-        -- For atomic, final no descendants to add
-        -- DO NOTHING
+        -- Atomic and final states have no descendants.
         
     END IF;
    
-    -- Remove duplicates from both arrays
+    -- They are Sets in XState: remove duplicates.
     SELECT array_agg(DISTINCT state) INTO descendant_states_to_enter 
     FROM unnest(descendant_states_to_enter) AS state;
     
@@ -291,13 +303,39 @@ CREATE TYPE fsm_core.ancestor_states_result_v2 AS (
 );
 
 
--- Adds ancestor states (and parallel children) to new arrays, handling reentrancy and parallel states.
 CREATE OR REPLACE FUNCTION fsm_core.get_ancestor_states_for_entry_v2(
     ancestors TEXT[],                -- Array of ancestor state_path (as text)
     reentrancy_domain TEXT,          -- Optional: state_path (as text), can be NULL
     fsm_name_param TEXT,
     fsm_version_param TEXT
 ) RETURNS fsm_core.ancestor_states_result_v2 AS $$
+-- XState's addAncestorStatesToEnter (packages/core/src/stateUtils.ts), without
+-- history:
+--
+--   for (const anc of ancestors) {
+--     if (!reentrancyDomain || isDescendant(anc, reentrancyDomain)) {
+--       statesToEnter.add(anc);
+--     }
+--     if (anc.type === 'parallel') {
+--       for (const child of getChildren(anc).filter((sn) => !isHistoryNode(sn))) {
+--         if (![...statesToEnter].some((s) => isDescendant(s, child))) {
+--           statesToEnter.add(child);
+--           addDescendantStatesToEnter(child, historyValue, statesForDefaultEntry, statesToEnter);
+--         }
+--       }
+--     }
+--   }
+--
+-- Returns the two lists (ancestor_states_to_enter = statesToEnter,
+-- ancestor_states_for_default_entry = statesForDefaultEntry) for the caller to
+-- merge. The `some(isDescendant)` check looks at this function's own list, not
+-- the caller's whole statesToEnter, so a region also counts as covering itself
+-- (s = child OR is_descendant(s, child)): the ancestors come nearest first, so
+-- the region on the way to the target is already in the list when its parallel
+-- parent is reached. A region
+-- added here is not a default entry, as in XState; its initial states are
+-- (addDescendantStatesToEnter). History children are not skipped, and the
+-- child is looked up by id (#507).
 DECLARE
     ancestor_states_to_enter TEXT[] := ARRAY[]::TEXT[];
     ancestor_states_for_default_entry TEXT[] := ARRAY[]::TEXT[];
@@ -307,20 +345,21 @@ DECLARE
     child_id TEXT;
     sanitized_child_id TEXT;
     sanitized_child_id_ltree LTREE;
-    is_descendant BOOLEAN;
+    child_covered BOOLEAN;
+    st_path TEXT;
     child_result RECORD;
-    i INT;
     result fsm_core.ancestor_states_result_v2;
 BEGIN
     FOREACH anc IN ARRAY ancestors LOOP
-        -- If no reentrancy_domain or anc is descendant of reentrancy_domain, add to ancestor_states_to_enter
-        IF reentrancy_domain IS NULL OR anc::ltree <@ reentrancy_domain::ltree THEN
+        -- if (!reentrancyDomain || isDescendant(anc, reentrancyDomain)): a
+        -- parallel domain added to the ancestors is not entered again (#506).
+        IF fsm_core.is_descendant(input_child := anc::ltree, input_parent := reentrancy_domain::ltree) THEN
             IF NOT (anc = ANY(ancestor_states_to_enter)) THEN
                 ancestor_states_to_enter := array_append(ancestor_states_to_enter, anc);
             END IF;
         END IF;
 
-        -- Check if ancestor is a parallel state
+        -- if (anc.type === 'parallel')
         SELECT * INTO anc_record
         FROM fsm_core.fsm_states
         WHERE computed_state_key_ltree = anc::ltree
@@ -329,33 +368,47 @@ BEGIN
         LIMIT 1;
 
         IF anc_record.type = 'parallel' THEN
-            -- For each child of the parallel state
+            -- for (const child of getChildren(anc))
             IF anc_record.states IS NOT NULL THEN
                 FOR child_state IN SELECT value FROM jsonb_each(anc_record.states)
                 LOOP
                     child_id := child_state->>'id';
-                    -- Sanitize child_id
+                    -- the child's id, mapped to its key path
                     sanitized_child_id := fsm_core.sanitize_text_to_ltree(input_text := child_id)::TEXT;
                     SELECT computed_state_key_ltree INTO sanitized_child_id_ltree
                     FROM fsm_core.fsm_states
                     WHERE computed_state_id_ltree = sanitized_child_id::ltree;
-                    -- Only add child if no state in ancestor_states_to_enter is a descendant of child
-                    is_descendant := FALSE;
+                    -- if (![...statesToEnter].some((s) => isDescendant(s, child)))
+                    -- The child itself counts too (s = child): this checks its own
+                    -- list, where the region on the way to the target stands for the
+                    -- target (see above). An empty list covers nothing: a region
+                    -- targeted directly from a sibling region leaves it empty here.
+                    -- FOREACH runs zero times on an empty array; the earlier
+                    -- FOR i IN 1..array_length(...) failed on its NULL bound (#506).
+                    --
+                    -- The same check as one query:
+                    --   child_covered := EXISTS (
+                    --       SELECT 1 FROM unnest(ancestor_states_to_enter) AS st(path)
+                    --       WHERE st.path::ltree = sanitized_child_id_ltree
+                    --          OR fsm_core.is_descendant(input_child := st.path::ltree, input_parent := sanitized_child_id_ltree));
                     IF sanitized_child_id_ltree::TEXT IS NOT NULL THEN
-                        FOR i IN 1..array_length(ancestor_states_to_enter, 1) LOOP
-                            IF ancestor_states_to_enter[i]::ltree <@ sanitized_child_id_ltree::ltree THEN
-                                is_descendant := TRUE;
+                        child_covered := FALSE;
+                        FOREACH st_path IN ARRAY COALESCE(ancestor_states_to_enter, ARRAY[]::TEXT[]) LOOP
+                            IF st_path::ltree = sanitized_child_id_ltree
+                               OR fsm_core.is_descendant(input_child := st_path::ltree, input_parent := sanitized_child_id_ltree) THEN
+                                child_covered := TRUE;
                                 EXIT;
                             END IF;
                         END LOOP;
-                        IF NOT is_descendant THEN
+                        IF NOT child_covered THEN
                             ancestor_states_to_enter := array_append(ancestor_states_to_enter, sanitized_child_id_ltree::text);
                            
                            
-                            -- Optionally, add descendants here if needed
+                            -- statesToEnter.add(child) (above), then
+                            -- addDescendantStatesToEnter(child, historyValue, statesForDefaultEntry, statesToEnter):
                             child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_child_id_ltree::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
                             
-                            -- TODO: DIFF:: only child_result would be added in both place ancestor_states_to_enter and ancestor_states_for_default_entry 
+                            -- its states to enter, and its default entries (statesForDefaultEntry)
                             ancestor_states_to_enter := array_cat(ancestor_states_to_enter, child_result.descendant_states_to_enter);
                             ancestor_states_for_default_entry := array_cat(ancestor_states_for_default_entry, child_result.descendant_states_for_default_entry);
                         END IF;
@@ -365,7 +418,7 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Remove duplicates before returning
+    -- They are Sets in XState: remove duplicates.
     SELECT array_agg(DISTINCT s) INTO ancestor_states_to_enter FROM unnest(ancestor_states_to_enter) AS s;
     SELECT array_agg(DISTINCT s) INTO ancestor_states_for_default_entry FROM unnest(ancestor_states_for_default_entry) AS s;
     
@@ -380,6 +433,35 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fsm_core.compute_entry_actions_v2(transition_record fsm_core.fsm_transitions, fsm_name_param TEXT, fsm_version_param TEXT, is_initial_transition BOOLEAN)
 RETURNS JSONB AS $$
+-- XState's computeEntrySet, plus the part of enterStates that picks the
+-- actions (packages/core/src/stateUtils.ts), for one transition:
+--
+--   for (const t of transitions) {
+--     const domain = getTransitionDomain(t, historyValue);
+--     for (const s of t.target || []) {                        // Part 1
+--       if (t.source !== s || t.source !== domain || t.reenter) {
+--         statesToEnter.add(s);
+--         statesForDefaultEntry.add(s);
+--       }
+--       addDescendantStatesToEnter(s, historyValue, statesForDefaultEntry, statesToEnter);
+--     }
+--     for (const s of getEffectiveTargetStates(t, historyValue)) {  // Part 2
+--       const ancestors = getProperAncestors(s, domain);
+--       if (domain?.type === 'parallel') ancestors.push(domain);
+--       addAncestorStatesToEnter(statesToEnter, historyValue, statesForDefaultEntry,
+--         ancestors, !t.source.parent && t.reenter ? undefined : domain);
+--     }
+--   }
+--   // enterStates, for each state to enter, parents first: its entry actions,
+--   // a spawnChild per invoke, then initial.actions if
+--   // statesForDefaultEntry.has(stateNodeToEnter).
+--
+-- Returned as lists: states_to_enter (statesToEnter), states_for_default_entry
+-- (statesForDefaultEntry), common_states (the states to enter that are default
+-- entries), their entry and invoke actions, and the common states' initial
+-- actions. The sync worker runs the actions in enterStates' order
+-- (orderEntryActions). The domain is the stored computed_transition_domain_lca
+-- (get_transition_domain_v2). History states are not supported.
 DECLARE
     sanitized_source_ltree LTREE;
     sanitized_target_ltree_array LTREE[];
@@ -391,6 +473,7 @@ DECLARE
     ancestors TEXT[];
     ancestors_result RECORD;
     domain_type TEXT;
+    source_is_root BOOLEAN;
     child_result RECORD;
     states_to_enter TEXT[];
     states_for_default_entry TEXT[];
@@ -398,30 +481,58 @@ DECLARE
     state_to_check TEXT;
     entry_actions_result JSONB;
     initial_actions_for_common_states_result JSONB;
-    resolve_state_value_result JSONB;
+    root_path ltree;
     final_result JSONB;
 BEGIN
 
-   -- if is_initial_transition true 
-   -- then return empty result
+    -- The initial step. XState's initialMicrostep runs this same computeEntrySet
+    -- with a synthetic transition:
+    --
+    --   { target: [...getInitialStateNodes(root)], source: root, reenter: true, actions: [] }
+    --
+    -- It has no domain (it re-enters, and the root has no proper ancestor), so
+    -- every target is entered and is a default entry, and the descendant and
+    -- ancestor steps add nothing new: the targets are the root and its whole
+    -- initial chain. So the result is just getInitialStateNodes(root), which
+    -- fsm_get_initial_state_nodes_v2 computes directly.
+    --
+    -- Why not build that synthetic transition and run it through the general
+    -- path below, as XState does: the answer is already known, and the first
+    -- event of every instance would then depend on all of the general entry
+    -- code (descendants, ancestors, reentrancy) and its queries, for nothing.
     IF is_initial_transition THEN
-          select fsm_core.resolve_state_value_v2(input_json := '{}'::jsonb, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO resolve_state_value_result;
-        --   states_to_enter := resolve_state_value_result->'all_nodes';
-          states_to_enter := array(
-                SELECT jsonb_array_elements_text(resolve_state_value_result->'all_nodes')
-            );
+          SELECT fs.computed_state_key_ltree INTO root_path
+          FROM fsm_core.fsm_states fs
+          WHERE fs.fsm_name = fsm_name_param
+            AND fs.fsm_version = fsm_version_param
+            AND fs.parent_node IS NULL;
+          -- statesToEnter = getInitialStateNodes(root): the root, a compound's
+          -- initial target, and every child of a parallel state, recursively.
+          states_to_enter := COALESCE(
+              fsm_core.fsm_get_initial_state_nodes_v2(input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param, input_state_path := root_path),
+              ARRAY[]::TEXT[]
+          );
 
           SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
+          -- Every state entered is a default entry, so each one's initial
+          -- actions run; the sync worker runs them after that state's entry
+          -- actions (#506).
+          SELECT fsm_core.get_initial_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
           RETURN jsonb_build_object(
                 'states_to_enter', states_to_enter,
-                'states_for_default_entry', '[]'::jsonb,
-                'common_states', '[]'::jsonb,
-                'entry_actions_for_states_to_enter', entry_actions_result::jsonb,
-                'initial_actions_for_common_states', '[]'::jsonb
+                -- Every target is a default entry (computeEntrySet), and
+                -- enterStates adds the root too:
+                --   if (isInitial) statesForDefaultEntry.add(machine.root)
+                -- The root is in states_to_enter already, so that line needs
+                -- nothing extra here.
+                'states_for_default_entry', states_to_enter,
+                'common_states', states_to_enter,
+                'entry_actions_for_states_to_enter', COALESCE(entry_actions_result, '[]'::jsonb),
+                'initial_actions_for_common_states', COALESCE(initial_actions_for_common_states_result, '[]'::jsonb)
           );
     END IF;
     
-    -- If no transition found, return empty result
+    -- No transition: nothing is entered.
     IF transition_record IS NULL THEN
         RETURN jsonb_build_object(
             'states_to_enter', '[]'::jsonb,
@@ -447,17 +558,14 @@ BEGIN
 
     reenter_flag := COALESCE((transition_record.reenter)::BOOLEAN, FALSE);
     
-    -- Part 1 : add all target state node and call addDescendantStatesToEnter to add all inital and node childern nodes
-    -- Call getStatesForEntry with the transition record and fsm parameters
-    -- result := getStatesForEntry(source_state, target_states_json, transition_domain_lca::TEXT, reenter_flag, fsm_name_param, fsm_version_param);
-    -- above line is and getStatesForEntry fn replaced with below code
+    -- Part 1: for (const s of t.target || []) { ... }
     RAISE NOTICE 'sanitized_target_ltree_array: %', sanitized_target_ltree_array;
     IF sanitized_target_ltree_array IS NOT NULL AND array_length(sanitized_target_ltree_array, 1) > 0 THEN
         FOR sanitized_target_state IN SELECT unnest(sanitized_target_ltree_array)
         LOOP
             
-            -- Apply the logic from the JavaScript code
             IF (
+                -- if (t.source !== s || t.source !== domain || t.reenter):
                 -- if the target is different than the source then it will *definitely* be entered
                 sanitized_source_ltree::TEXT != sanitized_target_state::TEXT OR
                 -- we know that the domain can't lie within the source
@@ -467,7 +575,6 @@ BEGIN
                 reenter_flag
             ) THEN
                 
-                -- Add to states_to_enter if not already present
                 
                     states_to_enter := array_append(states_to_enter, sanitized_target_state);
                 
@@ -480,7 +587,7 @@ BEGIN
             RAISE NOTICE 'states_to_enter: %', states_to_enter;
             RAISE NOTICE 'states_for_default_entry: %', states_for_default_entry;
             
-            -- call fsm_core.get_descendant_states_for_entry_v2 for each child state
+            -- addDescendantStatesToEnter(s, historyValue, statesForDefaultEntry, statesToEnter);
             child_result := fsm_core.get_descendant_states_for_entry_v2(input_state_id := sanitized_target_state::text, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param);
             RAISE NOTICE 'After fsm_core.get_descendant_states_for_entry_v2 for sanitized_target_state: %', sanitized_target_state;
             RAISE NOTICE 'child_result: %', child_result;
@@ -491,53 +598,71 @@ BEGIN
         END LOOP;
     END IF;
 
-    -- Part 2 : add all inbetween state nodes from domain to target state node
+    -- Part 2: for (const s of getEffectiveTargetStates(t, historyValue)) { ... }
 
     SELECT type INTO domain_type FROM fsm_core.fsm_states
                 WHERE computed_state_key_ltree = transition_domain_lca
                   AND fsm_name = fsm_name_param
                   AND fsm_version = fsm_version_param;
+    
 
-    -- TODO : pending fn of getEffectiveTargetStates would be transition_json -> 'target';
+    -- getEffectiveTargetStates(t, historyValue): the targets themselves; history
+    -- states, which it would resolve, are not supported.
     effective_target_states_ltree_array = transition_record.computed_sanitized_target_ltree_array;
     RAISE NOTICE 'effective_target_states_ltree_array: %', effective_target_states_ltree_array;
-    -- for (const s of effective_target_states) {
-    --   const ancestors = get_proper_ancestors(s, domain);
-    --   if (domain?.type === 'parallel') {
-    --     ancestors.push(domain);
-    --   }
-    --   fsm_core.get_ancestor_states_for_entry_v2(
-    --     statesToEnter,
-    --     historyValue,
-    --     statesForDefaultEntry,
-    --     ancestors,
-    --     !t.source.parent && t.reenter ? undefined : domain
-    --   );
-    -- }
+
+    -- !t.source.parent: the transition's source is the root (#506).
+    source_is_root := EXISTS (
+        SELECT 1 FROM fsm_core.fsm_states fs
+        WHERE fs.fsm_name = fsm_name_param
+          AND fs.fsm_version = fsm_version_param
+          AND fs.computed_state_key_ltree = sanitized_source_ltree
+          AND fs.parent_node IS NULL
+    );
 
     IF effective_target_states_ltree_array IS NOT NULL AND array_length(effective_target_states_ltree_array, 1) > 0 THEN
         FOR sanitized_effective_target_state IN SELECT unnest(effective_target_states_ltree_array)
         LOOP
 
-            
+            -- const ancestors = getProperAncestors(s, domain);
+            IF transition_domain_lca IS NULL THEN
+                -- No domain: getProperAncestors(s, undefined) is every ancestor
+                -- state, the root included, nearest first. get_proper_ancestors
+                -- stops at once on a NULL end, and walking the path would also
+                -- yield the labels of a root id with dots, so take them from
+                -- the FSM's states (#506).
+                SELECT COALESCE(array_agg(fs.computed_state_key_ltree::TEXT ORDER BY nlevel(fs.computed_state_key_ltree) DESC), ARRAY[]::TEXT[])
+                INTO ancestors
+                FROM fsm_core.fsm_states fs
+                WHERE fs.fsm_name = fsm_name_param
+                  AND fs.fsm_version = fsm_version_param
+                  AND fsm_core.is_descendant(input_child := sanitized_effective_target_state::ltree, input_parent := fs.computed_state_key_ltree);
+            ELSE
+                ancestors := fsm_core.get_proper_ancestors(state_path_ltree := sanitized_effective_target_state::TEXT, to_state_path_ltree := transition_domain_lca::TEXT);
+            END IF;
 
-            -- Get ancestors for s and domain
-            ancestors := fsm_core.get_proper_ancestors(state_path_ltree := sanitized_effective_target_state::TEXT, to_state_path_ltree := transition_domain_lca::TEXT);
-
-            -- If domain is parallel, append domain to ancestors
+            -- if (domain?.type === 'parallel') ancestors.push(domain);
             IF domain_type = 'parallel' THEN
                 ancestors := array_append(ancestors, transition_domain_lca::TEXT);
             END IF;
 
             
+            -- addAncestorStatesToEnter(statesToEnter, historyValue,
+            --   statesForDefaultEntry, ancestors, reentrancyDomain)
             ancestors_result := fsm_core.get_ancestor_states_for_entry_v2(
                 ancestors := ancestors,
-                reentrancy_domain := CASE WHEN transition_record.source IS NULL AND transition_record.reenter THEN NULL ELSE transition_domain_lca::TEXT END,
+                -- !t.source.parent && t.reenter ? undefined : domain (#506)
+                reentrancy_domain := CASE WHEN source_is_root AND reenter_flag THEN NULL ELSE transition_domain_lca::TEXT END,
                 fsm_name_param := fsm_name_param,
                 fsm_version_param := fsm_version_param
             );
 
             states_to_enter := array_cat(states_to_enter, ancestors_result.ancestor_states_to_enter);
+            -- Regions of a parallel ancestor entered on the way also enter their
+            -- initial states by default (addAncestorStatesToEnter calls
+            -- addDescendantStatesToEnter with statesForDefaultEntry), so those
+            -- states' initial actions run too (#506).
+            states_for_default_entry := array_cat(states_for_default_entry, ancestors_result.ancestor_states_for_default_entry);
 
         END LOOP;
     END IF;
@@ -546,40 +671,42 @@ BEGIN
     RAISE NOTICE 'Final states_for_default_entry before dedup: %', states_for_default_entry;
   
     
-    -- Find common elements between states_to_enter and states_for_default_entry
+    -- common_states: the states to enter that statesForDefaultEntry has, i.e.
+    -- the ones whose initial.actions run (enterStates).
     FOR state_to_check IN SELECT unnest(states_to_enter)
     LOOP
-        -- Check if statesForDefaultEntry has this stateNodeToEnter
+        -- statesForDefaultEntry.has(stateNodeToEnter)
         IF state_to_check = ANY(states_for_default_entry) THEN
-            -- Add to common_states (actions array equivalent)
             common_states := array_append(common_states, state_to_check);
         END IF;
     END LOOP;
     
-    -- Log the common states found
     RAISE NOTICE 'Common states found: %', common_states;
         
         
   
 
-    -- Get entry actions for states_to_enter
+    -- enterStates: for each state to enter, parents first, actions.push(...entry)
+    -- and a spawnChild per invoke: get_entry_actions_v2 (fsm_order ASC).
     SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
 
-    -- -- Get entry actions for states_for_default_entry
-    -- SELECT fsm_core.get_entry_actions_v2(states_for_default_entry, fsm_name_param, fsm_version_param) INTO default_entry_actions_result;
-    -- Get entry actions for the common states
+    -- Initial actions of the states entered by default (XState's
+    -- statesForDefaultEntry). Returned on their own: the sync worker runs each
+    -- one after its state's entry actions, as XState's enterStates does (#506).
     IF array_length(common_states, 1) > 0 THEN
         SELECT fsm_core.get_initial_actions_v2(input_state_paths := common_states, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
     END IF;
 
 
     -- Build the final result containing both arrays and their respective actions
+    -- Empty arrays, not JSON null, when nothing is entered (a targetless
+    -- transition): microstep_v2 expands states_to_enter (#506).
     final_result := jsonb_build_object(
-        'states_to_enter', to_jsonb(states_to_enter),
-        'states_for_default_entry', to_jsonb(states_for_default_entry),
-        'common_states', to_jsonb(common_states),
-        'entry_actions_for_states_to_enter', entry_actions_result,
-        'initial_actions_for_common_states', initial_actions_for_common_states_result
+        'states_to_enter', COALESCE(to_jsonb(states_to_enter), '[]'::jsonb),
+        'states_for_default_entry', COALESCE(to_jsonb(states_for_default_entry), '[]'::jsonb),
+        'common_states', COALESCE(to_jsonb(common_states), '[]'::jsonb),
+        'entry_actions_for_states_to_enter', COALESCE(entry_actions_result, '[]'::jsonb),
+        'initial_actions_for_common_states', COALESCE(initial_actions_for_common_states_result, '[]'::jsonb)
     );
 
     RETURN final_result;

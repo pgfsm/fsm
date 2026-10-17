@@ -133,6 +133,127 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- fsm_core.find_least_common_ancestor_v2: XState's findLeastCommonAncestor
+-- (packages/core/src/stateUtils.ts) for state paths: the deepest state that is
+-- a proper ancestor of every path, never one of the paths itself. NULL when
+-- there is none, i.e. one of the paths is the root (#506).
+--
+-- Why it searches fsm_core.fsm_states instead of working on the paths alone:
+-- a path label is not always a state, so a pure ltree answer can name a path
+-- that no state has.
+--   * A root id with dots spans several labels: root "com.acme.m" has the key
+--     path com.acme.m, and ltree's lca('com.acme.m.a', 'com.acme.m') is
+--     'com.acme', above the root. (For a path that is the root, lca() is ''.)
+--     Checking the result against the root path would catch that case.
+--   * A state key with a dot (e.g. "s3.1", which the loader accepts) adds a
+--     label that is no state: parent "p" and child key "s3.1" give the path
+--     p.s3.1, so the prefix p.s3 is not an ancestor state. Nothing but the
+--     states themselves tells that apart.
+-- Only states of this FSM version can be returned here, so the answer is
+-- always a real state.
+--
+-- Why not sql_lca_from_array: it returns the longest common prefix of the
+-- paths, which can be one of them, e.g. ARRAY['r.c.x', 'r.c'] -> 'r.c' (the
+-- target), where XState's least common ancestor is a proper ancestor, 'r'.
+-- The loader stored that prefix as computed_transition_domain_lca before
+-- #506, a wrong domain for every transition to an ancestor of its source and
+-- every re-entering one.
+CREATE OR REPLACE FUNCTION fsm_core.find_least_common_ancestor_v2(
+    input_paths ltree[],
+    input_fsm_name text,
+    input_fsm_version text
+) RETURNS ltree AS $$
+    -- Where ltree's lca() would do: it already returns a proper ancestor
+    -- (lca('r.c.x', 'r.c') = 'r', never one of its inputs), so with the root's
+    -- key path as an extra input (input_root) this needs no table:
+    --
+    --   SELECT CASE WHEN lca(input_paths) <@ input_root THEN lca(input_paths) END;
+    --
+    -- That form is only for a pure function (IMMUTABLE, not reading
+    -- fsm_core.fsm_states): it takes the root path as an input instead of
+    -- looking anything up.
+    -- `<@ input_root` rejects a result above the root ('' or 'com.acme' for
+    -- the root "com.acme.m"). Or, without the root input, keep lca() only
+    -- when it is a state, which rejects those same results:
+    --
+    --   SELECT fs.computed_state_key_ltree
+    --   FROM fsm_core.fsm_states fs
+    --   WHERE fs.fsm_name = input_fsm_name
+    --     AND fs.fsm_version = input_fsm_version
+    --     AND fs.computed_state_key_ltree = lca(input_paths);
+    --
+    -- Both are only right while no state key has a dot: lca('k.p.s3.1',
+    -- 'k.p.s3.2') = 'k.p.s3', which is no state (their parent is k.p). The
+    -- first returns that non-state; the second returns NULL, so the domain
+    -- falls back to the root, too high. Searching the states below gives k.p.
+    SELECT fs.computed_state_key_ltree
+    FROM fsm_core.fsm_states fs
+    WHERE fs.fsm_name = input_fsm_name
+      AND fs.fsm_version = input_fsm_version
+      AND fs.computed_state_key_ltree @> ALL (input_paths)       -- contains every path
+      AND NOT (fs.computed_state_key_ltree = ANY (input_paths))  -- but is none of them
+    ORDER BY nlevel(fs.computed_state_key_ltree) DESC            -- the deepest one
+    LIMIT 1;
+$$ LANGUAGE sql STABLE;
+
+
+-- fsm_core.get_transition_domain_v2: XState's getTransitionDomain
+-- (packages/core/src/stateUtils.ts) for a transition's key paths. The loader
+-- stores it in fsm_transitions.computed_transition_domain_lca, which exit and
+-- entry read: active states strictly below the domain exit, and entry enters
+-- down to it (#506). NULL means no domain: a re-entering transition at the
+-- root, which exits every active state. History targets are not supported, so
+-- the targets are used as given (XState resolves them first).
+CREATE OR REPLACE FUNCTION fsm_core.get_transition_domain_v2(
+    input_source ltree,
+    input_targets ltree[],
+    input_reenter boolean,
+    input_fsm_name text,
+    input_fsm_version text
+) RETURNS ltree AS $$
+DECLARE
+    targets ltree[] := COALESCE(input_targets, ARRAY[]::ltree[]);
+    domain_path ltree;
+BEGIN
+    -- if (!transition.reenter && targetStates.every((target) =>
+    --     target === transition.source || isDescendant(target, transition.source)))
+    --   return transition.source;
+    IF NOT COALESCE(input_reenter, false) AND NOT EXISTS (
+        SELECT 1 FROM unnest(targets) AS t(p)
+        WHERE NOT (t.p = input_source
+                   OR fsm_core.is_descendant(input_child := t.p, input_parent := input_source))
+    ) THEN
+        RETURN input_source;
+    END IF;
+
+    -- const lca = findLeastCommonAncestor(targetStates.concat(transition.source));
+    -- if (lca) return lca;
+    domain_path := fsm_core.find_least_common_ancestor_v2(
+        input_paths := targets || input_source,
+        input_fsm_name := input_fsm_name,
+        input_fsm_version := input_fsm_version
+    );
+    IF domain_path IS NOT NULL THEN
+        RETURN domain_path;
+    END IF;
+
+    -- No proper ancestor: the source or a target is the root.
+    -- if (transition.reenter) return;   (no domain)
+    IF COALESCE(input_reenter, false) THEN
+        RETURN NULL;
+    END IF;
+
+    -- return transition.source.machine.root;
+    SELECT fs.computed_state_key_ltree INTO domain_path
+    FROM fsm_core.fsm_states fs
+    WHERE fs.fsm_name = input_fsm_name
+      AND fs.fsm_version = input_fsm_version
+      AND fs.parent_node IS NULL;
+    RETURN domain_path;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
 -- DROP FUNCTION IF EXISTS fsm_core.load_fsm_transition_from_json_v2;
 
 CREATE OR REPLACE FUNCTION fsm_core.load_fsm_transition_from_json_v2(json_input JSONB, root_node_text TEXT, fsm_name TEXT, fsm_version TEXT) RETURNS JSONB AS $$
@@ -229,24 +350,18 @@ BEGIN
                         reenter := NULL;
                     END IF;
     
-                    -- Use already sanitized target array in transition_domain_lca in v2
-                    transition_domain_lca := fsm_core.sql_lca_from_array(
-                        paths := ARRAY[sanitized_source_ltree::ltree] || sanitized_target_ltree_array
+                    -- XState's transition domain, stored once here and read by exit
+                    -- and entry. The longest common prefix of the source and targets
+                    -- (sql_lca_from_array) is not it when a target is the source or
+                    -- an ancestor of it, or the transition re-enters (#506).
+                    transition_domain_lca := fsm_core.get_transition_domain_v2(
+                        input_source := sanitized_source_ltree,
+                        input_targets := sanitized_target_ltree_array,
+                        input_reenter := reenter,
+                        input_fsm_name := fsm_name,
+                        input_fsm_version := fsm_version
                     );
-
                     RAISE NOTICE 'transition_domain_lca: %', transition_domain_lca;
-                    -- If LCA calculation returned NULL, fall back to the root label of source (first path element)
-                    IF transition_domain_lca::TEXT IS NULL THEN
-                        BEGIN
-                            -- subpath(...,0,1) returns the root/top-most label of the ltree
-                            transition_domain_lca := subpath(sanitized_source_ltree, 0, 1);
-                            RAISE NOTICE 'Fallback transition_domain_lca with subpath %', transition_domain_lca;
-                        EXCEPTION WHEN OTHERS THEN
-                            -- leave as NULL if source isn't a valid ltree
-                            RAISE NOTICE 'Error in fallback transition_domain_lca calculation: %', SQLERRM;
-                            transition_domain_lca := NULL;
-                        END;
-                    END IF;
 
                     INSERT INTO fsm_core.fsm_transitions (
                         source, computed_sanitized_source_ltree, target, computed_sanitized_target_ltree_array, event_type, actions, cond, computed_transition_domain_lca,

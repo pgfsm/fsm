@@ -10,6 +10,7 @@ const actionsLogger = getLogger(["@pgfsm/worker", "macrostep", "actions"]);
 import type { FsmQueueMessage } from "../types.ts";
 import type { MacrostepV2Result, SyncOperationRegistration } from "./type.ts";
 import { stateValueWithoutRoot } from "./state-value.ts";
+import { orderEntryActions } from "./entry-actions.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -87,7 +88,7 @@ function findSyncOperationHandler(
 // @returns Promise<void>
 // Helper: run an action implementation resolved from the FSM's sync-operation registrations.
 export async function runActionImplementation(
-  actionKind: "exit" | "transition" | "entry",
+  actionKind: "exit" | "transition" | "entry" | "initial",
   action: Json,
   syncOperationRegistrations: SyncOperationRegistration[] | null | undefined,
   current_context: Json,
@@ -312,7 +313,12 @@ export async function macrostepV2(
     );
   }
 
-  const entry_actions = microstepResult.entry_actions || [];
+  // Entry, invoke and initial actions in XState's order: microstep_v2 returns
+  // the initial actions separately (#506).
+  const entry_actions = orderEntryActions(
+    microstepResult.entry_actions,
+    microstepResult.initial_actions,
+  );
   for (const action of entry_actions) {
     // find actions implementations and execute fn
     // do comapre based on type or  action_type
@@ -331,7 +337,7 @@ export async function macrostepV2(
     } else {
       // fsm events - try to execute implementation from actionsModule
       current_context = await runActionImplementation(
-        "entry",
+        action.action_type === "initial" ? "initial" : "entry",
         action,
         syncOperationRegistrations,
         current_context,

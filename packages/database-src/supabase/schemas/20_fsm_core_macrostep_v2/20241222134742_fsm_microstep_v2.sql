@@ -14,6 +14,20 @@ CREATE OR REPLACE FUNCTION fsm_core.microstep_v2(
 	fsm_version_param TEXT
 )
 RETURNS JSONB AS $$
+-- XState's microstep (packages/core/src/stateUtils.ts) for one transition:
+--
+--   const filteredTransitions = removeConflictingTransitions(transitions, ...);
+--   if (!isInitial) [nextState, historyValue] = exitStates(...);       // 1
+--   nextState = resolveActionsAndContext(..., filteredTransitions.flatMap((t) => t.actions));  // 2
+--   nextState = enterStates(..., isInitial);                            // 3
+--   // mutStateNodeSet: exitStates deletes each exited state, enterStates
+--   // adds each entered one                                            // 4
+--   if (nextState.status === 'done') ... the remaining states' exit actions
+--
+-- Only one transition is passed (no conflicts to remove), and the actions are
+-- returned for the sync worker to run in that order instead of being run here.
+-- `done` covers a top-level final state (5); done.state events and the exit
+-- actions on completion are not done yet (#504).
 DECLARE
 	
 	transition_actions JSONB;
@@ -28,39 +42,45 @@ DECLARE
 	initial_actions JSONB;
 	result_json JSONB;
 	is_done BOOLEAN;
+	is_initial BOOLEAN;
 BEGIN
 	RAISE NOTICE 'fsm_core.microstep_v2 called with event_name=%, fsm_name=%, fsm_version=%', event_name, fsm_name_param, fsm_version_param;
 	
 	RAISE NOTICE 'state_value_node_set: %', state_value_node_set;
 
 
-	-- 1. Call processEventTransitionForExit
-	exit_result := fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := state_value_node_set, input_fsm_name := transition_record.fsm_name, input_fsm_version := transition_record.fsm_version);
+	-- The initial step enters the machine's initial states and exits nothing,
+	-- whatever transition record it is given (#506).
+	is_initial := event_name = 'initialTransition_event';
+
+	-- 1. Exit states
+	-- if (!isInitial) exitStates(...)
+	IF is_initial THEN
+		exit_result := jsonb_build_object('exit_nodes', '[]'::jsonb, 'exit_actions', '[]'::jsonb);
+	ELSE
+		exit_result := fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := state_value_node_set, input_fsm_name := transition_record.fsm_name, input_fsm_version := transition_record.fsm_version);
+	END IF;
 	RAISE NOTICE 'exit_result: %', exit_result;
 	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO exit_nodes
 	FROM jsonb_array_elements_text(COALESCE(exit_result->'exit_nodes', '[]'::jsonb));
 	RAISE NOTICE 'exit_nodes: %', exit_nodes;
 
 
-	-- 2. transition_actions
+	-- 2. Execute transition content:
+	-- resolveActionsAndContext(..., filteredTransitions.flatMap((t) => t.actions))
 	transition_actions := transition_record.actions;
 	RAISE NOTICE 'transition_actions: %', transition_actions; 
 
-	-- 3. Call fsm_core.compute_entry_actions_v2
-	-- if event is initialTransition_event, set is_initial_transition to TRUE
-	IF event_name = 'initialTransition_event' THEN
-		entry_result := fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := TRUE);
-	ELSE
-		entry_result := fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := FALSE);
-	END IF;
+	-- 3. Enter states: enterStates(..., isInitial)
+	entry_result := fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := is_initial);
 	RAISE NOTICE 'entry_result: %', entry_result;
 	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO entry_nodes
 	FROM jsonb_array_elements_text(COALESCE(entry_result->'states_to_enter', '[]'::jsonb));
 	RAISE NOTICE 'entry_nodes: %', entry_nodes;
 	
 
-	-- 4. Compute updated state node set:
-	--    (state_value_node_set - exit_nodes) + entry_nodes
+	-- 4. mutStateNodeSet: exitStates deletes each exited state and enterStates
+	--    adds each entered one: (state_value_node_set - exit_nodes) + entry_nodes
 	updated_state_nodes := ARRAY(
 		SELECT DISTINCT x FROM (
 			SELECT unnest(state_value_node_set) AS x
@@ -69,6 +89,7 @@ BEGIN
 			UNION
 			SELECT unnest(entry_nodes) AS x
 		) t
+		ORDER BY x
 	);
 	RAISE NOTICE 'updated_state_nodes: %', updated_state_nodes;
 

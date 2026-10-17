@@ -157,6 +157,14 @@ SELECT lca(ARRAY['a'::ltree, 'a.b.c'::ltree, 'a.b.c.f'::ltree]);
 -- This function takes an array of LTREE paths and returns their lowest common ancestor (LCA) as an LTREE.
 -- If the input array is empty or NULL, the function returns NULL.
 -- If there is no common ancestor, the function returns NULL.
+--
+-- Note: this is the longest common PREFIX, which can be one of the input paths
+-- (ARRAY['r.c.x', 'r.c'] -> 'r.c'; ARRAY['r.a', 'r.a'] -> 'r.a'). It is not
+-- XState's least common ancestor, which is always a proper ancestor ('r' for
+-- both). The v2 loader used it for computed_transition_domain_lca, which made
+-- the stored domain wrong for transitions to an ancestor of their source and
+-- for re-entering ones; transition domains now come from
+-- get_transition_domain_v2 / find_least_common_ancestor_v2 (#506).
 CREATE OR REPLACE FUNCTION fsm_core.sql_lca_from_array(paths ltree[]) RETURNS ltree AS $$
   SELECT ancestor
   FROM (
@@ -186,6 +194,20 @@ SELECT fsm_core.sql_lca_from_array(ARRAY['a.b.c.d'::ltree, 'a.b.c.e'::ltree, 'a.
 SELECT fsm_core.sql_lca_from_array(ARRAY['a.b.c.d'::ltree, 'x.y.z'::ltree]);
 -- output: NULL
 
+
+
+-- XState's isDescendant (packages/core/src/stateUtils.ts) for state paths:
+-- true when input_child is strictly inside input_parent, so a state is not its
+-- own descendant. With no parent (NULL) every state is a descendant, as
+-- isDescendant(node, undefined) is in XState: that is how a transition with no
+-- domain exits every active state (#506).
+CREATE OR REPLACE FUNCTION fsm_core.is_descendant(
+    input_child ltree,
+    input_parent ltree
+) RETURNS boolean AS $$
+    SELECT input_parent IS NULL
+        OR (input_child <@ input_parent AND input_child <> input_parent);
+$$ LANGUAGE sql IMMUTABLE;
 
 
 -- Returns all proper ancestors of state_path_ltree, stopping before to_state_path_ltree (exclusive).
