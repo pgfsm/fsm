@@ -11,6 +11,7 @@ import type { FsmQueueMessage } from "../types.ts";
 import type { MacrostepV2Result, SyncOperationRegistration } from "./type.ts";
 import { stateValueWithoutRoot } from "./state-value.ts";
 import { orderEntryActions } from "./entry-actions.ts";
+import { selectTransitions } from "./select-transitions.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -145,9 +146,6 @@ export async function macrostepV2(
     json: Json;
     all_nodes: string[];
   };
-  // Simulate work (replace with real logic)
-  await new Promise<void>((resolve) => setTimeout(resolve, 500));
-
   const msgData = msg.message as unknown as FsmQueueMessage;
   const eventType = msgData.eventData?.eventType;
 
@@ -188,85 +186,65 @@ export async function macrostepV2(
   const new_schedule_queue_data = [] as Json[];
   const new_async_operation_queue_data = [] as Json[];
 
-  let selectedTransition;
-  if (eventType === "initialTransition_event") {
-    selectedTransition = null;
-  } else {
-    const allTransitions = (await selectAllTransitions(
+  // XState's transition selection (#510): from each active leaf, deepest
+  // first, the first candidate whose guard passes, at most one per region.
+  let selectedTransition: FsmTransitionRow | null = null;
+  if (eventType !== "initialTransition_event") {
+    const candidates = ((await selectAllTransitions(
       deps,
       eventType,
       resolvedState.all_nodes,
       fsmName,
       fsmVersion.toString(),
-    )) as FsmTransitionRow[] | null;
-    if (!allTransitions || allTransitions.length === 0) {
-      logger.error("No transitions found for the given FSM name and version");
-      // TODO check if eventType is xstate.error.actor  we may want to pust FSM to error state
-      // stateUtils.ts > code 1676 to 1685 for reference on how to handle xstate.error.actor event
-      return;
-    } else if (allTransitions.length === 1) {
-      selectedTransition = allTransitions[0];
-    } else {
-      // iterate through all transitions and evaluate guard conditions
-      const filteredTransitions: FsmTransitionRow[] = [];
-      for (const transition of allTransitions) {
-        if (typeof transition.cond === "string") {
-          if (transition.cond === "true") filteredTransitions.push(transition);
-        } else if (
-          typeof transition.cond === "object" && transition.cond !== null
-        ) {
-          const condObj = transition.cond as
-            & { type: string }
-            & Record<
-              string,
-              Json
-            >;
-          if (condObj.type) {
-            const guardFn = findSyncOperationHandler(
-              syncOperationRegistrations,
-              "guard",
-              condObj.type,
-            );
-            if (typeof guardFn === "function") {
-              const eval_result = await guardFn(
-                current_context,
-                condObj,
-                { deps, queueName, msg },
-              );
-              if (eval_result) filteredTransitions.push(transition);
-            } else {
-              logger.error("Guard function {guard} not found in module", {
-                guard: condObj.type,
-              });
-            }
-          } else {
-            logger.error("Condition object does not have a type key: {cond}", {
-              cond: condObj,
-            });
-          }
-        } else {
-          logger.error("Condition is neither string nor object: {cond}", {
-            cond: transition.cond,
+    )) as FsmTransitionRow[] | null) ?? [];
+    const enabled = await selectTransitions(
+      candidates,
+      resolvedState.all_nodes,
+      async (guard) => {
+        const guardFn = findSyncOperationHandler(
+          syncOperationRegistrations,
+          "guard",
+          guard.type,
+        );
+        if (typeof guardFn !== "function") {
+          // XState throws for a guard without an implementation; here the
+          // transition is just not taken.
+          logger.error("Guard {guard} has no implementation", {
+            guard: guard.type,
           });
+          return false;
         }
-      }
-
-      if (filteredTransitions.length === 0) {
-        logger.error(
-          "No valid transitions found for the given event and state",
+        // Generated guard stubs take (context, event).
+        return Boolean(
+          await guardFn(current_context, msgData.eventData, {
+            params: guard.params ?? {},
+            deps,
+            queueName,
+            msg,
+          }),
         );
-        return;
-      } else if (filteredTransitions.length > 1) {
-        logger.error(
-          "Multiple valid transitions found for the given event and state. Ambiguous transition",
+      },
+    );
+    if (enabled.length === 0) {
+      // Like XState, an event no transition takes is consumed with no change:
+      // microstep_v2 with no transition keeps the state.
+      // TODO(#504): an unhandled xstate.error.actor.* event sets status error.
+      logger.info("No enabled transition for event {eventType}", {
+        eventType,
+      });
+    } else {
+      if (enabled.length > 1) {
+        // One per parallel region; microstep_v2 takes one transition until
+        // #504 runs them together.
+        logger.warn(
+          "{count} transitions enabled for event {eventType} (one per region); only the first runs until #504",
+          { count: enabled.length, eventType },
         );
-        return;
-      } else {
-        logger.info("Selected Transition: {transition}", {
-          transition: filteredTransitions[0],
-        });
-        selectedTransition = filteredTransitions[0];
       }
+      selectedTransition = enabled[0];
+      logger.info("Selected Transition: {transition}", {
+        transition: selectedTransition,
+      });
     }
   }
 

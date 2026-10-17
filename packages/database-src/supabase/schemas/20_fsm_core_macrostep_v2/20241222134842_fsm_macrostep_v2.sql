@@ -69,7 +69,10 @@ DECLARE
 	transitions JSONB;
 BEGIN
 	transitions := (
-		SELECT jsonb_agg(t)
+		-- In definition order: the loader inserts a state's transitions in
+		-- document order, and selection takes the first whose guard passes
+		-- (XState's StateNode.next, #510).
+		SELECT jsonb_agg(t ORDER BY t.id)
 		FROM (
 			SELECT * FROM fsm_core.fsm_transitions
 			WHERE event_type = event_name
