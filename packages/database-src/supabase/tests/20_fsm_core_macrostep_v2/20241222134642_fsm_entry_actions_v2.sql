@@ -48,10 +48,10 @@ values
 select results_eq(
   $$ select fsm_core.get_entry_actions_v2(ARRAY['r', 'r.c2'], 'enact', 'v1') $$,
   $$ values ('[
-       {"type": "enterC2", "fsm_order": 4, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
-       {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
+       {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
+       {"type": "enterC2", "fsm_order": 4, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
      ]'::jsonb) $$,
-  'collects entry actions from matching states, tagged with fsm_order/parent FSM and ordered DESC'
+  'collects entry actions from matching states, tagged with fsm_order/parent FSM, parents first (#506)'
 );
 select results_eq(
   $$ select fsm_core.get_initial_actions_v2(ARRAY['r'], 'enact', 'v1') $$,
@@ -85,8 +85,8 @@ select results_eq(
        "states_to_enter": ["r.c1", "r.c1.a"],
        "states_for_default_entry": ["r.c1", "r.c1.a"],
        "entry_actions_for_states_to_enter": [
-         {"type": "enterA", "fsm_order": 3, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
-         {"type": "enterC1", "fsm_order": 2, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
+         {"type": "enterC1", "fsm_order": 2, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
+         {"type": "enterA", "fsm_order": 3, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
        ],
        "initial_actions_for_common_states": []
      }'::jsonb) $$,
@@ -95,17 +95,17 @@ select results_eq(
 select results_eq(
   $$ select fsm_core.compute_entry_actions_v2(NULL, 'enact', 'v1', true) $$,
   $$ values ('{
-       "common_states": [],
+       "common_states": ["r", "r.c1", "r.c1.a"],
        "states_to_enter": ["r", "r.c1", "r.c1.a"],
-       "states_for_default_entry": [],
+       "states_for_default_entry": ["r", "r.c1", "r.c1.a"],
        "entry_actions_for_states_to_enter": [
-         {"type": "enterA", "fsm_order": 3, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
+         {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
          {"type": "enterC1", "fsm_order": 2, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"},
-         {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
+         {"type": "enterA", "fsm_order": 3, "action_type": "entry", "parentFsmName": "enact", "parentFsmVersion": "v1"}
        ],
        "initial_actions_for_common_states": []
      }'::jsonb) $$,
-  'an initial transition (no transition record needed) enters the whole default initial-state chain from the root'
+  'an initial transition (no transition record needed) enters the whole default initial-state chain from the root, all by default (#506)'
 );
 select results_eq(
   $$ select fsm_core.compute_entry_actions_v2(NULL, 'enact', 'v1', false) $$,

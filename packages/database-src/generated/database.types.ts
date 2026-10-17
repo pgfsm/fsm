@@ -767,10 +767,6 @@ export type Database = {
         Args: { state_node_set: unknown[]; transition_domain_lca: unknown };
         Returns: string[];
       };
-      compute_child_exit_set_v2: {
-        Args: { state_node_set: unknown[]; transition_domain_lca: unknown };
-        Returns: string[];
-      };
       compute_entry_actions_v1: {
         Args: {
           fsm_name_param: string;
@@ -913,6 +909,14 @@ export type Database = {
           input_parent_fsm_version: string;
         };
         Returns: Json;
+      };
+      find_least_common_ancestor_v2: {
+        Args: {
+          input_fsm_name: string;
+          input_fsm_version: string;
+          input_paths: unknown[];
+        };
+        Returns: unknown;
       };
       fsm_get_all_state_nodes_v1: {
         Args: {
@@ -1103,6 +1107,16 @@ export type Database = {
         Args: { state_path_ltree: unknown; to_state_path_ltree: unknown };
         Returns: unknown[];
       };
+      get_transition_domain_v2: {
+        Args: {
+          input_fsm_name: string;
+          input_fsm_version: string;
+          input_reenter: boolean;
+          input_source: unknown;
+          input_targets: unknown[];
+        };
+        Returns: unknown;
+      };
       hello: { Args: { input_text: string }; Returns: undefined };
       hello_niraj: { Args: { input_text: string }; Returns: undefined };
       insert_fsm_dependencies: {
@@ -1112,6 +1126,10 @@ export type Database = {
           p_parent_version: string;
         };
         Returns: undefined;
+      };
+      is_descendant: {
+        Args: { input_child: unknown; input_parent: unknown };
+        Returns: boolean;
       };
       json_matches_schema: {
         Args: { instance: Json; schema: Json };

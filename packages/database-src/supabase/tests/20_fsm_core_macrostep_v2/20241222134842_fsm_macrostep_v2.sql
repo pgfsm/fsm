@@ -53,12 +53,12 @@ select results_eq(
 select results_eq(
   $$ select fsm_core.macrostep_v2('NEXT', ARRAY['r', 'r.a'], 'ms', 'v1') $$,
   $$ values ('{
-       "exit_actions": [{"type": "exitA", "fsm_order": 2, "action_type": "exit"}, {"type": "exitR", "fsm_order": 1, "action_type": "exit"}],
+       "exit_actions": [{"type": "exitA", "fsm_order": 2, "action_type": "exit"}],
        "entry_actions": [{"type": "enterB", "fsm_order": 3, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"}],
        "initial_actions": [],
        "transition_actions": [{"type": "doNext"}],
        "updated_state_value": {"r": "b"},
-       "updated_state_value_node_set": ["r.b"],
+       "updated_state_value_node_set": ["r", "r.b"],
        "done": false
      }'::jsonb) $$,
   'a single unambiguous transition runs straight through to microstep_v2'
@@ -66,12 +66,12 @@ select results_eq(
 select results_eq(
   $$ select fsm_core.macrostep_v2('GUARDED', ARRAY['r', 'r.a'], 'ms', 'v1') $$,
   $$ values ('{
-       "exit_actions": [{"type": "exitA", "fsm_order": 2, "action_type": "exit"}, {"type": "exitR", "fsm_order": 1, "action_type": "exit"}],
+       "exit_actions": [{"type": "exitA", "fsm_order": 2, "action_type": "exit"}],
        "entry_actions": [{"type": "enterB", "fsm_order": 3, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"}],
        "initial_actions": [],
        "transition_actions": [{"type": "doGuardedTrue"}],
        "updated_state_value": {"r": "b"},
-       "updated_state_value_node_set": ["r.b"],
+       "updated_state_value_node_set": ["r", "r.b"],
        "done": false
      }'::jsonb) $$,
   'guard evaluation narrows two same-event candidates down to the one with cond.value = true'
@@ -93,8 +93,8 @@ select results_eq(
   $$ values ('{
        "exit_actions": [],
        "entry_actions": [
-         {"type": "enterA", "fsm_order": 2, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"},
-         {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"}
+         {"type": "enterR", "fsm_order": 1, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"},
+         {"type": "enterA", "fsm_order": 2, "action_type": "entry", "parentFsmName": "ms", "parentFsmVersion": "v1"}
        ],
        "initial_actions": [],
        "transition_actions": null,

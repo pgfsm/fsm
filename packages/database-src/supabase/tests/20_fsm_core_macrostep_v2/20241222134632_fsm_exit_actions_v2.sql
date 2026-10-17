@@ -3,8 +3,8 @@ select plan(10);
 
 select has_function('fsm_core', 'get_exit_actions_v2', ARRAY['text[]', 'text', 'text'],
   'get_exit_actions_v2(text[], text, text) exists');
-select has_function('fsm_core', 'compute_child_exit_set_v2', ARRAY['ltree', 'ltree[]'],
-  'compute_child_exit_set_v2(ltree, ltree[]) exists');
+select hasnt_function('fsm_core', 'compute_child_exit_set_v2', ARRAY['ltree', 'ltree[]'],
+  'compute_child_exit_set_v2 is gone: inlined into compute_full_exit_set_v2 (#506)');
 select has_function('fsm_core', 'compute_full_exit_set_v2', ARRAY['fsm_core.fsm_transitions', 'text[]'],
   'compute_full_exit_set_v2(fsm_transitions, text[]) exists');
 select has_function('fsm_core', 'compute_exit_actions_v2', ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
@@ -43,9 +43,11 @@ select results_eq(
   'collects exit and invoke actions from all matching states, tagged and ordered by fsm_order DESC'
 );
 select results_eq(
-  $$ select fsm_core.compute_child_exit_set_v2('m'::ltree, ARRAY['m'::ltree, 'm.a'::ltree, 'm.b'::ltree, 'other'::ltree]) $$,
-  $$ values (ARRAY['m', 'm.a', 'm.b']::text[]) $$,
-  'keeps only nodes that are the domain itself or its descendants'
+  $$ select fsm_core.compute_full_exit_set_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'LEAVE_A' and fsm_name = 'ea' and fsm_version = 'v1'),
+       ARRAY['m', 'm.a', 'm.b', 'other']) $$,
+  $$ values (ARRAY['m.a', 'm.b']::text[]) $$,
+  'exits only strict descendants of the domain: not the domain itself, nor states outside it (#506)'
 );
 select results_eq(
   $$ select fsm_core.compute_full_exit_set_v2(

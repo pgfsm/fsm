@@ -186,7 +186,17 @@ export async function microstep(
   updated_state_value_node_set: string[];
   updated_state_value: Json;
   exit_actions: Json;
+  /**
+   * Entry and invoke actions of the states entered, each tagged with its
+   * state's `fsm_order`; parents first since fsm_core 2.1.3 (#506).
+   */
   entry_actions: Json;
+  /**
+   * The `initial.actions` of the states entered by default, tagged the same
+   * way (since fsm_core 2.1.3 also on the initial step, #506). XState runs
+   * them right after their state's entry actions: the sync worker merges the
+   * two lists (`orderEntryActions`).
+   */
   initial_actions: Json;
   transition_actions: Json;
   /**
