@@ -341,7 +341,10 @@ BEGIN
                     event_type := transition->>'eventType';
                     -- Get actions and cond
                     actions := transition->'actions';
-                    cond := transition->'cond';
+                    -- XState v5 writes a transition's guard as `guard` (a name, or
+                    -- { type, params }); `cond` is the v4 key, kept as a fallback.
+                    -- Reading only `cond` dropped every guard (#510).
+                    cond := COALESCE(transition->'guard', transition->'cond');
 
                     -- Get reenter flag (may be null)
                     IF (transition::jsonb ? 'reenter') THEN
