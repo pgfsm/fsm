@@ -12,6 +12,7 @@ import type { MacrostepV2Result, SyncOperationRegistration } from "./type.ts";
 import { stateValueWithoutRoot } from "./state-value.ts";
 import { orderEntryActions } from "./entry-actions.ts";
 import { selectTransitions } from "./select-transitions.ts";
+import { delayedEventType, resolveRaiseDelay } from "./delays.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -264,6 +265,14 @@ export async function macrostepV2(
     // example  // type === xstate.raise or action_type === raise
     if (action.type === "xstate.raise") { // TODO: update action_type
       remove_schedule_queue_msg_ids_xstate.push(action);
+    } else if (action.type === "xstate.cancel") {
+      // An `after` timer of the state being exited: cancel its scheduled
+      // event by name (`xstate.after.<key>.<state id>`), so it can't fire
+      // after the state is gone (#516).
+      const eventType = delayedEventType(action);
+      if (eventType) {
+        remove_schedule_queue_msg_ids_xstate.push({ ...action, id: eventType });
+      }
     } else if (action.type === "xstate.invoke") { //
       // this is equivalent to xstate.stopChild from worker-helper.ts
       remove_async_operation_queue_msg_ids_xstate.push(action);
@@ -302,12 +311,50 @@ export async function macrostepV2(
     // do comapre based on type or  action_type
     // example  // type === xstate.raise or action_type === raise
     if (action.type === "xstate.raise") { //
-      // update macroSaveFnPayload for new schedule queue data
-      const delay = action.params?.delay || 5000000;
+      // An `after` transition's delayed raise (the compiler's
+      // delayActionName / delayActionEventType, #516). A raise you write
+      // yourself isn't in fsm.json: XState serializes it without its event.
+      const eventType = delayedEventType(action);
+      if (!eventType) {
+        logger.error(
+          "xstate.raise without an event can't be sent: {action}",
+          { action },
+        );
+        continue;
+      }
+      const delay = await resolveRaiseDelay(action, async (name) => {
+        const delayFn = findSyncOperationHandler(
+          syncOperationRegistrations,
+          "delay",
+          name,
+        );
+        if (typeof delayFn !== "function") {
+          logger.error("Delay {delay} has no implementation", {
+            delay: name,
+          });
+          return undefined;
+        }
+        // Generated delay stubs take (context, event) and return ms.
+        return await delayFn(current_context, msgData.eventData);
+      });
+      if (delay === undefined) {
+        // XState raises it without a delay when the delay doesn't resolve to
+        // a number; until the internal queue (SPEC-010) it's sent now.
+        logger.warn(
+          "Delay for {eventType} did not resolve to milliseconds; sending it now",
+          { eventType },
+        );
+      }
+      // update macroSaveFnPayload for new schedule queue data: the archive
+      // sends `id` (the event name) to this instance's queue after `delay` ms.
       new_schedule_queue_data.push({
         ...action,
-        "delay": delay,
         "type": action.type,
+        "id": eventType,
+        "delay": delay ?? 0,
+        "input": { type: eventType },
+        "fsmType": action.parentFsmName,
+        "fsmVersion": action.parentFsmVersion,
       });
     } else if (action.type === "xstate.invoke") {
       // this is equivalent to xstate.spawnChild from worker-helper.ts
