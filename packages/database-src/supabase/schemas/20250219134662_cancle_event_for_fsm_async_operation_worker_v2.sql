@@ -16,10 +16,20 @@ BEGIN
    --    archive_result := false;
    -- END IF;
 
-    -- 2. Notify all workers via pg_notify (only when queue name present)
-    -- IF async_operation_type_worker_name IS NOT NULL AND async_operation_type_worker_name <> '' THEN
-        PERFORM pg_notify('fsm_async_operation_worker_' || async_operation_type_worker_name, COALESCE(queue_msg_id::text, ''));
-    -- END IF;
+    -- 2. Notify on one fixed channel, with the queue and message in the
+    --    payload, for a listener that cancels an invoke already in flight.
+    --    The channel used to be 'fsm_async_operation_worker_' || <queue name>,
+    --    which passed PostgreSQL's 63-byte limit for any queue name of 37+
+    --    characters and failed the whole archive (#512). Nothing listens yet:
+    --    the Activity Gateway will, to send the worker a Cancel (#514).
+    --    Delivered only when the archive's transaction commits.
+    PERFORM pg_notify(
+        'fsm_async_operation_cancel',
+        jsonb_build_object(
+            'queue_name', async_operation_type_worker_name,
+            'msg_id', queue_msg_id
+        )::text
+    );
 
     -- 3. Log event to fsm_async_operation_queue_event_logs (allow null queue id but record name)
     INSERT INTO fsm_core.fsm_async_operation_queue_event_logs (
