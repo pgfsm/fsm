@@ -1,5 +1,5 @@
 begin;
-select plan(15);
+select plan(20);
 
 select has_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
   ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
@@ -162,6 +162,74 @@ select is(
   (select count(*)::int from pgmq.read('archTotals_v1_i_work_t', 0, 10)),
   0,
   'the removed invoke''s actor queue message is cancelled (#495)'
+);
+
+-- #516: an `after` timer. The worker asks the archive to schedule the event
+-- by name (`id`) after `delay` ms; a cancel names that event; when the
+-- scheduled message itself is processed, its entry is dropped.
+delete from fsm_core.fsm_instance where fsm_name = 'archAfterFsm' and fsm_version = 'v1';
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('33334444-5555-6666-7777-888899990000'::uuid, 'archAfterFsm', 'v1');
+select pgmq.create(queue_name := '33334444-5555-6666-7777-888899990000');
+select pgmq.send(queue_name := '33334444-5555-6666-7777-888899990000', msg := '{"enter": "a"}'::jsonb);
+
+-- 1. Entering a state with after: { 60000 } schedules its event.
+create temp table arch516_scheduled as
+select r from fsm_core.archive_event_from_fsm_type_worker_v2(
+  '33334444-5555-6666-7777-888899990000', 1::bigint,
+  NULL, NULL,
+  '[{"type": "xstate.raise", "id": "xstate.after.60000.m.a", "delay": 60000, "input": {"type": "xstate.after.60000.m.a"},
+     "fsmType": "archAfterFsm", "fsmVersion": "v1", "action_type": "entry"}]'::jsonb,
+  NULL, '[]'::jsonb, '[]'::jsonb,
+  '"active"'::jsonb, '{"a": "x"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  NULL, NULL, NULL) r;
+select results_eq(
+  $$ select jsonb_path_query_array(r->'new_total_schedule_queue_data', '$[*].queue_data.eventData.eventType'),
+            jsonb_path_query_array(r->'new_total_schedule_queue_data', '$[*].queue_data.queueMsgDelay')
+     from arch516_scheduled $$,
+  $$ values ('["xstate.after.60000.m.a"]'::jsonb, '[60]'::jsonb) $$,
+  'an after timer is scheduled under its event name, its delay in seconds (#516)'
+);
+select is(
+  (select count(*)::int from pgmq.read('33334444-5555-6666-7777-888899990000', 0, 10)),
+  0,
+  'the scheduled event is not visible yet (delayed)'
+);
+
+-- 2. Leaving the state first cancels it: the delayed message is archived.
+select pgmq.send(queue_name := '33334444-5555-6666-7777-888899990000', msg := '{"leave": "a"}'::jsonb);
+create temp table arch516_cancelled as
+select r from fsm_core.archive_event_from_fsm_type_worker_v2(
+  '33334444-5555-6666-7777-888899990000', 3::bigint,
+  '[{"type": "xstate.cancel", "id": "xstate.after.60000.m.a"}]'::jsonb, NULL,
+  NULL, NULL,
+  (select r->'new_total_schedule_queue_data' from arch516_scheduled), '[]'::jsonb,
+  '"active"'::jsonb, '{"b": "y"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  NULL, NULL, NULL) r;
+select results_eq(
+  $$ select r->'new_total_schedule_queue_data', jsonb_array_length(r->'confirmed_removed_schedule_queue_data_success')
+     from arch516_cancelled $$,
+  $$ values ('[]'::jsonb, 1) $$,
+  'a cancel by event name removes the scheduled entry (#516)'
+);
+select is(
+  (select queue_length::int from pgmq.metrics('33334444-5555-6666-7777-888899990000')),
+  0,
+  'the cancelled event''s delayed message is archived, so it never fires (#516)'
+);
+
+-- 3. A scheduled event that fires drops its own entry when it is processed.
+select pgmq.send(queue_name := '33334444-5555-6666-7777-888899990000', msg := '{"enter": "a"}'::jsonb);
+select results_eq(
+  $$ select r->'new_total_schedule_queue_data'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '33334444-5555-6666-7777-888899990000', 4::bigint,
+       NULL, NULL, NULL, NULL,
+       '[{"queue_data": {"eventData": {"eventType": "xstate.after.60000.m.a"}, "queueMsgId": 4}}]'::jsonb, '[]'::jsonb,
+       '"active"'::jsonb, '{"c": "z"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       NULL, NULL, NULL) r $$,
+  $$ values ('[]'::jsonb) $$,
+  'processing the scheduled event itself drops its entry (#516)'
 );
 
 select * from finish();

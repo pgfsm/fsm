@@ -318,13 +318,21 @@ BEGIN
             SELECT value FROM jsonb_array_elements(input_total_schedule_queue_data) value
         LOOP
             remove_schedule := false;
+            -- The scheduled event being processed now has fired: drop its entry
+            -- (its message is archived below as the current one, #516).
+            CONTINUE WHEN (schedule_queue_entry->'queue_data'->>'queueMsgId')::bigint = remove_current_queue_msg_id;
             IF to_be_removed_schedule_queue_msg_ids IS NOT NULL THEN
                 FOR i IN 0 .. jsonb_array_length(to_be_removed_schedule_queue_msg_ids)-1 LOOP
                     schedule_queue_message := to_be_removed_schedule_queue_msg_ids->i;
 
+                    -- A cancel names the scheduled event (`id`, e.g.
+                    -- xstate.after.1000.<state id>); an entry is what
+                    -- send_event_to_fsm_queue_with_event_logs_v2 returned when it was
+                    -- scheduled. The old keys (event.send_event_name_to_parent_queue_id,
+                    -- schedule_queue_name) were never in an entry, so nothing was ever
+                    -- cancelled (#516).
                     IF (
-                        (schedule_queue_entry->'event'->>'send_event_name_to_parent_queue_id')::text = (schedule_queue_message->>'id')::text
-                        AND (schedule_queue_entry->>'schedule_queue_name')::text = (schedule_queue_message->>'src')::text
+                        (schedule_queue_entry->'queue_data'->'eventData'->>'eventType')::text = (schedule_queue_message->>'id')::text
                     ) THEN
                         remove_schedule := true;
 
@@ -353,8 +361,7 @@ BEGIN
             confirmed_match_for_schedule := false;
             FOREACH schedule_queue_entry IN ARRAY confirmed_removed_schedule_queue_data LOOP
                 IF (
-                    (schedule_queue_entry->>'id')::text = (schedule_queue_message->>'id')::text
-                    AND (schedule_queue_entry->>'src')::text = (schedule_queue_message->>'src')::text
+                    (schedule_queue_entry->'queue_data'->'eventData'->>'eventType')::text = (schedule_queue_message->>'id')::text
                 ) THEN
                     confirmed_match_for_schedule := true;
                     EXIT;
@@ -435,7 +442,8 @@ BEGIN
 
 
             -- IF remove_from_current_fsm_instance_queue_id IS NOT NULL AND remove_from_current_fsm_instance_queue_id <> '' AND schedule_queue_message->>'type' IS NOT NULL AND schedule_queue_message->>'type' <> '' THEN
-                PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := (schedule_queue_entry->>'type')::bigint);
+                -- The scheduled message's id, as stored when it was sent (#516).
+                PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := (schedule_queue_entry->'queue_data'->>'queueMsgId')::bigint);
                 confirmed_removed_schedule_queue_data_success := array_append(confirmed_removed_schedule_queue_data_success, schedule_queue_entry);
             -- END IF;
         END LOOP;
