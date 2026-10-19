@@ -1105,6 +1105,15 @@ export type Database = {
         Args: { input_child: unknown; input_parent: unknown };
         Returns: boolean;
       };
+      is_in_final_state_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          state_node_set: string[];
+          state_path: string;
+        };
+        Returns: boolean;
+      };
       json_matches_schema: {
         Args: { instance: Json; schema: Json };
         Returns: boolean;

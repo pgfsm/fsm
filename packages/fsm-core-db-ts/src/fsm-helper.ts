@@ -200,10 +200,23 @@ export async function microstep(
   initial_actions: Json;
   transition_actions: Json;
   /**
-   * The machine is now in a top-level final state (microstep_v2 from fsm_core
-   * 2.1.2, #500; absent on older databases, meaning not done).
+   * The machine is done (microstep_v2 from fsm_core 2.1.2, #500; absent on
+   * older databases, meaning not done). Since fsm_core 2.1.9 XState's rule:
+   * a final state was entered and no enclosing state is left to finish.
    */
   done?: boolean;
+  /**
+   * The `xstate.done.state.<id>` events this microstep raised, in XState's
+   * order, as `{ eventType }` (fsm_core 2.1.9, SPEC-010, #518). Pass them to
+   * the archive unchanged; it puts them on the instance's internal event queue.
+   */
+  raised_events?: Json;
+  /**
+   * When `done`: the exit actions of every active state, deepest first, with
+   * each state's invokes as stops (fsm_core 2.1.9, #518). Run after the entry
+   * actions, like a state's exit actions.
+   */
+  completion_exit_actions?: Json;
 }> {
   try {
     const transitionRecordJson =
@@ -242,6 +255,8 @@ export async function microstep(
         initial_actions: Json;
         transition_actions: Json;
         done?: boolean;
+        raised_events?: Json;
+        completion_exit_actions?: Json;
       };
     }>(text, values);
     return (

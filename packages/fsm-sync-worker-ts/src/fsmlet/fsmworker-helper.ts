@@ -259,34 +259,43 @@ export async function macrostepV2(
   );
 
   const exit_actions = microstepResult.exit_actions || [];
-  for (const action of exit_actions) {
-    // find actions implementations and execute fn
-    // do comapre based on type or action_type
-    // example  // type === xstate.raise or action_type === raise
-    if (action.type === "xstate.raise") { // TODO: update action_type
-      remove_schedule_queue_msg_ids_xstate.push(action);
-    } else if (action.type === "xstate.cancel") {
-      // An `after` timer of the state being exited: cancel its scheduled
-      // event by name (`xstate.after.<key>.<state id>`), so it can't fire
-      // after the state is gone (#516).
-      const eventType = delayedEventType(action);
-      if (eventType) {
-        remove_schedule_queue_msg_ids_xstate.push({ ...action, id: eventType });
+  // Exit actions, and the timers and invokes they stop: a state's own exit
+  // (microstep_v2's exit_actions) and, once the machine is done, every
+  // remaining state's (completion_exit_actions, #518).
+  const runExitActions = async (actions: Json[]) => {
+    for (const action of actions as typeof exit_actions) {
+      // find actions implementations and execute fn
+      // do comapre based on type or action_type
+      // example  // type === xstate.raise or action_type === raise
+      if (action.type === "xstate.raise") { // TODO: update action_type
+        remove_schedule_queue_msg_ids_xstate.push(action);
+      } else if (action.type === "xstate.cancel") {
+        // An `after` timer of the state being exited: cancel its scheduled
+        // event by name (`xstate.after.<key>.<state id>`), so it can't fire
+        // after the state is gone (#516).
+        const eventType = delayedEventType(action);
+        if (eventType) {
+          remove_schedule_queue_msg_ids_xstate.push({
+            ...action,
+            id: eventType,
+          });
+        }
+      } else if (action.type === "xstate.invoke") { //
+        // this is equivalent to xstate.stopChild from worker-helper.ts
+        remove_async_operation_queue_msg_ids_xstate.push(action);
+      } else {
+        // fsm events - try to execute implementation from actionsModule
+        current_context = await runActionImplementation(
+          "exit",
+          action,
+          syncOperationRegistrations,
+          current_context,
+          { deps, queueName, msg },
+        );
       }
-    } else if (action.type === "xstate.invoke") { //
-      // this is equivalent to xstate.stopChild from worker-helper.ts
-      remove_async_operation_queue_msg_ids_xstate.push(action);
-    } else {
-      // fsm events - try to execute implementation from actionsModule
-      current_context = await runActionImplementation(
-        "exit",
-        action,
-        syncOperationRegistrations,
-        current_context,
-        { deps, queueName, msg },
-      );
     }
-  }
+  };
+  await runExitActions(exit_actions);
   const transition_actions = microstepResult.transition_actions || [];
   for (const action of transition_actions) {
     // find actions implementations and execute fn
@@ -371,6 +380,15 @@ export async function macrostepV2(
     }
   }
 
+  // Done (a top-level final state): XState then runs every remaining state's
+  // exit actions, deepest first, and stops the machine's children (#518).
+  const done = (microstepResult as { done?: unknown }).done === true;
+  if (done) {
+    await runExitActions(
+      (microstepResult.completion_exit_actions ?? []) as typeof exit_actions,
+    );
+  }
+
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
     .filter((item) =>
@@ -421,9 +439,7 @@ export async function macrostepV2(
   );
 
   // Done once the machine is in a top-level final state (microstep_v2 from
-  // fsm_core 2.1.2 reports it; an older database never does). Read
-  // defensively, so this doesn't need a newer @pgfsm/db's types (#500).
-  const done = (microstepResult as { done?: unknown }).done === true;
+  // fsm_core 2.1.2 reports it; an older database never does), read above.
   macroSaveFnPayload.fsm_instance_data_save_fsm_status = done
     ? "done"
     : "active"; // "active" | "done" | "error" | "stopped"
