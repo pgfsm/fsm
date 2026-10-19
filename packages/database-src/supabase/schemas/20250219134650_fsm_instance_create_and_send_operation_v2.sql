@@ -2,9 +2,6 @@ CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
     input_fsm_instance_id uuid,
     input_fsm_instance_id_fsm_type text,
     input_fsm_instance_id_fsm_version text,
-    input_send_to_parent_queue_id uuid,
-    input_send_to_parent_queue_type text,
-    input_send_to_parent_queue_id_event_name text,
     input_event_name text,
     input_event_action_type text,
     input_event_data jsonb,
@@ -35,10 +32,9 @@ BEGIN
         ),
         'queueId',                    input_fsm_instance_id,
         'queueType',                  input_fsm_instance_id_fsm_type,
-        'queueVersion',               input_fsm_instance_id_fsm_version,
-        'sendToParentQueueId',        input_send_to_parent_queue_id,
-        'sendToParentQueueType',      input_send_to_parent_queue_type,
-        'sendToParentQueueIdEventName', input_send_to_parent_queue_id_event_name
+        'queueVersion',               input_fsm_instance_id_fsm_version
+        -- No reply-to (sendToParent*) on an FSM queue's messages: nothing reads
+        -- it; a child FSM's parent is on its fsm_instance row (#523, #526).
     );
 
     BEGIN
@@ -66,8 +62,6 @@ BEGIN
         event_name,
         event_data,
         event_delay,
-        send_to_parent_queue_id,
-        send_to_parent_queue_id_event_name,
         execution_started_at,
         execution_duration,
         execution_finished_at,
@@ -82,8 +76,6 @@ BEGIN
         input_event_name,
         input_event_data,
         input_event_delay,
-        input_send_to_parent_queue_id,
-        input_send_to_parent_queue_id_event_name,
         input_execution_started_at,
         input_execution_duration,
         input_execution_finished_at,
@@ -93,15 +85,11 @@ BEGIN
     ) RETURNING fsm_instance_queue_event_log_id INTO output_fsm_instance_queue_event_log_id;
 
     RETURN jsonb_build_object(
-     
         'queue_data', queue_msg_data,
-        -- 'queue_msg_id', output_fsm_instance_queue_msg_id,
-        -- 'queue_msg_delay', input_event_delay,
         'queue_event_log_id', output_fsm_instance_queue_event_log_id,
         'event_status', input_event_status,
         'event_output', input_event_output,
         'error_message', input_error_message
-       
     );
 END;
 $$ LANGUAGE plpgsql;
@@ -202,9 +190,6 @@ BEGIN
                     input_fsm_instance_id := fsm_instance_id,
                     input_fsm_instance_id_fsm_type := derived_fsm_type,
                     input_fsm_instance_id_fsm_version := input_fsm_version,
-                    input_send_to_parent_queue_id := fsm_core.pg_system_queue_uuid(),
-                    input_send_to_parent_queue_type := fsm_core.pg_system_queue_type(),
-                    input_send_to_parent_queue_id_event_name := fsm_core.pg_system_event_name(),
                     input_event_name := 'initialTransition_event',
                     input_event_action_type := 'system',
                     input_event_data := jsonb_build_object('source', 'system'),

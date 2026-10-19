@@ -80,5 +80,5 @@ veryLongParentFsmName_v01_veryLongPromiseNameX  ← 48 chars → runtime error
   (`parentFsmName + _ + parentFsmVersion + _ + fsmName`) must not exceed 47
   characters
 - Future: add a check in the FSM compiler or
-  `create_async_op_queue_and_send_event_from_fsm_instance_id_v2` to validate
-  queue name length before calling `pgmq.create()`
+  `start_async_operation_for_worker_v2` to validate queue name length before
+  calling `pgmq.create()`

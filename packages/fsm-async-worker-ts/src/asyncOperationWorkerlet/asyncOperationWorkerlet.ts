@@ -285,7 +285,7 @@ export async function startAsyncOperationWorkerlet(
       return;
     }
 
-    // Must match the queue create_async_op_queue_and_send_event_from_fsm_instance_id_v2
+    // Must match the queue start_async_operation_for_worker_v2
     // (the fsmlet) actually writes to — both derive it from the same
     // fsm_core.compute_async_operation_queue_name_v2, so they can't drift apart again.
     const queueName = await computeAsyncOperationQueueName(deps, {

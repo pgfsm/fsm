@@ -11,9 +11,6 @@ import type {
 } from "./fsm.routes.ts";
 import { getSupabase } from "../../middlewares/supabase.ts";
 import {
-  API_SYSTEM_EVENT_NAME,
-  API_SYSTEM_QUEUE_TYPE,
-  API_SYSTEM_QUEUE_UUID,
   createFsmInstanceFromName,
   getFSMData,
   getFsmDataResolveStateValue,
@@ -160,9 +157,6 @@ export const send: AppRouteHandler<SendRoute> = async (c) => {
       fsm_instance_id,
       fsmInstance.fsm_type ?? null,
       fsmInstance.fsm_version ?? null,
-      API_SYSTEM_QUEUE_UUID,
-      API_SYSTEM_QUEUE_TYPE,
-      API_SYSTEM_EVENT_NAME,
       event_data?.type ?? "",
       "external",
       event_data as unknown as Json,

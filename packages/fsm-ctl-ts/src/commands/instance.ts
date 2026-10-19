@@ -1,8 +1,5 @@
 import { getLogger } from "@logtape/logtape";
 import {
-  API_SYSTEM_EVENT_NAME,
-  API_SYSTEM_QUEUE_TYPE,
-  API_SYSTEM_QUEUE_UUID,
   createFsmInstanceFromName,
   getFSMData,
   resumeEventForFsmWorker,
@@ -175,9 +172,6 @@ export async function instanceCommand(argv: string[]): Promise<void> {
           queueName!,
           fsmInstance.fsm_type ?? null,
           fsmInstance.fsm_version ?? null,
-          API_SYSTEM_QUEUE_UUID,
-          API_SYSTEM_QUEUE_TYPE,
-          API_SYSTEM_EVENT_NAME,
           eventType!,
           "external",
           { ...eventData as object, type: eventType } as Json,

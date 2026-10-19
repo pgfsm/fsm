@@ -393,8 +393,6 @@ export type Database = {
           fsm_instance_id_fsm_version: string | null;
           fsm_instance_queue_event_log_id: string;
           fsm_instance_queue_msg_id: number | null;
-          send_to_parent_queue_id: string | null;
-          send_to_parent_queue_id_event_name: string | null;
         };
         Insert: {
           error_message?: string | null;
@@ -411,8 +409,6 @@ export type Database = {
           fsm_instance_id_fsm_version?: string | null;
           fsm_instance_queue_event_log_id?: string;
           fsm_instance_queue_msg_id?: number | null;
-          send_to_parent_queue_id?: string | null;
-          send_to_parent_queue_id_event_name?: string | null;
         };
         Update: {
           error_message?: string | null;
@@ -429,8 +425,6 @@ export type Database = {
           fsm_instance_id_fsm_version?: string | null;
           fsm_instance_queue_event_log_id?: string;
           fsm_instance_queue_msg_id?: number | null;
-          send_to_parent_queue_id?: string | null;
-          send_to_parent_queue_id_event_name?: string | null;
         };
         Relationships: [
           {
@@ -701,9 +695,6 @@ export type Database = {
           input_total_schedule_queue_data: Json;
           remove_current_queue_msg_id: number;
           remove_from_current_fsm_instance_queue_id: string;
-          send_to_parent_queue_id: string;
-          send_to_parent_queue_id_event_name: string;
-          send_to_parent_queue_type: string;
           to_be_added_async_operation_queue_data: Json;
           to_be_added_schedule_queue_data: Json;
           to_be_removed_async_operation_queue_msg_ids: Json;
@@ -830,23 +821,6 @@ export type Database = {
         Args: { input_name: string; input_role: string };
         Returns: Json;
       };
-      create_async_op_queue_and_send_event_from_fsm_instance_id_v2: {
-        Args: {
-          action_type: string;
-          asyncoperationlanguage: string;
-          asyncoperationname: string;
-          asyncoperationtype: string;
-          asyncoperationversion: string;
-          event_input: Json;
-          event_name: string;
-          from_source_fsm_instance_id: string;
-          id: string;
-          parentfsmname: string;
-          parentfsmversion: string;
-          src: string;
-        };
-        Returns: Json;
-      };
       create_async_operation_instance_and_notify_async_operation_sche: {
         Args: {
           input_async_operation_instance_id: string;
@@ -867,22 +841,6 @@ export type Database = {
           input_fsm_version: string;
           input_parent_fsm_instance_id?: string;
           input_parent_invoke_id?: string;
-        };
-        Returns: Json;
-      };
-      create_fsm_queue_and_send_event_from_fsm_instance_id_v2: {
-        Args: {
-          action_type: string;
-          event_input: Json;
-          event_name: string;
-          from_source_fsm_instance_id: string;
-          fsmname: string;
-          fsmtype: string;
-          fsmversion: string;
-          id: string;
-          parentfsmname: string;
-          parentfsmversion: string;
-          src: string;
         };
         Returns: Json;
       };
@@ -1430,31 +1388,52 @@ export type Database = {
           input_fsm_instance_id: string;
           input_fsm_instance_id_fsm_type: string;
           input_fsm_instance_id_fsm_version: string;
-          input_send_to_parent_queue_id: string;
-          input_send_to_parent_queue_id_event_name: string;
-          input_send_to_parent_queue_type: string;
-        };
-        Returns: Json;
-      };
-      send_event_to_queue_from_fsm_instance_id_v2: {
-        Args: {
-          action_type: string;
-          asyncoperationlanguage: string;
-          asyncoperationname: string;
-          asyncoperationtype: string;
-          asyncoperationversion: string;
-          event_input: Json;
-          event_name: string;
-          from_source_fsm_instance_id: string;
-          id: string;
-          parentfsmname: string;
-          parentfsmversion: string;
-          src: string;
         };
         Returns: Json;
       };
       sql_lca_for_transition: { Args: { transition: Json }; Returns: unknown };
       sql_lca_from_array: { Args: { paths: unknown[] }; Returns: unknown };
+      start_async_operation_for_worker_v2: {
+        Args: {
+          action_type: string;
+          async_operation_language: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          input: Json;
+          invoke_id: string;
+          parent_fsm_instance_id: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          src: string;
+        };
+        Returns: Json;
+      };
+      start_child_fsm_v2: {
+        Args: {
+          fsm_name: string;
+          fsm_version: string;
+          input: Json;
+          invoke_id: string;
+          parent_fsm_instance_id: string;
+          src: string;
+        };
+        Returns: Json;
+      };
+      start_invoked_async_operation_v2: {
+        Args: {
+          action_type: string;
+          async_operation_language: string;
+          async_operation_type: string;
+          async_operation_version: string;
+          input: Json;
+          invoke_id: string;
+          parent_fsm_instance_id: string;
+          parent_fsm_name: string;
+          parent_fsm_version: string;
+          src: string;
+        };
+        Returns: Json;
+      };
       stop_event_for_fsm_worker_v1: {
         Args: { input_fsm_instance_id: string };
         Returns: Json;

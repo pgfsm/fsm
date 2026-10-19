@@ -1,68 +1,79 @@
 begin;
-select plan(26);
+select plan(32);
 
-select has_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
-  ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
-  'create_async_op_queue_and_send_event_from_fsm_instance_id_v2(...) exists');
-select has_function('fsm_core', 'create_fsm_queue_and_send_event_from_fsm_instance_id_v2',
-  ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
-  'create_fsm_queue_and_send_event_from_fsm_instance_id_v2(...) exists');
-select has_function('fsm_core', 'send_event_to_queue_from_fsm_instance_id_v2',
-  ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
-  'send_event_to_queue_from_fsm_instance_id_v2(...) exists');
+select has_function('fsm_core', 'start_async_operation_for_worker_v2',
+  ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
+  'start_async_operation_for_worker_v2(...) exists (#526)');
+select has_function('fsm_core', 'start_child_fsm_v2',
+  ARRAY['text', 'text', 'jsonb', 'text', 'text', 'uuid'],
+  'start_child_fsm_v2(...) exists (#526)');
+select has_function('fsm_core', 'start_invoked_async_operation_v2',
+  ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
+  'start_invoked_async_operation_v2(...) exists (#526)');
+select hasnt_function('fsm_core', 'send_event_to_queue_from_fsm_instance_id_v2',
+  'the old dispatcher name is gone (#526)');
+select hasnt_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
+  'the old async operation name is gone (#526)');
 select has_function('fsm_core', 'archive_event_from_fsm_type_worker_v2',
-  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'uuid', 'text', 'text'],
-  'archive_event_from_fsm_type_worker_v2(...) exists');
+  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb'],
+  'archive_event_from_fsm_type_worker_v2(...) exists, without reply-to parameters (#526)');
 
 delete from fsm_core.fsm_async_operation_queue_event_logs where async_operation_queue_name like 'pFsm_v1_%';
 delete from fsm_core.fsm_instance where fsm_name = 'srcFsm' and fsm_version = 'v1';
 insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
 values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid, 'srcFsm', 'v1');
 
+create temp table start526_async as
+select fsm_core.start_async_operation_for_worker_v2(
+  invoke_id := 'someId', src := 'childOp', input := '{"x": 1}'::jsonb, action_type := 'invoke',
+  async_operation_type := 'internalAsyncOperation', async_operation_version := 'v1', async_operation_language := 'typescript',
+  parent_fsm_instance_id := 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid,
+  parent_fsm_name := 'pFsm', parent_fsm_version := 'v1') r;
 select results_eq(
-  $$ select (r->>'start_queue_worker')::boolean, (r->'queue_data'->>'queueId')
-     from fsm_core.create_async_op_queue_and_send_event_from_fsm_instance_id_v2(
-       'evt1', '{"x": 1}'::jsonb, 'someId', 'invoke', 'someSrc', 'childOp', 'internalAsyncOperation', 'v1',
-       'pFsm', 'v1', 'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) r $$,
-  $$ values (true, 'pFsm_v1_i_childOp_t'::text) $$,
-  'the first call for a not-yet-existing async-operation queue creates it (start_queue_worker=true), naming delegated to compute_async_operation_queue_name_v2'
+  $$ select r->>'invoke_id', r->>'src', r->>'async_operation_type', r->>'queue_id',
+            (r->>'queue_msg_id')::bigint = (r->'queue_data'->>'queueMsgId')::bigint,
+            r ? 'queue_event_log_id'
+     from start526_async $$,
+  $$ values ('someId'::text, 'childOp'::text, 'internalAsyncOperation'::text, 'pFsm_v1_i_childOp_t'::text, true, true) $$,
+  'start_async_operation_for_worker_v2 returns the invoke''s entry, its queue named by compute_async_operation_queue_name_v2 (#526)'
 );
 select results_eq(
-  $$ select (r->>'start_queue_worker')::boolean
-     from fsm_core.create_async_op_queue_and_send_event_from_fsm_instance_id_v2(
-       'evt2', '{"x": 2}'::jsonb, 'someId2', 'invoke', 'someSrc', 'childOp', 'internalAsyncOperation', 'v1',
-       'pFsm', 'v1', 'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) r $$,
-  $$ values (false) $$,
-  'a second call for the same async-operation queue reuses it (start_queue_worker=false)'
+  $$ select m.message->'eventData'->>'eventType', m.message->>'sendToParentQueueId',
+            m.message->>'sendToParentQueueIdEventName', m.message->'eventData'->'eventPayload'
+     from pgmq.read('pFsm_v1_i_childOp_t', 0, 1) m $$,
+  $$ values ('someId'::text, 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::text, 'someId'::text, '{"x": 1}'::jsonb) $$,
+  'the first start creates the async operation''s queue; the message keeps the reply-to the gateway answers on'
+);
+select lives_ok(
+  $$ select fsm_core.start_async_operation_for_worker_v2('someId2', 'childOp', '{}'::jsonb, 'invoke',
+       'internalAsyncOperation', 'v1', 'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid, 'pFsm', 'v1') $$,
+  'a second start reuses the existing queue'
 );
 select throws_ok(
-  $$ select fsm_core.create_async_op_queue_and_send_event_from_fsm_instance_id_v2(
-       'evt', '{}'::jsonb, 'id', 'invoke', 'src', 'x', 'unsupportedType', 'v1', 'p', 'v1',
-       'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) $$,
+  $$ select fsm_core.start_async_operation_for_worker_v2('id', 'src', '{}'::jsonb, 'invoke',
+       'unsupportedType', 'v1', 'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid, 'p', 'v1') $$,
   'P0001',
-  'create_async_op_queue_and_send_event_from_fsm_instance_id_v2: unsupported fsmType: unsupportedType',
-  'an unsupported fsmType still raises (validated here, before delegating naming to compute_async_operation_queue_name_v2)'
+  'start_async_operation_for_worker_v2: unsupported async operation type: unsupportedType',
+  'an unsupported async operation type raises (validated here, before delegating naming to compute_async_operation_queue_name_v2)'
 );
 
--- create_fsm_queue_and_send_event_from_fsm_instance_id_v2 creates the child
--- as a real instance (#523; it used to log against an id it never inserted,
--- a foreign-key failure), so an unknown child FSM is reported by name.
+-- start_child_fsm_v2 creates the child as a real instance (#523; it used to
+-- log against an id it never inserted, a foreign-key failure), so an unknown
+-- child FSM is reported by name.
 select throws_ok(
-  $$ select fsm_core.create_fsm_queue_and_send_event_from_fsm_instance_id_v2(
-       'childEvt', '{"x": 1}'::jsonb, 'someId', 'childFsm', 'someSrc', 'childName', 'childFsm', 'v1',
-       'parentName', 'parentV1', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) $$,
+  $$ select fsm_core.start_child_fsm_v2('someId', 'childName', '{"x": 1}'::jsonb, 'childName', 'v1',
+       'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) $$,
   'P0001',
   'FSM with name childName and version v1 not found in fsm_core.fsm_json',
   'invoking a child FSM that is not loaded raises a not-found error, not a foreign-key failure (#523)'
 );
 
 select throws_ok(
-  $$ select fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
-       'evt', '{}'::jsonb, 'id', 'invoke', 'src', 'x', 'unsupportedFsmType', 'v1', 'p', 'v1',
-       'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) $$,
+  $$ select fsm_core.start_invoked_async_operation_v2('id', 'src', '{}'::jsonb, 'invoke',
+       'unsupportedFsmType', 'v1', 'typescript', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid, 'p', 'v1') $$,
   'P0001',
-  'Unsupported fsmType: unsupportedFsmType',
-  'send_event_to_queue_from_fsm_instance_id_v2 rejects an unrecognized fsmType'
+  'start_invoked_async_operation_v2: unsupported async operation type: unsupportedFsmType',
+  'start_invoked_async_operation_v2 rejects an unrecognized async operation type'
 );
 
 -- Simplest case for the macro archive/save function: no schedule/async-operation
@@ -78,8 +89,7 @@ select results_eq(
   $$ select fsm_core.archive_event_from_fsm_type_worker_v2(
        'ffffffff-ffff-ffff-ffff-ffffffffffff', 1::bigint,
        NULL, NULL, NULL, NULL, NULL, NULL,
-       '"active"'::jsonb, '{"foo": "bar"}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb,
-       NULL, NULL, NULL) $$,
+       '"active"'::jsonb, '{"foo": "bar"}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb) $$,
   $$ values ('{
        "parent_notify_result": null, "added_async_operation_queue_data": [], "added_schedule_queue_data": [],
        "new_total_async_operation_queue_data": [], "old_total_async_operation_queue_data": null,
@@ -109,11 +119,10 @@ select results_eq(
   $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
        'ffffffff-ffff-ffff-ffff-ffffffffffff', 2::bigint,
        NULL, NULL, NULL, NULL, NULL, NULL,
-       '"done"'::jsonb, '{"final": true}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb,
-       '11112222-3333-4444-5555-666677778888'::uuid, 'FSM', 'childDoneEvt'
+       '"done"'::jsonb, '{"final": true}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb
      ))->'parent_notify_result' $$,
   $$ values ('null'::jsonb) $$,
-  'an instance with no parent notifies nobody, whatever the message names as its parent (#523)'
+  'an instance with no parent notifies nobody when it finishes (#523)'
 );
 
 -- #495: an instance with outstanding actor invokes and scheduled events. This
@@ -137,12 +146,11 @@ select results_eq(
        '[{"id": "a", "src": "work"}]'::jsonb,
        NULL, NULL,
        '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb,
-       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 1, "queueFnName": "work", "sendToParentQueueIdEventName": "a"},
-         {"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
-       '"active"'::jsonb, '{"s": 1}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb,
-       NULL, NULL, NULL) r $$,
+       '[{"invoke_id": "a", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 1},
+         {"invoke_id": "b", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 2}]'::jsonb,
+       '"active"'::jsonb, '{"s": 1}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb) r $$,
   $$ values (
-       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
+       '[{"invoke_id": "b", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 2}]'::jsonb,
        '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb) $$,
   'outstanding invokes and scheduled events this macrostep keeps stay in the new totals (#495)'
 );
@@ -150,7 +158,7 @@ select results_eq(
   $$ select total_async_operation_queue_data, total_schedule_queue_data
      from fsm_core.fsm_instance where id = '22223333-4444-5555-6666-777788889999'::uuid $$,
   $$ values (
-       '[{"queueId": "archTotals_v1_i_work_t", "queueMsgId": 2, "queueFnName": "work", "sendToParentQueueIdEventName": "b"}]'::jsonb,
+       '[{"invoke_id": "b", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 2}]'::jsonb,
        '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb) $$,
   'the instance row keeps the remaining invoke and scheduled event (#495)'
 );
@@ -177,8 +185,7 @@ select r from fsm_core.archive_event_from_fsm_type_worker_v2(
   '[{"type": "xstate.raise", "id": "xstate.after.60000.m.a", "delay": 60000, "input": {"type": "xstate.after.60000.m.a"},
      "fsmType": "archAfterFsm", "fsmVersion": "v1", "action_type": "entry"}]'::jsonb,
   NULL, '[]'::jsonb, '[]'::jsonb,
-  '"active"'::jsonb, '{"a": "x"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-  NULL, NULL, NULL) r;
+  '"active"'::jsonb, '{"a": "x"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r;
 select results_eq(
   $$ select jsonb_path_query_array(r->'new_total_schedule_queue_data', '$[*].queue_data.eventData.eventType'),
             jsonb_path_query_array(r->'new_total_schedule_queue_data', '$[*].queue_data.queueMsgDelay')
@@ -200,8 +207,7 @@ select r from fsm_core.archive_event_from_fsm_type_worker_v2(
   '[{"type": "xstate.cancel", "id": "xstate.after.60000.m.a"}]'::jsonb, NULL,
   NULL, NULL,
   (select r->'new_total_schedule_queue_data' from arch516_scheduled), '[]'::jsonb,
-  '"active"'::jsonb, '{"b": "y"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-  NULL, NULL, NULL) r;
+  '"active"'::jsonb, '{"b": "y"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r;
 select results_eq(
   $$ select r->'new_total_schedule_queue_data', jsonb_array_length(r->'confirmed_removed_schedule_queue_data_success')
      from arch516_cancelled $$,
@@ -222,8 +228,7 @@ select results_eq(
        '33334444-5555-6666-7777-888899990000', 4::bigint,
        NULL, NULL, NULL, NULL,
        '[{"queue_data": {"eventData": {"eventType": "xstate.after.60000.m.a"}, "queueMsgId": 4}}]'::jsonb, '[]'::jsonb,
-       '"active"'::jsonb, '{"c": "z"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       NULL, NULL, NULL) r $$,
+       '"active"'::jsonb, '{"c": "z"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
   $$ values ('[]'::jsonb) $$,
   'processing the scheduled event itself drops its entry (#516)'
 );
@@ -242,41 +247,41 @@ values ('44445555-6666-7777-8888-999900001111'::uuid, 'chParent', 'v1');
 select pgmq.create(queue_name := '44445555-6666-7777-8888-999900001111');
 
 create temp table ch523_invoked as
-select fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
-  event_name := '0.chParent.Invoking', event_input := '{"n": 1}'::jsonb, id := '0.chParent.Invoking',
-  action_type := 'entry', src := 'chChild', asyncOperationName := 'chChild', asyncOperationType := 'fsm',
-  asyncOperationVersion := 'v1', parentFsmName := 'chParent', parentFsmVersion := 'v1',
-  asyncOperationLanguage := 'typescript',
-  from_source_fsm_instance_id := '44445555-6666-7777-8888-999900001111'::uuid) r;
+select fsm_core.start_invoked_async_operation_v2(
+  invoke_id := '0.chParent.Invoking', src := 'chChild', input := '{"n": 1}'::jsonb,
+  action_type := 'entry', async_operation_type := 'fsm', async_operation_version := 'v1', async_operation_language := 'typescript',
+  parent_fsm_instance_id := '44445555-6666-7777-8888-999900001111'::uuid,
+  parent_fsm_name := 'chParent', parent_fsm_version := 'v1') r;
 
 select results_eq(
   $$ select fi.parent_fsm_instance_id, fi.parent_invoke_id, fi.fsm_instance_context
      from fsm_core.fsm_instance fi, ch523_invoked
-     where fi.id = (ch523_invoked.r->>'child_instance_id')::uuid $$,
+     where fi.id = (ch523_invoked.r->>'queue_id')::uuid $$,
   $$ values ('44445555-6666-7777-8888-999900001111'::uuid, '0.chParent.Invoking'::text, '{"n": 1}'::jsonb) $$,
   'invoking a child FSM creates its fsm_instance row with the parent and the invoke id, and the invoke input as context (#523)'
 );
 select results_eq(
-  $$ select (select count(*)::int from fsm_core.fsm_instance_and_fsm_workerlet w where w.fsm_instance_id = (r->>'child_instance_id')::uuid),
-            (select (m.message->'eventData'->>'eventType') from pgmq.read(r->>'child_instance_id', 0, 1) m)
+  $$ select (select count(*)::int from fsm_core.fsm_instance_and_fsm_workerlet w where w.fsm_instance_id = (r->>'queue_id')::uuid),
+            (select (m.message->'eventData'->>'eventType') from pgmq.read(r->>'queue_id', 0, 1) m)
      from ch523_invoked $$,
   $$ values (1, 'initialTransition_event'::text) $$,
   'the child is queued for an fsmlet and starts with initialTransition_event'
 );
 select results_eq(
-  $$ select r->>'queueId' = r->>'child_instance_id', r->>'sendToParentQueueIdEventName', r->>'queueFnName' from ch523_invoked $$,
-  $$ values (true, '0.chParent.Invoking'::text, 'chChild'::text) $$,
-  'the result has the keys the parent''s archive uses to find the invoke on exit'
+  $$ select r->>'invoke_id', r->>'src', r->>'async_operation_type',
+            (r->>'queue_msg_id')::bigint = (r->'queue_data'->>'queueMsgId')::bigint, r ? 'queue_event_log_id'
+     from ch523_invoked $$,
+  $$ values ('0.chParent.Invoking'::text, 'chChild'::text, 'fsm'::text, true, true) $$,
+  'a child FSM''s entry has the same shape as a worker async operation''s (#526)'
 );
 
 -- The child finishing: done, then (another child) error.
-select pgmq.send(queue_name := (select r->>'child_instance_id' from ch523_invoked), msg := '{"finish": 1}'::jsonb);
+select pgmq.send(queue_name := (select r->>'queue_id' from ch523_invoked), msg := '{"finish": 1}'::jsonb);
 select results_eq(
   $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
-       (select r->>'child_instance_id' from ch523_invoked), 2::bigint,
+       (select r->>'queue_id' from ch523_invoked), 2::bigint,
        NULL, NULL, NULL, NULL, NULL, NULL,
-       '"done"'::jsonb, '"Finished"'::jsonb, '{"n": 2}'::jsonb, '{}'::jsonb,
-       NULL, NULL, NULL))->'parent_notify_result'->'queue_data'->'eventData' $$,
+       '"done"'::jsonb, '"Finished"'::jsonb, '{"n": 2}'::jsonb, '{}'::jsonb))->'parent_notify_result'->'queue_data'->'eventData' $$,
   $$ values ('{"eventType": "xstate.done.actor.0.chParent.Invoking", "eventPayload": {"n": 2}, "actionType": "childFsm_completed"}'::jsonb) $$,
   'a child reaching done sends xstate.done.actor.<invoke id> to its parent, with its context (#523)'
 );
@@ -294,10 +299,60 @@ select results_eq(
   $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
        '55556666-7777-8888-9999-000011112222', 1::bigint,
        NULL, NULL, NULL, NULL, NULL, NULL,
-       '"error"'::jsonb, '"Failed"'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       NULL, NULL, NULL))->'parent_notify_result'->'queue_data'->'eventData'->>'eventType' $$,
+       '"error"'::jsonb, '"Failed"'::jsonb, '{}'::jsonb, '{}'::jsonb))->'parent_notify_result'->'queue_data'->'eventData'->>'eventType' $$,
   $$ values ('xstate.error.actor.1.chParent.Other'::text) $$,
   'a child ending in error sends xstate.error.actor.<invoke id> (#523)'
+);
+
+-- #526: a macrostep that starts a child FSM and a worker async operation keeps both
+-- entries next to the ones already there. The child's result had no
+-- queue_data, so step 6 appended NULL and wiped the whole list.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('66667777-8888-9999-0000-111122223333'::uuid, 'chParent', 'v1');
+select pgmq.create(queue_name := '66667777-8888-9999-0000-111122223333');
+select pgmq.send(queue_name := '66667777-8888-9999-0000-111122223333', msg := '{"enter": 1}'::jsonb);
+select pgmq.send(queue_name := '66667777-8888-9999-0000-111122223333', msg := '{"exit": 1}'::jsonb);
+
+create temp table both526 as
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  '66667777-8888-9999-0000-111122223333', 1::bigint,
+  NULL, NULL, NULL,
+  '[{"id": "0.chParent.Both", "src": "chChild", "input": {"n": 3}, "action_type": "entry",
+     "asyncOperationType": "fsm", "asyncOperationVersion": "v1"},
+    {"id": "0.chParent.Both", "src": "work526", "input": {}, "action_type": "entry",
+     "asyncOperationType": "internalAsyncOperation", "asyncOperationVersion": "v1",
+     "asyncOperationLanguage": "typescript", "parentFsmName": "chParent", "parentFsmVersion": "v1"}]'::jsonb,
+  NULL,
+  '[{"invoke_id": "0.chParent.Earlier", "src": "older", "async_operation_type": "internalAsyncOperation",
+     "queue_id": "chParent_v1_i_older_t", "queue_msg_id": 9}]'::jsonb,
+  '"active"'::jsonb, '{"s": 1}'::jsonb, '{}'::jsonb, '{}'::jsonb) r;
+
+select results_eq(
+  $$ select jsonb_path_query_array(total_async_operation_queue_data, '$[*].src'),
+            jsonb_path_query_array(total_async_operation_queue_data, '$[*].async_operation_type')
+     from fsm_core.fsm_instance where id = '66667777-8888-9999-0000-111122223333'::uuid $$,
+  $$ values ('["older", "chChild", "work526"]'::jsonb,
+             '["internalAsyncOperation", "fsm", "internalAsyncOperation"]'::jsonb) $$,
+  'starting a child FSM and a worker async operation keeps the earlier entry and adds both (#526)'
+);
+
+-- The invoking state exits: only the child's invoke is stopped here.
+select results_eq(
+  $$ select jsonb_path_query_array(r->'new_total_async_operation_queue_data', '$[*].src'),
+            jsonb_path_query_array(r->'confirmed_removed_async_operation_queue_data_success', '$[*].src')
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '66667777-8888-9999-0000-111122223333', 2::bigint,
+       NULL, '[{"id": "0.chParent.Both", "src": "chChild"}]'::jsonb, NULL, NULL, NULL,
+       (select total_async_operation_queue_data from fsm_core.fsm_instance where id = '66667777-8888-9999-0000-111122223333'::uuid),
+       '"active"'::jsonb, '{"s": 2}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values ('["older", "work526"]'::jsonb, '["chChild"]'::jsonb) $$,
+  'on exit the entry is found by invoke_id and src, and the others stay (#526)'
+);
+select is(
+  (select count(*)::int from pgmq.read(
+     (select r->'new_total_async_operation_queue_data'->1->>'queue_id' from both526), 0, 10)),
+  0,
+  'the child''s queued start event is cancelled with the entry''s queue_id and queue_msg_id'
 );
 
 select * from finish();

@@ -12,8 +12,8 @@ select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'fsm_instance_que
 select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'event_name', 'has event_name column');
 select col_type_is('fsm_core', 'fsm_instance_queue_event_logs', 'event_data', 'jsonb', 'event_data is jsonb');
 select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'event_delay', 'has event_delay column');
-select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'send_to_parent_queue_id', 'has send_to_parent_queue_id column');
-select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'send_to_parent_queue_id_event_name', 'has send_to_parent_queue_id_event_name column');
+select hasnt_column('fsm_core', 'fsm_instance_queue_event_logs', 'send_to_parent_queue_id', 'no send_to_parent_queue_id column: FSM-queue events have no reply-to (#526)');
+select hasnt_column('fsm_core', 'fsm_instance_queue_event_logs', 'send_to_parent_queue_id_event_name', 'no send_to_parent_queue_id_event_name column: FSM-queue events have no reply-to (#526)');
 select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'execution_started_at', 'has execution_started_at column');
 select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'execution_duration', 'has execution_duration column');
 select has_column('fsm_core', 'fsm_instance_queue_event_logs', 'execution_finished_at', 'has execution_finished_at column');

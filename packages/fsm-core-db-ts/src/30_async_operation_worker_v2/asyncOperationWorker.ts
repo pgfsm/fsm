@@ -235,7 +235,7 @@ export async function ensureAsyncOperationQueueForWorker(
  * the queue (see `ensureAsyncOperationQueueForWorker` for that). Callers that need
  * to derive an async-operation-actor's queue name -- e.g. `fsm-async-worker-ts`'s
  * `asyncOperationWorkerlet`, matching the same queue
- * `create_async_op_queue_and_send_event_from_fsm_instance_id_v2` (the fsmlet)
+ * `start_async_operation_for_worker_v2` (the fsmlet)
  * writes to -- should call this instead of re-deriving the naming rule
  * themselves, which is what let it drift out of sync before.
  */
