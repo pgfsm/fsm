@@ -167,7 +167,7 @@ export async function macrostepV2(
     fsm_instance_data_save_fsm_status: {},
     fsm_instance_data_save_fsm_state: {},
     fsm_instance_data_save_fsm_context: {} as Json,
-    fsm_instance_data_save_fsm_error: {},
+    fsm_instance_data_save_fsm_error: null as Json,
     fsm_instance_data_save_fsm_output: {},
     fsm_instance_data_save_fsm_xstate_state: {},
     raised_events: [] as Json[],
@@ -191,6 +191,9 @@ export async function macrostepV2(
   // XState's transition selection (#510): from each active leaf, deepest
   // first, the first candidate whose guard passes, at most one per region.
   let selectedTransition: FsmTransitionRow | null = null;
+  // Set to the event's error when an xstate.error.actor.* event selects no
+  // transition (#520).
+  let unhandledActorError: Json | undefined;
   if (eventType !== "initialTransition_event") {
     const candidates = ((await selectAllTransitions(
       deps,
@@ -227,19 +230,31 @@ export async function macrostepV2(
         );
       },
     );
-    if (enabled.length === 0) {
+    if (enabled.length === 0 && eventType.startsWith("xstate.error.actor.")) {
+      // XState's macrostep:
+      //   if (isErrorActorEvent(currentEvent) && !transitions.length) {
+      //     nextSnapshot = cloneMachineSnapshot(snapshot, { status: 'error', error: currentEvent.error });
+      //   }
+      // An actor's error that no transition handles stops the machine (#520).
+      unhandledActorError = msgData.eventData?.eventPayload ?? null;
+      logger.warn(
+        "Unhandled actor error {eventType}; the instance stops in error",
+        {
+          eventType,
+        },
+      );
+    } else if (enabled.length === 0) {
       // Like XState, an event no transition takes is consumed with no change:
       // microstep_v2 with no transition keeps the state.
-      // TODO(#504): an unhandled xstate.error.actor.* event sets status error.
       logger.info("No enabled transition for event {eventType}", {
         eventType,
       });
     } else {
       if (enabled.length > 1) {
-        // One per parallel region; microstep_v2 takes one transition until
-        // #504 runs them together.
+        // One per parallel region; microstep_v2 takes one transition. Running
+        // them together is left to a later spec (SPEC-010's non-goals).
         logger.warn(
-          "{count} transitions enabled for event {eventType} (one per region); only the first runs until #504",
+          "{count} transitions enabled for event {eventType} (one per region); only the first runs",
           { count: enabled.length, eventType },
         );
       }
@@ -443,8 +458,12 @@ export async function macrostepV2(
   // fsm_core 2.1.2 reports it; an older database never does), read above.
   macroSaveFnPayload.fsm_instance_data_save_fsm_status = done
     ? "done"
+    : unhandledActorError !== undefined
+    ? "error"
     : "active"; // "active" | "done" | "error" | "stopped"
-  macroSaveFnPayload.fsm_instance_data_save_fsm_error = {};
+  // The error saved with status error; null keeps the instance's error.
+  macroSaveFnPayload.fsm_instance_data_save_fsm_error =
+    unhandledActorError === undefined ? null : unhandledActorError;
   macroSaveFnPayload.fsm_instance_data_save_fsm_output = {};
 
   macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state =

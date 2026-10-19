@@ -270,7 +270,10 @@ export async function archiveEventFromFsmTypeWorker(
   deps: DBDeps,
   remove_from_current_fsm_instance_queue_id:
     ArchiveWorkerArgs["remove_from_current_fsm_instance_queue_id"],
-  remove_current_queue_msg_id: ArchiveWorkerArgs["remove_current_queue_msg_id"],
+  /** The pgmq message processed; null for an internal event (#520). */
+  remove_current_queue_msg_id:
+    | ArchiveWorkerArgs["remove_current_queue_msg_id"]
+    | null,
   to_be_removed_schedule_queue_msg_ids:
     | ArchiveWorkerArgs["to_be_removed_schedule_queue_msg_ids"]
     | null,
@@ -309,6 +312,12 @@ export async function archiveEventFromFsmTypeWorker(
    */
   processed_internal_event: ArchiveWorkerArgs["processed_internal_event"] =
     null,
+  /**
+   * Saved as the instance's error (with status error, an unhandled
+   * `xstate.error.actor.*` event, #520); null keeps the instance's error.
+   */
+  fsm_instance_data_save_fsm_error:
+    ArchiveWorkerArgs["fsm_instance_data_save_fsm_error"] = null,
 ): Promise<Json> {
   try {
     const text = `
@@ -326,7 +335,8 @@ export async function archiveEventFromFsmTypeWorker(
         $11::jsonb,
         $12::jsonb,
         $13::jsonb,
-        $14::jsonb
+        $14::jsonb,
+        $15::jsonb
       ) AS result;
     `;
     const values = [
@@ -344,6 +354,7 @@ export async function archiveEventFromFsmTypeWorker(
       toJsonbParam(fsm_instance_data_save_fsm_xstate_state),
       toJsonbParam(raised_events ?? []),
       toJsonbParam(processed_internal_event),
+      toJsonbParam(fsm_instance_data_save_fsm_error),
     ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;

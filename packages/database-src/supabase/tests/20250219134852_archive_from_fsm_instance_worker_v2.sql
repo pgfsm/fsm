@@ -1,5 +1,5 @@
 begin;
-select plan(41);
+select plan(42);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -15,8 +15,8 @@ select hasnt_function('fsm_core', 'send_event_to_queue_from_fsm_instance_id_v2',
 select hasnt_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
   'the old async operation name is gone (#526)');
 select has_function('fsm_core', 'archive_event_from_fsm_type_worker_v2',
-  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb'],
-  'archive_event_from_fsm_type_worker_v2(...) exists, with raised_events and processed_internal_event (#519)');
+  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb'],
+  'archive_event_from_fsm_type_worker_v2(...) exists, with raised_events, processed_internal_event (#519) and the error to save (#520)');
 
 delete from fsm_core.fsm_async_operation_queue_event_logs where async_operation_queue_name like 'pFsm_v1_%';
 delete from fsm_core.fsm_instance where fsm_name = 'srcFsm' and fsm_version = 'v1';
@@ -446,6 +446,24 @@ select results_eq(
      from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
   $$ values ('"error"'::jsonb, true, '[]'::jsonb) $$,
   'past the cycle cap the status becomes error with an infinite-loop message (#519)'
+);
+
+-- #520: an unhandled xstate.error.actor.* event: the worker saves status error
+-- with the event's error, and nothing more is processed.
+update fsm_core.fsm_instance
+set fsm_instance_status = '"active"'::jsonb, fsm_instance_error = NULL,
+    internal_event_queue = '[{"eventType": "xstate.done.state.pending"}]'::jsonb, internal_event_count = 0
+where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid;
+select pgmq.send(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111', msg := '{"actorError": 1}'::jsonb);
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  '88889999-aaaa-bbbb-cccc-dddd00001111', (select max(msg_id) from pgmq.read('88889999-aaaa-bbbb-cccc-dddd00001111', 0, 10)), NULL, NULL, NULL, NULL, NULL, NULL,
+  '"error"'::jsonb, '{"s": 6}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[]'::jsonb, NULL, '{"message": "boom"}'::jsonb);
+select results_eq(
+  $$ select fsm_instance_status, fsm_instance_error, internal_event_queue
+     from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
+  $$ values ('"error"'::jsonb, '{"message": "boom"}'::jsonb, '[]'::jsonb) $$,
+  'status error saves the error passed and clears the internal queue (#520)'
 );
 
 select * from finish();

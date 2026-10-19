@@ -101,15 +101,17 @@ export type SyncOperationRegistration = {
 
 /**
  * Used in: fsmworker-helper.ts (macrostepV2 return type). Field names/types
- * for the 12 fields `fsmworker.ts` actually forwards into
+ * for the fields `fsmworker.ts` actually forwards into
  * `archiveEventFromFsmTypeWorker` are tied to `ArchiveWorkerArgs` (so a rename
  * on the PG side follows automatically here) and renamed to match the PG
  * parameter names exactly — they used to diverge (e.g. `remove_*` /
  * `new_*` / bare `total_*` here vs. the PG function's `to_be_removed_*` /
  * `to_be_added_*` / `input_total_*`).
  *
- * `fsm_instance_data_save_fsm_error`, `fsm_instance_data_save_fsm_output`,
- * `exit_actions`, `transition_actions`, and `entry_actions` are computed by
+ * `raised_events` and `fsm_instance_data_save_fsm_error` (the error of an
+ * unhandled `xstate.error.actor.*` event, or null) are forwarded too (#519,
+ * #520). `fsm_instance_data_save_fsm_output`, `exit_actions`,
+ * `transition_actions`, and `entry_actions` are computed by
  * `macrostepV2` but not part of `ArchiveWorkerArgs` — `fsmworker.ts` doesn't
  * forward them to any archive call today. Kept hand-written (schema has no
  * equivalent to derive from) rather than dropped, since nothing here confirms

@@ -697,6 +697,7 @@ export type Database = {
       archive_event_from_fsm_type_worker_v2: {
         Args: {
           fsm_instance_data_save_fsm_context: Json;
+          fsm_instance_data_save_fsm_error?: Json;
           fsm_instance_data_save_fsm_state: Json;
           fsm_instance_data_save_fsm_status: Json;
           fsm_instance_data_save_fsm_xstate_state: Json;

@@ -1,7 +1,8 @@
 set check_function_bodies = off;
 
--- SPEC-010 (a) and (b), #518 / #519: enterStates' done.state events and
--- completion, and the per-instance internal event queue.
+-- SPEC-010 (a), (b) and (c), #518 / #519 / #520: enterStates' done.state
+-- events and completion, the per-instance internal event queue, and an
+-- unhandled actor error.
 -- * One SQL function per XState function: exit_states_v2 is exitStates
 --   (compute_exit_actions_v2 is folded in), compute_entry_set_v2 is
 --   computeEntrySet (compute_entry_actions_v2, renamed, without the actions),
@@ -11,7 +12,8 @@ set check_function_bodies = off;
 --   every active state's exit actions.
 -- * fsm_instance gets an internal event queue and a counter; the archive
 --   appends raised events, takes the head of the queue for an internal
---   event, caps a cycle, and logs internal events with event_source.
+--   event, caps a cycle, logs internal events with event_source, and saves
+--   the error of an unhandled xstate.error.actor.* event.
 ALTER TABLE fsm_core.fsm_instance
     ADD COLUMN internal_event_queue jsonb NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN internal_event_count integer NOT NULL DEFAULT 0;
@@ -730,6 +732,8 @@ $$ LANGUAGE plpgsql;
 -- in this transaction (step 6b). processed_internal_event is set when the
 -- event processed now came from that queue instead of pgmq: it must be the
 -- queue's head, which is removed, and no pgmq message is archived (step 8).
+-- fsm_instance_data_save_fsm_error is saved as the instance's error, with
+-- status error (an unhandled xstate.error.actor.* event, #520); NULL keeps it.
 DROP FUNCTION IF EXISTS fsm_core.archive_event_from_fsm_type_worker_v2(
   text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, text, text
 );
@@ -750,7 +754,8 @@ CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(
   fsm_instance_data_save_fsm_context jsonb,
   fsm_instance_data_save_fsm_xstate_state jsonb,
   raised_events jsonb DEFAULT '[]'::jsonb,
-  processed_internal_event jsonb DEFAULT NULL
+  processed_internal_event jsonb DEFAULT NULL,
+  fsm_instance_data_save_fsm_error jsonb DEFAULT NULL
 ) RETURNS jsonb AS $$
 DECLARE
     i int;
@@ -1059,7 +1064,7 @@ BEGIN
         total_async_operation_queue_data = new_total_async_operation_queue_data,
         internal_event_queue = new_internal_event_queue,
         internal_event_count = new_internal_event_count,
-        fsm_instance_error = COALESCE(saved_error, fsm_instance_error),
+        fsm_instance_error = COALESCE(saved_error, fsm_instance_data_save_fsm_error, fsm_instance_error),
         fsm_instance_status = saved_status,
         fsm_instance_state = fsm_instance_data_save_fsm_state,
         fsm_instance_context = fsm_instance_data_save_fsm_context,
@@ -1135,6 +1140,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-ALTER FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
-REVOKE EXECUTE ON FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) TO fsm_worker;
+ALTER FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
+REVOKE EXECUTE ON FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb) TO fsm_worker;

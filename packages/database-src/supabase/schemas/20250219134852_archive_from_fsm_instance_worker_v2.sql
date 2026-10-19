@@ -236,6 +236,8 @@ $$ LANGUAGE plpgsql;
 -- in this transaction (step 6b). processed_internal_event is set when the
 -- event processed now came from that queue instead of pgmq: it must be the
 -- queue's head, which is removed, and no pgmq message is archived (step 8).
+-- fsm_instance_data_save_fsm_error is saved as the instance's error, with
+-- status error (an unhandled xstate.error.actor.* event, #520); NULL keeps it.
 DROP FUNCTION IF EXISTS fsm_core.archive_event_from_fsm_type_worker_v2(
   text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, text, text
 );
@@ -256,7 +258,8 @@ CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(
   fsm_instance_data_save_fsm_context jsonb,
   fsm_instance_data_save_fsm_xstate_state jsonb,
   raised_events jsonb DEFAULT '[]'::jsonb,
-  processed_internal_event jsonb DEFAULT NULL
+  processed_internal_event jsonb DEFAULT NULL,
+  fsm_instance_data_save_fsm_error jsonb DEFAULT NULL
 ) RETURNS jsonb AS $$
 DECLARE
     i int;
@@ -565,7 +568,7 @@ BEGIN
         total_async_operation_queue_data = new_total_async_operation_queue_data,
         internal_event_queue = new_internal_event_queue,
         internal_event_count = new_internal_event_count,
-        fsm_instance_error = COALESCE(saved_error, fsm_instance_error),
+        fsm_instance_error = COALESCE(saved_error, fsm_instance_data_save_fsm_error, fsm_instance_error),
         fsm_instance_status = saved_status,
         fsm_instance_state = fsm_instance_data_save_fsm_state,
         fsm_instance_context = fsm_instance_data_save_fsm_context,
