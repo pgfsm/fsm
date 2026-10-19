@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(11);
 
 select has_function('fsm_core', 'get_exit_actions_v2', ARRAY['text[]', 'text', 'text'],
   'get_exit_actions_v2(text[], text, text) exists');
@@ -7,8 +7,10 @@ select hasnt_function('fsm_core', 'compute_child_exit_set_v2', ARRAY['ltree', 'l
   'compute_child_exit_set_v2 is gone: inlined into compute_full_exit_set_v2 (#506)');
 select has_function('fsm_core', 'compute_full_exit_set_v2', ARRAY['fsm_core.fsm_transitions', 'text[]'],
   'compute_full_exit_set_v2(fsm_transitions, text[]) exists');
-select has_function('fsm_core', 'compute_exit_actions_v2', ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
-  'compute_exit_actions_v2(fsm_transitions, text[], text, text) exists');
+select has_function('fsm_core', 'exit_states_v2', ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
+  'exit_states_v2(fsm_transitions, text[], text, text) exists');
+select hasnt_function('fsm_core', 'compute_exit_actions_v2', ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
+  'compute_exit_actions_v2 is gone: part of exit_states_v2, which is XState''s exitStates (#518)');
 
 -- Isolate from any pre-existing rows for this fsm_name/version.
 delete from fsm_core.fsm_transitions where fsm_name = 'ea' and fsm_version = 'v1';
@@ -64,20 +66,20 @@ select results_eq(
   'a non-reentering transition does not add the source itself, only its descendants'
 );
 select results_eq(
-  $$ select fsm_core.compute_exit_actions_v2(
+  $$ select fsm_core.exit_states_v2(
        (select t from fsm_core.fsm_transitions t where event_type = 'SELF' and fsm_name = 'ea' and fsm_version = 'v1'),
        ARRAY['m.a', 'm.b'], 'ea', 'v1') $$,
-  $$ values ('{"exit_nodes": ["m", "m.a", "m.b"], "exit_actions": [
+  $$ values ('{"exit_nodes": ["m", "m.a", "m.b"], "state_node_set": [], "exit_actions": [
        {"type": "cleanupA", "fsm_order": 2, "action_type": "exit"},
        {"type": "stopInvokeA", "fsm_order": 2, "action_type": "invoke"},
        {"type": "logExitM", "fsm_order": 1, "action_type": "exit"}
      ]}'::jsonb) $$,
-  'combines the full exit set with its resolved exit/invoke actions'
+  'exits the full exit set, deepest first with each state''s exit and invoke actions, and removes it from the active states'
 );
 select results_eq(
-  $$ select fsm_core.compute_exit_actions_v2(NULL, ARRAY['m.a', 'm.b'], 'ea', 'v1') $$,
-  $$ values ('{"exit_nodes": [], "exit_actions": []}'::jsonb) $$,
-  'a NULL transition record (no matching transition) yields empty exit nodes and actions'
+  $$ select fsm_core.exit_states_v2(NULL, ARRAY['m.a', 'm.b'], 'ea', 'v1') $$,
+  $$ values ('{"exit_nodes": [], "exit_actions": [], "state_node_set": ["m.a", "m.b"]}'::jsonb) $$,
+  'a NULL transition record (no matching transition) exits nothing and leaves the active states'
 );
 
 select * from finish();

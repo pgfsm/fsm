@@ -1,5 +1,5 @@
 begin;
-select plan(15);
+select plan(19);
 
 select has_function('fsm_core', 'microstep_v2',
   ARRAY['fsm_core.fsm_transitions', 'text', 'text[]', 'text', 'text'],
@@ -67,6 +67,32 @@ select results_eq(
      }'::jsonb) $$,
   'the initialTransition_event enters the machine''s default initial-state chain, parents first (#506), with no exits'
 );
+-- exit_states_v2 and enter_states_v2 are XState's exitStates and enterStates:
+-- the active states go from one to the other.
+select has_function('fsm_core', 'exit_states_v2',
+  ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
+  'exit_states_v2(fsm_transitions, text[], text, text) exists');
+select has_function('fsm_core', 'enter_states_v2',
+  ARRAY['fsm_core.fsm_transitions', 'text[]', 'boolean', 'text', 'text'],
+  'enter_states_v2(fsm_transitions, text[], boolean, text, text) exists');
+select results_eq(
+  $$ select r - 'exit_actions'
+     from (select fsm_core.exit_states_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'NEXT' and fsm_name = 'ms' and fsm_version = 'v1'),
+       ARRAY['r', 'r.a'], 'ms', 'v1') as r) s $$,
+  $$ values ('{"exit_nodes": ["r.a"], "state_node_set": ["r"]}'::jsonb) $$,
+  'exit_states_v2 returns the states exited and removes them from the active states (mutStateNodeSet.delete)'
+);
+select results_eq(
+  $$ select jsonb_build_object('nodes', r->'state_node_set', 'entered', r->'states_to_enter',
+            'entry', jsonb_path_query_array(r->'entry_actions', '$[*].type'))
+     from (select fsm_core.enter_states_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'NEXT' and fsm_name = 'ms' and fsm_version = 'v1'),
+       ARRAY['r'], false, 'ms', 'v1') as r) s $$,
+  $$ values ('{"nodes": ["r", "r.b"], "entered": ["r.b"], "entry": ["enterB"]}'::jsonb) $$,
+  'enter_states_v2 adds the states entered to the active states, with their entry actions (mutStateNodeSet.add)'
+);
+
 select results_eq(
   $$ select (fsm_core.microstep_v2(
        (select t from fsm_core.fsm_transitions t where event_type = 'FINISH' and fsm_name = 'ms' and fsm_version = 'v1'),

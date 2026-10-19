@@ -127,15 +127,17 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 
 
-CREATE OR REPLACE FUNCTION fsm_core.compute_exit_actions_v2(
+-- compute_exit_actions_v2 (the exit set and its actions) became part of
+-- exit_states_v2, which is the whole of XState's exitStates (#518).
+DROP FUNCTION IF EXISTS fsm_core.compute_exit_actions_v2(fsm_core.fsm_transitions, TEXT[], TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION fsm_core.exit_states_v2(
     transition_record fsm_core.fsm_transitions,
-    input_state_node_set TEXT[],
-    input_fsm_name TEXT,
-    input_fsm_version TEXT
+    state_node_set TEXT[],
+    fsm_name_param TEXT,
+    fsm_version_param TEXT
 )
-RETURNS JSONB
-LANGUAGE plpgsql
-AS $BODY$
+RETURNS JSONB AS $$
 -- XState's exitStates (packages/core/src/stateUtils.ts) for one transition:
 --
 --   const statesToExit = computeExitSet(transitions, mutStateNodeSet, historyValue);
@@ -146,45 +148,52 @@ AS $BODY$
 --     mutStateNodeSet.delete(s);
 --   }
 --
--- Returns exit_nodes (statesToExit; microstep_v2 removes them from the active
--- states) and exit_actions in that order. History states are not supported, so
--- nothing is recorded for them.
+-- Returns exit_nodes (statesToExit), exit_actions in that order, and
+-- state_node_set (mutStateNodeSet after the exits), which microstep_v2 passes
+-- to enter_states_v2. History states are not supported, so nothing is
+-- recorded for them.
 DECLARE
-  exit_set_result TEXT[];
-  actions_result JSONB;
+    exit_nodes TEXT[];
+    exit_actions JSONB;
+    remaining_state_nodes TEXT[];
 BEGIN
+    -- No transition: nothing exits.
+    IF transition_record IS NULL THEN
+        RETURN jsonb_build_object(
+            'exit_nodes', '[]'::jsonb,
+            'exit_actions', '[]'::jsonb,
+            'state_node_set', to_jsonb(COALESCE(state_node_set, ARRAY[]::TEXT[]))
+        );
+    END IF;
 
-  
-  -- No transition: nothing exits.
-  IF transition_record IS NULL THEN
-      RETURN jsonb_build_object(
-              'exit_nodes', '[]'::JSONB,
-              'exit_actions', '[]'::JSONB
-            );
-  END IF;
+    -- const statesToExit = computeExitSet(transitions, mutStateNodeSet, historyValue);
+    exit_nodes := COALESCE(
+        fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := state_node_set),
+        ARRAY[]::TEXT[]
+    );
 
+    -- statesToExit.sort((a, b) => b.order - a.order), then per state its exit
+    -- actions and a stopChild per invoke: get_exit_actions_v2 returns them in
+    -- that order (fsm_order DESC, exit before invoke).
+    exit_actions := fsm_core.get_exit_actions_v2(
+        input_state_paths := exit_nodes,
+        input_fsm_name := fsm_name_param,
+        input_fsm_version := fsm_version_param
+    )->'actions';
 
+    -- mutStateNodeSet.delete(s), for each state exited
+    remaining_state_nodes := ARRAY(
+        SELECT s FROM unnest(COALESCE(state_node_set, ARRAY[]::TEXT[])) AS s
+        WHERE NOT (s = ANY(exit_nodes))
+    );
 
-  RAISE NOTICE 'Transition Record: %', transition_record;
-  -- const statesToExit = computeExitSet(transitions, mutStateNodeSet, historyValue);
-  SELECT fsm_core.compute_full_exit_set_v2(transition_record := transition_record, state_node_set := input_state_node_set) INTO exit_set_result;
-
-  RAISE NOTICE 'Exit Set Result: %', exit_set_result;
-
-  -- statesToExit.sort((a, b) => b.order - a.order), then per state its exit
-  -- actions and a stopChild per invoke: get_exit_actions_v2 returns them in
-  -- that order (fsm_order DESC, exit before invoke).
-  SELECT fsm_core.get_exit_actions_v2(input_state_paths := exit_set_result, input_fsm_name := input_fsm_name, input_fsm_version := input_fsm_version) INTO actions_result;
-
-  RAISE NOTICE 'exit_actions Result: %', actions_result;
-
-  -- exit_nodes: what microstep_v2 removes (mutStateNodeSet.delete(s)).
-  RETURN jsonb_build_object(
-    'exit_nodes', exit_set_result,
-    'exit_actions', actions_result->'actions'
-  );
+    RETURN jsonb_build_object(
+        'exit_nodes', to_jsonb(exit_nodes),
+        'exit_actions', COALESCE(exit_actions, '[]'::jsonb),
+        'state_node_set', to_jsonb(remaining_state_nodes)
+    );
 END;
-$BODY$;
+$$ LANGUAGE plpgsql;
 
 
 
@@ -205,7 +214,7 @@ BEGIN
     LIMIT 1;
 
 
-    SELECT fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := input_state_node_set, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO result;
+    SELECT fsm_core.exit_states_v2(transition_record := transition_record, state_node_set := input_state_node_set, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param) INTO result;
 
 
     RETURN result;

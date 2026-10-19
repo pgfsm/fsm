@@ -771,7 +771,7 @@ export type Database = {
         };
         Returns: Json;
       };
-      compute_entry_actions_v2: {
+      compute_entry_set_v2: {
         Args: {
           fsm_name_param: string;
           fsm_version_param: string;
@@ -786,16 +786,6 @@ export type Database = {
           p_fsm_name: string;
           p_fsm_version: string;
           p_state_node_set: string[];
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-        };
-        Returns: Json;
-      };
-      compute_exit_actions_v2: {
-        Args: {
-          input_fsm_name: string;
-          input_fsm_version: string;
-          input_state_node_set: string[];
           transition_record:
             Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
@@ -870,6 +860,27 @@ export type Database = {
           input_async_operation_version: string;
           input_parent_fsm_name: string;
           input_parent_fsm_version: string;
+        };
+        Returns: Json;
+      };
+      enter_states_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          is_initial: boolean;
+          state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
+        };
+        Returns: Json;
+      };
+      exit_states_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
