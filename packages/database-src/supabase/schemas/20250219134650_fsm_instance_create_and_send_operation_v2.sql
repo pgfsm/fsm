@@ -117,7 +117,11 @@ CREATE OR REPLACE FUNCTION fsm_core.create_fsm_instance_from_name_v2(
     input_fsm_name text,
     input_fsm_version TEXT,
     input_fsm_context jsonb,
-    create_pgmq_queue boolean DEFAULT true
+    create_pgmq_queue boolean DEFAULT true,
+    -- A child FSM: the instance that invokes it and that invoke's id (#523).
+    -- Without them the instance has no parent (API, pgfsmctl, system).
+    input_parent_fsm_instance_id uuid DEFAULT NULL,
+    input_parent_invoke_id text DEFAULT NULL
 )
 RETURNS JSONB
 AS $$
@@ -155,8 +159,8 @@ BEGIN
     END IF;
 
     -- 2. Create new fsm_instance
-    INSERT INTO fsm_core.fsm_instance (fsm_name, fsm_version, fsm_type, fsm_instance_context)
-    VALUES (input_fsm_name, input_fsm_version, derived_fsm_type, input_fsm_context)
+    INSERT INTO fsm_core.fsm_instance (fsm_name, fsm_version, fsm_type, fsm_instance_context, parent_fsm_instance_id, parent_invoke_id)
+    VALUES (input_fsm_name, input_fsm_version, derived_fsm_type, input_fsm_context, input_parent_fsm_instance_id, input_parent_invoke_id)
     RETURNING * INTO fsm_instance_row;
 
     fsm_instance_id := fsm_instance_row.id;

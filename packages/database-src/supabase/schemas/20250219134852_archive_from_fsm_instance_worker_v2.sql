@@ -98,29 +98,44 @@ CREATE OR REPLACE FUNCTION fsm_core.create_fsm_queue_and_send_event_from_fsm_ins
     parentFsmVersion text,
     from_source_fsm_instance_id uuid
 ) RETURNS jsonb AS $$
+-- An invoked machine is a child actor in XState; here it is a real
+-- fsm_instance, created like any other (its row, transition rows, dispatch to
+-- an fsmlet, queue and initialTransition_event) with this instance recorded as
+-- its parent and `id` as its invoke id, so the parent is told when it finishes
+-- (archive step 9, #523). Before, only a queue was made: no row (the event log's
+-- foreign key failed the parent's archive), no dispatch, and the invoke id was
+-- sent as the child's first event.
 DECLARE
-    child_instance_id uuid := uuid_generate_v4();
-    send_result jsonb;
+    create_result jsonb;
+    child_instance_id uuid;
 BEGIN
-    PERFORM pgmq.create(queue_name := child_instance_id::text);
-
-    send_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
-        input_fsm_instance_id := child_instance_id,
-        input_fsm_instance_id_fsm_type := fsmType,
-        input_fsm_instance_id_fsm_version := fsmVersion,
-        input_send_to_parent_queue_id := from_source_fsm_instance_id,
-        input_send_to_parent_queue_type := 'FSM OR childFSM OR sharedFSM', -- # TODO : pending
-        input_send_to_parent_queue_id_event_name := id,
-        input_event_name := event_name,
-        input_event_action_type := action_type,
-        input_event_data := event_input,
-        input_event_delay := 0,
-        input_event_status := 'fsm_started',
-        input_event_output := '{}'::jsonb,
-        input_error_message := NULL
+    create_result := fsm_core.create_fsm_instance_from_name_v2(
+        input_fsm_name := fsmName,
+        input_fsm_version := fsmVersion,
+        input_fsm_context := COALESCE(event_input, '{}'::jsonb),
+        create_pgmq_queue := true,
+        input_parent_fsm_instance_id := from_source_fsm_instance_id,
+        input_parent_invoke_id := id
     );
+    child_instance_id := (create_result->>'fsm_instance_id')::uuid;
+    IF NOT COALESCE((create_result->>'queue_created')::boolean, false) THEN
+        RAISE EXCEPTION 'child FSM %@% (invoke %) was created without a queue: %',
+            fsmName, fsmVersion, id, create_result->>'message';
+    END IF;
 
-    RETURN send_result || jsonb_build_object('start_queue_worker', true, 'child_instance_id', child_instance_id);
+    -- The same keys as an async actor's entry (queueId, queueMsgId, queueFnName,
+    -- sendToParentQueueIdEventName), so when the invoking state exits the
+    -- parent's archive finds it in total_async_operation_queue_data and cancels
+    -- the child's queued start event. Stopping a child that is already running
+    -- is a follow-up (#514).
+    RETURN jsonb_build_object(
+        'queueId', child_instance_id::text,
+        'queueMsgId', create_result->'send_event_result'->'queue_data'->'queueMsgId',
+        'queueFnName', src,
+        'sendToParentQueueIdEventName', id,
+        'child_instance_id', child_instance_id,
+        'start_queue_worker', true
+    );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -304,6 +319,10 @@ DECLARE
     added_schedule_queue_data jsonb[] := '{}';
     added_async_operation_queue_data jsonb[] := '{}';
     parent_notify_result jsonb;
+    child_parent_fsm_instance_id uuid;
+    child_parent_invoke_id text;
+    child_parent_fsm_name text;
+    child_parent_fsm_version text;
 BEGIN
 
 
@@ -545,20 +564,37 @@ BEGIN
     -- 8. All above macro steps are completed so remove current queue_msg_id from current_workflow_queue_id
     PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id::bigint);
 
-    -- 9. If FSM reached a terminal state and has a real parent queue, notify the parent
-    IF (fsm_instance_data_save_fsm_status #>> '{}') IN ('done', 'stopped', 'completed', 'final')
-        AND send_to_parent_queue_id IS NOT NULL
-        AND send_to_parent_queue_id != fsm_core.pg_system_queue_uuid()
-        AND send_to_parent_queue_id != fsm_core.api_system_queue_uuid()
+    -- 9. If this instance was invoked by a parent FSM and has finished, tell the
+    --    parent, as XState does for a child actor (#523):
+    --    xstate.done.actor.<invoke id> when done, xstate.error.actor.<invoke id>
+    --    on error, nothing when stopped. The parent comes from this instance's row
+    --    (set when it was invoked): the message processed now is usually not the
+    --    one that named the parent, so the message's send_to_parent_* is not used.
+    SELECT fi.parent_fsm_instance_id, fi.parent_invoke_id
+    INTO child_parent_fsm_instance_id, child_parent_invoke_id
+    FROM fsm_core.fsm_instance fi
+    WHERE fi.id = remove_from_current_fsm_instance_queue_id::uuid;
+
+    IF child_parent_fsm_instance_id IS NOT NULL
+        AND (fsm_instance_data_save_fsm_status #>> '{}') IN ('done', 'completed', 'final', 'error')
     THEN
+        SELECT p.fsm_name, p.fsm_version
+        INTO child_parent_fsm_name, child_parent_fsm_version
+        FROM fsm_core.fsm_instance p
+        WHERE p.id = child_parent_fsm_instance_id;
+
         parent_notify_result := fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
-            input_fsm_instance_id              := send_to_parent_queue_id,
-            input_fsm_instance_id_fsm_type     := send_to_parent_queue_type,
-            input_fsm_instance_id_fsm_version  := NULL,
+            input_fsm_instance_id              := child_parent_fsm_instance_id,
+            input_fsm_instance_id_fsm_type     := child_parent_fsm_name,
+            input_fsm_instance_id_fsm_version  := child_parent_fsm_version,
             input_send_to_parent_queue_id      := fsm_core.pg_system_queue_uuid(),
             input_send_to_parent_queue_type    := fsm_core.pg_system_queue_type(),
             input_send_to_parent_queue_id_event_name := fsm_core.pg_system_event_name(),
-            input_event_name                   := send_to_parent_queue_id_event_name,
+            input_event_name                   := CASE
+                                                      WHEN (fsm_instance_data_save_fsm_status #>> '{}') = 'error'
+                                                      THEN 'xstate.error.actor.'
+                                                      ELSE 'xstate.done.actor.'
+                                                  END || child_parent_invoke_id,
             input_event_action_type            := 'childFsm_completed',
             input_event_data                   := fsm_instance_data_save_fsm_context,
             input_event_delay                  := 0,
