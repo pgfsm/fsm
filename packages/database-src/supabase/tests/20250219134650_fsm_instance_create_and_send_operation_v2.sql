@@ -1,11 +1,11 @@
 begin;
-select plan(13);
+select plan(15);
 
 select has_function('fsm_core', 'send_event_to_fsm_queue_with_event_logs_v2',
   ARRAY['uuid', 'text', 'text', 'uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz'],
   'send_event_to_fsm_queue_with_event_logs_v2(...) exists');
-select has_function('fsm_core', 'create_fsm_instance_from_name_v2', ARRAY['text', 'text', 'jsonb', 'boolean'],
-  'create_fsm_instance_from_name_v2(text, text, jsonb, boolean) exists');
+select has_function('fsm_core', 'create_fsm_instance_from_name_v2', ARRAY['text', 'text', 'jsonb', 'boolean', 'uuid', 'text'],
+  'create_fsm_instance_from_name_v2(text, text, jsonb, boolean, uuid, text) exists');
 
 select throws_ok(
   $$ select fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
@@ -108,6 +108,24 @@ select results_eq(
   $$ select fsm_type from fsm_core.fsm_instance where fsm_name = 'childFsm' and fsm_version = 'v1' $$,
   $$ values ('childfsm'::text) $$,
   'a FSM registered as a child in fsm_dependencies is derived as fsm_type=childfsm'
+);
+
+select results_eq(
+  $$ select parent_fsm_instance_id, parent_invoke_id from fsm_core.fsm_instance where fsm_name = 'createFsm' and fsm_version = 'v1' $$,
+  $$ values (NULL::uuid, NULL::text) $$,
+  'an instance created without a parent has none (#523)'
+);
+create temp table created523 as
+select fsm_core.create_fsm_instance_from_name_v2('childFsm', 'v1', '{}'::jsonb, true,
+  '99999999-1111-2222-3333-444444444444'::uuid, '0.createFsm.Invoking') r;
+select results_eq(
+  $$ select fi.parent_fsm_instance_id, fi.parent_invoke_id,
+            c.r->'send_event_result'->'queue_data'->>'sendToParentQueueId',
+            c.r->'send_event_result'->'queue_data'->>'sendToParentQueueIdEventName'
+     from created523 c join fsm_core.fsm_instance fi on fi.id = (c.r->>'fsm_instance_id')::uuid $$,
+  $$ values ('99999999-1111-2222-3333-444444444444'::uuid, '0.createFsm.Invoking'::text,
+             '00000000-0000-0000-0000-000000000000'::text, 'POSTGRES_INTERNAL_EVENT'::text) $$,
+  'a child instance records its parent and invoke id on its row; its start event comes from the system as usual (#523)'
 );
 
 select * from finish();

@@ -19,7 +19,10 @@ create table fsm_core.fsm_instance (
   total_async_operation_queue_data jsonb DEFAULT '[]'::jsonb,
 
 
-  parent uuid default '00000000-0000-0000-0000-000000000001', -- Self-reference, 00000000-0000-0000-0000-000000000001 for system
+  -- The instance that invoked this one as a child FSM, and that invoke's id
+  -- (#523). NULL for an instance started by the API, pgfsmctl or the system.
+  parent_fsm_instance_id uuid,
+  parent_invoke_id text,
   childrens jsonb,    
   started_at timestamp with time zone default now(),
   ended_at timestamp with time zone,
@@ -30,6 +33,11 @@ create table fsm_core.fsm_instance (
   worker_lock_expires_at timestamp with time zone
   
 );
+
+COMMENT ON COLUMN fsm_core.fsm_instance.parent_fsm_instance_id IS
+  'The fsm_instance that invoked this one as a child FSM; NULL when started by the API, pgfsmctl or the system. When this instance finishes, that parent is sent xstate.done.actor.<parent_invoke_id> (done) or xstate.error.actor.<parent_invoke_id> (error).';
+COMMENT ON COLUMN fsm_core.fsm_instance.parent_invoke_id IS
+  'The parent''s invoke id for this child (XState''s child actor id), which names the events the parent gets when this instance finishes.';
 
 -- DO $$
 -- DECLARE

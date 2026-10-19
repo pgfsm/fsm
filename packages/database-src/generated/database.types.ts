@@ -251,7 +251,8 @@ export type Database = {
           fsm_type: string | null;
           fsm_version: string | null;
           id: string;
-          parent: string | null;
+          parent_fsm_instance_id: string | null;
+          parent_invoke_id: string | null;
           started_at: string | null;
           total_async_operation_queue_data: Json | null;
           total_schedule_queue_data: Json | null;
@@ -273,7 +274,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
-          parent?: string | null;
+          parent_fsm_instance_id?: string | null;
+          parent_invoke_id?: string | null;
           started_at?: string | null;
           total_async_operation_queue_data?: Json | null;
           total_schedule_queue_data?: Json | null;
@@ -295,7 +297,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
-          parent?: string | null;
+          parent_fsm_instance_id?: string | null;
+          parent_invoke_id?: string | null;
           started_at?: string | null;
           total_async_operation_queue_data?: Json | null;
           total_schedule_queue_data?: Json | null;
@@ -862,6 +865,8 @@ export type Database = {
           input_fsm_context: Json;
           input_fsm_name: string;
           input_fsm_version: string;
+          input_parent_fsm_instance_id?: string;
+          input_parent_invoke_id?: string;
         };
         Returns: Json;
       };

@@ -1,5 +1,5 @@
 begin;
-select plan(32);
+select plan(33);
 
 -- fsm_core.fsm_instance
 select has_table('fsm_core', 'fsm_instance', 'fsm_core.fsm_instance exists');
@@ -15,7 +15,8 @@ select col_type_is('fsm_core', 'fsm_instance', 'fsm_instance_error', 'jsonb', 'f
 select col_type_is('fsm_core', 'fsm_instance', 'fsm_instance_xstate_state', 'jsonb', 'fsm_instance_xstate_state is jsonb');
 select has_column('fsm_core', 'fsm_instance', 'total_schedule_queue_data', 'has total_schedule_queue_data column');
 select has_column('fsm_core', 'fsm_instance', 'total_async_operation_queue_data', 'has total_async_operation_queue_data column');
-select col_type_is('fsm_core', 'fsm_instance', 'parent', 'uuid', 'parent is uuid');
+select col_type_is('fsm_core', 'fsm_instance', 'parent_fsm_instance_id', 'uuid', 'parent_fsm_instance_id is uuid (#523)');
+select col_type_is('fsm_core', 'fsm_instance', 'parent_invoke_id', 'text', 'parent_invoke_id is text (#523)');
 select has_column('fsm_core', 'fsm_instance', 'childrens', 'has childrens column');
 select has_column('fsm_core', 'fsm_instance', 'started_at', 'has started_at column');
 select has_column('fsm_core', 'fsm_instance', 'ended_at', 'has ended_at column');

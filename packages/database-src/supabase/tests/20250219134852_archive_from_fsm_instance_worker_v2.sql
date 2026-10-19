@@ -1,5 +1,5 @@
 begin;
-select plan(20);
+select plan(26);
 
 select has_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
   ARRAY['text', 'jsonb', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'uuid'],
@@ -44,20 +44,16 @@ select throws_ok(
   'an unsupported fsmType still raises (validated here, before delegating naming to compute_async_operation_queue_name_v2)'
 );
 
--- Characterization test: create_fsm_queue_and_send_event_from_fsm_instance_id_v2
--- generates a brand-new child_instance_id via uuid_generate_v4() and immediately
--- tries to log an event against it in fsm_instance_queue_event_logs, whose
--- fsm_instance_id column has a foreign key to fsm_core.fsm_instance. Since that
--- freshly generated id was never inserted into fsm_instance, this always fails
--- with a foreign key violation as currently written. Filed as a bug (see
--- tracking issue) — documented here rather than silently papered over.
+-- create_fsm_queue_and_send_event_from_fsm_instance_id_v2 creates the child
+-- as a real instance (#523; it used to log against an id it never inserted,
+-- a foreign-key failure), so an unknown child FSM is reported by name.
 select throws_ok(
   $$ select fsm_core.create_fsm_queue_and_send_event_from_fsm_instance_id_v2(
        'childEvt', '{"x": 1}'::jsonb, 'someId', 'childFsm', 'someSrc', 'childName', 'childFsm', 'v1',
        'parentName', 'parentV1', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid) $$,
-  '23503',
-  'insert or update on table "fsm_instance_queue_event_logs" violates foreign key constraint "fsm_instance_queue_event_logs_fsm_instance_id_fkey"',
-  'create_fsm_queue_and_send_event_from_fsm_instance_id_v2 always fails: it logs against a freshly-generated child_instance_id that was never inserted into fsm_instance (foreign key violation, likely a bug)'
+  'P0001',
+  'FSM with name childName and version v1 not found in fsm_core.fsm_json',
+  'invoking a child FSM that is not loaded raises a not-found error, not a foreign-key failure (#523)'
 );
 
 select throws_ok(
@@ -110,14 +106,14 @@ select pgmq.create(queue_name := '11112222-3333-4444-5555-666677778888');
 select pgmq.send(queue_name := 'ffffffff-ffff-ffff-ffff-ffffffffffff', msg := '{"another": "msg"}'::jsonb);
 
 select results_eq(
-  $$ select ((fsm_core.archive_event_from_fsm_type_worker_v2(
+  $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
        'ffffffff-ffff-ffff-ffff-ffffffffffff', 2::bigint,
        NULL, NULL, NULL, NULL, NULL, NULL,
        '"done"'::jsonb, '{"final": true}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb,
        '11112222-3333-4444-5555-666677778888'::uuid, 'FSM', 'childDoneEvt'
-     ))->'parent_notify_result'->'queue_data'->'eventData'->>'eventType') $$,
-  $$ values ('childDoneEvt'::text) $$,
-  'a terminal status with a real parent queue id sends a completion event to the parent'
+     ))->'parent_notify_result' $$,
+  $$ values ('null'::jsonb) $$,
+  'an instance with no parent notifies nobody, whatever the message names as its parent (#523)'
 );
 
 -- #495: an instance with outstanding actor invokes and scheduled events. This
@@ -230,6 +226,78 @@ select results_eq(
        NULL, NULL, NULL) r $$,
   $$ values ('[]'::jsonb) $$,
   'processing the scheduled event itself drops its entry (#516)'
+);
+
+-- #523: invoking a child FSM creates a real child instance with its parent
+-- recorded, and the child finishing tells the parent as
+-- xstate.done.actor.<invoke id> / xstate.error.actor.<invoke id>.
+delete from fsm_core.fsm_transitions where fsm_name = 'chChild' and fsm_version = 'v1';
+delete from fsm_core.fsm_json where fsm_name = 'chChild' and fsm_version = 'v1';
+insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json) values ('chChild', 'v1', '{"id": "chChild"}'::jsonb);
+insert into fsm_core.fsm_transitions (source, computed_sanitized_source_ltree, event_type, fsm_name, fsm_version)
+values ('#chChild', 'chChild', 'NEXT', 'chChild', 'v1');
+delete from fsm_core.fsm_instance where fsm_name = 'chParent' and fsm_version = 'v1';
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('44445555-6666-7777-8888-999900001111'::uuid, 'chParent', 'v1');
+select pgmq.create(queue_name := '44445555-6666-7777-8888-999900001111');
+
+create temp table ch523_invoked as
+select fsm_core.send_event_to_queue_from_fsm_instance_id_v2(
+  event_name := '0.chParent.Invoking', event_input := '{"n": 1}'::jsonb, id := '0.chParent.Invoking',
+  action_type := 'entry', src := 'chChild', asyncOperationName := 'chChild', asyncOperationType := 'fsm',
+  asyncOperationVersion := 'v1', parentFsmName := 'chParent', parentFsmVersion := 'v1',
+  asyncOperationLanguage := 'typescript',
+  from_source_fsm_instance_id := '44445555-6666-7777-8888-999900001111'::uuid) r;
+
+select results_eq(
+  $$ select fi.parent_fsm_instance_id, fi.parent_invoke_id, fi.fsm_instance_context
+     from fsm_core.fsm_instance fi, ch523_invoked
+     where fi.id = (ch523_invoked.r->>'child_instance_id')::uuid $$,
+  $$ values ('44445555-6666-7777-8888-999900001111'::uuid, '0.chParent.Invoking'::text, '{"n": 1}'::jsonb) $$,
+  'invoking a child FSM creates its fsm_instance row with the parent and the invoke id, and the invoke input as context (#523)'
+);
+select results_eq(
+  $$ select (select count(*)::int from fsm_core.fsm_instance_and_fsm_workerlet w where w.fsm_instance_id = (r->>'child_instance_id')::uuid),
+            (select (m.message->'eventData'->>'eventType') from pgmq.read(r->>'child_instance_id', 0, 1) m)
+     from ch523_invoked $$,
+  $$ values (1, 'initialTransition_event'::text) $$,
+  'the child is queued for an fsmlet and starts with initialTransition_event'
+);
+select results_eq(
+  $$ select r->>'queueId' = r->>'child_instance_id', r->>'sendToParentQueueIdEventName', r->>'queueFnName' from ch523_invoked $$,
+  $$ values (true, '0.chParent.Invoking'::text, 'chChild'::text) $$,
+  'the result has the keys the parent''s archive uses to find the invoke on exit'
+);
+
+-- The child finishing: done, then (another child) error.
+select pgmq.send(queue_name := (select r->>'child_instance_id' from ch523_invoked), msg := '{"finish": 1}'::jsonb);
+select results_eq(
+  $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
+       (select r->>'child_instance_id' from ch523_invoked), 2::bigint,
+       NULL, NULL, NULL, NULL, NULL, NULL,
+       '"done"'::jsonb, '"Finished"'::jsonb, '{"n": 2}'::jsonb, '{}'::jsonb,
+       NULL, NULL, NULL))->'parent_notify_result'->'queue_data'->'eventData' $$,
+  $$ values ('{"eventType": "xstate.done.actor.0.chParent.Invoking", "eventPayload": {"n": 2}, "actionType": "childFsm_completed"}'::jsonb) $$,
+  'a child reaching done sends xstate.done.actor.<invoke id> to its parent, with its context (#523)'
+);
+select results_eq(
+  $$ select (m.message->'eventData'->>'eventType') from pgmq.read('44445555-6666-7777-8888-999900001111', 0, 10) m $$,
+  $$ values ('xstate.done.actor.0.chParent.Invoking'::text) $$,
+  'the event is on the parent''s queue'
+);
+
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, parent_fsm_instance_id, parent_invoke_id)
+values ('55556666-7777-8888-9999-000011112222'::uuid, 'chChild', 'v1', '44445555-6666-7777-8888-999900001111'::uuid, '1.chParent.Other');
+select pgmq.create(queue_name := '55556666-7777-8888-9999-000011112222');
+select pgmq.send(queue_name := '55556666-7777-8888-9999-000011112222', msg := '{"fail": 1}'::jsonb);
+select results_eq(
+  $$ select (fsm_core.archive_event_from_fsm_type_worker_v2(
+       '55556666-7777-8888-9999-000011112222', 1::bigint,
+       NULL, NULL, NULL, NULL, NULL, NULL,
+       '"error"'::jsonb, '"Failed"'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       NULL, NULL, NULL))->'parent_notify_result'->'queue_data'->'eventData'->>'eventType' $$,
+  $$ values ('xstate.error.actor.1.chParent.Other'::text) $$,
+  'a child ending in error sends xstate.error.actor.<invoke id> (#523)'
 );
 
 select * from finish();
