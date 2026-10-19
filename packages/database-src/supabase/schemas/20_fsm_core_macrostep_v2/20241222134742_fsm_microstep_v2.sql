@@ -14,118 +14,93 @@ CREATE OR REPLACE FUNCTION fsm_core.microstep_v2(
 	fsm_version_param TEXT
 )
 RETURNS JSONB AS $$
--- XState's microstep (packages/core/src/stateUtils.ts) for one transition:
+-- XState's microstep (packages/core/src/stateUtils.ts) for one transition,
+-- one step per XState call:
 --
 --   const filteredTransitions = removeConflictingTransitions(transitions, ...);
---   if (!isInitial) [nextState, historyValue] = exitStates(...);       // 1
+--   if (!isInitial) [nextState, historyValue] = exitStates(...);              // 1
 --   nextState = resolveActionsAndContext(..., filteredTransitions.flatMap((t) => t.actions));  // 2
---   nextState = enterStates(..., isInitial);                            // 3
---   // mutStateNodeSet: exitStates deletes each exited state, enterStates
---   // adds each entered one                                            // 4
---   if (nextState.status === 'done') ... the remaining states' exit actions
+--   nextState = enterStates(..., isInitial);                                   // 3
+--   const nextStateNodes = [...mutStateNodeSet];
+--   if (nextState.status === 'done') {
+--     nextState = resolveActionsAndContext(..., nextStateNodes
+--       .sort((a, b) => b.order - a.order).flatMap((state) => state.exit));    // 4
+--   }
 --
--- Only one transition is passed (no conflicts to remove), and the actions are
--- returned for the sync worker to run in that order instead of being run here.
--- `done` covers a top-level final state (5); done.state events and the exit
--- actions on completion are not done yet (#504).
+-- exit_states_v2 and enter_states_v2 are exitStates and enterStates; the
+-- active states (mutStateNodeSet) go from one to the other. Only one
+-- transition is passed (no conflicts to remove), and the actions are returned
+-- for the sync worker to run in that order instead of being run here. The
+-- done.state events enterStates raises are returned as raised_events, for the
+-- archive to put on the instance's internal event queue (SPEC-010, #518).
 DECLARE
-	
 	transition_actions JSONB;
 	exit_result JSONB;
 	entry_result JSONB;
-	exit_nodes TEXT[];
-	entry_nodes TEXT[];
 	updated_state_nodes TEXT[];
-	updated_state_nodes_jsonb JSONB;
-	exit_actions JSONB;
-	entry_actions JSONB;
-	initial_actions JSONB;
-	result_json JSONB;
 	is_done BOOLEAN;
 	is_initial BOOLEAN;
+	completion_exit_actions JSONB := '[]'::jsonb;
 BEGIN
-	RAISE NOTICE 'fsm_core.microstep_v2 called with event_name=%, fsm_name=%, fsm_version=%', event_name, fsm_name_param, fsm_version_param;
-	
-	RAISE NOTICE 'state_value_node_set: %', state_value_node_set;
-
+	RAISE NOTICE 'fsm_core.microstep_v2 called with event_name=%, fsm_name=%, fsm_version=%, state_value_node_set=%',
+		event_name, fsm_name_param, fsm_version_param, state_value_node_set;
 
 	-- The initial step enters the machine's initial states and exits nothing,
 	-- whatever transition record it is given (#506).
 	is_initial := event_name = 'initialTransition_event';
 
-	-- 1. Exit states
-	-- if (!isInitial) exitStates(...)
+	-- 1. if (!isInitial) exitStates(...)
 	IF is_initial THEN
-		exit_result := jsonb_build_object('exit_nodes', '[]'::jsonb, 'exit_actions', '[]'::jsonb);
+		exit_result := jsonb_build_object(
+			'exit_nodes', '[]'::jsonb,
+			'exit_actions', '[]'::jsonb,
+			'state_node_set', to_jsonb(COALESCE(state_value_node_set, ARRAY[]::TEXT[]))
+		);
 	ELSE
-		exit_result := fsm_core.compute_exit_actions_v2(transition_record := transition_record, input_state_node_set := state_value_node_set, input_fsm_name := transition_record.fsm_name, input_fsm_version := transition_record.fsm_version);
+		exit_result := fsm_core.exit_states_v2(
+			transition_record := transition_record,
+			state_node_set := state_value_node_set,
+			fsm_name_param := fsm_name_param,
+			fsm_version_param := fsm_version_param
+		);
 	END IF;
-	RAISE NOTICE 'exit_result: %', exit_result;
-	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO exit_nodes
-	FROM jsonb_array_elements_text(COALESCE(exit_result->'exit_nodes', '[]'::jsonb));
-	RAISE NOTICE 'exit_nodes: %', exit_nodes;
 
-
-	-- 2. Execute transition content:
-	-- resolveActionsAndContext(..., filteredTransitions.flatMap((t) => t.actions))
+	-- 2. resolveActionsAndContext(..., filteredTransitions.flatMap((t) => t.actions))
 	transition_actions := transition_record.actions;
-	RAISE NOTICE 'transition_actions: %', transition_actions; 
 
-	-- 3. Enter states: enterStates(..., isInitial)
-	entry_result := fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := is_initial);
-	RAISE NOTICE 'entry_result: %', entry_result;
-	SELECT COALESCE(array_agg(value), ARRAY[]::TEXT[]) INTO entry_nodes
-	FROM jsonb_array_elements_text(COALESCE(entry_result->'states_to_enter', '[]'::jsonb));
-	RAISE NOTICE 'entry_nodes: %', entry_nodes;
-	
-
-	-- 4. mutStateNodeSet: exitStates deletes each exited state and enterStates
-	--    adds each entered one: (state_value_node_set - exit_nodes) + entry_nodes
-	updated_state_nodes := ARRAY(
-		SELECT DISTINCT x FROM (
-			SELECT unnest(state_value_node_set) AS x
-			EXCEPT
-			SELECT unnest(exit_nodes) AS x
-			UNION
-			SELECT unnest(entry_nodes) AS x
-		) t
-		ORDER BY x
+	-- 3. enterStates(..., isInitial), on the active states left after the exits
+	entry_result := fsm_core.enter_states_v2(
+		transition_record := transition_record,
+		state_node_set := ARRAY(SELECT jsonb_array_elements_text(exit_result->'state_node_set')),
+		is_initial := is_initial,
+		fsm_name_param := fsm_name_param,
+		fsm_version_param := fsm_version_param
 	);
-	RAISE NOTICE 'updated_state_nodes: %', updated_state_nodes;
+	updated_state_nodes := ARRAY(SELECT jsonb_array_elements_text(entry_result->'state_node_set'));
+	is_done := (entry_result->>'done')::BOOLEAN;
 
-	
-	updated_state_nodes_jsonb := fsm_core.build_nested_json_recursive(paths := updated_state_nodes);
-	RAISE NOTICE 'updated_state_nodes_jsonb: %', updated_state_nodes_jsonb;
+	-- 4. if (nextState.status === 'done'): every active state's exit actions,
+	--    deepest first. XState then stops the machine's children; here each
+	--    state's invokes come back as stops too, for the sync worker to cancel
+	--    their queued messages (get_exit_actions_v2, as when a state exits).
+	IF is_done THEN
+		completion_exit_actions := fsm_core.get_exit_actions_v2(
+			input_state_paths := updated_state_nodes,
+			input_fsm_name := fsm_name_param,
+			input_fsm_version := fsm_version_param
+		)->'actions';
+	END IF;
 
-	-- 5. done: the machine is now in a top-level final state (a final child
-	--    of the root), so the instance has finished and the sync worker
-	--    marks it done (#500). The root is matched by parent_node rather
-	--    than by ltree depth: a root id with dots spans several labels.
-	is_done := EXISTS (
-		SELECT 1
-		FROM fsm_core.fsm_states fs
-		JOIN fsm_core.fsm_states root
-		  ON root.fsm_name = fs.fsm_name
-		 AND root.fsm_version = fs.fsm_version
-		 AND root.parent_node IS NULL
-		 AND fs.parent_node = root.computed_state_key_ltree::text
-		WHERE fs.fsm_name = fsm_name_param
-		  AND fs.fsm_version = fsm_version_param
-		  AND fs.type = 'final'
-		  AND fs.computed_state_key_ltree::text = ANY(updated_state_nodes)
-	);
-
-	-- 6. Return result as JSONB
-	result_json := jsonb_build_object(
+	RETURN jsonb_build_object(
 		'updated_state_value_node_set', updated_state_nodes,
-		'updated_state_value', updated_state_nodes_jsonb,
+		'updated_state_value', fsm_core.build_nested_json_recursive(paths := updated_state_nodes),
 		'exit_actions', exit_result->'exit_actions',
-		'entry_actions', entry_result->'entry_actions_for_states_to_enter',
-		'initial_actions', entry_result->'initial_actions_for_common_states',
+		'entry_actions', entry_result->'entry_actions',
+		'initial_actions', entry_result->'initial_actions',
 		'transition_actions', transition_actions,
-		'done', is_done
+		'raised_events', entry_result->'raised_events',
+		'done', is_done,
+		'completion_exit_actions', COALESCE(completion_exit_actions, '[]'::jsonb)
 	);
-	RAISE NOTICE 'fsm_core.microstep_v2 result: %', result_json;
-	RETURN result_json;
 END;
 $$ LANGUAGE plpgsql;

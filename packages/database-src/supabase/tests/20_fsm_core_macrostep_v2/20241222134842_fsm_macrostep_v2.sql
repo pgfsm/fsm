@@ -59,7 +59,7 @@ select results_eq(
        "transition_actions": [{"type": "doNext"}],
        "updated_state_value": {"r": "b"},
        "updated_state_value_node_set": ["r", "r.b"],
-       "done": false
+       "done": false, "raised_events": [], "completion_exit_actions": []
      }'::jsonb) $$,
   'a single unambiguous transition runs straight through to microstep_v2'
 );
@@ -72,7 +72,7 @@ select results_eq(
        "transition_actions": [{"type": "doGuardedTrue"}],
        "updated_state_value": {"r": "b"},
        "updated_state_value_node_set": ["r", "r.b"],
-       "done": false
+       "done": false, "raised_events": [], "completion_exit_actions": []
      }'::jsonb) $$,
   'guard evaluation narrows two same-event candidates down to the one with cond.value = true'
 );
@@ -100,7 +100,7 @@ select results_eq(
        "transition_actions": null,
        "updated_state_value": {"r": "a"},
        "updated_state_value_node_set": ["r", "r.a"],
-       "done": false
+       "done": false, "raised_events": [], "completion_exit_actions": []
      }'::jsonb) $$,
   'fsm_worker_v2 resolves the current state value and drives the initial transition end to end'
 );

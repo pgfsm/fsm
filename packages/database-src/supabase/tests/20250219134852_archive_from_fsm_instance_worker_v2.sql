@@ -1,5 +1,5 @@
 begin;
-select plan(32);
+select plan(42);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -15,8 +15,8 @@ select hasnt_function('fsm_core', 'send_event_to_queue_from_fsm_instance_id_v2',
 select hasnt_function('fsm_core', 'create_async_op_queue_and_send_event_from_fsm_instance_id_v2',
   'the old async operation name is gone (#526)');
 select has_function('fsm_core', 'archive_event_from_fsm_type_worker_v2',
-  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb'],
-  'archive_event_from_fsm_type_worker_v2(...) exists, without reply-to parameters (#526)');
+  ARRAY['text', 'bigint', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb', 'jsonb'],
+  'archive_event_from_fsm_type_worker_v2(...) exists, with raised_events, processed_internal_event (#519) and the error to save (#520)');
 
 delete from fsm_core.fsm_async_operation_queue_event_logs where async_operation_queue_name like 'pFsm_v1_%';
 delete from fsm_core.fsm_instance where fsm_name = 'srcFsm' and fsm_version = 'v1';
@@ -92,6 +92,7 @@ select results_eq(
        '"active"'::jsonb, '{"foo": "bar"}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb) $$,
   $$ values ('{
        "parent_notify_result": null, "added_async_operation_queue_data": [], "added_schedule_queue_data": [],
+       "internal_event_queue": [], "internal_event_count": 0,
        "new_total_async_operation_queue_data": [], "old_total_async_operation_queue_data": null,
        "new_total_schedule_queue_data": [], "old_total_schedule_queue_data": null,
        "not_confirmed_removed_async_operation_queue_data": [], "not_confirmed_removed_schedule_queue_data": [],
@@ -353,6 +354,116 @@ select is(
      (select r->'new_total_async_operation_queue_data'->1->>'queue_id' from both526), 0, 10)),
   0,
   'the child''s queued start event is cancelled with the entry''s queue_id and queue_msg_id'
+);
+
+-- SPEC-010 (b), #519: the internal event queue. An event from pgmq raises two
+-- events; the first is then processed from the internal queue.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_type)
+values ('88889999-aaaa-bbbb-cccc-dddd00001111'::uuid, 'iqFsm', 'v1', 'fsm');
+select pgmq.create(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111');
+select pgmq.send(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111', msg := '{"external": 1}'::jsonb);
+
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  '88889999-aaaa-bbbb-cccc-dddd00001111', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+  '"active"'::jsonb, '{"s": 1}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[{"eventType": "xstate.done.state.e1"}, {"eventType": "xstate.done.state.e2"}]'::jsonb, NULL);
+select results_eq(
+  $$ select internal_event_queue, internal_event_count, fsm_instance_state
+     from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
+  $$ values ('[{"eventType": "xstate.done.state.e1"}, {"eventType": "xstate.done.state.e2"}]'::jsonb, 0, '{"s": 1}'::jsonb) $$,
+  'the archive appends raised_events to the internal event queue with the state it saves (#519)'
+);
+select results_eq(
+  $$ select array_agg(event_name order by event_name), array_agg(distinct event_source), bool_and(fsm_instance_queue_msg_id is null)
+     from fsm_core.fsm_instance_queue_event_logs where fsm_instance_id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid and event_source = 'internal' $$,
+  $$ values (ARRAY['xstate.done.state.e1', 'xstate.done.state.e2'], ARRAY['internal'], true) $$,
+  'each raised event is logged with event_source = internal (#519)'
+);
+
+-- A message that arrived meanwhile stays on pgmq while internal events go first.
+select pgmq.send(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111', msg := '{"external": 2}'::jsonb);
+select results_eq(
+  $$ select r->'internal_event_queue', (r->>'internal_event_count')::int
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{"s": 2}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[{"eventType": "xstate.done.state.e3"}]'::jsonb, '{"eventType": "xstate.done.state.e1"}'::jsonb) r $$,
+  $$ values ('[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb, 1) $$,
+  'processing an internal event removes the head of the queue and counts it (#519)'
+);
+select is(
+  (select count(*)::int from pgmq.read('88889999-aaaa-bbbb-cccc-dddd00001111', 0, 10)),
+  1,
+  'an internal event archives no pgmq message: the waiting one is still there'
+);
+select throws_like(
+  $$ select fsm_core.archive_event_from_fsm_type_worker_v2(
+       '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, '{"eventType": "xstate.done.state.e3"}'::jsonb) $$,
+  'internal event % is not the head of instance %',
+  'an internal event that isn''t the head of the queue is refused'
+);
+
+-- A failing archive saves nothing: the raised events and the state go together.
+select throws_ok(
+  $$ select fsm_core.archive_event_from_fsm_type_worker_v2(
+       '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL,
+       '[{"id": "bad", "src": "x", "asyncOperationType": "unsupported"}]'::jsonb, NULL, NULL,
+       '"active"'::jsonb, '{"s": 3}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[{"eventType": "xstate.done.state.lost"}]'::jsonb, '{"eventType": "xstate.done.state.e2"}'::jsonb) $$,
+  'P0001'
+);
+select results_eq(
+  $$ select internal_event_queue, internal_event_count, fsm_instance_state
+     from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
+  $$ values ('[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb, 1, '{"s": 2}'::jsonb) $$,
+  'a failed archive leaves both the internal queue and the state unchanged (#519)'
+);
+
+-- An event from pgmq resets the count; done clears the queue, raised events included.
+select results_eq(
+  $$ select r->'internal_event_queue', (r->>'internal_event_count')::int
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '88889999-aaaa-bbbb-cccc-dddd00001111', 2::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"done"'::jsonb, '{"s": 4}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[{"eventType": "xstate.done.state.iqFsm"}]'::jsonb, NULL) r $$,
+  $$ values ('[]'::jsonb, 0) $$,
+  'an instance that is done keeps no internal events, as XState''s macrostep stops (#519)'
+);
+
+-- The cycle cap: the 101st internal event in a row sets the instance to error.
+update fsm_core.fsm_instance
+set internal_event_queue = '[{"eventType": "xstate.done.state.loop"}]'::jsonb, internal_event_count = 100,
+    fsm_instance_status = '"active"'::jsonb
+where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid;
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+  '"active"'::jsonb, '{"s": 5}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[{"eventType": "xstate.done.state.loop"}]'::jsonb, '{"eventType": "xstate.done.state.loop"}'::jsonb);
+select results_eq(
+  $$ select fsm_instance_status, fsm_instance_error->>'message' like 'Infinite loop: more than 100 internal events in a row%', internal_event_queue
+     from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
+  $$ values ('"error"'::jsonb, true, '[]'::jsonb) $$,
+  'past the cycle cap the status becomes error with an infinite-loop message (#519)'
+);
+
+-- #520: an unhandled xstate.error.actor.* event: the worker saves status error
+-- with the event's error, and nothing more is processed.
+update fsm_core.fsm_instance
+set fsm_instance_status = '"active"'::jsonb, fsm_instance_error = NULL,
+    internal_event_queue = '[{"eventType": "xstate.done.state.pending"}]'::jsonb, internal_event_count = 0
+where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid;
+select pgmq.send(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111', msg := '{"actorError": 1}'::jsonb);
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  '88889999-aaaa-bbbb-cccc-dddd00001111', (select max(msg_id) from pgmq.read('88889999-aaaa-bbbb-cccc-dddd00001111', 0, 10)), NULL, NULL, NULL, NULL, NULL, NULL,
+  '"error"'::jsonb, '{"s": 6}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[]'::jsonb, NULL, '{"message": "boom"}'::jsonb);
+select results_eq(
+  $$ select fsm_instance_status, fsm_instance_error, internal_event_queue
+     from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
+  $$ values ('"error"'::jsonb, '{"message": "boom"}'::jsonb, '[]'::jsonb) $$,
+  'status error saves the error passed and clears the internal queue (#520)'
 );
 
 select * from finish();

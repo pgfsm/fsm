@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                              |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                              |
+| Status  | Accepted                                                                                                                                                                           |
 | Date    | 2026-10-18                                                                                                                                                                         |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                           |
 | Issue   | #504                                                                                                                                                                               |
@@ -284,4 +284,11 @@ The SQL path:
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+- #518: `microstep_v2` returns `raised_events` and the completion exit actions.
+- #519: the internal event queue on `fsm_instance`; the archive appends, removes
+  and caps.
+- #520: the sync worker takes internal events first; an unhandled actor error
+  sets status `error`.
+- #521: the SQL `macrostep_v2` / `fsm_worker_v2` raise and process `done.state`.
+- #522: end to end, `loadTest` and `creditCheck` finish without a hand-sent
+  `done.state`.

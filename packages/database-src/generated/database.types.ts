@@ -251,6 +251,8 @@ export type Database = {
           fsm_type: string | null;
           fsm_version: string | null;
           id: string;
+          internal_event_count: number;
+          internal_event_queue: Json;
           parent_fsm_instance_id: string | null;
           parent_invoke_id: string | null;
           started_at: string | null;
@@ -274,6 +276,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
+          internal_event_count?: number;
+          internal_event_queue?: Json;
           parent_fsm_instance_id?: string | null;
           parent_invoke_id?: string | null;
           started_at?: string | null;
@@ -297,6 +301,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
+          internal_event_count?: number;
+          internal_event_queue?: Json;
           parent_fsm_instance_id?: string | null;
           parent_invoke_id?: string | null;
           started_at?: string | null;
@@ -384,6 +390,7 @@ export type Database = {
           event_delay: number | null;
           event_name: string | null;
           event_output: Json | null;
+          event_source: string;
           event_status: string | null;
           execution_duration: number | null;
           execution_finished_at: string | null;
@@ -400,6 +407,7 @@ export type Database = {
           event_delay?: number | null;
           event_name?: string | null;
           event_output?: Json | null;
+          event_source?: string;
           event_status?: string | null;
           execution_duration?: number | null;
           execution_finished_at?: string | null;
@@ -416,6 +424,7 @@ export type Database = {
           event_delay?: number | null;
           event_name?: string | null;
           event_output?: Json | null;
+          event_source?: string;
           event_status?: string | null;
           execution_duration?: number | null;
           execution_finished_at?: string | null;
@@ -688,11 +697,14 @@ export type Database = {
       archive_event_from_fsm_type_worker_v2: {
         Args: {
           fsm_instance_data_save_fsm_context: Json;
+          fsm_instance_data_save_fsm_error?: Json;
           fsm_instance_data_save_fsm_state: Json;
           fsm_instance_data_save_fsm_status: Json;
           fsm_instance_data_save_fsm_xstate_state: Json;
           input_total_async_operation_queue_data: Json;
           input_total_schedule_queue_data: Json;
+          processed_internal_event?: Json;
+          raised_events?: Json;
           remove_current_queue_msg_id: number;
           remove_from_current_fsm_instance_queue_id: string;
           to_be_added_async_operation_queue_data: Json;
@@ -771,7 +783,7 @@ export type Database = {
         };
         Returns: Json;
       };
-      compute_entry_actions_v2: {
+      compute_entry_set_v2: {
         Args: {
           fsm_name_param: string;
           fsm_version_param: string;
@@ -786,16 +798,6 @@ export type Database = {
           p_fsm_name: string;
           p_fsm_version: string;
           p_state_node_set: string[];
-          transition_record:
-            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
-        };
-        Returns: Json;
-      };
-      compute_exit_actions_v2: {
-        Args: {
-          input_fsm_name: string;
-          input_fsm_version: string;
-          input_state_node_set: string[];
           transition_record:
             Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
@@ -870,6 +872,27 @@ export type Database = {
           input_async_operation_version: string;
           input_parent_fsm_name: string;
           input_parent_fsm_version: string;
+        };
+        Returns: Json;
+      };
+      enter_states_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          is_initial: boolean;
+          state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
+        };
+        Returns: Json;
+      };
+      exit_states_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          state_node_set: string[];
+          transition_record:
+            Database["fsm_core"]["Tables"]["fsm_transitions"]["Row"];
         };
         Returns: Json;
       };
@@ -1092,6 +1115,15 @@ export type Database = {
       };
       is_descendant: {
         Args: { input_child: unknown; input_parent: unknown };
+        Returns: boolean;
+      };
+      is_in_final_state_v2: {
+        Args: {
+          fsm_name_param: string;
+          fsm_version_param: string;
+          state_node_set: string[];
+          state_path: string;
+        };
         Returns: boolean;
       };
       json_matches_schema: {

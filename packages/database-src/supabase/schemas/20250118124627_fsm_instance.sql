@@ -17,6 +17,11 @@ create table fsm_core.fsm_instance (
 
   total_schedule_queue_data jsonb DEFAULT '[]'::jsonb,
   total_async_operation_queue_data jsonb DEFAULT '[]'::jsonb,
+  -- XState's internal event queue (SPEC-010, #519): the events a microstep
+  -- raised (done.state), taken before the instance's pgmq queue.
+  internal_event_queue jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Internal events processed since the last external one, for the cycle cap.
+  internal_event_count integer NOT NULL DEFAULT 0,
 
 
   -- The instance that invoked this one as a child FSM, and that invoke's id
@@ -34,6 +39,10 @@ create table fsm_core.fsm_instance (
   
 );
 
+COMMENT ON COLUMN fsm_core.fsm_instance.internal_event_queue IS
+  'Events raised by the instance''s own microsteps (xstate.done.state.<id>), oldest first. The sync worker takes the head before reading the instance''s pgmq queue; the archive appends to it and removes the head in the same transaction as the state. Cleared when the instance stops being active.';
+COMMENT ON COLUMN fsm_core.fsm_instance.internal_event_count IS
+  'Internal events processed since the last event from the pgmq queue. Past 100 the instance is set to error (an infinite loop).';
 COMMENT ON COLUMN fsm_core.fsm_instance.parent_fsm_instance_id IS
   'The fsm_instance that invoked this one as a child FSM; NULL when started by the API, pgfsmctl or the system. When this instance finishes, that parent is sent xstate.done.actor.<parent_invoke_id> (done) or xstate.error.actor.<parent_invoke_id> (error).';
 COMMENT ON COLUMN fsm_core.fsm_instance.parent_invoke_id IS

@@ -1,5 +1,5 @@
 begin;
-select plan(15);
+select plan(26);
 
 select has_function('fsm_core', 'microstep_v2',
   ARRAY['fsm_core.fsm_transitions', 'text', 'text[]', 'text', 'text'],
@@ -12,6 +12,8 @@ delete from fsm_core.fsm_transitions where fsm_name = 'msd' and fsm_version = 'v
 delete from fsm_core.fsm_states where fsm_name = 'msd' and fsm_version = 'v1';
 delete from fsm_core.fsm_transitions where fsm_name in ('msi', 'msp', 'msq') and fsm_version = 'v1';
 delete from fsm_core.fsm_states where fsm_name in ('msi', 'msp', 'msq') and fsm_version = 'v1';
+delete from fsm_core.fsm_transitions where fsm_name in ('mdn', 'mdi', 'mdr') and fsm_version = 'v1';
+delete from fsm_core.fsm_states where fsm_name in ('mdn', 'mdi', 'mdr') and fsm_version = 'v1';
 
 -- Fixture: compound root "r" (initial -> a) with atomic siblings "r.a"/"r.b",
 -- each carrying its own entry/exit actions, plus a transition a -> b; and a
@@ -47,7 +49,7 @@ select results_eq(
        "transition_actions": [{"type": "doNext"}],
        "updated_state_value": {"r": "b"},
        "updated_state_value_node_set": ["r", "r.b"],
-       "done": false
+       "done": false, "raised_events": [], "completion_exit_actions": []
      }'::jsonb) $$,
   'a sibling transition exits the source but not the domain (#506), enters the target, and rebuilds the state value'
 );
@@ -63,10 +65,36 @@ select results_eq(
        "transition_actions": null,
        "updated_state_value": {"r": "a"},
        "updated_state_value_node_set": ["r", "r.a"],
-       "done": false
+       "done": false, "raised_events": [], "completion_exit_actions": []
      }'::jsonb) $$,
   'the initialTransition_event enters the machine''s default initial-state chain, parents first (#506), with no exits'
 );
+-- exit_states_v2 and enter_states_v2 are XState's exitStates and enterStates:
+-- the active states go from one to the other.
+select has_function('fsm_core', 'exit_states_v2',
+  ARRAY['fsm_core.fsm_transitions', 'text[]', 'text', 'text'],
+  'exit_states_v2(fsm_transitions, text[], text, text) exists');
+select has_function('fsm_core', 'enter_states_v2',
+  ARRAY['fsm_core.fsm_transitions', 'text[]', 'boolean', 'text', 'text'],
+  'enter_states_v2(fsm_transitions, text[], boolean, text, text) exists');
+select results_eq(
+  $$ select r - 'exit_actions'
+     from (select fsm_core.exit_states_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'NEXT' and fsm_name = 'ms' and fsm_version = 'v1'),
+       ARRAY['r', 'r.a'], 'ms', 'v1') as r) s $$,
+  $$ values ('{"exit_nodes": ["r.a"], "state_node_set": ["r"]}'::jsonb) $$,
+  'exit_states_v2 returns the states exited and removes them from the active states (mutStateNodeSet.delete)'
+);
+select results_eq(
+  $$ select jsonb_build_object('nodes', r->'state_node_set', 'entered', r->'states_to_enter',
+            'entry', jsonb_path_query_array(r->'entry_actions', '$[*].type'), 'raised', r->'raised_events', 'done', r->'done')
+     from (select fsm_core.enter_states_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'NEXT' and fsm_name = 'ms' and fsm_version = 'v1'),
+       ARRAY['r'], false, 'ms', 'v1') as r) s $$,
+  $$ values ('{"nodes": ["r", "r.b"], "entered": ["r.b"], "entry": ["enterB"], "raised": [], "done": false}'::jsonb) $$,
+  'enter_states_v2 adds the states entered to the active states, with their entry actions (mutStateNodeSet.add)'
+);
+
 select results_eq(
   $$ select (fsm_core.microstep_v2(
        (select t from fsm_core.fsm_transitions t where event_type = 'FINISH' and fsm_name = 'ms' and fsm_version = 'v1'),
@@ -284,6 +312,134 @@ select results_eq(
        'JUMP', ARRAY['q', 'q.p', 'q.p.a', 'q.p.a.c', 'q.p.a.c.x', 'q.p.b', 'q.p.b.b1'], 'msq', 'v1') as r) s $$,
   $$ values ('{"initial": ["initAC"], "nodes": ["q", "q.p", "q.p.a", "q.p.a.c", "q.p.a.c.x", "q.p.b", "q.p.b.b2"]}'::jsonb) $$,
   'a region entered again through its parallel parent runs its initial state''s initial actions, not its own (#506)'
+);
+
+-- SPEC-010 (a), #518: the done.state events a microstep raises, as XState's
+-- enterStates does. Fixture mdn: compound root "m" (an invoke, exit exitM)
+-- -> parallel "m.w" with region "m.w.a" (a1, final af) and region "m.w.n",
+-- itself parallel with regions "m.w.n.x" (x1, final xf) and "m.w.n.y" (y1,
+-- final yf); m.w's onDone goes to the top-level final "m.done".
+insert into fsm_core.fsm_states
+  (state_id_with_fsm_name_and_fsm_version, computed_state_id_ltree, computed_state_key_ltree,
+   id, key, parent_node, type, fsm_order, initial, states, exit, invoke, fsm_name, fsm_version)
+values
+  ('mdn.v1.m', 'm', 'm', 'm', 'm', NULL, 'compound', 1, '{"target": ["#m.w"], "source": "#m"}'::jsonb, NULL,
+   '[{"type": "exitM"}]'::jsonb, '[{"type": "xstate.invoke", "id": "m.job", "src": "job"}]'::jsonb, 'mdn', 'v1'),
+  ('mdn.v1.m.w', 'm.w', 'm.w', 'm.w', 'w', 'm', 'parallel', 2, NULL,
+   '{"a": {"id": "m.w.a", "key": "a"}, "n": {"id": "m.w.n", "key": "n"}}'::jsonb, '[{"type": "exitW"}]'::jsonb, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.a', 'm.w.a', 'm.w.a', 'm.w.a', 'a', 'm.w', 'compound', 3, '{"target": ["#m.w.a.a1"], "source": "#m.w.a"}'::jsonb, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.a.a1', 'm.w.a.a1', 'm.w.a.a1', 'm.w.a.a1', 'a1', 'm.w.a', 'atomic', 4, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.a.af', 'm.w.a.af', 'm.w.a.af', 'm.w.a.af', 'af', 'm.w.a', 'final', 5, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n', 'm.w.n', 'm.w.n', 'm.w.n', 'n', 'm.w', 'parallel', 6, NULL,
+   '{"x": {"id": "m.w.n.x", "key": "x"}, "y": {"id": "m.w.n.y", "key": "y"}}'::jsonb, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.x', 'm.w.n.x', 'm.w.n.x', 'm.w.n.x', 'x', 'm.w.n', 'compound', 7, '{"target": ["#m.w.n.x.x1"], "source": "#m.w.n.x"}'::jsonb, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.x.x1', 'm.w.n.x.x1', 'm.w.n.x.x1', 'm.w.n.x.x1', 'x1', 'm.w.n.x', 'atomic', 8, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.x.xf', 'm.w.n.x.xf', 'm.w.n.x.xf', 'm.w.n.x.xf', 'xf', 'm.w.n.x', 'final', 9, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.y', 'm.w.n.y', 'm.w.n.y', 'm.w.n.y', 'y', 'm.w.n', 'compound', 10, '{"target": ["#m.w.n.y.y1"], "source": "#m.w.n.y"}'::jsonb, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.y.y1', 'm.w.n.y.y1', 'm.w.n.y.y1', 'm.w.n.y.y1', 'y1', 'm.w.n.y', 'atomic', 11, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.w.n.y.yf', 'm.w.n.y.yf', 'm.w.n.y.yf', 'm.w.n.y.yf', 'yf', 'm.w.n.y', 'final', 12, NULL, NULL, NULL, NULL, 'mdn', 'v1'),
+  ('mdn.v1.m.done', 'm.done', 'm.done', 'm.done', 'done', 'm', 'final', 13, NULL, NULL, NULL, NULL, 'mdn', 'v1');
+
+insert into fsm_core.fsm_transitions
+  (source, computed_sanitized_source_ltree, target, computed_sanitized_target_ltree_array,
+   event_type, actions, computed_transition_domain_lca, reenter, fsm_name, fsm_version)
+values
+  ('#m.w.a.a1', 'm.w.a.a1', ARRAY['#m.w.a.af']::text[], ARRAY['m.w.a.af'::ltree], 'A_DONE', '[]'::jsonb,
+   fsm_core.get_transition_domain_v2('m.w.a.a1', ARRAY['m.w.a.af'::ltree], false, 'mdn', 'v1')::text, false, 'mdn', 'v1'),
+  ('#m.w.n.y.y1', 'm.w.n.y.y1', ARRAY['#m.w.n.y.yf']::text[], ARRAY['m.w.n.y.yf'::ltree], 'Y_DONE', '[]'::jsonb,
+   fsm_core.get_transition_domain_v2('m.w.n.y.y1', ARRAY['m.w.n.y.yf'::ltree], false, 'mdn', 'v1')::text, false, 'mdn', 'v1'),
+  ('#m.w', 'm.w', ARRAY['#m.done']::text[], ARRAY['m.done'::ltree], 'xstate.done.state.m.w', '[]'::jsonb,
+   fsm_core.get_transition_domain_v2('m.w', ARRAY['m.done'::ltree], false, 'mdn', 'v1')::text, false, 'mdn', 'v1');
+
+select results_eq(
+  $$ select jsonb_build_object('raised', r->'raised_events', 'done', r->'done')
+     from (select fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'A_DONE' and fsm_name = 'mdn' and fsm_version = 'v1'),
+       'A_DONE', ARRAY['m', 'm.w', 'm.w.a', 'm.w.a.a1', 'm.w.n', 'm.w.n.x', 'm.w.n.x.x1', 'm.w.n.y', 'm.w.n.y.y1'], 'mdn', 'v1') as r) s $$,
+  $$ values ('{"raised": [{"eventType": "xstate.done.state.m.w.a"}], "done": false}'::jsonb) $$,
+  'a final state whose parent is compound raises done.state.<parent>; the parallel state, with a region not final, raises nothing (#518)'
+);
+select results_eq(
+  $$ select jsonb_path_query_array(fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'Y_DONE' and fsm_name = 'mdn' and fsm_version = 'v1'),
+       'Y_DONE', ARRAY['m', 'm.w', 'm.w.a', 'm.w.a.af', 'm.w.n', 'm.w.n.x', 'm.w.n.x.xf', 'm.w.n.y', 'm.w.n.y.y1'], 'mdn', 'v1')->'raised_events', '$[*].eventType') $$,
+  $$ values ('["xstate.done.state.m.w.n.y", "xstate.done.state.m.w.n", "xstate.done.state.m.w"]'::jsonb) $$,
+  'the last region finishing raises done.state.<region>, then each enclosing parallel state that is now done, nested ones included (#518)'
+);
+select results_eq(
+  $$ select jsonb_path_query_array(fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'Y_DONE' and fsm_name = 'mdn' and fsm_version = 'v1'),
+       'Y_DONE', ARRAY['m', 'm.w', 'm.w.a', 'm.w.a.a1', 'm.w.n', 'm.w.n.x', 'm.w.n.x.xf', 'm.w.n.y', 'm.w.n.y.y1'], 'mdn', 'v1')->'raised_events', '$[*].eventType') $$,
+  $$ values ('["xstate.done.state.m.w.n.y", "xstate.done.state.m.w.n"]'::jsonb) $$,
+  'the cascade stops at a parallel state with a region that isn''t final (#518)'
+);
+select results_eq(
+  $$ select jsonb_build_object('raised', r->'raised_events', 'done', r->'done',
+            'completion', jsonb_path_query_array(r->'completion_exit_actions', '$[*].type'))
+     from (select fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'xstate.done.state.m.w' and fsm_name = 'mdn' and fsm_version = 'v1'),
+       'xstate.done.state.m.w', ARRAY['m', 'm.w', 'm.w.a', 'm.w.a.af', 'm.w.n', 'm.w.n.x', 'm.w.n.x.xf', 'm.w.n.y', 'm.w.n.y.yf'], 'mdn', 'v1') as r) s $$,
+  $$ values ('{"raised": [{"eventType": "xstate.done.state.m"}], "done": true, "completion": ["exitM", "xstate.invoke"]}'::jsonb) $$,
+  'reaching a top-level final state is done, with the remaining states'' exit actions deepest first and their invokes as stops (#518)'
+);
+select results_eq(
+  $$ select r->'completion_exit_actions'
+     from (select fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'A_DONE' and fsm_name = 'mdn' and fsm_version = 'v1'),
+       'A_DONE', ARRAY['m', 'm.w', 'm.w.a', 'm.w.a.a1', 'm.w.n', 'm.w.n.x', 'm.w.n.x.x1', 'm.w.n.y', 'm.w.n.y.y1'], 'mdn', 'v1') as r) s $$,
+  $$ values ('[]'::jsonb) $$,
+  'no completion exit actions while the machine isn''t done'
+);
+
+-- Fixture mdi: root "r" -> parallel "r.p" whose regions "r.p.a" and "r.p.b"
+-- both start in a final state, so the initial step finishes both regions.
+insert into fsm_core.fsm_states
+  (state_id_with_fsm_name_and_fsm_version, computed_state_id_ltree, computed_state_key_ltree,
+   id, key, parent_node, type, fsm_order, initial, states, fsm_name, fsm_version)
+values
+  ('mdi.v1.r', 'r', 'r', 'r', 'r', NULL, 'compound', 1, '{"target": ["#r.p"], "source": "#r"}'::jsonb, NULL, 'mdi', 'v1'),
+  ('mdi.v1.r.p', 'r.p', 'r.p', 'r.p', 'p', 'r', 'parallel', 2, NULL,
+   '{"a": {"id": "r.p.a", "key": "a"}, "b": {"id": "r.p.b", "key": "b"}}'::jsonb, 'mdi', 'v1'),
+  ('mdi.v1.r.p.a', 'r.p.a', 'r.p.a', 'r.p.a', 'a', 'r.p', 'compound', 3, '{"target": ["#r.p.a.af"], "source": "#r.p.a"}'::jsonb, NULL, 'mdi', 'v1'),
+  ('mdi.v1.r.p.a.af', 'r.p.a.af', 'r.p.a.af', 'r.p.a.af', 'af', 'r.p.a', 'final', 4, NULL, NULL, 'mdi', 'v1'),
+  ('mdi.v1.r.p.b', 'r.p.b', 'r.p.b', 'r.p.b', 'b', 'r.p', 'compound', 5, '{"target": ["#r.p.b.bf"], "source": "#r.p.b"}'::jsonb, NULL, 'mdi', 'v1'),
+  ('mdi.v1.r.p.b.bf', 'r.p.b.bf', 'r.p.b.bf', 'r.p.b.bf', 'bf', 'r.p.b', 'final', 6, NULL, NULL, 'mdi', 'v1');
+
+select results_eq(
+  $$ select jsonb_build_object('raised', jsonb_path_query_array(r->'raised_events', '$[*].eventType'), 'done', r->'done')
+     from (select fsm_core.microstep_v2(NULL, 'initialTransition_event', ARRAY[]::text[], 'mdi', 'v1') as r) s $$,
+  $$ values ('{"raised": ["xstate.done.state.r.p.a", "xstate.done.state.r.p.b", "xstate.done.state.r.p"], "done": false}'::jsonb) $$,
+  'several regions finishing in one microstep raise the parallel state''s done.state once, after the last region''s (#518)'
+);
+
+-- Fixture mdr: a parallel root "pr" with regions "pr.a" (a1, final af) and
+-- "pr.b" (already final): when the last region finishes, the machine is done.
+insert into fsm_core.fsm_states
+  (state_id_with_fsm_name_and_fsm_version, computed_state_id_ltree, computed_state_key_ltree,
+   id, key, parent_node, type, fsm_order, initial, states, fsm_name, fsm_version)
+values
+  ('mdr.v1.pr', 'pr', 'pr', 'pr', 'pr', NULL, 'parallel', 1, NULL,
+   '{"a": {"id": "pr.a", "key": "a"}, "b": {"id": "pr.b", "key": "b"}}'::jsonb, 'mdr', 'v1'),
+  ('mdr.v1.pr.a', 'pr.a', 'pr.a', 'pr.a', 'a', 'pr', 'compound', 2, '{"target": ["#pr.a.a1"], "source": "#pr.a"}'::jsonb, NULL, 'mdr', 'v1'),
+  ('mdr.v1.pr.a.a1', 'pr.a.a1', 'pr.a.a1', 'pr.a.a1', 'a1', 'pr.a', 'atomic', 3, NULL, NULL, 'mdr', 'v1'),
+  ('mdr.v1.pr.a.af', 'pr.a.af', 'pr.a.af', 'pr.a.af', 'af', 'pr.a', 'final', 4, NULL, NULL, 'mdr', 'v1'),
+  ('mdr.v1.pr.b', 'pr.b', 'pr.b', 'pr.b', 'b', 'pr', 'compound', 5, '{"target": ["#pr.b.bf"], "source": "#pr.b"}'::jsonb, NULL, 'mdr', 'v1'),
+  ('mdr.v1.pr.b.bf', 'pr.b.bf', 'pr.b.bf', 'pr.b.bf', 'bf', 'pr.b', 'final', 6, NULL, NULL, 'mdr', 'v1');
+
+insert into fsm_core.fsm_transitions
+  (source, computed_sanitized_source_ltree, target, computed_sanitized_target_ltree_array,
+   event_type, actions, computed_transition_domain_lca, reenter, fsm_name, fsm_version)
+values
+  ('#pr.a.a1', 'pr.a.a1', ARRAY['#pr.a.af']::text[], ARRAY['pr.a.af'::ltree], 'FIN', '[]'::jsonb,
+   fsm_core.get_transition_domain_v2('pr.a.a1', ARRAY['pr.a.af'::ltree], false, 'mdr', 'v1')::text, false, 'mdr', 'v1');
+
+select results_eq(
+  $$ select jsonb_build_object('raised', jsonb_path_query_array(r->'raised_events', '$[*].eventType'), 'done', r->'done')
+     from (select fsm_core.microstep_v2(
+       (select t from fsm_core.fsm_transitions t where event_type = 'FIN' and fsm_name = 'mdr' and fsm_version = 'v1'),
+       'FIN', ARRAY['pr', 'pr.a', 'pr.a.a1', 'pr.b', 'pr.b.bf'], 'mdr', 'v1') as r) s $$,
+  $$ values ('{"raised": ["xstate.done.state.pr.a", "xstate.done.state.pr"], "done": true}'::jsonb) $$,
+  'a parallel root whose regions are all final is done, as in XState (before #518 only a final child of the root was)'
 );
 
 select * from finish();

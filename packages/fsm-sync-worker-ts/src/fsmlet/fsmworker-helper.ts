@@ -167,9 +167,10 @@ export async function macrostepV2(
     fsm_instance_data_save_fsm_status: {},
     fsm_instance_data_save_fsm_state: {},
     fsm_instance_data_save_fsm_context: {} as Json,
-    fsm_instance_data_save_fsm_error: {},
+    fsm_instance_data_save_fsm_error: null as Json,
     fsm_instance_data_save_fsm_output: {},
     fsm_instance_data_save_fsm_xstate_state: {},
+    raised_events: [] as Json[],
     exit_actions: [] as Json[],
     transition_actions: [] as Json[],
     entry_actions: [] as Json[],
@@ -190,6 +191,9 @@ export async function macrostepV2(
   // XState's transition selection (#510): from each active leaf, deepest
   // first, the first candidate whose guard passes, at most one per region.
   let selectedTransition: FsmTransitionRow | null = null;
+  // Set to the event's error when an xstate.error.actor.* event selects no
+  // transition (#520).
+  let unhandledActorError: Json | undefined;
   if (eventType !== "initialTransition_event") {
     const candidates = ((await selectAllTransitions(
       deps,
@@ -226,19 +230,31 @@ export async function macrostepV2(
         );
       },
     );
-    if (enabled.length === 0) {
+    if (enabled.length === 0 && eventType.startsWith("xstate.error.actor.")) {
+      // XState's macrostep:
+      //   if (isErrorActorEvent(currentEvent) && !transitions.length) {
+      //     nextSnapshot = cloneMachineSnapshot(snapshot, { status: 'error', error: currentEvent.error });
+      //   }
+      // An actor's error that no transition handles stops the machine (#520).
+      unhandledActorError = msgData.eventData?.eventPayload ?? null;
+      logger.warn(
+        "Unhandled actor error {eventType}; the instance stops in error",
+        {
+          eventType,
+        },
+      );
+    } else if (enabled.length === 0) {
       // Like XState, an event no transition takes is consumed with no change:
       // microstep_v2 with no transition keeps the state.
-      // TODO(#504): an unhandled xstate.error.actor.* event sets status error.
       logger.info("No enabled transition for event {eventType}", {
         eventType,
       });
     } else {
       if (enabled.length > 1) {
-        // One per parallel region; microstep_v2 takes one transition until
-        // #504 runs them together.
+        // One per parallel region; microstep_v2 takes one transition. Running
+        // them together is left to a later spec (SPEC-010's non-goals).
         logger.warn(
-          "{count} transitions enabled for event {eventType} (one per region); only the first runs until #504",
+          "{count} transitions enabled for event {eventType} (one per region); only the first runs",
           { count: enabled.length, eventType },
         );
       }
@@ -259,34 +275,43 @@ export async function macrostepV2(
   );
 
   const exit_actions = microstepResult.exit_actions || [];
-  for (const action of exit_actions) {
-    // find actions implementations and execute fn
-    // do comapre based on type or action_type
-    // example  // type === xstate.raise or action_type === raise
-    if (action.type === "xstate.raise") { // TODO: update action_type
-      remove_schedule_queue_msg_ids_xstate.push(action);
-    } else if (action.type === "xstate.cancel") {
-      // An `after` timer of the state being exited: cancel its scheduled
-      // event by name (`xstate.after.<key>.<state id>`), so it can't fire
-      // after the state is gone (#516).
-      const eventType = delayedEventType(action);
-      if (eventType) {
-        remove_schedule_queue_msg_ids_xstate.push({ ...action, id: eventType });
+  // Exit actions, and the timers and invokes they stop: a state's own exit
+  // (microstep_v2's exit_actions) and, once the machine is done, every
+  // remaining state's (completion_exit_actions, #518).
+  const runExitActions = async (actions: Json[]) => {
+    for (const action of actions as typeof exit_actions) {
+      // find actions implementations and execute fn
+      // do comapre based on type or action_type
+      // example  // type === xstate.raise or action_type === raise
+      if (action.type === "xstate.raise") { // TODO: update action_type
+        remove_schedule_queue_msg_ids_xstate.push(action);
+      } else if (action.type === "xstate.cancel") {
+        // An `after` timer of the state being exited: cancel its scheduled
+        // event by name (`xstate.after.<key>.<state id>`), so it can't fire
+        // after the state is gone (#516).
+        const eventType = delayedEventType(action);
+        if (eventType) {
+          remove_schedule_queue_msg_ids_xstate.push({
+            ...action,
+            id: eventType,
+          });
+        }
+      } else if (action.type === "xstate.invoke") { //
+        // this is equivalent to xstate.stopChild from worker-helper.ts
+        remove_async_operation_queue_msg_ids_xstate.push(action);
+      } else {
+        // fsm events - try to execute implementation from actionsModule
+        current_context = await runActionImplementation(
+          "exit",
+          action,
+          syncOperationRegistrations,
+          current_context,
+          { deps, queueName, msg },
+        );
       }
-    } else if (action.type === "xstate.invoke") { //
-      // this is equivalent to xstate.stopChild from worker-helper.ts
-      remove_async_operation_queue_msg_ids_xstate.push(action);
-    } else {
-      // fsm events - try to execute implementation from actionsModule
-      current_context = await runActionImplementation(
-        "exit",
-        action,
-        syncOperationRegistrations,
-        current_context,
-        { deps, queueName, msg },
-      );
     }
-  }
+  };
+  await runExitActions(exit_actions);
   const transition_actions = microstepResult.transition_actions || [];
   for (const action of transition_actions) {
     // find actions implementations and execute fn
@@ -371,6 +396,15 @@ export async function macrostepV2(
     }
   }
 
+  // Done (a top-level final state): XState then runs every remaining state's
+  // exit actions, deepest first, and stops the machine's children (#518).
+  const done = (microstepResult as { done?: unknown }).done === true;
+  if (done) {
+    await runExitActions(
+      (microstepResult.completion_exit_actions ?? []) as typeof exit_actions,
+    );
+  }
+
   // remove msg.message?.type from remove_schedule_queue_msg_ids_xstate because msg.message?.type will be removed from current queue it self in step 6 of save micro fn
   remove_schedule_queue_msg_ids_xstate = remove_schedule_queue_msg_ids_xstate
     .filter((item) =>
@@ -421,17 +455,24 @@ export async function macrostepV2(
   );
 
   // Done once the machine is in a top-level final state (microstep_v2 from
-  // fsm_core 2.1.2 reports it; an older database never does). Read
-  // defensively, so this doesn't need a newer @pgfsm/db's types (#500).
-  const done = (microstepResult as { done?: unknown }).done === true;
+  // fsm_core 2.1.2 reports it; an older database never does), read above.
   macroSaveFnPayload.fsm_instance_data_save_fsm_status = done
     ? "done"
+    : unhandledActorError !== undefined
+    ? "error"
     : "active"; // "active" | "done" | "error" | "stopped"
-  macroSaveFnPayload.fsm_instance_data_save_fsm_error = {};
+  // The error saved with status error; null keeps the instance's error.
+  macroSaveFnPayload.fsm_instance_data_save_fsm_error =
+    unhandledActorError === undefined ? null : unhandledActorError;
   macroSaveFnPayload.fsm_instance_data_save_fsm_output = {};
 
   macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state =
     microstepResult?.updated_state_value ?? null;
+
+  // The done.state events this microstep raised go to the archive unchanged,
+  // which puts them on the instance's internal event queue (SPEC-010, #519).
+  macroSaveFnPayload.raised_events = (microstepResult.raised_events ??
+    []) as Json[];
 
   macroSaveFnPayload.exit_actions = exit_actions;
   macroSaveFnPayload.transition_actions = transition_actions;

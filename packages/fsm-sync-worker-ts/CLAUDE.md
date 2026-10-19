@@ -129,6 +129,22 @@ implementation (`runFsmlet`/`startFsmlet`, `src/fsmlet/fsmlet.ts`) is untouched
 and still exported from `index.ts` — embed it directly in your own process
 instead of shelling out to a CLI.
 
+## Internal events first (SPEC-010)
+
+`microstep_v2` returns the `xstate.done.state.<id>` events a microstep raises
+(`raised_events`); `macrostepV2` passes them to the archive, which appends them
+to `fsm_instance.internal_event_queue` in the same transaction as the state.
+`startFSMWorker` takes the head of that queue before reading the instance's pgmq
+queue (`takeNextEvent`, `src/fsmlet/internal-events.ts`), as XState's macrostep
+drains its internal queue before the next event, and handles it like any event:
+it comes as a queue message with no `msg_id`, and the archive is given it as
+`processed_internal_event` (it removes the head instead of archiving a pgmq
+message). Only this worker's archive calls write the queue, so the row is read
+once at start and afterwards each archive result says whether events are
+waiting. An `xstate.error.actor.*` event no transition takes sets status
+`error`, saving the event's payload as the instance's error, and the worker
+stops, as it does on `done`.
+
 ## Startup FSM definition check (SPEC-006)
 
 Before `registerFsmlet`, `startFsmlet` calls `checkFsmDefinitions`

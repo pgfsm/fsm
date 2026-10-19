@@ -431,10 +431,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION fsm_core.compute_entry_actions_v2(transition_record fsm_core.fsm_transitions, fsm_name_param TEXT, fsm_version_param TEXT, is_initial_transition BOOLEAN)
+-- Renamed compute_entry_set_v2: it is XState's computeEntrySet only. The
+-- actions each entered state brings are picked by enter_states_v2, as
+-- XState's enterStates does (#518).
+DROP FUNCTION IF EXISTS fsm_core.compute_entry_actions_v2(fsm_core.fsm_transitions, TEXT, TEXT, BOOLEAN);
+
+CREATE OR REPLACE FUNCTION fsm_core.compute_entry_set_v2(transition_record fsm_core.fsm_transitions, fsm_name_param TEXT, fsm_version_param TEXT, is_initial_transition BOOLEAN)
 RETURNS JSONB AS $$
--- XState's computeEntrySet, plus the part of enterStates that picks the
--- actions (packages/core/src/stateUtils.ts), for one transition:
+-- XState's computeEntrySet (packages/core/src/stateUtils.ts) for one
+-- transition:
 --
 --   for (const t of transitions) {
 --     const domain = getTransitionDomain(t, historyValue);
@@ -452,15 +457,10 @@ RETURNS JSONB AS $$
 --         ancestors, !t.source.parent && t.reenter ? undefined : domain);
 --     }
 --   }
---   // enterStates, for each state to enter, parents first: its entry actions,
---   // a spawnChild per invoke, then initial.actions if
---   // statesForDefaultEntry.has(stateNodeToEnter).
 --
--- Returned as lists: states_to_enter (statesToEnter), states_for_default_entry
--- (statesForDefaultEntry), common_states (the states to enter that are default
--- entries), their entry and invoke actions, and the common states' initial
--- actions. The sync worker runs the actions in enterStates' order
--- (orderEntryActions). The domain is the stored computed_transition_domain_lca
+-- Returned as lists: states_to_enter (statesToEnter) and
+-- states_for_default_entry (statesForDefaultEntry), for enter_states_v2. The
+-- domain is the stored computed_transition_domain_lca
 -- (get_transition_domain_v2). History states are not supported.
 DECLARE
     sanitized_source_ltree LTREE;
@@ -477,10 +477,6 @@ DECLARE
     child_result RECORD;
     states_to_enter TEXT[];
     states_for_default_entry TEXT[];
-    common_states TEXT[] := '{}';
-    state_to_check TEXT;
-    entry_actions_result JSONB;
-    initial_actions_for_common_states_result JSONB;
     root_path ltree;
     final_result JSONB;
 BEGIN
@@ -513,22 +509,13 @@ BEGIN
               ARRAY[]::TEXT[]
           );
 
-          SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
-          -- Every state entered is a default entry, so each one's initial
-          -- actions run; the sync worker runs them after that state's entry
-          -- actions (#506).
-          SELECT fsm_core.get_initial_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
           RETURN jsonb_build_object(
                 'states_to_enter', states_to_enter,
-                -- Every target is a default entry (computeEntrySet), and
-                -- enterStates adds the root too:
-                --   if (isInitial) statesForDefaultEntry.add(machine.root)
-                -- The root is in states_to_enter already, so that line needs
-                -- nothing extra here.
-                'states_for_default_entry', states_to_enter,
-                'common_states', states_to_enter,
-                'entry_actions_for_states_to_enter', COALESCE(entry_actions_result, '[]'::jsonb),
-                'initial_actions_for_common_states', COALESCE(initial_actions_for_common_states_result, '[]'::jsonb)
+                -- Every target is a default entry, the root included
+                -- (enterStates' `if (isInitial)
+                -- statesForDefaultEntry.add(machine.root)`), so each one's
+                -- initial actions run.
+                'states_for_default_entry', states_to_enter
           );
     END IF;
     
@@ -536,10 +523,7 @@ BEGIN
     IF transition_record IS NULL THEN
         RETURN jsonb_build_object(
             'states_to_enter', '[]'::jsonb,
-            'states_for_default_entry', '[]'::jsonb,
-            'common_states', '[]'::jsonb,
-            'entry_actions_for_states_to_enter', '[]'::jsonb,
-            'initial_actions_for_common_states', '[]'::jsonb
+            'states_for_default_entry', '[]'::jsonb
         );
     END IF;
     
@@ -671,42 +655,11 @@ BEGIN
     RAISE NOTICE 'Final states_for_default_entry before dedup: %', states_for_default_entry;
   
     
-    -- common_states: the states to enter that statesForDefaultEntry has, i.e.
-    -- the ones whose initial.actions run (enterStates).
-    FOR state_to_check IN SELECT unnest(states_to_enter)
-    LOOP
-        -- statesForDefaultEntry.has(stateNodeToEnter)
-        IF state_to_check = ANY(states_for_default_entry) THEN
-            common_states := array_append(common_states, state_to_check);
-        END IF;
-    END LOOP;
-    
-    RAISE NOTICE 'Common states found: %', common_states;
-        
-        
-  
-
-    -- enterStates: for each state to enter, parents first, actions.push(...entry)
-    -- and a spawnChild per invoke: get_entry_actions_v2 (fsm_order ASC).
-    SELECT fsm_core.get_entry_actions_v2(input_state_paths := states_to_enter, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO entry_actions_result;
-
-    -- Initial actions of the states entered by default (XState's
-    -- statesForDefaultEntry). Returned on their own: the sync worker runs each
-    -- one after its state's entry actions, as XState's enterStates does (#506).
-    IF array_length(common_states, 1) > 0 THEN
-        SELECT fsm_core.get_initial_actions_v2(input_state_paths := common_states, input_fsm_name := fsm_name_param, input_fsm_version := fsm_version_param) INTO initial_actions_for_common_states_result;
-    END IF;
-
-
-    -- Build the final result containing both arrays and their respective actions
     -- Empty arrays, not JSON null, when nothing is entered (a targetless
-    -- transition): microstep_v2 expands states_to_enter (#506).
+    -- transition): enter_states_v2 expands states_to_enter (#506).
     final_result := jsonb_build_object(
         'states_to_enter', COALESCE(to_jsonb(states_to_enter), '[]'::jsonb),
-        'states_for_default_entry', COALESCE(to_jsonb(states_for_default_entry), '[]'::jsonb),
-        'common_states', COALESCE(to_jsonb(common_states), '[]'::jsonb),
-        'entry_actions_for_states_to_enter', COALESCE(entry_actions_result, '[]'::jsonb),
-        'initial_actions_for_common_states', COALESCE(initial_actions_for_common_states_result, '[]'::jsonb)
+        'states_for_default_entry', COALESCE(to_jsonb(states_for_default_entry), '[]'::jsonb)
     );
 
     RETURN final_result;
@@ -714,31 +667,265 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION fsm_core.test_event_transition_for_entry_v2(event_name TEXT, fsm_name_param TEXT, fsm_version_param TEXT)
-RETURNS JSONB AS $$
+CREATE OR REPLACE FUNCTION fsm_core.is_in_final_state_v2(
+    state_node_set TEXT[],
+    state_path TEXT,
+    fsm_name_param TEXT,
+    fsm_version_param TEXT
+)
+RETURNS BOOLEAN AS $$
+-- XState's isInFinalState (packages/core/src/stateUtils.ts):
+--
+--   if (stateNode.type === 'compound') {
+--     return getChildren(stateNode).some((s) => s.type === 'final' && stateNodeSet.has(s));
+--   }
+--   if (stateNode.type === 'parallel') {
+--     return getChildren(stateNode).every((sn) => isInFinalState(stateNodeSet, sn));
+--   }
+--   return stateNode.type === 'final';
+--
+-- getChildren skips history states. A state's children are the rows whose
+-- parent_node is its key path.
 DECLARE
-    transition_record fsm_core.fsm_transitions;
-    result JSONB;
+    node fsm_core.fsm_states;
+    child fsm_core.fsm_states;
 BEGIN
-    -- Find single record from fsm_core.fsm_transitions based on event_type, fsm_name, and fsm_version
-    SELECT * INTO transition_record
-    FROM fsm_core.fsm_transitions 
-    WHERE event_type = event_name 
-      AND fsm_name = fsm_name_param 
-      AND fsm_version = fsm_version_param
-    LIMIT 1;
-    
-    -- if event_name = "initialTransition_event" then set is_initial_transition = TRUE
-    -- and call fsm_core.compute_entry_actions_v2 with is_initial_transition = TRUE
-    -- else call with FALSE
-    IF event_name = 'initialTransition_event' THEN
-        SELECT fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := TRUE) INTO result;
-    ELSE
-        SELECT fsm_core.compute_entry_actions_v2(transition_record := transition_record, fsm_name_param := fsm_name_param, fsm_version_param := fsm_version_param, is_initial_transition := FALSE) INTO result;
+    SELECT * INTO node
+    FROM fsm_core.fsm_states fs
+    WHERE fs.fsm_name = fsm_name_param
+      AND fs.fsm_version = fsm_version_param
+      AND fs.computed_state_key_ltree::TEXT = state_path;
+    IF NOT FOUND THEN
+        RETURN FALSE;
     END IF;
 
+    IF node.type = 'compound' THEN
+        FOR child IN
+            SELECT * FROM fsm_core.fsm_states fs
+            WHERE fs.fsm_name = fsm_name_param
+              AND fs.fsm_version = fsm_version_param
+              AND fs.parent_node = state_path
+              AND fs.type <> 'history'
+        LOOP
+            IF child.type = 'final' AND child.computed_state_key_ltree::TEXT = ANY(state_node_set) THEN
+                RETURN TRUE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END IF;
 
-    RETURN result;
+    IF node.type = 'parallel' THEN
+        FOR child IN
+            SELECT * FROM fsm_core.fsm_states fs
+            WHERE fs.fsm_name = fsm_name_param
+              AND fs.fsm_version = fsm_version_param
+              AND fs.parent_node = state_path
+              AND fs.type <> 'history'
+        LOOP
+            IF NOT fsm_core.is_in_final_state_v2(state_node_set, child.computed_state_key_ltree::TEXT, fsm_name_param, fsm_version_param) THEN
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+        RETURN TRUE;
+    END IF;
+
+    RETURN node.type = 'final';
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION fsm_core.enter_states_v2(
+    transition_record fsm_core.fsm_transitions,
+    state_node_set TEXT[],
+    is_initial BOOLEAN,
+    fsm_name_param TEXT,
+    fsm_version_param TEXT
+)
+RETURNS JSONB AS $$
+-- XState's enterStates (packages/core/src/stateUtils.ts) for one transition:
+--
+--   computeEntrySet(filteredTransitions, historyValue, statesForDefaultEntry, statesToEnter);
+--   if (isInitial) statesForDefaultEntry.add(snapshot.machine.root);
+--   const completedNodes = new Set();
+--   for (const stateNodeToEnter of [...statesToEnter].sort((a, b) => a.order - b.order)) {
+--     mutStateNodeSet.add(stateNodeToEnter);
+--     actions.push(...stateNodeToEnter.entry, spawnChild per invoke,
+--                  ...initial.actions if statesForDefaultEntry.has(stateNodeToEnter));
+--     if (stateNodeToEnter.type === 'final') {
+--       const parent = stateNodeToEnter.parent;
+--       let ancestorMarker = parent?.type === 'parallel' ? parent : parent?.parent;
+--       if (parent?.type === 'compound') {
+--         internalQueue.push(createDoneStateEvent(parent!.id, ...output));
+--       }
+--       while (ancestorMarker?.type === 'parallel' && !completedNodes.has(ancestorMarker)
+--              && isInFinalState(mutStateNodeSet, ancestorMarker)) {
+--         completedNodes.add(ancestorMarker);
+--         internalQueue.push(createDoneStateEvent(ancestorMarker.id));
+--         ancestorMarker = ancestorMarker.parent;
+--       }
+--       if (ancestorMarker) continue;
+--       nextSnapshot = cloneMachineSnapshot(nextSnapshot, { status: 'done', ... });
+--     }
+--   }
+--
+-- compute_entry_set_v2 is computeEntrySet. The loop goes through the states to
+-- enter as XState's does: adds each to the active states, collects its actions
+-- and, for a final state, raises its done.state events and decides done
+-- (SPEC-010, #518). Each state is added before its check, so when two regions
+-- finish in one microstep their parallel state is done only at the second, and
+-- raises once. The actions are returned for the sync worker to run: a state's
+-- entry actions and a spawnChild per invoke in entry_actions, its initial
+-- actions in initial_actions (the worker puts each after its state's entry
+-- actions, orderEntryActions).
+--
+-- state_node_set is the active states after exitStates (exit_states_v2).
+-- Returns states_to_enter, entry_actions, initial_actions, state_node_set
+-- (mutStateNodeSet afterwards, sorted), raised_events
+-- ([{eventType: xstate.done.state.<state id>}], without a final state's
+-- output, a function that isn't in fsm.json) and done (a final state was
+-- entered and no enclosing state is left to finish: the machine itself is
+-- done).
+DECLARE
+    entry_set JSONB;
+    states_to_enter TEXT[];
+    states_for_default_entry TEXT[];
+    entry_actions JSONB := '[]'::jsonb;
+    initial_actions JSONB := '[]'::jsonb;
+    mut_state_node_set TEXT[] := COALESCE(state_node_set, ARRAY[]::TEXT[]);
+    completed_nodes TEXT[] := ARRAY[]::TEXT[];
+    raised_events JSONB := '[]'::jsonb;
+    is_done BOOLEAN := FALSE;
+    state_to_enter fsm_core.fsm_states;
+    parent fsm_core.fsm_states;
+    ancestor_marker fsm_core.fsm_states;
+    has_parent BOOLEAN;
+    has_ancestor_marker BOOLEAN;
+BEGIN
+    -- computeEntrySet(filteredTransitions, historyValue, statesForDefaultEntry, statesToEnter);
+    -- if (isInitial) statesForDefaultEntry.add(snapshot.machine.root): on the
+    -- initial step compute_entry_set_v2 already counts the root as one.
+    entry_set := fsm_core.compute_entry_set_v2(
+        transition_record := transition_record,
+        fsm_name_param := fsm_name_param,
+        fsm_version_param := fsm_version_param,
+        is_initial_transition := is_initial
+    );
+    states_to_enter := ARRAY(SELECT jsonb_array_elements_text(COALESCE(entry_set->'states_to_enter', '[]'::jsonb)));
+    states_for_default_entry := ARRAY(SELECT jsonb_array_elements_text(COALESCE(entry_set->'states_for_default_entry', '[]'::jsonb)));
+
+    -- [...statesToEnter].sort((a, b) => a.order - b.order)
+    FOR state_to_enter IN
+        SELECT * FROM fsm_core.fsm_states fs
+        WHERE fs.fsm_name = fsm_name_param
+          AND fs.fsm_version = fsm_version_param
+          AND fs.computed_state_key_ltree::TEXT = ANY(states_to_enter)
+        ORDER BY fs.fsm_order ASC
+    LOOP
+        -- mutStateNodeSet.add(stateNodeToEnter)
+        IF NOT (state_to_enter.computed_state_key_ltree::TEXT = ANY(mut_state_node_set)) THEN
+            mut_state_node_set := array_append(mut_state_node_set, state_to_enter.computed_state_key_ltree::TEXT);
+        END IF;
+
+        -- actions.push(...stateNodeToEnter.entry), and a spawnChild per invoke
+        entry_actions := entry_actions || fsm_core.get_entry_actions_v2(
+            input_state_paths := ARRAY[state_to_enter.computed_state_key_ltree::TEXT],
+            input_fsm_name := fsm_name_param,
+            input_fsm_version := fsm_version_param
+        );
+        -- if (statesForDefaultEntry.has(stateNodeToEnter)) actions.push(...initial.actions)
+        IF state_to_enter.computed_state_key_ltree::TEXT = ANY(states_for_default_entry) THEN
+            initial_actions := initial_actions || fsm_core.get_initial_actions_v2(
+                input_state_paths := ARRAY[state_to_enter.computed_state_key_ltree::TEXT],
+                input_fsm_name := fsm_name_param,
+                input_fsm_version := fsm_version_param
+            );
+        END IF;
+
+        -- if (stateNodeToEnter.type === 'final')
+        CONTINUE WHEN state_to_enter.type <> 'final';
+
+        -- const parent = stateNodeToEnter.parent;
+        SELECT * INTO parent FROM fsm_core.fsm_states fs
+        WHERE fs.fsm_name = fsm_name_param
+          AND fs.fsm_version = fsm_version_param
+          AND fs.computed_state_key_ltree::TEXT = state_to_enter.parent_node;
+        has_parent := FOUND;
+
+        -- let ancestorMarker = parent?.type === 'parallel' ? parent : parent?.parent;
+        has_ancestor_marker := FALSE;
+        IF has_parent AND parent.type = 'parallel' THEN
+            ancestor_marker := parent;
+            has_ancestor_marker := TRUE;
+        ELSIF has_parent THEN
+            SELECT * INTO ancestor_marker FROM fsm_core.fsm_states fs
+            WHERE fs.fsm_name = fsm_name_param
+              AND fs.fsm_version = fsm_version_param
+              AND fs.computed_state_key_ltree::TEXT = parent.parent_node;
+            has_ancestor_marker := FOUND;
+        END IF;
+
+        -- if (parent?.type === 'compound') internalQueue.push(createDoneStateEvent(parent.id))
+        IF has_parent AND parent.type = 'compound' THEN
+            raised_events := raised_events || jsonb_build_array(jsonb_build_object('eventType', 'xstate.done.state.' || parent.id));
+        END IF;
+
+        -- while (ancestorMarker?.type === 'parallel' && !completedNodes.has(ancestorMarker)
+        --        && isInFinalState(mutStateNodeSet, ancestorMarker))
+        WHILE has_ancestor_marker
+            AND ancestor_marker.type = 'parallel'
+            AND NOT (ancestor_marker.computed_state_key_ltree::TEXT = ANY(completed_nodes))
+            AND fsm_core.is_in_final_state_v2(mut_state_node_set, ancestor_marker.computed_state_key_ltree::TEXT, fsm_name_param, fsm_version_param)
+        LOOP
+            completed_nodes := array_append(completed_nodes, ancestor_marker.computed_state_key_ltree::TEXT);
+            raised_events := raised_events || jsonb_build_array(jsonb_build_object('eventType', 'xstate.done.state.' || ancestor_marker.id));
+            -- ancestorMarker = ancestorMarker.parent
+            SELECT * INTO ancestor_marker FROM fsm_core.fsm_states fs
+            WHERE fs.fsm_name = fsm_name_param
+              AND fs.fsm_version = fsm_version_param
+              AND fs.computed_state_key_ltree::TEXT = ancestor_marker.parent_node;
+            has_ancestor_marker := FOUND;
+        END LOOP;
+
+        -- if (ancestorMarker) continue; otherwise the machine is done.
+        CONTINUE WHEN has_ancestor_marker;
+        is_done := TRUE;
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'states_to_enter', to_jsonb(states_to_enter),
+        'entry_actions', entry_actions,
+        'initial_actions', initial_actions,
+        'state_node_set', to_jsonb(ARRAY(
+            SELECT DISTINCT x FROM unnest(mut_state_node_set || states_to_enter) AS x ORDER BY x
+        )),
+        'raised_events', raised_events,
+        'done', is_done
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION fsm_core.test_event_transition_for_entry_v2(event_name TEXT, fsm_name_param TEXT, fsm_version_param TEXT)
+RETURNS JSONB AS $$
+-- For debugging: what entering on event_name's first transition does, from
+-- no active states (enter_states_v2).
+DECLARE
+    transition_record fsm_core.fsm_transitions;
+BEGIN
+    SELECT * INTO transition_record
+    FROM fsm_core.fsm_transitions
+    WHERE event_type = event_name
+      AND fsm_name = fsm_name_param
+      AND fsm_version = fsm_version_param
+    LIMIT 1;
+
+    RETURN fsm_core.enter_states_v2(
+        transition_record := transition_record,
+        state_node_set := ARRAY[]::TEXT[],
+        is_initial := event_name = 'initialTransition_event',
+        fsm_name_param := fsm_name_param,
+        fsm_version_param := fsm_version_param
+    );
 END;
 $$ LANGUAGE plpgsql;
 
