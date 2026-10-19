@@ -230,8 +230,17 @@ $$ LANGUAGE plpgsql;
 -- start_invoked_async_operation_v2 (invokes) returned.
 -- The reply-to parameters (send_to_parent_queue_id, _type, _event_name) are
 -- gone: a parent is read from this instance's row (step 9, #523, #526).
+--
+-- The internal event queue (SPEC-010, #519): raised_events are the done.state
+-- events microstep_v2 returned, appended to fsm_instance.internal_event_queue
+-- in this transaction (step 6b). processed_internal_event is set when the
+-- event processed now came from that queue instead of pgmq: it must be the
+-- queue's head, which is removed, and no pgmq message is archived (step 8).
 DROP FUNCTION IF EXISTS fsm_core.archive_event_from_fsm_type_worker_v2(
   text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, uuid, text, text
+);
+DROP FUNCTION IF EXISTS fsm_core.archive_event_from_fsm_type_worker_v2(
+  text, bigint, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb, jsonb
 );
 CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(
   remove_from_current_fsm_instance_queue_id text,
@@ -245,7 +254,9 @@ CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_type_worker_v2(
   fsm_instance_data_save_fsm_status jsonb,
   fsm_instance_data_save_fsm_state jsonb,
   fsm_instance_data_save_fsm_context jsonb,
-  fsm_instance_data_save_fsm_xstate_state jsonb
+  fsm_instance_data_save_fsm_xstate_state jsonb,
+  raised_events jsonb DEFAULT '[]'::jsonb,
+  processed_internal_event jsonb DEFAULT NULL
 ) RETURNS jsonb AS $$
 DECLARE
     i int;
@@ -287,6 +298,20 @@ DECLARE
     child_parent_invoke_id text;
     child_parent_fsm_name text;
     child_parent_fsm_version text;
+
+    -- SPEC-010's cycle cap: internal events in a row before the instance is
+    -- set to error, so a cycle (an onDone that enters another final state that
+    -- leads back) can't run forever.
+    max_internal_events CONSTANT integer := 100;
+    instance_fsm_type text;
+    instance_fsm_version text;
+    current_internal_event_queue jsonb;
+    current_internal_event_count integer;
+    new_internal_event_queue jsonb;
+    new_internal_event_count integer;
+    saved_status jsonb;
+    saved_error jsonb;
+    raised_event jsonb;
 BEGIN
     -- 1. Remove the cancelled scheduled events from input_total_schedule_queue_data
     -- A = 'input_total_schedule_queue_data'
@@ -481,19 +506,77 @@ BEGIN
         END LOOP;
     END IF;
 
-    -- 7. Save the instance: its new totals, status, state, context and XState snapshot
+    -- 6b. The internal event queue (SPEC-010, #519), read under the row lock.
+    SELECT fi.fsm_type, fi.fsm_version, fi.internal_event_queue, fi.internal_event_count
+    INTO instance_fsm_type, instance_fsm_version, current_internal_event_queue, current_internal_event_count
+    FROM fsm_core.fsm_instance fi
+    WHERE fi.id = remove_from_current_fsm_instance_queue_id::uuid
+    FOR UPDATE;
+
+    new_internal_event_queue := COALESCE(current_internal_event_queue, '[]'::jsonb);
+    IF processed_internal_event IS NOT NULL THEN
+        -- An internal event was processed: it is the head of the queue, as the
+        -- worker took it. Anything else means the queue changed under it.
+        IF new_internal_event_queue->0 IS DISTINCT FROM processed_internal_event THEN
+            RAISE EXCEPTION 'internal event % is not the head of instance %''s internal event queue (head: %)',
+                processed_internal_event, remove_from_current_fsm_instance_queue_id, new_internal_event_queue->0;
+        END IF;
+        new_internal_event_queue := new_internal_event_queue - 0;
+        new_internal_event_count := COALESCE(current_internal_event_count, 0) + 1;
+    ELSE
+        -- An event from the pgmq queue starts a new count.
+        new_internal_event_count := 0;
+    END IF;
+
+    saved_status := fsm_instance_data_save_fsm_status;
+    IF new_internal_event_count > max_internal_events THEN
+        saved_status := '"error"'::jsonb;
+        saved_error := jsonb_build_object(
+            'message', format('Infinite loop: more than %s internal events in a row (last: %s)',
+                max_internal_events, processed_internal_event->>'eventType')
+        );
+    END IF;
+
+    IF COALESCE(saved_status #>> '{}', 'active') = 'active' THEN
+        -- internalQueue.push(...): this microstep's raised events go after the
+        -- ones already waiting, each logged as an internal event.
+        FOR raised_event IN SELECT value FROM jsonb_array_elements(COALESCE(raised_events, '[]'::jsonb)) value
+        LOOP
+            new_internal_event_queue := new_internal_event_queue || jsonb_build_array(raised_event);
+            INSERT INTO fsm_core.fsm_instance_queue_event_logs (
+                fsm_instance_id, fsm_instance_id_fsm_type, fsm_instance_id_fsm_version,
+                event_name, event_data, event_delay, event_source, event_status, event_output
+            ) VALUES (
+                remove_from_current_fsm_instance_queue_id::uuid, instance_fsm_type, instance_fsm_version,
+                raised_event->>'eventType', raised_event, 0, 'internal', 'ACTIVE', '{}'::jsonb
+            );
+        END LOOP;
+    ELSE
+        -- Done, error or stopped: like XState's macrostep, which only runs
+        -- while the snapshot is active, nothing more is processed.
+        new_internal_event_queue := '[]'::jsonb;
+    END IF;
+
+    -- 7. Save the instance: its new totals, status, state, context, XState
+    --    snapshot and internal event queue
     UPDATE fsm_core.fsm_instance
     SET
         total_schedule_queue_data = new_total_schedule_queue_data,
         total_async_operation_queue_data = new_total_async_operation_queue_data,
-        fsm_instance_status = fsm_instance_data_save_fsm_status,
+        internal_event_queue = new_internal_event_queue,
+        internal_event_count = new_internal_event_count,
+        fsm_instance_error = COALESCE(saved_error, fsm_instance_error),
+        fsm_instance_status = saved_status,
         fsm_instance_state = fsm_instance_data_save_fsm_state,
         fsm_instance_context = fsm_instance_data_save_fsm_context,
         fsm_instance_xstate_state = fsm_instance_data_save_fsm_xstate_state
     WHERE id = remove_from_current_fsm_instance_queue_id::uuid;
 
-    -- 8. Archive the message this macrostep processed
-    PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id::bigint);
+    -- 8. Archive the pgmq message this macrostep processed. An internal event
+    --    was removed from the internal queue instead (6b).
+    IF processed_internal_event IS NULL THEN
+        PERFORM pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id::bigint);
+    END IF;
 
     -- 9. If this instance was invoked by a parent FSM and has finished, tell the
     --    parent, as XState does for a child actor (#523):
@@ -507,7 +590,7 @@ BEGIN
     WHERE fi.id = remove_from_current_fsm_instance_queue_id::uuid;
 
     IF child_parent_fsm_instance_id IS NOT NULL
-        AND (fsm_instance_data_save_fsm_status #>> '{}') IN ('done', 'completed', 'final', 'error')
+        AND (saved_status #>> '{}') IN ('done', 'completed', 'final', 'error')
     THEN
         SELECT p.fsm_name, p.fsm_version
         INTO child_parent_fsm_name, child_parent_fsm_version
@@ -519,7 +602,7 @@ BEGIN
             input_fsm_instance_id_fsm_type     := child_parent_fsm_name,
             input_fsm_instance_id_fsm_version  := child_parent_fsm_version,
             input_event_name                   := CASE
-                                                      WHEN (fsm_instance_data_save_fsm_status #>> '{}') = 'error'
+                                                      WHEN (saved_status #>> '{}') = 'error'
                                                       THEN 'xstate.error.actor.'
                                                       ELSE 'xstate.done.actor.'
                                                   END || child_parent_invoke_id,
@@ -550,6 +633,8 @@ BEGIN
 
          'old_total_schedule_queue_data', input_total_schedule_queue_data,
          'old_total_async_operation_queue_data', input_total_async_operation_queue_data,
+         'internal_event_queue', new_internal_event_queue,
+         'internal_event_count', new_internal_event_count,
          'parent_notify_result', parent_notify_result
       );
 

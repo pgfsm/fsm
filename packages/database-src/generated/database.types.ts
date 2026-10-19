@@ -251,6 +251,8 @@ export type Database = {
           fsm_type: string | null;
           fsm_version: string | null;
           id: string;
+          internal_event_count: number;
+          internal_event_queue: Json;
           parent_fsm_instance_id: string | null;
           parent_invoke_id: string | null;
           started_at: string | null;
@@ -274,6 +276,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
+          internal_event_count?: number;
+          internal_event_queue?: Json;
           parent_fsm_instance_id?: string | null;
           parent_invoke_id?: string | null;
           started_at?: string | null;
@@ -297,6 +301,8 @@ export type Database = {
           fsm_type?: string | null;
           fsm_version?: string | null;
           id?: string;
+          internal_event_count?: number;
+          internal_event_queue?: Json;
           parent_fsm_instance_id?: string | null;
           parent_invoke_id?: string | null;
           started_at?: string | null;
@@ -384,6 +390,7 @@ export type Database = {
           event_delay: number | null;
           event_name: string | null;
           event_output: Json | null;
+          event_source: string;
           event_status: string | null;
           execution_duration: number | null;
           execution_finished_at: string | null;
@@ -400,6 +407,7 @@ export type Database = {
           event_delay?: number | null;
           event_name?: string | null;
           event_output?: Json | null;
+          event_source?: string;
           event_status?: string | null;
           execution_duration?: number | null;
           execution_finished_at?: string | null;
@@ -416,6 +424,7 @@ export type Database = {
           event_delay?: number | null;
           event_name?: string | null;
           event_output?: Json | null;
+          event_source?: string;
           event_status?: string | null;
           execution_duration?: number | null;
           execution_finished_at?: string | null;
@@ -693,6 +702,8 @@ export type Database = {
           fsm_instance_data_save_fsm_xstate_state: Json;
           input_total_async_operation_queue_data: Json;
           input_total_schedule_queue_data: Json;
+          processed_internal_event?: Json;
+          raised_events?: Json;
           remove_current_queue_msg_id: number;
           remove_from_current_fsm_instance_queue_id: string;
           to_be_added_async_operation_queue_data: Json;

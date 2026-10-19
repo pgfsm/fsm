@@ -297,6 +297,18 @@ export async function archiveEventFromFsmTypeWorker(
     ArchiveWorkerArgs["fsm_instance_data_save_fsm_context"],
   fsm_instance_data_save_fsm_xstate_state:
     ArchiveWorkerArgs["fsm_instance_data_save_fsm_xstate_state"],
+  /**
+   * microstep_v2's `raised_events`, appended to the instance's internal event
+   * queue in this transaction (fsm_core 2.1.9, SPEC-010, #519).
+   */
+  raised_events: ArchiveWorkerArgs["raised_events"] = [],
+  /**
+   * The internal event processed, when it came from the internal event queue
+   * instead of pgmq: it must be the queue's head, which is removed, and no pgmq
+   * message is archived. Omitted (null) for an event read from pgmq.
+   */
+  processed_internal_event: ArchiveWorkerArgs["processed_internal_event"] =
+    null,
 ): Promise<Json> {
   try {
     const text = `
@@ -312,7 +324,9 @@ export async function archiveEventFromFsmTypeWorker(
         $9::jsonb,
         $10::jsonb,
         $11::jsonb,
-        $12::jsonb
+        $12::jsonb,
+        $13::jsonb,
+        $14::jsonb
       ) AS result;
     `;
     const values = [
@@ -328,6 +342,8 @@ export async function archiveEventFromFsmTypeWorker(
       toJsonbParam(fsm_instance_data_save_fsm_state),
       toJsonbParam(fsm_instance_data_save_fsm_context),
       toJsonbParam(fsm_instance_data_save_fsm_xstate_state),
+      toJsonbParam(raised_events ?? []),
+      toJsonbParam(processed_internal_event),
     ];
     const res = await deps.db.query<{ result: Json }>(text, values);
     return res.rows?.[0]?.result ?? null;

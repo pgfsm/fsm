@@ -80,6 +80,7 @@ export async function startFSMWorker(
                 macrostepV2Result.fsm_instance_data_save_fsm_state,
                 macrostepV2Result.fsm_instance_data_save_fsm_context,
                 macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
+                macrostepV2Result.raised_events,
               );
               logger.info("Message archived with result: {result}", {
                 result: archiveResult,

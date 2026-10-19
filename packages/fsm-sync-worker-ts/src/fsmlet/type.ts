@@ -141,6 +141,8 @@ export type MacrostepV2Result = {
     ArchiveWorkerArgs["fsm_instance_data_save_fsm_context"];
   fsm_instance_data_save_fsm_xstate_state:
     ArchiveWorkerArgs["fsm_instance_data_save_fsm_xstate_state"];
+  /** microstep_v2's done.state events, for the archive's internal queue (#519). */
+  raised_events: Json[];
   fsm_instance_data_save_fsm_error: Json;
   fsm_instance_data_save_fsm_output: Json;
   exit_actions: Json[];

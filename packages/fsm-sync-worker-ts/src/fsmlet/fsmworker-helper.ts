@@ -170,6 +170,7 @@ export async function macrostepV2(
     fsm_instance_data_save_fsm_error: {},
     fsm_instance_data_save_fsm_output: {},
     fsm_instance_data_save_fsm_xstate_state: {},
+    raised_events: [] as Json[],
     exit_actions: [] as Json[],
     transition_actions: [] as Json[],
     entry_actions: [] as Json[],
@@ -448,6 +449,11 @@ export async function macrostepV2(
 
   macroSaveFnPayload.fsm_instance_data_save_fsm_xstate_state =
     microstepResult?.updated_state_value ?? null;
+
+  // The done.state events this microstep raised go to the archive unchanged,
+  // which puts them on the instance's internal event queue (SPEC-010, #519).
+  macroSaveFnPayload.raised_events = (microstepResult.raised_events ??
+    []) as Json[];
 
   macroSaveFnPayload.exit_actions = exit_actions;
   macroSaveFnPayload.transition_actions = transition_actions;
