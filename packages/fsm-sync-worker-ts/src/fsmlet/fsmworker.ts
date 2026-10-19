@@ -12,7 +12,6 @@ import {
 } from "@pgfsm/db";
 
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
-import type { FsmQueueMessage } from "../types.ts";
 import type { SyncOperationRegistration } from "./type.ts";
 
 export async function startFSMWorker(
@@ -42,7 +41,6 @@ export async function startFSMWorker(
           logger.info("Processing FSM message: {message}", {
             message: msg.message,
           });
-          const msgData = msg.message as unknown as FsmQueueMessage;
 
           const fsmDataWithResolvedStateValue =
             await getFsmDataResolveStateValue(deps, queueName);
@@ -82,9 +80,6 @@ export async function startFSMWorker(
                 macrostepV2Result.fsm_instance_data_save_fsm_state,
                 macrostepV2Result.fsm_instance_data_save_fsm_context,
                 macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
-                msgData.sendToParentQueueId ?? null,
-                msgData.sendToParentQueueType ?? null,
-                msgData.sendToParentQueueIdEventName ?? null,
               );
               logger.info("Message archived with result: {result}", {
                 result: archiveResult,

@@ -20,9 +20,9 @@ create table fsm_core.fsm_instance_queue_event_logs (
     -- event_source_queue_id uuid, -- e.g., if event_source_type is 'fsm', this is the fsm_instance_id of the source fsm instance
     -- event_source_queue_event_name text, -- e.g., if event_source_type is 'fsm', this is the event_name to source queue
 
-    -- 2. sent_to_parent
-    send_to_parent_queue_id uuid, -- references fsm_core.fsm_instance,
-    send_to_parent_queue_id_event_name text,
+    -- 2. (send_to_parent_queue_id / _event_name, a reply-to address, were
+    --    removed: nothing read them; a child FSM's parent is on its
+    --    fsm_instance row, #523, #526.)
 
     execution_started_at timestamp with time zone default now(),
     execution_duration integer DEFAULT NULL,

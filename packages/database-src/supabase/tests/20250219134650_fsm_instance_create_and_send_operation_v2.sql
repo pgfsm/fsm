@@ -2,21 +2,21 @@ begin;
 select plan(15);
 
 select has_function('fsm_core', 'send_event_to_fsm_queue_with_event_logs_v2',
-  ARRAY['uuid', 'text', 'text', 'uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz'],
+  ARRAY['uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz'],
   'send_event_to_fsm_queue_with_event_logs_v2(...) exists');
 select has_function('fsm_core', 'create_fsm_instance_from_name_v2', ARRAY['text', 'text', 'jsonb', 'boolean', 'uuid', 'text'],
   'create_fsm_instance_from_name_v2(text, text, jsonb, boolean, uuid, text) exists');
 
 select throws_ok(
   $$ select fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
-       NULL, 'FSM', 'v1', gen_random_uuid(), 'sys', 'evt', 'NEXT', 'system', '{}'::jsonb) $$,
+       NULL, 'FSM', 'v1', 'NEXT', 'system', '{}'::jsonb) $$,
   'P0001',
   'fsm_instance_id is NULL',
   'a NULL fsm_instance_id is rejected up front'
 );
 select throws_ok(
   $$ select fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
-       '99999999-1111-2222-3333-444444444444'::uuid, 'FSM', 'v1', gen_random_uuid(), 'sys', 'evt', 'NEXT', 'system', '{}'::jsonb) $$,
+       '99999999-1111-2222-3333-444444444444'::uuid, 'FSM', 'v1', 'NEXT', 'system', '{}'::jsonb) $$,
   'P0001',
   'pgmq.send failed for queue 99999999-1111-2222-3333-444444444444: relation "pgmq.q_99999999-1111-2222-3333-444444444444" does not exist',
   'sending to a queue that was never created raises a wrapped pgmq error'
@@ -32,7 +32,6 @@ select results_eq(
   $$ select (r->>'event_status'), (r->'queue_data'->>'queueId')::uuid, (r->'queue_data'->'eventData'->>'eventType')
      from fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
        '99999999-1111-2222-3333-444444444444'::uuid, 'FSM', 'v1',
-       '00000000-0000-0000-0000-000000000000'::uuid, 'POSTGRES_INTERNAL', 'sysEvt',
        'NEXT', 'system', '{"foo": "bar"}'::jsonb) r $$,
   $$ values ('ACTIVE'::text, '99999999-1111-2222-3333-444444444444'::uuid, 'NEXT'::text) $$,
   'a successful send returns ACTIVE status, the queue id, and the event type'
@@ -120,12 +119,11 @@ select fsm_core.create_fsm_instance_from_name_v2('childFsm', 'v1', '{}'::jsonb, 
   '99999999-1111-2222-3333-444444444444'::uuid, '0.createFsm.Invoking') r;
 select results_eq(
   $$ select fi.parent_fsm_instance_id, fi.parent_invoke_id,
-            c.r->'send_event_result'->'queue_data'->>'sendToParentQueueId',
-            c.r->'send_event_result'->'queue_data'->>'sendToParentQueueIdEventName'
+            c.r->'send_event_result'->'queue_data' ? 'sendToParentQueueId'
      from created523 c join fsm_core.fsm_instance fi on fi.id = (c.r->>'fsm_instance_id')::uuid $$,
   $$ values ('99999999-1111-2222-3333-444444444444'::uuid, '0.createFsm.Invoking'::text,
-             '00000000-0000-0000-0000-000000000000'::text, 'POSTGRES_INTERNAL_EVENT'::text) $$,
-  'a child instance records its parent and invoke id on its row; its start event comes from the system as usual (#523)'
+             false) $$,
+  'a child instance records its parent and invoke id on its row; its start event has no reply-to (#523, #526)'
 );
 
 select * from finish();
