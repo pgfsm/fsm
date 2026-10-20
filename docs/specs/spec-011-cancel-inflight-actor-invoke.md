@@ -8,7 +8,8 @@
 | Issue   | #514                                                                                                                                                                                                                                                                                                 |
 | Affects | `packages/database-src`, `packages/fsm-async-worker-gateway-ts`, `packages/fsm-proto-codegen` (`sidecar_gateway.proto`), `packages/fsm-async-worker-sdk-{ts,python,rust,go}`, `packages/fsm-sync-worker-ts`, `packages/fsm-core-db-ts`, `packages/fsm-compiler-ts` (handler scaffolds), `test-apps/` |
 
-Related: #512 (the cancel notification's fixed channel), #510 (a late actor
+Related: #532 (a child FSM's error event carries its context; step 11's
+payload), #512 (the cancel notification's fixed channel), #510 (a late actor
 result is consumed with no change), #523 / #526 (invoked child FSMs are real
 instances, started through `start_invoked_async_operation_v2`), #396 (retriable
 failures are redelivered), SPEC-007 (gateway behind a transaction pooler,
@@ -72,6 +73,37 @@ the parent's exit, its done event is already in the parent's queue. The parent
 exits, re-enters, starts a new invoke X, then reads the stale `done.actor.X` and
 treats the **new** invoke as finished.
 
+**The macrostep save can't stop safely.**
+`archive_event_from_fsm_type_worker_v2` is where every one of the fixes above
+has to take effect, and today it can't support them:
+
+1. **It takes its row lock late.** The first `FOR UPDATE` is at step 6b, after
+   steps 1–6 have archived schedules, cancelled invokes and started new ones.
+   Those steps work on `input_total_*_queue_data`, the totals the fsmlet read
+   earlier, and step 7 writes values derived from them back over the row. A stop
+   that lands while a macrostep is in flight can't be seen in time, and step 7
+   then overwrites the totals the stop cleared.
+2. **A terminal status leaves invokes and schedules running.** When the saved
+   status is `done` or `error`, entries left in the totals keep running. The
+   internal-event cycle cap sets `error` only after step 6 has already started
+   this macrostep's invokes. XState stops all of an actor's children when it
+   finishes or fails. (`pgfsmctl instance stop` has the same gap: it only
+   removes the dispatch row.)
+3. **Step 8 ignores `pgmq.archive`'s result.** If the processed message was
+   already archived (a redelivery after its visibility timeout, or a stop), the
+   macrostep has been applied a second time. Steps 3 and 4 also ignore their
+   archive results and always report success.
+4. **The internal-event head check raises.** A stop clears
+   `internal_event_queue`, so a macrostep racing it hits the "not the head"
+   `RAISE` instead of being discarded.
+5. **The lock mode can deadlock against a child.**
+   `fsm_instance_queue_event_logs.fsm_instance_id` is a foreign key to
+   `fsm_instance`, so inserting a parent's log row takes `FOR KEY SHARE` on the
+   parent row, which conflicts with `FOR UPDATE`. A child's archive holds the
+   child row and, in step 9, waits for the parent row to log the notification.
+   At the same time, the parent's archive holds the parent row and waits for the
+   child row to stop it. Postgres detects the deadlock and aborts one of them.
+
 Who is affected: any FSM whose actors or child machines have side effects
 (payments, emails, external calls) and whose states can exit before the invoke
 finishes. That includes every `after` timeout racing an invoke (#516), any state
@@ -101,8 +133,12 @@ or be caught by a gateway restart.
   its delayed events. A stopped actor sends its parent nothing. Re-entering a
   state starts a fresh actor under the same invoke id.
 - **Lock order.** The parent's archive holds the parent row and then works on
-  its children. Anything a child does must not lock the parent row, or the two
-  can deadlock.
+  its children. Anything a child does must not take a lock on the parent row
+  that conflicts with the parent's, or the two can deadlock. A child does
+  implicitly take `FOR KEY SHARE` on the parent: every event-log insert for the
+  parent checks its foreign key. So instance rows must be locked
+  `FOR NO KEY UPDATE`, which doesn't conflict with `FOR KEY SHARE` and is what a
+  plain `UPDATE` of non-key columns takes anyway, never `FOR UPDATE`.
 - **Delivery stays at least once** (#396); actors must already be idempotent.
   This spec reduces duplicate and orphaned execution. It does not promise
   exactly once.
@@ -200,6 +236,20 @@ deadlock. And it does nothing for actors.
 the event when its current entry for that invoke id doesn't match. Covers both
 commit orders, takes no extra lock, and treats actors and child FSMs alike.
 
+### 8. Making the macrostep save safe
+
+**A. Patch the guards into today's order.** Add a `stopped` check after the 6b
+lock, and check step 8's archive result. Smallest diff, but the lock still comes
+after the invokes have started. The totals still come from the caller, and the
+cycle cap still flips the status after the starts. Each guard would be working
+around the order rather than relying on it.
+
+**B. Reorder the whole function.** Lock first (`FOR NO KEY UPDATE`), gate on
+status and on the processed message before any side effect, work from the row's
+totals, decide the final status before the entry side, and stop the subtree on a
+terminal status. A rewrite of one function, but every guard then holds by
+construction.
+
 ## Decision
 
 **Detection: 1C (hybrid).** The gateway LISTENs on `fsm_async_operation_cancel`
@@ -250,6 +300,11 @@ running child carries on.
 **Stale events: 7B (parent-side source check).** Driver: it is the only option
 that covers both commit orders and both kinds of invoke. 7A loses on coverage,
 and on lock order.
+
+**Macrostep save: 8B (reorder).** Driver: the stop, the stale-event check and
+exactly-once processing all need the same thing: to be decided under the lock,
+before any side effect. 8A loses because the lock would still come after the
+starts. See "Target sequence" below.
 
 ### Design: database
 
@@ -307,13 +362,16 @@ The mirror of `start_invoked_async_operation_v2`. It takes one entry from
 - `fsm`: `stop_child_fsm_v2(entry.queue_id::uuid)`.
 - anything else: `RAISE EXCEPTION`, as the start function does.
 
-`archive_event_from_fsm_type_worker_v2` step 4 calls it for each confirmed
-stopped invoke, instead of calling the actor cancel function directly.
+`archive_event_from_fsm_type_worker_v2` calls it for each invoke of an exited
+state (step 5b of the target sequence) and for every invoke left when the
+instance reaches a terminal status (step 8). Today's step 4 calls the actor
+cancel function directly.
 
 #### `stop_child_fsm_v2(input_child_fsm_instance_id uuid)`
 
-1. `SELECT … FOR UPDATE` the child row. If it's not found, or its status is
-   already `done` / `error` / `stopped`, return without doing anything.
+1. `SELECT … FOR NO KEY UPDATE` the child row (see Constraints: lock order). If
+   it's not found, or its status is already `done` / `error` / `stopped`, return
+   without doing anything.
 2. Read its `total_async_operation_queue_data`, then set
    `fsm_instance_status = 'stopped'` and clear `internal_event_queue`,
    `total_schedule_queue_data` and `total_async_operation_queue_data`.
@@ -335,18 +393,40 @@ It does not notify the parent: a stopped actor reports nothing. It locks only
 rows below the caller (child, then grandchildren), which matches the parent
 archive's order.
 
-#### The `stopped` guard in `archive_event_from_fsm_type_worker_v2`
+The same steps, without the parent-specific log fields, are what stopping any
+instance means. `stop_child_fsm_v2` is a thin wrapper over a general
+`stop_fsm_instance_v2(input_fsm_instance_id uuid, input_reason text)`. The
+target sequence's terminal-status step uses the same subtree-stop logic, and
+`pgfsmctl instance stop` can move onto it later (outside this spec).
 
-After the function takes the instance row lock, if the status is `stopped`, it
-only archives the processed pgmq message (or removes the internal event) and
-returns. No starts, no stops, no scheduling, no state save, and no step 9. The
-call returns a result saying the macrostep was discarded, so the fsmlet doesn't
-treat it as a failure. Whichever of the stop and an in-flight macrostep takes
-the row lock first wins:
+#### Target sequence for `archive_event_from_fsm_type_worker_v2`
 
-- **The stop wins:** the macrostep is discarded. Its message was already
-  archived in step 4, so its own archive returns false.
-- **The macrostep wins:** it saves normally, then the stop runs on the saved
+This replaces today's order. It all runs in one transaction. The order still
+decides which lock is taken when, which decision gates which side effect, and
+that the exit side runs before the entry side (a re-entered state reuses its
+ids).
+
+| #  | Step                                                                                                                                                                                                                                                                             | Why here                                                                                                                                                                                             |
+| -- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1  | **Lock the instance**: `SELECT … FOR NO KEY UPDATE`. Missing row: raise.                                                                                                                                                                                                         | Everything below works on locked state, serialised with a stop and with a duplicate fsmlet. The mode avoids the foreign-key deadlock (Constraints: lock order).                                      |
+| 2  | **Status gate.** If the row's status isn't `active`, archive the processed pgmq message (if any), log `discarded`, and return `{discarded: true, reason: <status>}`.                                                                                                             | A stopped or finished instance takes no more macrosteps. Comes before the internal-queue head check, because a stop clears that queue.                                                               |
+| 3  | **Consume the processed input, gated.** A pgmq message: read it (for its source), then `pgmq.archive`. If that returns false, log `discarded` and return. An internal event: if it isn't the queue's head, log `discarded` and return (instead of raising). Otherwise remove it. | Exactly once per message. False means another fsmlet already applied it, or a stop archived it. This gate is the `stopped` guard for a macrostep that was already in flight when the stop committed. |
+| 4  | **Stale-event check** (see "Stale done/error events"). For `xstate.done.actor.X` / `xstate.error.actor.X` with a source that doesn't match the row's current entry for X: log `stale_actor_event` and return.                                                                    | Under the parent's own lock, after the message is consumed. The transition the fsmlet computed is discarded, which is the same as XState ignoring the event.                                         |
+| 5  | **Exit side**, from the **row's** totals: (a) archive the cancelled schedules' messages; (b) stop the exited invokes with `stop_invoked_async_operation_v2`. Remove both from the totals, and record each archive's real result.                                                 | XState runs exit actions first. Old entries must be gone before new ones with the same id are added. The input totals are only checked against the row; a mismatch is logged.                        |
+| 6  | **Decide the final status**: the fsmlet's status, overridden by the internal-event cycle cap (→ `error`).                                                                                                                                                                        | Decided before anything is started, so nothing is started only to be stopped.                                                                                                                        |
+| 7  | **Entry side, only if the final status is `active`**: (a) schedule delayed events; (b) start invokes with `start_invoked_async_operation_v2`. Add both to the totals.                                                                                                            | A finished or errored machine starts nothing.                                                                                                                                                        |
+| 8  | **If the final status is terminal** (`done` / `error`): stop every invoke left in the totals, archive every remaining schedule and every message left on the instance's own queue, and clear the totals.                                                                         | XState stops all of an actor's children when it finishes or fails.                                                                                                                                   |
+| 9  | **Internal event queue**: if `active`, append the raised events; otherwise clear it.                                                                                                                                                                                             | As SPEC-010.                                                                                                                                                                                         |
+| 10 | **Save the row**: status, state, context, XState snapshot, totals, internal queue and count, error.                                                                                                                                                                              | After steps 5–8, whose message ids and entries are what get saved.                                                                                                                                   |
+| 11 | **Notify the parent** if the status is `done` / `error` and there is one, with the source `{invoke_id: parent_invoke_id, queue_id: <this instance's id>}`. Never lock the parent row explicitly.                                                                                 | Last, so it reflects the final status. A stopped instance never gets here (step 2).                                                                                                                  |
+| 12 | **Return** the result, including `discarded` and its reason.                                                                                                                                                                                                                     | The fsmlet treats a discard as success, not as an error, and logs it.                                                                                                                                |
+
+How the race between a stop and a macrostep resolves (both take the instance
+lock first):
+
+- **The stop wins:** it archives every message on the queue, including the one
+  being processed, and sets `stopped`. The macrostep then stops at step 2.
+- **The macrostep wins:** it saves normally. The stop then runs on the saved
   state and stops whatever that macrostep started.
 
 #### Re-entry: a new child per start
@@ -365,22 +445,25 @@ payload XState sees doesn't change):
 - an actor result: `{invoke_id, queue_id: <actor queue name>, queue_msg_id}`,
   set by `finish_async_operation_event_v2`;
 - a child FSM's result: `{invoke_id, queue_id: <child instance id>}`, set by
-  archive step 9.
+  step 11 of the target sequence.
 
-Before an `xstate.done.actor.*` / `xstate.error.actor.*` event is processed, the
-parent looks up its current `total_async_operation_queue_data` entry for that
-invoke id. It drops the event if there's no entry, or if the entry's `queue_id`
-(and `queue_msg_id`, for actors) doesn't match the source. A dropped event is
-archived as a no-op macrostep, and the event log records it as
-`stale_actor_event`. Messages without a source (from before this change) are
-processed as today.
+When the parent saves the macrostep for an `xstate.done.actor.*` /
+`xstate.error.actor.*` event (step 4 of the target sequence), it looks up its
+current `total_async_operation_queue_data` entry for that invoke id. It discards
+the macrostep if there's no entry, or if the entry's `queue_id` (and
+`queue_msg_id`, for actors) doesn't match the source. The message was already
+archived in step 3, and the event log records `stale_actor_event`. Messages
+without a source (from before this change) are processed as today.
+
+The check runs in SQL, under the parent's own row lock, rather than in the
+fsmlet before XState sees the event. The fsmlet's read of the totals would be
+unlocked and could already be stale, and in SQL one check covers every fsmlet.
+The cost is that the fsmlet computes a transition that is then thrown away,
+which is rare and cheap.
 
 This covers both orderings of the race described in the Problem. It works for
 actors and children alike, and takes no lock beyond the parent's own row. A
-child-side check was rejected (option 7A) because of lock order. Whether the
-check runs in the fsmlet before XState sees the event, or in the SQL that hands
-the message over, is left to the implementation issue. Either way it runs under
-the parent's row lock.
+child-side check was rejected (option 7A) because of lock order.
 
 ### Design: gateway, proto and SDKs
 
@@ -511,10 +594,18 @@ regenerated.
   still works with up to one sweep interval of latency.
 - **New SQL functions:** `finish_async_operation_event_v2`,
   `stop_invoked_async_operation_v2`, `stop_child_fsm_v2`, the sweep check and
-  the ack log. Two existing functions are rewritten: the archive's step 4 and
-  its `stopped` guard, and step 9, which adds the source. The event-processing
-  path in `fsm-sync-worker-ts` (or its SQL) gains the stale-event check. All of
-  it follows `docs/schema-change-propagation.md`.
+  the ack log, and `stop_fsm_instance_v2` behind `stop_child_fsm_v2`.
+  `archive_event_from_fsm_type_worker_v2` is reordered to the target sequence,
+  including the stale-event check and the notification's source. The fsmlet
+  learns to treat a `discarded` result as success. All of it follows
+  `docs/schema-change-propagation.md`.
+- **The input totals become a check.** The fsmlet still passes
+  `input_total_*_queue_data` (no signature change for the reorder), but the
+  function works from the row and only logs a mismatch. Dropping the parameters
+  is a later cleanup.
+- **Terminal instances now stop their subtree.** An FSM that reaches `done` or
+  `error` with invokes still running stops them. Today they keep running and
+  report to a finished parent. This is a behaviour change, and the XState one.
 - **A stopped child FSM loses its queued messages** (archived, not processed).
   That is XState's behaviour for a stopped actor, but anything that sends events
   to a child by id should expect it.
@@ -542,7 +633,7 @@ Database:
       completion/cancel race.
 - [ ] The two old function names are wrappers over it, and the v1 worker still
       works.
-- [ ] Archive step 4 calls `stop_invoked_async_operation_v2`. An actor entry is
+- [ ] Exiting a state calls `stop_invoked_async_operation_v2`. An actor entry is
       cancelled through `finish_async_operation_event_v2`, a `fsm` entry through
       `stop_child_fsm_v2`, and an unknown type raises.
 - [ ] `stop_child_fsm_v2` on a running child sets `stopped`, removes its pending
@@ -550,8 +641,24 @@ Database:
       in-flight ones), stops its actors and grandchildren recursively, logs
       `stop_child`, and sends the parent nothing. On an already finished or
       stopped child it does nothing.
-- [ ] A macrostep saved for a `stopped` instance is discarded: no starts, sends,
-      state change or parent notification.
+- [ ] `archive_event_from_fsm_type_worker_v2` follows the target sequence: it
+      locks the instance `FOR NO KEY UPDATE` before any side effect, and works
+      from the row's totals.
+- [ ] A macrostep saved for an instance that isn't `active` is discarded (no
+      starts, stops, schedules, state change or parent notification) and returns
+      `discarded`. The fsmlet treats that as success.
+- [ ] A macrostep whose pgmq message was already archived is discarded, so the
+      same message is never applied twice. pgTAP covers a duplicate save. A
+      macrostep whose internal event is no longer the queue's head is discarded
+      instead of raising.
+- [ ] When the final status is `done` or `error` (including the cycle cap), no
+      invoke or schedule is started. Every remaining invoke is stopped, and
+      every remaining schedule and queued message is archived.
+- [ ] Steps 5a and 5b record each archive's real result: the `_failed` arrays
+      are filled when an archive returns false.
+- [ ] A parent and a child saving at the same moment, the parent exiting the
+      invoking state while the child finishes, never deadlock. pgTAP or a
+      concurrent test runs both orders.
 - [ ] Re-entering an invoking state creates a new child `fsm_instance`; the old
       one is `stopped`.
 - [ ] A stale `xstate.done/error.actor.<id>` (from an actor or a child, queued
@@ -614,10 +721,13 @@ gateway and ship first.
 
 1. `finish_async_operation_event_v2` with the archive gate, wrappers for the two
    old names, and the gateway switched to it; schema-change propagation.
-2. `stop_invoked_async_operation_v2`, `stop_child_fsm_v2`, archive step 4, and
-   the `stopped` guard.
-3. Sources on done/error events (actor and child) and the parent's stale-event
-   check.
+2. `archive_event_from_fsm_type_worker_v2` reordered to the target sequence
+   (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals from the
+   row, final status before the entry side, terminal subtree stop), with
+   `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` /
+   `stop_child_fsm_v2`, and the fsmlet's handling of `discarded`.
+3. Sources on done/error events (actor and child) and the stale-event check
+   (step 4 of the target sequence).
 4. Proto `Cancel.reason` and protocol `2.0`; the gateway's in-flight index,
    cancelling state, slot release on reply, `TIMEOUT` / `SHUTDOWN` triggers and
    protocol gate.
