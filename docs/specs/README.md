@@ -47,6 +47,7 @@ Flow:
 | [SPEC-008](spec-008-async-actor-coverage-and-liveness.md)  | Async Actor Coverage and Liveness                                        | Draft    |
 | [SPEC-009](spec-009-cli-surface-and-access-model.md)       | CLI Surface and Access Model — `pgfsmctl` via URL + Role-Scoped API Keys | Accepted |
 | [SPEC-010](spec-010-done-state-internal-event-queue.md)    | `done.state` Events Through a Per-Instance Internal Event Queue          | Accepted |
+| [SPEC-011](spec-011-cancel-inflight-actor-invoke.md)       | Cancel an In-Flight Actor Invoke                                         | Draft    |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
