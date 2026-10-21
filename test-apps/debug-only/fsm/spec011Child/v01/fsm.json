@@ -1,0 +1,102 @@
+{
+  "id": "spec011Child",
+  "key": "spec011Child",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec011Child.Working"
+    ],
+    "source": "#spec011Child",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Working": {
+      "id": "spec011Child.Working",
+      "key": "Working",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Child.Working",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.spec011Child.Working": [
+          {
+            "target": [
+              "#spec011Child.Finished"
+            ],
+            "actions": [
+              {
+                "type": "markChildDone"
+              }
+            ],
+            "source": "#spec011Child.Working",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.spec011Child.Working"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec011Child.Finished"
+          ],
+          "actions": [
+            {
+              "type": "markChildDone"
+            }
+          ],
+          "source": "#spec011Child.Working",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.spec011Child.Working"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [
+        {
+          "src": "spec011ChildWork",
+          "type": "xstate.invoke",
+          "id": "0.spec011Child.Working",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v01",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "Finished": {
+      "id": "spec011Child.Finished",
+      "key": "Finished",
+      "type": "final",
+      "initial": {
+        "target": [],
+        "source": "#spec011Child.Finished",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

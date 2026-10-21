@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec011Child",
+      "parentFsmVersion": "v01",
+      "src": "spec011ChildWork",
+      "asyncOperationName": "spec011ChildWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/spec011ChildWork/spec011ChildWork.ts",
+      "exportedAsyncOperationName": "spec011ChildWork"
+    }
+  ]
+}

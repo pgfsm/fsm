@@ -1,5 +1,5 @@
 begin;
-select plan(78);
+select plan(84);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -900,6 +900,111 @@ select results_eq(
        '"done"'::jsonb, '"Done"'::jsonb, '{"ctx": "this"}'::jsonb, '{}'::jsonb) r $$,
   $$ values ('{"ctx": "this"}'::jsonb, NULL::text) $$,
   'a child reaching done still sends its context, with no error message (#532)'
+);
+
+-- ============================================================
+-- Re-entry, chained through the real functions (SPEC-011, #536). One invoke
+-- id R throughout; each re-entry exits and re-enters the invoking state in a
+-- single macrostep (R removed and added again). Two stale results:
+--   * invoke 1's, queued on the parent before the exit was processed: the
+--     parent's stale-event check drops it (#535);
+--   * invoke 2's, returned after its exit cancelled it: the archive gate
+--     drops it, so it is never sent (#533).
+-- Only invoke 3's result is applied.
+-- ============================================================
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('a5360001-0000-0000-0000-000000000000'::uuid, 're536', 'v1');
+select pgmq.create(queue_name := 'a5360001-0000-0000-0000-000000000000');
+
+create function pg_temp.send536(event_type text) returns bigint language sql as $$
+  select (fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+    input_fsm_instance_id := 'a5360001-0000-0000-0000-000000000000'::uuid,
+    input_fsm_instance_id_fsm_type := 're536', input_fsm_instance_id_fsm_version := 'v1',
+    input_event_name := event_type, input_event_action_type := 'external',
+    input_event_data := '{}'::jsonb)->'queue_data'->>'queueMsgId')::bigint
+$$;
+-- A macrostep that (re-)enters the invoking state: removes R if held, starts R.
+create function pg_temp.enter536(msg_id bigint, removes boolean) returns jsonb language sql as $$
+  select fsm_core.archive_event_from_fsm_type_worker_v2(
+    'a5360001-0000-0000-0000-000000000000', msg_id, NULL,
+    CASE WHEN removes THEN '[{"id": "R", "src": "rework"}]'::jsonb END,
+    NULL,
+    '[{"id": "R", "src": "rework", "input": {}, "action_type": "entry",
+       "asyncOperationType": "internalAsyncOperation", "asyncOperationVersion": "v1",
+       "asyncOperationLanguage": "typescript", "parentFsmName": "re536", "parentFsmVersion": "v1"}]'::jsonb,
+    NULL, NULL,
+    '"active"'::jsonb, '"Retrying"'::jsonb, '{}'::jsonb, '{}'::jsonb)
+$$;
+-- The worker finishing invoke msg_id of R, as the gateway reports it.
+create function pg_temp.finish536(msg_id bigint) returns jsonb language sql as $$
+  select fsm_core.finish_async_operation_event_v2(
+    'completed', 're536_v1_i_rework_t', msg_id,
+    'internalAsyncOperation', 'v1', 'xstate.done.actor.R', 'xstate.invoke', '{}'::jsonb, 0,
+    'a5360001-0000-0000-0000-000000000000'::uuid, 'R',
+    now(), 1, now(), 'succeeded', jsonb_build_object('invoke', msg_id), NULL)
+$$;
+-- The parent's macrostep for a done event: the transition it would take.
+create function pg_temp.done536(msg_id bigint) returns jsonb language sql as $$
+  select fsm_core.archive_event_from_fsm_type_worker_v2(
+    'a5360001-0000-0000-0000-000000000000', msg_id, NULL, NULL, NULL, NULL, NULL, NULL,
+    '"active"'::jsonb, '"RetryDone"'::jsonb, '{}'::jsonb, '{}'::jsonb)
+$$;
+
+-- 1. Enter the state: invoke 1 (actor message 1).
+select pg_temp.enter536(pg_temp.send536('START'), false);
+-- 2. RETRY is queued; then invoke 1 finishes, so its result is queued on the
+--    parent behind RETRY, before the exit is processed.
+create temp table re536 (step text, v jsonb);
+insert into re536 values ('retry1', to_jsonb(pg_temp.send536('RETRY')));
+insert into re536 values ('done1', pg_temp.finish536(1));
+-- 3. RETRY: exit and re-enter in one macrostep; R restarts as message 2.
+select results_eq(
+  $$ select jsonb_path_query_array(r->'new_total_async_operation_queue_data', '$[*].queue_msg_id'),
+            jsonb_array_length(r->'confirmed_removed_async_operation_queue_data_failed')
+     from pg_temp.enter536((select v::text::bigint from re536 where step = 'retry1'), true) r $$,
+  $$ values ('[2]'::jsonb, 1) $$,
+  're-entering removes R and adds it again under the same id, now message 2; invoke 1 had already finished, so there was nothing to cancel (#536)'
+);
+-- 4. Invoke 1's queued result: same invoke id, an earlier invoke: dropped.
+select results_eq(
+  $$ select r->>'discarded_reason'
+     from pg_temp.done536((select (v->'send_to_parent_result'->'queue_data'->>'queueMsgId')::bigint
+                           from re536 where step = 'done1')) r $$,
+  $$ values ('stale_actor_event'::text) $$,
+  'invoke 1''s result, queued before the exit was processed, is dropped by the stale-event check (#536)'
+);
+-- 5. RETRY again while invoke 2 is still on its queue: it is cancelled, and
+--    R restarts as message 3.
+select results_eq(
+  $$ select jsonb_path_query_array(r->'new_total_async_operation_queue_data', '$[*].queue_msg_id'),
+            jsonb_array_length(r->'confirmed_removed_async_operation_queue_data_success')
+     from pg_temp.enter536(pg_temp.send536('RETRY'), true) r $$,
+  $$ values ('[3]'::jsonb, 1) $$,
+  're-entering again cancels invoke 2 and starts invoke 3 under the same id (#536)'
+);
+-- 6. Invoke 2 returns after its cancel: the archive gate drops it, unsent.
+select results_eq(
+  $$ select (r->>'archive_result')::boolean, r->>'status', r->'send_to_parent_result'->>'reason'
+     from pg_temp.finish536(2) r $$,
+  $$ values (false, 'discarded'::text, 'message already archived'::text) $$,
+  'invoke 2''s late result is discarded by the archive gate and never reaches the parent (#536)'
+);
+-- 7. Invoke 3's result is the one that counts.
+select results_eq(
+  $$ select (r->>'discarded')::boolean
+     from pg_temp.done536((pg_temp.finish536(3)->'send_to_parent_result'->'queue_data'->>'queueMsgId')::bigint) r $$,
+  $$ values (false) $$,
+  'invoke 3''s result is applied (#536)'
+);
+select results_eq(
+  $$ select fsm_instance_state,
+            (select count(*)::int from fsm_core.fsm_instance_queue_event_logs l
+             where l.fsm_instance_id = 'a5360001-0000-0000-0000-000000000000'::uuid
+               and l.event_name = 'xstate.done.actor.R' and l.event_status = 'succeeded'),
+            (select count(*)::int from pgmq.read('a5360001-0000-0000-0000-000000000000', 0, 10))
+     from fsm_core.fsm_instance where id = 'a5360001-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('"RetryDone"'::jsonb, 2, 0) $$,
+  'only invokes 1 and 3 ever reached the parent, only invoke 3 drove it, and nothing is left on its queue (#536)'
 );
 
 select * from finish();

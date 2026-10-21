@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                     |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Accepted                                                                                                                                                                                  |
+| Status  | Implemented                                                                                                                                                                               |
 | Date    | 2026-10-20                                                                                                                                                                                |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                  |
 | Issue   | #514                                                                                                                                                                                      |
@@ -553,16 +553,16 @@ End to end:
 
 ## Implementation
 
-Accepted with #531. Implementation issues:
+Accepted with #531; implemented in:
 
-1. #533 — `finish_async_operation_event_v2` with the archive gate, a wrapper for
-   the old archive name (the cancel function dropped), and the gateway switched
-   to it; schema-change propagation. #548 removes the wrapper.
-2. #534 — `archive_event_from_fsm_type_worker_v2` reordered to the target
-   sequence (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals
-   from the row, final status before the entry side, terminal subtree stop),
-   with `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` /
-   `stop_child_fsm_v2`, and the fsmlet's handling of `discarded`.
-3. #535 — Sources on done/error events (actor and child) and the stale-event
-   check (step 4 of the target sequence).
-4. #536 — End-to-end tests: child FSM stop, re-entry, late actor result.
+| Issue | What                                                                                                                                                                                                                                                                                                                                          | PR   |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| #534  | `archive_event_from_fsm_type_worker_v2` reordered to the target sequence (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals from the row, final status before the entry side, terminal subtree stop); `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` / `stop_child_fsm_v2`; the fsmlet's handling of `discarded` | #547 |
+| #533  | `finish_async_operation_event_v2` with the archive gate and the result's source; the cancel function dropped, the old archive name kept as a wrapper (#548 removes it); the gateway switched to it                                                                                                                                            | #549 |
+| #535  | Sources on child FSM results, and the stale done/error actor event check (step 4)                                                                                                                                                                                                                                                             | #550 |
+| #536  | End-to-end tests: child FSM stop, late actor result, re-entry (`apps/fsm-core-example/fsm/spec011Parent/v01/spec011-journey-test.ts`, CI job "SPEC-011 end-to-end")                                                                                                                                                                           | —    |
+
+Related fixes found along the way: #532 (a child FSM's error event carries its
+error, #551). Follow-ups: #546 (internal events gated by contents, not
+identity), #548 (remove the deprecated archive wrapper). The gateway and SDK
+half of #514 is [SPEC-012](spec-012-cancel-inflight-actor-invoke.md).

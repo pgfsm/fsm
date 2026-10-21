@@ -1,0 +1,458 @@
+{
+  "id": "spec011Parent",
+  "key": "spec011Parent",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec011Parent.Idle"
+    ],
+    "source": "#spec011Parent",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Idle": {
+      "id": "spec011Parent.Idle",
+      "key": "Idle",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.Idle",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "START_CHILD": [
+          {
+            "target": [
+              "#spec011Parent.WithChild"
+            ],
+            "actions": [],
+            "source": "#spec011Parent.Idle",
+            "reenter": false,
+            "eventType": "START_CHILD"
+          }
+        ],
+        "START_SLOW": [
+          {
+            "target": [
+              "#spec011Parent.Slow"
+            ],
+            "actions": [],
+            "source": "#spec011Parent.Idle",
+            "reenter": false,
+            "eventType": "START_SLOW"
+          }
+        ],
+        "START_RETRY": [
+          {
+            "target": [
+              "#spec011Parent.Retrying"
+            ],
+            "actions": [],
+            "source": "#spec011Parent.Idle",
+            "reenter": false,
+            "eventType": "START_RETRY"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec011Parent.WithChild"
+          ],
+          "actions": [],
+          "source": "#spec011Parent.Idle",
+          "reenter": false,
+          "eventType": "START_CHILD"
+        },
+        {
+          "target": [
+            "#spec011Parent.Slow"
+          ],
+          "actions": [],
+          "source": "#spec011Parent.Idle",
+          "reenter": false,
+          "eventType": "START_SLOW"
+        },
+        {
+          "target": [
+            "#spec011Parent.Retrying"
+          ],
+          "actions": [],
+          "source": "#spec011Parent.Idle",
+          "reenter": false,
+          "eventType": "START_RETRY"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    },
+    "WithChild": {
+      "id": "spec011Parent.WithChild",
+      "key": "WithChild",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.WithChild",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.spec011Parent.WithChild": [
+          {
+            "target": [
+              "#spec011Parent.ChildDone"
+            ],
+            "actions": [],
+            "source": "#spec011Parent.WithChild",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.spec011Parent.WithChild"
+          }
+        ],
+        "xstate.after.2000.spec011Parent.WithChild": [
+          {
+            "target": [
+              "#spec011Parent.ChildAbandoned"
+            ],
+            "event": "xstate.after.2000.spec011Parent.WithChild",
+            "delay": 2000,
+            "actions": [],
+            "source": "#spec011Parent.WithChild",
+            "reenter": false,
+            "eventType": "xstate.after.2000.spec011Parent.WithChild"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec011Parent.ChildDone"
+          ],
+          "actions": [],
+          "source": "#spec011Parent.WithChild",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.spec011Parent.WithChild"
+        },
+        {
+          "target": [
+            "#spec011Parent.ChildAbandoned"
+          ],
+          "event": "xstate.after.2000.spec011Parent.WithChild",
+          "delay": 2000,
+          "actions": [],
+          "source": "#spec011Parent.WithChild",
+          "reenter": false,
+          "eventType": "xstate.after.2000.spec011Parent.WithChild"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise",
+          "delayActionName": "delay2000",
+          "delayActionEventType": "xstate.after.2000.spec011Parent.WithChild"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel",
+          "delayActionName": "delay2000",
+          "delayActionEventType": "xstate.after.2000.spec011Parent.WithChild"
+        }
+      ],
+      "order": 2,
+      "invoke": [
+        {
+          "asyncOperationType": "fsm",
+          "asyncOperationVersion": "v01",
+          "src": "spec011Child",
+          "type": "xstate.invoke",
+          "id": "0.spec011Parent.WithChild",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "ChildDone": {
+      "id": "spec011Parent.ChildDone",
+      "key": "ChildDone",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.ChildDone",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 3,
+      "invoke": [],
+      "tags": []
+    },
+    "ChildAbandoned": {
+      "id": "spec011Parent.ChildAbandoned",
+      "key": "ChildAbandoned",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.ChildAbandoned",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 4,
+      "invoke": [],
+      "tags": []
+    },
+    "Slow": {
+      "id": "spec011Parent.Slow",
+      "key": "Slow",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.Slow",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.spec011Parent.Slow": [
+          {
+            "target": [
+              "#spec011Parent.SlowDone"
+            ],
+            "actions": [],
+            "source": "#spec011Parent.Slow",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.spec011Parent.Slow"
+          }
+        ],
+        "xstate.after.1000.spec011Parent.Slow": [
+          {
+            "target": [
+              "#spec011Parent.TimedOut"
+            ],
+            "event": "xstate.after.1000.spec011Parent.Slow",
+            "delay": 1000,
+            "actions": [],
+            "source": "#spec011Parent.Slow",
+            "reenter": false,
+            "eventType": "xstate.after.1000.spec011Parent.Slow"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec011Parent.SlowDone"
+          ],
+          "actions": [],
+          "source": "#spec011Parent.Slow",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.spec011Parent.Slow"
+        },
+        {
+          "target": [
+            "#spec011Parent.TimedOut"
+          ],
+          "event": "xstate.after.1000.spec011Parent.Slow",
+          "delay": 1000,
+          "actions": [],
+          "source": "#spec011Parent.Slow",
+          "reenter": false,
+          "eventType": "xstate.after.1000.spec011Parent.Slow"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise",
+          "delayActionName": "delay1000",
+          "delayActionEventType": "xstate.after.1000.spec011Parent.Slow"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel",
+          "delayActionName": "delay1000",
+          "delayActionEventType": "xstate.after.1000.spec011Parent.Slow"
+        }
+      ],
+      "order": 5,
+      "invoke": [
+        {
+          "src": "spec011SlowWork",
+          "type": "xstate.invoke",
+          "id": "0.spec011Parent.Slow",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v01",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "SlowDone": {
+      "id": "spec011Parent.SlowDone",
+      "key": "SlowDone",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.SlowDone",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 6,
+      "invoke": [],
+      "tags": []
+    },
+    "TimedOut": {
+      "id": "spec011Parent.TimedOut",
+      "key": "TimedOut",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.TimedOut",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 7,
+      "invoke": [],
+      "tags": []
+    },
+    "Retrying": {
+      "id": "spec011Parent.Retrying",
+      "key": "Retrying",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.Retrying",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "RETRY": [
+          {
+            "target": [
+              "#spec011Parent.Retrying"
+            ],
+            "reenter": true,
+            "actions": [],
+            "source": "#spec011Parent.Retrying",
+            "eventType": "RETRY"
+          }
+        ],
+        "xstate.done.actor.0.spec011Parent.Retrying": [
+          {
+            "target": [
+              "#spec011Parent.RetryDone"
+            ],
+            "actions": [
+              {
+                "type": "saveResult"
+              }
+            ],
+            "source": "#spec011Parent.Retrying",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.spec011Parent.Retrying"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec011Parent.Retrying"
+          ],
+          "reenter": true,
+          "actions": [],
+          "source": "#spec011Parent.Retrying",
+          "eventType": "RETRY"
+        },
+        {
+          "target": [
+            "#spec011Parent.RetryDone"
+          ],
+          "actions": [
+            {
+              "type": "saveResult"
+            }
+          ],
+          "source": "#spec011Parent.Retrying",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.spec011Parent.Retrying"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 8,
+      "invoke": [
+        {
+          "src": "spec011RetryWork",
+          "type": "xstate.invoke",
+          "id": "0.spec011Parent.Retrying",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v01",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "RetryDone": {
+      "id": "spec011Parent.RetryDone",
+      "key": "RetryDone",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec011Parent.RetryDone",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 9,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}
