@@ -16,6 +16,7 @@
 // result it checks, so the file takes about 30s.
 
 import { assert, assertEquals } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 
 import { runFsmScheduler } from "@pgfsm/ctl";

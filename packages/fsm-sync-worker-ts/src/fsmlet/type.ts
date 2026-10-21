@@ -1,4 +1,6 @@
+// @ts-types="@types/pg"
 import type { Pool } from "pg";
+// @ts-types="@types/pg"
 import type { PoolConfig } from "pg";
 import type { Database, Json } from "@pgfsm/db/database.types";
 import type { FsmModule } from "@pgfsm/db";

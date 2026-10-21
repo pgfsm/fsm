@@ -1,6 +1,7 @@
 import { initialTransition, transition } from "xstate";
 import { diff } from "json-diff-ts";
 import { assertEquals } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool } from "pg";
 
 import machineConfig from "./machine.ts";

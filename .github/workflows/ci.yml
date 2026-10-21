@@ -37,10 +37,23 @@ jobs:
       # Non-blocking: 8 CLI exit-code tests in
       # packages/fsm-compiler-ts/test/cli.test.ts are currently red — remove
       # `continue-on-error` once they're fixed so tests gate merges again.
+      # Blocking: every pg import must carry `// @ts-types="@types/pg"`.
+      # Without it pg is `any` here (CI has no deno.lock), and the type-check
+      # below would pass while catching nothing pg-related (#479).
+      - name: pg imports carry @ts-types
+        run: deno run --allow-read --allow-run=git scripts/check-pg-types-directive.ts
+
       # Blocking: the API app stopped compiling after #341 and nobody noticed,
-      # because no job type-checked it (#472).
-      - name: Type-check API (apps/fsm-core-ts-hono-deno)
-        run: deno check apps/fsm-core-ts-hono-deno/deno.ts apps/fsm-core-ts-hono-deno/src/cli/index.ts apps/fsm-core-ts-hono-deno/test
+      # because no job type-checked it (#472); @pgfsm/db, pgfsmctl and
+      # @pgfsm/sync-worker only looked clean because pg was `any` (#479).
+      # pg-types.check.ts fails if pg ever resolves untyped again.
+      - name: Type-check (API, @pgfsm/db, pgfsmctl, @pgfsm/sync-worker)
+        run: >-
+          deno check
+          apps/fsm-core-ts-hono-deno/deno.ts apps/fsm-core-ts-hono-deno/src/cli/index.ts apps/fsm-core-ts-hono-deno/test
+          packages/fsm-core-db-ts/src/index.ts packages/fsm-core-db-ts/test
+          packages/fsm-ctl-ts/src/index.ts packages/fsm-ctl-ts/src/cli/pgfsmctl.ts packages/fsm-ctl-ts/test
+          packages/fsm-sync-worker-ts/src/index.ts packages/fsm-sync-worker-ts/test
 
       - name: Test (unit)
         run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src

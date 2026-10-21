@@ -11,6 +11,7 @@
 // through.
 
 import { assert, assertEquals } from "@std/assert";
+// @ts-types="@types/pg"
 import { Pool, type PoolClient } from "pg";
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL");
