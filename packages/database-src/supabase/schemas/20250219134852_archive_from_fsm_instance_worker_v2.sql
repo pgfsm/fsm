@@ -423,16 +423,23 @@ $$ LANGUAGE plpgsql;
 --                             queue
 --   internal_event_not_head   the internal event is no longer the queue's head:
 --                             another fsmlet processed and removed it
+--   stale_actor_event         a done/error actor event whose source isn't an
+--                             invoke the instance still holds: the result of
+--                             an earlier invoke under the same id (#535)
 -- The caller has already archived the processed pgmq message (when there is
 -- one), so it isn't delivered again. This logs one 'discarded' row and returns
 -- what the fsmlet needs: that the macrostep was discarded and why, the
 -- instance's status (the fsmlet stops when it isn't active), and its internal
 -- event queue. The fsmlet treats a discard as success, not as an error.
+-- input_processed_message (#535): the processed pgmq message, when the
+-- archive read it (step 3), so the log names the event that was dropped.
+DROP FUNCTION IF EXISTS fsm_core.discard_fsm_macrostep_v2(fsm_core.fsm_instance, text, bigint, jsonb);
 CREATE OR REPLACE FUNCTION fsm_core.discard_fsm_macrostep_v2(
     input_instance_row fsm_core.fsm_instance,
     input_reason text,
     input_processed_queue_msg_id bigint,
-    input_processed_internal_event jsonb
+    input_processed_internal_event jsonb,
+    input_processed_message jsonb DEFAULT NULL
 ) RETURNS jsonb AS $$
 BEGIN
     INSERT INTO fsm_core.fsm_instance_queue_event_logs (
@@ -441,8 +448,16 @@ BEGIN
     ) VALUES (
         input_instance_row.id, input_instance_row.fsm_type, input_instance_row.fsm_version,
         input_processed_queue_msg_id,
-        COALESCE(input_processed_internal_event->>'eventType', 'macrostep'),
-        jsonb_build_object('reason', input_reason, 'processed_internal_event', input_processed_internal_event),
+        COALESCE(
+            input_processed_internal_event->>'eventType',
+            input_processed_message->'eventData'->>'eventType',
+            'macrostep'
+        ),
+        jsonb_build_object(
+            'reason', input_reason,
+            'processed_internal_event', input_processed_internal_event,
+            'source', input_processed_message->'source'
+        ),
         CASE WHEN input_processed_internal_event IS NULL THEN 'queue' ELSE 'internal' END,
         'discarded'
     );
@@ -472,7 +487,8 @@ $$ LANGUAGE plpgsql;
 --    3  consume the processed event, gated: a pgmq message must still be
 --       there to archive, an internal event must be the queue's head;
 --       otherwise the macrostep is discarded (applied already, or stopped)
---    4  (SPEC-011 (c), #535: the stale done/error actor event check)
+--    4  stale done/error actor event: its source must be an invoke the
+--       instance still holds (#535); otherwise the macrostep is discarded
 --    5  exit side, from the row's totals: cancel schedules, stop invokes
 --    6  final status, including the internal-event cycle cap
 --    7  entry side, only while active: schedule, start invokes
@@ -484,11 +500,13 @@ $$ LANGUAGE plpgsql;
 -- The input totals are only checked against the row: the fsmlet read them
 -- without the lock.
 --
--- Discarded macrosteps (steps 2 and 3, discard_fsm_macrostep_v2). A macrostep
--- is applied at most once, and never to an instance that has stopped or
--- finished. It is discarded, instead of applied, when the instance isn't
--- active, when its pgmq message was already archived, or when its internal
--- event isn't the head of the internal queue. Discarding happens before any
+-- Discarded macrosteps (steps 2 to 4, discard_fsm_macrostep_v2). A macrostep
+-- is applied at most once, never to an instance that has stopped or finished,
+-- and never for a stale actor result. It is discarded, instead of applied,
+-- when the instance isn't active, when its pgmq message was already archived,
+-- when its internal event isn't the head of the internal queue, or when it is
+-- a done/error actor event from an invoke the instance no longer holds
+-- (stale_actor_event, #535). Discarding happens before any
 -- side effect; the result says {discarded: true, discarded_reason, ...}. The
 -- status gate comes first: a stop clears the internal queue, and its reason is
 -- that the instance stopped, not that the event moved. When neither a message
@@ -584,6 +602,9 @@ DECLARE
     saved_error jsonb;
     final_status text;
     raised_event jsonb;
+    processed_message jsonb;
+    processed_event_type text;
+    processed_event_source jsonb;
 BEGIN
     -- 1. Lock the instance first: every decision below is made on locked
     --    state, serialised with a stop (stop_fsm_instance_v2) and with a
@@ -640,19 +661,54 @@ BEGIN
         -- archived, either by another fsmlet that got it after its visibility
         -- timeout and saved first, or by a stop (stop_fsm_instance_v2 archives
         -- the whole queue). No message id (a direct SQL call): not gated.
-        IF remove_current_queue_msg_id IS NOT NULL
-            AND NOT pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id)
-        THEN
-            RETURN fsm_core.discard_fsm_macrostep_v2(
-                instance_row, 'message_already_archived', remove_current_queue_msg_id, NULL
-            );
+        -- The message is read first, for step 4: archiving moves it out of
+        -- the queue table.
+        IF remove_current_queue_msg_id IS NOT NULL THEN
+            EXECUTE format('SELECT message FROM pgmq.%I WHERE msg_id = $1', 'q_' || remove_from_current_fsm_instance_queue_id)
+            INTO processed_message
+            USING remove_current_queue_msg_id;
+            IF NOT pgmq.archive(queue_name := remove_from_current_fsm_instance_queue_id, msg_id := remove_current_queue_msg_id) THEN
+                RETURN fsm_core.discard_fsm_macrostep_v2(
+                    instance_row, 'message_already_archived', remove_current_queue_msg_id, NULL
+                );
+            END IF;
         END IF;
         new_internal_event_queue := COALESCE(instance_row.internal_event_queue, '[]'::jsonb);
         -- An event from the pgmq queue starts a new count.
         new_internal_event_count := 0;
     END IF;
 
-    -- 4. The stale done/error actor event check comes here (SPEC-011 (c), #535).
+    -- 4. Stale done/error actor events (SPEC-011 (c), #535). Re-entering a
+    --    state starts a new invoke under the same invoke id, and the parent
+    --    matches xstate.done.actor.<id> / xstate.error.actor.<id> by name. A
+    --    result of the earlier invoke, queued before the parent's exit
+    --    committed or after it, would be taken for the new invoke's. So the
+    --    event's source (set by finish_async_operation_event_v2 for an actor,
+    --    and by step 11 for a child FSM) must still be an invoke this instance
+    --    holds: an entry of its totals with the same invoke_id and queue_id
+    --    (and queue_msg_id, for an actor). Otherwise the macrostep is
+    --    discarded, the same as XState ignoring the event. Checked here, under
+    --    the instance's lock, not in the fsmlet: its copy of the totals is
+    --    read without the lock. A message without a source (sent before
+    --    #533/#535, or by the API) is processed as before.
+    processed_event_type := processed_message->'eventData'->>'eventType';
+    processed_event_source := processed_message->'source';
+    IF processed_event_source IS NOT NULL
+        AND (starts_with(processed_event_type, 'xstate.done.actor.')
+             OR starts_with(processed_event_type, 'xstate.error.actor.'))
+        AND NOT EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(COALESCE(instance_row.total_async_operation_queue_data, '[]'::jsonb)) held
+            WHERE held.value->>'invoke_id' = processed_event_source->>'invoke_id'
+              AND held.value->>'queue_id' = processed_event_source->>'queue_id'
+              AND (NOT processed_event_source ? 'queue_msg_id'
+                   OR (held.value->>'queue_msg_id')::bigint = (processed_event_source->>'queue_msg_id')::bigint)
+        )
+    THEN
+        RETURN fsm_core.discard_fsm_macrostep_v2(
+            instance_row, 'stale_actor_event', remove_current_queue_msg_id, NULL, processed_message
+        );
+    END IF;
 
     -- 5. The exit side, from the row's totals. The worker's copy was read
     --    without the lock; a difference is only reported.
@@ -934,7 +990,13 @@ BEGIN
             input_event_delay                  := 0,
             input_event_status                 := 'ACTIVE',
             input_event_output                 := '{}'::jsonb,
-            input_error_message                := NULL
+            input_error_message                := NULL,
+            -- This child, as the parent's entry for it names it, for the
+            -- parent's stale-event check (step 4, #535).
+            input_event_source                 := jsonb_build_object(
+                                                      'invoke_id', instance_row.parent_invoke_id,
+                                                      'queue_id', instance_row.id::text
+                                                  )
         );
     END IF;
 

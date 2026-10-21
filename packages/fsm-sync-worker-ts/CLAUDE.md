@@ -153,7 +153,9 @@ when the instance isn't active (`instance_not_active`: stopped, done or error),
 when the pgmq message was already archived (`message_already_archived`: another
 worker got it after this one's visibility timeout and saved first, or a stop
 archived the queue), or when the internal event is no longer the queue's head
-(`internal_event_not_head`: another worker processed it). The result says
+(`internal_event_not_head`: another worker processed it), or when a done/error
+actor event comes from an invoke the instance no longer holds
+(`stale_actor_event`, #535: its `source` doesn't match). The result says
 `{discarded: true, discarded_reason, fsm_instance_status, ...}`;
 `archiveOutcome` (`src/fsmlet/internal-events.ts`) reads it, and the worker logs
 it and goes on. It is not an error. The full explanation is in SPEC-011,
