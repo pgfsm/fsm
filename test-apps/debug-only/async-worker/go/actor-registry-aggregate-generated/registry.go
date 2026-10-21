@@ -2,6 +2,8 @@
 package generatedregistry
 
 import (
+	"context"
+
 	creditcheck_v01_checkreportstable "debug-only/creditcheck/v01/go/actors/checkreportstable"
 )
 
@@ -15,7 +17,7 @@ type ActorRegistration struct {
 	// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;
 	// 0 falls back to the worker's --max-concurrency.
 	MaxConcurrency uint32
-	Handler        func(input any) (any, error)
+	Handler        func(ctx context.Context, input any) (any, error)
 }
 
 func ActorRegistrations() []ActorRegistration {

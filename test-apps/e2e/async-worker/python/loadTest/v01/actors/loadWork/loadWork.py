@@ -14,13 +14,15 @@ MAX_CONCURRENCY = 1
 MAX_WORK_MS = 600_000
 
 
-def loadWork(input):
+def loadWork(input, token):
     input = input if isinstance(input, dict) else {}
     try:
         work_ms = float(input.get("workMs") or 0)
     except (TypeError, ValueError):
         work_ms = 0
-    time.sleep(min(max(work_ms, 0), MAX_WORK_MS) / 1000)
+    # The work stops when the gateway cancels this invoke (SPEC-012).
+    if token.wait(min(max(work_ms, 0), MAX_WORK_MS) / 1000):
+        token.raise_if_cancelled()
     return {
         "n": input.get("n"),
         "runId": input.get("runId"),

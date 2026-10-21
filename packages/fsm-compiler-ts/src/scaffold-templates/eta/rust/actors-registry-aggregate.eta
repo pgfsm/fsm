@@ -15,7 +15,7 @@ pub struct ActorRegistration {
     /// to the worker's --max-concurrency. Unread by a main.rs from before #435.
     #[allow(dead_code)]
     pub max_concurrency: u32,
-    pub handler: fn(serde_json::Value) -> serde_json::Value,
+    pub handler: fn(serde_json::Value, pgfsm_async_worker_sdk::CancellationToken) -> serde_json::Value,
 }
 
 pub fn actor_registrations() -> Vec<ActorRegistration> {

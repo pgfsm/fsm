@@ -6,10 +6,10 @@ require e2e/actor-registry-aggregate-generated v0.0.0
 
 require e2e/loadtest/v01/go/actors/loadwork v0.0.0 // indirect
 
-require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.1
+require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.4.0
 
 require (
-	github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go v0.2.0 // indirect
+	github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go v0.3.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

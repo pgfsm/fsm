@@ -597,9 +597,9 @@ dependencies = [
 
 [[package]]
 name = "pgfsm-async-worker-sdk"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4730681c1f6f838d7ab4a3b579bd8ad80b9d6cccb8e977b957a93565dd18f9f"
+checksum = "ccc128869b1cfc9a3adaec3630fff3ba891c4df8d6048e1c8d5bc29f7d722c87"
 dependencies = [
  "log",
  "pgfsm-proto-codegen",
@@ -611,9 +611,9 @@ dependencies = [
 
 [[package]]
 name = "pgfsm-proto-codegen"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9886b2f1d3751229936f96a229b9aba076fd24b600018ea9a900243acc13e4a1"
+checksum = "56044fcced07c992abfd6ddd251570490e58e763a4ccf57dac0835057d14716d"
 dependencies = [
  "prost",
  "tonic",

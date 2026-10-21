@@ -7,7 +7,10 @@
 pub const MAX_CONCURRENCY: u32 = 5;
 
 #[allow(non_snake_case)]
-pub fn checkBureauRust(input: serde_json::Value) -> serde_json::Value {
+pub fn checkBureauRust(
+    input: serde_json::Value,
+    _token: pgfsm_async_worker_sdk::CancellationToken,
+) -> serde_json::Value {
     // TODO: implement actor logic
     serde_json::json!({ "input": input, "msg": "checkBureauRust actor invoked by rust" })
 }

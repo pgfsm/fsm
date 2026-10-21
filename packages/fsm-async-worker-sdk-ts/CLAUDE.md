@@ -68,12 +68,13 @@ inlined. `test: false` keeps the gateway-backed tests out of dnt's Node test
 run.
 
 The compiler's `worker-sdk-deno-json.eta` pins
-`npm:@pgfsm/async-worker-sdk@^0.3.0`. Bump that pin by hand when this package's
-API changes in a way `run-async-worker.eta`'s call depends on. Deno 2.9+ won't
-install an npm version younger than 24 hours by default (its minimum dependency
-age policy), so a generated project pinned to a just-published version fails to
-resolve until then. Release a compiler carrying a new pin at least a day after
-publishing the SDK, and check locally with `--min-dep-age=0` in the meantime.
+`npm:@pgfsm/async-worker-sdk@^0.4.0` (#544). Bump that pin by hand when this
+package's API changes in a way `run-async-worker.eta`'s call depends on. Deno
+2.9+ won't install an npm version younger than 24 hours by default (its minimum
+dependency age policy), so a generated project pinned to a just-published
+version fails to resolve until then. Release a compiler carrying a new pin at
+least a day after publishing the SDK, and check locally with `--min-dep-age=0`
+in the meantime.
 
 Inside this repo, the worker project is
 [`test-apps/debug-only/`](../../test-apps/debug-only/README.md) (#405). Its

@@ -6,8 +6,10 @@
 // also be idempotent: the same invoke can arrive more than once.
 export const maxConcurrency = 1;
 
-export function <%~ it.fnName %>(input: unknown): unknown {
+export function <%~ it.fnName %>(input: unknown, signal: AbortSignal): unknown {
   // <%~ it.todo %>
+  // signal aborts when the gateway cancels this invoke (e.g. its FSM state
+  // exited): pass it to fetch() and the like, or check signal.aborted.
   return { input, msg: "<%~ it.name %> actor invoked by <%~ it.lang %>" };
 }
 

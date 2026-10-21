@@ -5,6 +5,7 @@ package actors
 // tell replicas apart (worker is the pod name in Kubernetes).
 
 import (
+	"context"
 	"os"
 	"time"
 )
@@ -17,7 +18,7 @@ const MaxConcurrency = 1
 
 const maxWorkMs = 600_000
 
-func LoadWork(input any) (any, error) {
+func LoadWork(ctx context.Context, input any) (any, error) {
 	fields, _ := input.(map[string]any)
 	workMs, _ := fields["workMs"].(float64)
 	if workMs < 0 {
@@ -25,7 +26,12 @@ func LoadWork(input any) (any, error) {
 	} else if workMs > maxWorkMs {
 		workMs = maxWorkMs
 	}
-	time.Sleep(time.Duration(workMs) * time.Millisecond)
+	// The work stops when the gateway cancels this invoke (SPEC-012).
+	select {
+	case <-time.After(time.Duration(workMs) * time.Millisecond):
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	}
 	worker, err := os.Hostname()
 	if err != nil {
 		worker = "unknown"

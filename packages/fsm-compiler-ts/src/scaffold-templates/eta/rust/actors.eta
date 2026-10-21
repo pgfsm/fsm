@@ -7,8 +7,13 @@
 pub const MAX_CONCURRENCY: u32 = 1;
 
 #[allow(non_snake_case)]
-pub fn <%~ it.fnName %>(input: serde_json::Value) -> serde_json::Value {
+pub fn <%~ it.fnName %>(
+    input: serde_json::Value,
+    _token: pgfsm_async_worker_sdk::CancellationToken,
+) -> serde_json::Value {
     // <%~ it.todo %>
+    // _token is cancelled when the gateway cancels this invoke (e.g. its FSM
+    // state exited): check _token.is_cancelled() between steps.
     serde_json::json!({ "input": input, "msg": "<%~ it.name %> actor invoked by <%~ it.lang %>" })
 }
 

@@ -8,7 +8,9 @@
 MAX_CONCURRENCY = 1
 
 
-def <%~ it.fnName %>(input):
+def <%~ it.fnName %>(input, token):
     # <%~ it.todo %>
+    # token is cancelled when the gateway cancels this invoke (e.g. its FSM
+    # state exited): check token.cancelled, or call token.raise_if_cancelled().
     return {"input": input, "msg": "<%~ it.name %> actor invoked by <%~ it.lang %>"}
 
