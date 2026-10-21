@@ -673,27 +673,6 @@ export type Database = {
       api_system_event_name: { Args: never; Returns: string };
       api_system_queue_type: { Args: never; Returns: string };
       api_system_queue_uuid: { Args: never; Returns: string };
-      archive_event_from_fsm_async_operation_type_worker_v2: {
-        Args: {
-          input_async_operation_queue_msg_id: number;
-          input_async_operation_queue_name: string;
-          input_async_operation_queue_type: string;
-          input_async_operation_queue_version: string;
-          input_error_message: string;
-          input_event_action_type: string;
-          input_event_data: Json;
-          input_event_delay: number;
-          input_event_name: string;
-          input_event_output: Json;
-          input_event_status: string;
-          input_execution_duration: number;
-          input_execution_finished_at: string;
-          input_execution_started_at: string;
-          input_send_to_parent_queue_id: string;
-          input_send_to_parent_queue_id_event_name: string;
-        };
-        Returns: Json;
-      };
       archive_event_from_fsm_type_worker_v2: {
         Args: {
           fsm_instance_data_save_fsm_context: Json;
