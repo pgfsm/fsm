@@ -139,11 +139,13 @@ queue (`takeNextEvent`, `src/fsmlet/internal-events.ts`), as XState's macrostep
 drains its internal queue before the next event, and handles it like any event:
 it comes as a queue message with no `msg_id`, and the archive is given it as
 `processed_internal_event` (it removes the head instead of archiving a pgmq
-message). Only this worker's archive calls write the queue, so the row is read
-once at start and afterwards each archive result says whether events are
-waiting. An `xstate.error.actor.*` event no transition takes sets status
-`error`, saving the event's payload as the instance's error, and the worker
-stops, as it does on `done`.
+message). Pass it back exactly as read: the archive stamps each queued event
+with an `internalEventId` and gates on it (#546), so an altered copy is
+discarded as `internal_event_not_head`. Only this worker's archive calls write
+the queue, so the row is read once at start and afterwards each archive result
+says whether events are waiting. An `xstate.error.actor.*` event no transition
+takes sets status `error`, saving the event's payload as the instance's error,
+and the worker stops, as it does on `done`.
 
 ## Discarded macrosteps and stopped instances (SPEC-011, #534)
 

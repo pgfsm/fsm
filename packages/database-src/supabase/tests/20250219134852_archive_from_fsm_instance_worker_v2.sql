@@ -1,5 +1,5 @@
 begin;
-select plan(84);
+select plan(88);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -395,10 +395,11 @@ select fsm_core.archive_event_from_fsm_type_worker_v2(
   '"active"'::jsonb, '{"s": 1}'::jsonb, '{}'::jsonb, '{}'::jsonb,
   '[{"eventType": "xstate.done.state.e1"}, {"eventType": "xstate.done.state.e2"}]'::jsonb, NULL);
 select results_eq(
-  $$ select internal_event_queue, internal_event_count, fsm_instance_state
+  $$ select jsonb_path_query_array(internal_event_queue, '$[*].eventType'), internal_event_count, fsm_instance_state,
+            (select count(distinct e->>'internalEventId')::int from jsonb_array_elements(internal_event_queue) e)
      from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
-  $$ values ('[{"eventType": "xstate.done.state.e1"}, {"eventType": "xstate.done.state.e2"}]'::jsonb, 0, '{"s": 1}'::jsonb) $$,
-  'the archive appends raised_events to the internal event queue with the state it saves (#519)'
+  $$ values ('["xstate.done.state.e1", "xstate.done.state.e2"]'::jsonb, 0, '{"s": 1}'::jsonb, 2) $$,
+  'the archive appends raised_events to the internal event queue with the state it saves, each with its own internalEventId (#519, #546)'
 );
 select results_eq(
   $$ select array_agg(event_name order by event_name), array_agg(distinct event_source), bool_and(fsm_instance_queue_msg_id is null)
@@ -410,13 +411,13 @@ select results_eq(
 -- A message that arrived meanwhile stays on pgmq while internal events go first.
 select pgmq.send(queue_name := '88889999-aaaa-bbbb-cccc-dddd00001111', msg := '{"external": 2}'::jsonb);
 select results_eq(
-  $$ select r->'internal_event_queue', (r->>'internal_event_count')::int
+  $$ select jsonb_path_query_array(r->'internal_event_queue', '$[*].eventType'), (r->>'internal_event_count')::int
      from fsm_core.archive_event_from_fsm_type_worker_v2(
        '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
        '"active"'::jsonb, '{"s": 2}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       '[{"eventType": "xstate.done.state.e3"}]'::jsonb, '{"eventType": "xstate.done.state.e1"}'::jsonb) r $$,
-  $$ values ('[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb, 1) $$,
-  'processing an internal event removes the head of the queue and counts it (#519)'
+       '[{"eventType": "xstate.done.state.e3"}]'::jsonb, (select internal_event_queue->0 from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid)) r $$,
+  $$ values ('["xstate.done.state.e2", "xstate.done.state.e3"]'::jsonb, 1) $$,
+  'processing an internal event (the head, as the worker read it) removes it and counts it (#519)'
 );
 select is(
   (select count(*)::int from pgmq.read('88889999-aaaa-bbbb-cccc-dddd00001111', 0, 10)),
@@ -424,13 +425,14 @@ select is(
   'an internal event archives no pgmq message: the waiting one is still there'
 );
 select results_eq(
-  $$ select (r->>'discarded')::boolean, r->>'discarded_reason', r->'internal_event_queue'
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason',
+            jsonb_path_query_array(r->'internal_event_queue', '$[*].eventType')
      from fsm_core.archive_event_from_fsm_type_worker_v2(
        '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
        '"active"'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       '[]'::jsonb, '{"eventType": "xstate.done.state.e3"}'::jsonb) r $$,
+       '[]'::jsonb, (select internal_event_queue->1 from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid)) r $$,
   $$ values (true, 'internal_event_not_head'::text,
-             '[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb) $$,
+             '["xstate.done.state.e2", "xstate.done.state.e3"]'::jsonb) $$,
   'an internal event that isn''t the head of the queue was processed already: the macrostep is discarded, not raised (#534)'
 );
 
@@ -440,13 +442,13 @@ select throws_ok(
        '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL,
        '[{"id": "bad", "src": "x", "asyncOperationType": "unsupported"}]'::jsonb, NULL, NULL,
        '"active"'::jsonb, '{"s": 3}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       '[{"eventType": "xstate.done.state.lost"}]'::jsonb, '{"eventType": "xstate.done.state.e2"}'::jsonb) $$,
+       '[{"eventType": "xstate.done.state.lost"}]'::jsonb, (select internal_event_queue->0 from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid)) $$,
   'P0001'
 );
 select results_eq(
-  $$ select internal_event_queue, internal_event_count, fsm_instance_state
+  $$ select jsonb_path_query_array(internal_event_queue, '$[*].eventType'), internal_event_count, fsm_instance_state
      from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
-  $$ values ('[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb, 1, '{"s": 2}'::jsonb) $$,
+  $$ values ('["xstate.done.state.e2", "xstate.done.state.e3"]'::jsonb, 1, '{"s": 2}'::jsonb) $$,
   'a failed archive leaves both the internal queue and the state unchanged (#519)'
 );
 
@@ -1005,6 +1007,62 @@ select results_eq(
      from fsm_core.fsm_instance where id = 'a5360001-0000-0000-0000-000000000000'::uuid $$,
   $$ values ('"RetryDone"'::jsonb, 2, 0) $$,
   'only invokes 1 and 3 ever reached the parent, only invoke 3 drove it, and nothing is left on its queue (#536)'
+);
+
+-- ============================================================
+-- #546: internal events are gated by identity. Two identical done.state
+-- events in a row: a late, duplicate save for the first must not consume the
+-- second.
+-- ============================================================
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_type)
+values ('a5460001-0000-0000-0000-000000000000'::uuid, 'iq546', 'v1', 'fsm');
+select pgmq.create(queue_name := 'a5460001-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5460001-0000-0000-0000-000000000000', msg := '{"external": 1}'::jsonb);
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  'a5460001-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+  '"active"'::jsonb, '{"s": "raised"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[{"eventType": "xstate.done.state.X"}, {"eventType": "xstate.done.state.X"}]'::jsonb, NULL);
+create temp table iq546 as
+select internal_event_queue->0 as first, internal_event_queue->1 as second
+from fsm_core.fsm_instance where id = 'a5460001-0000-0000-0000-000000000000'::uuid;
+select results_eq(
+  $$ select first->>'eventType' = second->>'eventType', first->'internalEventId' <> second->'internalEventId' from iq546 $$,
+  $$ values (true, true) $$,
+  'two identical raised events get different internalEventIds (#546)'
+);
+-- One worker processes the first.
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  'a5460001-0000-0000-0000-000000000000', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+  '"active"'::jsonb, '{"s": "first applied"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+  '[]'::jsonb, (select first from iq546));
+-- A second worker, which also took the first, saves it late.
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5460001-0000-0000-0000-000000000000', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{"s": "duplicate"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, (select first from iq546)) r $$,
+  $$ values (true, 'internal_event_not_head'::text) $$,
+  'a duplicate save for the first event doesn''t match the identical second one: it is discarded (#546)'
+);
+select results_eq(
+  $$ select fi.internal_event_queue->0 = iq546.second, jsonb_array_length(fi.internal_event_queue),
+            fi.fsm_instance_state, fi.internal_event_count
+     from fsm_core.fsm_instance fi, iq546 where fi.id = 'a5460001-0000-0000-0000-000000000000'::uuid $$,
+  $$ values (true, 1, '{"s": "first applied"}'::jsonb, 1) $$,
+  'the second event is still at the head, and only the first save was applied (#546)'
+);
+-- An event queued before #546 has no id: it is still matched by its contents.
+update fsm_core.fsm_instance set internal_event_queue = '[{"eventType": "xstate.done.state.old"}]'::jsonb
+where id = 'a5460001-0000-0000-0000-000000000000'::uuid;
+select results_eq(
+  $$ select (r->>'discarded')::boolean, jsonb_array_length(r->'internal_event_queue')
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5460001-0000-0000-0000-000000000000', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{"s": "old"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, '{"eventType": "xstate.done.state.old"}'::jsonb) r $$,
+  $$ values (false, 0) $$,
+  'an internal event queued before #546 (no id) is still matched by its contents (#546)'
 );
 
 select * from finish();

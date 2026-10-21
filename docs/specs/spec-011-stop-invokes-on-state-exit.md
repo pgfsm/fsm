@@ -418,12 +418,12 @@ Details:
   has nothing to archive.
 - **Nothing to gate.** When neither a message id nor an internal event is passed
   (direct SQL callers), the macrostep is applied, as before #534.
-- **Known gap (#546).** The internal-event check compares contents, not
-  identity. With two identical events in a row, a duplicate fsmlet's late save
-  for the first matches the second and is applied, consuming it. It is rare (a
-  duplicate fsmlet racing a run of identical `done.state` events) and was
-  equally possible before #534. The fix is to give each internal event an id, as
-  pgmq gates on `msg_id`.
+- **Identity, not contents (#546).** The internal-event check first compared
+  contents, so with two identical events in a row a duplicate fsmlet's late save
+  for the first matched the second and consumed it. Each internal event now gets
+  an `internalEventId` when it is queued (step 9), and the fsmlet passes it back
+  unchanged, so the check is by identity, as pgmq's is by `msg_id`. Events
+  queued before #546 have no id and are compared by contents.
 
 ### Re-entry: a new child per start
 

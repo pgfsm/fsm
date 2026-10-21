@@ -511,8 +511,9 @@ $$ LANGUAGE plpgsql;
 -- status gate comes first: a stop clears the internal queue, and its reason is
 -- that the instance stopped, not that the event moved. When neither a message
 -- id nor an internal event is passed (direct SQL callers), nothing is gated.
--- Known gap (#546): the internal-event check compares contents, so it can't
--- tell two identical events in a row apart.
+-- Each internal event gets an internalEventId when step 9 queues it (#546),
+-- so the internal-event check is by identity: two identical events in a row
+-- are told apart, as pgmq messages are by msg_id.
 --
 -- The internal event queue (SPEC-010, #519): raised_events are the done.state
 -- events microstep_v2 returned, appended to fsm_instance.internal_event_queue
@@ -645,8 +646,11 @@ BEGIN
     IF processed_internal_event IS NOT NULL THEN
         -- An internal event: it must still be the head of the queue, as the
         -- worker took it. Anything else means another fsmlet already processed
-        -- and removed it. This compares contents, not identity: two identical
-        -- events in a row can't be told apart (#546).
+        -- and removed it. The worker passes the event back exactly as it read
+        -- it, internalEventId included (step 9), so this compares identity:
+        -- with two identical events in a row, a late save for the first can't
+        -- match the second (#546). An event queued before #546 has no id and
+        -- is compared by its contents.
         new_internal_event_queue := COALESCE(instance_row.internal_event_queue, '[]'::jsonb);
         IF new_internal_event_queue->0 IS DISTINCT FROM processed_internal_event THEN
             RETURN fsm_core.discard_fsm_macrostep_v2(
@@ -928,9 +932,12 @@ BEGIN
     -- 9. The internal event queue (SPEC-010, #519).
     IF final_status = 'active' THEN
         -- internalQueue.push(...): this microstep's raised events go after the
-        -- ones already waiting, each logged as an internal event.
+        -- ones already waiting, each logged as an internal event. Each gets an
+        -- internalEventId, its identity for step 3's gate (#546); the fsmlet
+        -- doesn't pass it on to XState.
         FOR raised_event IN SELECT value FROM jsonb_array_elements(COALESCE(raised_events, '[]'::jsonb)) value
         LOOP
+            raised_event := raised_event || jsonb_build_object('internalEventId', gen_random_uuid());
             new_internal_event_queue := new_internal_event_queue || jsonb_build_array(raised_event);
             INSERT INTO fsm_core.fsm_instance_queue_event_logs (
                 fsm_instance_id, fsm_instance_id_fsm_type, fsm_instance_id_fsm_version,
