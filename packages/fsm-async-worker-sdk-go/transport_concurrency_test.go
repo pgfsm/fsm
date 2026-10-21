@@ -13,6 +13,7 @@ package asyncworkersdk
 // coverage as the Python and Rust SDKs' transport tests.
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -261,7 +262,7 @@ func goActor(name string, handler ActorHandler) ActorRegistration {
 }
 
 func doubleActor() ActorRegistration {
-	return goActor("double", func(input any) (any, error) {
+	return goActor("double", func(_ context.Context, input any) (any, error) {
 		return map[string]any{"doubled": input.(map[string]any)["n"].(float64) * 2}, nil
 	})
 }
@@ -332,7 +333,7 @@ type gate struct {
 
 func newGate() *gate { return &gate{permits: make(chan struct{}, 64)} }
 
-func (g *gate) handler(input any) (any, error) {
+func (g *gate) handler(_ context.Context, input any) (any, error) {
 	g.mu.Lock()
 	g.started++
 	g.running++

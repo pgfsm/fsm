@@ -39,11 +39,11 @@ ACTOR = {
 }
 
 
-def _check_bureau(input_value):
+def _check_bureau(input_value, _token):
     return {"input": input_value, "msg": "checkBureau actor invoked by python"}
 
 
-def _failing(_input_value):
+def _failing(_input_value, _token):
     raise RuntimeError("boom")
 
 

@@ -175,6 +175,46 @@ Separately from concurrency, **handlers must be idempotent**: delivery is
 at-least-once, so an actor may run again for the same message (after a worker or
 gateway restart, a dropped connection, or a timeout).
 
+### Cancellation (SPEC-012)
+
+Every handler gets a `CancellationToken` as its second argument. It's cancelled
+when the gateway cancels the invoke, and `token.reason` says why:
+
+| Reason         | When                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `STATE_EXITED` | The FSM state that invoked this actor exited: nothing needs the result    |
+| `TIMEOUT`      | The gateway's invoke timeout ran out; the message will be delivered again |
+| `SHUTDOWN`     | The gateway is stopping, or this worker's session with it ended           |
+
+Cancellation is cooperative: the SDK can't interrupt a running thread. Check the
+token between steps, and use `token.wait(seconds)` instead of `time.sleep`:
+
+```python
+from pgfsm.async_worker_sdk import CancellationToken
+
+
+def check_bureau(input_value, token: CancellationToken):
+    for attempt in range(5):
+        token.raise_if_cancelled()  # raises InvokeCancelledError
+        if try_bureau(input_value):
+            return {"ok": True}
+        if token.wait(2.0):  # True once cancelled
+            break
+    token.raise_if_cancelled()
+    return {"ok": False}
+```
+
+After a cancel, a handler that **raises** is reported as `CANCELLED`, and one
+that **returns** still sends its result, which tells the gateway the work
+completed anyway. Either reply frees the invoke's concurrency slot: a handler
+that ignores the cancel keeps its slot until it finishes. An invoke cancelled
+while still waiting for a slot never starts.
+
+This SDK speaks sidecar protocol **2.0**, which a 2.0 gateway requires. If the
+gateway rejects the registration (for example an older gateway), the worker logs
+an error and `run()` raises `RegistrationRejectedError`, so the CLI exits 1
+instead of reconnecting in a loop.
+
 ### Stopping
 
 `stop()` (and SIGINT/SIGTERM under `run_actor_worker_cli`) drains: invokes that
@@ -215,13 +255,14 @@ A registration is a dict:
     "async_operation_name": "checkBureau",
     "async_operation_version": "v01",
     "async_operation_language": "python",
-    "handler": check_bureau,  # (input) -> JSON-serializable output; may be async
+    "handler": check_bureau,  # (input, token) -> JSON-serializable output; may be async
     "max_concurrency": 4,     # optional: this actor's own limit (see "Concurrency")
 }
 ```
 
-A handler that raises is reported to the gateway as an `INTERNAL` invoke error;
-an invoke for an unregistered actor is reported as `NOT_FOUND`.
+A handler that raises is reported to the gateway as an `INTERNAL` invoke error
+(`CANCELLED` once its token is cancelled); an invoke for an unregistered actor
+is reported as `NOT_FOUND`.
 
 Logging goes through the standard `logging` module (`pgfsm.async_worker_sdk`
 loggers); the library never configures logging itself.

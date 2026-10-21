@@ -126,7 +126,50 @@ type RegisteredActor = sidecargatewayv1.RegisteredActor
 // ActorHandler is an actor's compiled-in implementation. A returned error is
 // reported to the gateway as an INTERNAL invoke error; a panic is recovered
 // and reported the same way rather than crashing the worker process.
-type ActorHandler func(input any) (any, error)
+//
+// ctx is cancelled when the gateway cancels this invoke (SPEC-012), or when
+// the worker's session with the gateway ends; context.Cause(ctx) is then an
+// *InvokeCancelledError carrying the [CancelReason]. Pass ctx to anything that
+// takes one and stop when it's done. After a cancel, a returned error (or a
+// panic) is reported as CANCELLED, and a returned value is still sent as the
+// result, telling the gateway the work completed anyway.
+type ActorHandler func(ctx context.Context, input any) (any, error)
+
+// SidecarProtocolVersion is the sidecar protocol this SDK speaks (SPEC-012:
+// it honours Cancel). A 2.0 gateway rejects 1.x workers.
+const SidecarProtocolVersion = "2.0"
+
+// CancelReason is why the gateway cancelled an invoke: the generated
+// pgfsm.sidecargateway.v1.CancelReason enum.
+type CancelReason = sidecargatewayv1.CancelReason
+
+// The CancelReason values.
+const (
+	CancelReasonUnspecified = sidecargatewayv1.CancelReason_CANCEL_REASON_UNSPECIFIED
+	CancelReasonStateExited = sidecargatewayv1.CancelReason_CANCEL_REASON_STATE_EXITED
+	CancelReasonTimeout     = sidecargatewayv1.CancelReason_CANCEL_REASON_TIMEOUT
+	CancelReasonShutdown    = sidecargatewayv1.CancelReason_CANCEL_REASON_SHUTDOWN
+)
+
+// InvokeCancelledError is the cause of a cancelled invoke's context
+// (context.Cause): why it was cancelled.
+type InvokeCancelledError struct {
+	Reason CancelReason
+}
+
+func (e *InvokeCancelledError) Error() string {
+	return "invoke cancelled (" + e.Reason.String() + ")"
+}
+
+// CancelReasonOf returns why ctx's invoke was cancelled, and false if it
+// wasn't (or not by the gateway or session).
+func CancelReasonOf(ctx context.Context) (CancelReason, bool) {
+	var cancelled *InvokeCancelledError
+	if errors.As(context.Cause(ctx), &cancelled) {
+		return cancelled.Reason, true
+	}
+	return CancelReasonUnspecified, false
+}
 
 // ActorRegistration is one actor to register with the gateway: its identity
 // (Meta) and its handler. Meta is a pointer because generated protobuf
@@ -583,7 +626,7 @@ func (w *ActorWorker) runSession() (registered bool, err error) {
 			Register: &sidecargatewayv1.Register{
 				WorkerId:        w.options.WorkerID,
 				Language:        "go",
-				ProtocolVersion: "1.0",
+				ProtocolVersion: SidecarProtocolVersion,
 				Actors:          w.registered,
 			},
 		},
@@ -603,6 +646,9 @@ func (w *ActorWorker) runSession() (registered bool, err error) {
 		return false, fmt.Errorf("expected register_ack but got %T", first.GetPayload())
 	}
 	if !ack.RegisterAck.GetAccepted() {
+		// Not retried: e.g. a gateway that doesn't speak this protocol
+		// version (SPEC-012) would just refuse it again.
+		w.logger.Error("the gateway rejected this worker's registration; exiting", "worker_id", w.options.WorkerID, "protocol_version", SidecarProtocolVersion)
 		w.closeSend(stream)
 		return false, ErrRegistrationRejected
 	}
@@ -645,7 +691,16 @@ func (w *ActorWorker) runSession() (registered bool, err error) {
 		}
 	}()
 
-	err = w.serveLoop(stream)
+	// Every invoke's context derives from the session's: when the session
+	// ends, the ones still running are cancelled with SHUTDOWN, since their
+	// results can no longer be delivered.
+	sessionCtx, endSession := context.WithCancelCause(context.Background())
+	running := &runningInvokes{byID: map[string]context.CancelCauseFunc{}}
+	err = w.serveLoop(stream, sessionCtx, running)
+	if n := running.count(); n > 0 {
+		w.logger.Info("cancelling invokes still running: their gateway session ended", "count", n)
+	}
+	endSession(&InvokeCancelledError{Reason: CancelReasonShutdown})
 	close(stopHeartbeat)
 	<-heartbeatDone
 	w.closeSend(stream)
@@ -672,7 +727,38 @@ func (w *ActorWorker) closeSend(stream sessionStream) {
 	_ = stream.CloseSend()
 }
 
-func (w *ActorWorker) serveLoop(stream sessionStream) error {
+// runningInvokes is a session's running invokes, by id, for Cancel.
+type runningInvokes struct {
+	mu   sync.Mutex
+	byID map[string]context.CancelCauseFunc
+}
+
+func (r *runningInvokes) add(id string, cancel context.CancelCauseFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[id] = cancel
+}
+
+func (r *runningInvokes) remove(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.byID, id)
+}
+
+func (r *runningInvokes) get(id string) (context.CancelCauseFunc, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cancel, ok := r.byID[id]
+	return cancel, ok
+}
+
+func (r *runningInvokes) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.byID)
+}
+
+func (w *ActorWorker) serveLoop(stream sessionStream, sessionCtx context.Context, running *runningInvokes) error {
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
@@ -683,9 +769,21 @@ func (w *ActorWorker) serveLoop(stream sessionStream) error {
 			}
 			return err
 		}
+		if c, ok := resp.GetPayload().(*sidecargatewayv1.SessionResponse_Cancel); ok {
+			id := c.Cancel.GetInvokeId()
+			cancel, found := running.get(id)
+			if !found {
+				// Already finished: its reply is on its way, and
+				// acknowledges the cancel.
+				w.logger.Debug("ignoring cancel of unknown invoke", "invoke_id", id)
+				continue
+			}
+			w.logger.Info("cancelling invoke", "invoke_id", id, "reason", c.Cancel.GetReason().String())
+			cancel(&InvokeCancelledError{Reason: c.Cancel.GetReason()})
+			continue
+		}
 		p, ok := resp.GetPayload().(*sidecargatewayv1.SessionResponse_Invoke)
 		if !ok {
-			// Cancel: invokes run to completion; nothing to cancel.
 			continue
 		}
 		w.mu.Lock()
@@ -703,17 +801,21 @@ func (w *ActorWorker) serveLoop(stream sessionStream) error {
 		}
 		// Not run inline: invokes run concurrently, each actor bounded by
 		// its own slots (see handleInvoke).
+		ctx, cancel := context.WithCancelCause(sessionCtx)
+		running.add(p.Invoke.GetInvokeId(), cancel)
 		go func(body *sidecargatewayv1.Invoke) {
 			defer func() {
+				running.remove(body.GetInvokeId())
+				cancel(nil)
 				w.inFlightCount.Add(-1)
 				w.inFlight.Done()
 			}()
-			w.handleInvoke(stream, body)
+			w.handleInvoke(ctx, stream, body)
 		}(p.Invoke)
 	}
 }
 
-func (w *ActorWorker) handleInvoke(stream sessionStream, body *sidecargatewayv1.Invoke) {
+func (w *ActorWorker) handleInvoke(ctx context.Context, stream sessionStream, body *sidecargatewayv1.Invoke) {
 	key := ActorKey(body.GetParentFsmName(), body.GetParentFsmVersion(), body.GetAsyncOperationType(), body.GetAsyncOperationName(), body.GetAsyncOperationVersion(), body.GetAsyncOperationLanguage())
 	handler, ok := w.handlers[key]
 	slots := w.slots[key]
@@ -733,14 +835,27 @@ func (w *ActorWorker) handleInvoke(stream sessionStream, body *sidecargatewayv1.
 
 	// Never run more of this actor than declared, even if the gateway sends
 	// more (after its own invoke timeout, or through a direct Invoke() RPC).
-	slots <- struct{}{}
+	// Cancelled while waiting for a slot: it never starts.
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		w.sendError(stream, body.GetInvokeId(), key, "CANCELLED", "cancelled before it started: "+context.Cause(ctx).Error(), false)
+		return
+	}
 	defer func() { <-slots }()
 
 	started := time.Now()
-	output, err := safeInvoke(handler, input)
+	output, err := safeInvoke(ctx, handler, input)
 	if err != nil {
-		w.logger.Error("actor failed", "actor", key, "error", err)
-		w.sendError(stream, body.GetInvokeId(), key, "INTERNAL", err.Error(), false)
+		// After a cancel, any failure acknowledges it as CANCELLED
+		// (SPEC-012), whatever the handler returned.
+		code := "INTERNAL"
+		if _, cancelled := CancelReasonOf(ctx); cancelled {
+			code = "CANCELLED"
+		} else {
+			w.logger.Error("actor failed", "actor", key, "error", err)
+		}
+		w.sendError(stream, body.GetInvokeId(), key, code, err.Error(), false)
 		return
 	}
 
@@ -772,13 +887,13 @@ func (w *ActorWorker) warnIfDropped(err error, invokeID, key string) {
 	}
 }
 
-func safeInvoke(handler ActorHandler, input any) (output any, err error) {
+func safeInvoke(ctx context.Context, handler ActorHandler, input any) (output any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
-	return handler(input)
+	return handler(ctx, input)
 }
 
 func (w *ActorWorker) sendError(stream sessionStream, invokeID, key, code, message string, retriable bool) {

@@ -12,7 +12,7 @@ fn registrations() -> Vec<ActorRegistration> {
         "checkBureau",
         "v01",
         "rust",
-        |_input: Value| Value::Null,
+        |_input: Value, _token: pgfsm_async_worker_sdk::CancellationToken| Value::Null,
     )]
 }
 

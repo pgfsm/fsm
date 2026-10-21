@@ -110,6 +110,27 @@ connect-node gateway isn't started here (it's Deno); interop with it was checked
 by hand for #432 (mTLS + token, concurrency, max-age reconnect, drain, wrong
 token).
 
+## Cancel (SPEC-012 (e), #541)
+
+- **Handler signature** `handler(input, token)`, sync or `async def`.
+  `CancellationToken` (`cancellation.py`) is thread-safe: `cancelled`, `reason`
+  (the proto's `CancelReason` by name, `CANCEL_REASON_` stripped:
+  `"STATE_EXITED"`, `"TIMEOUT"`, `"SHUTDOWN"`), `wait(timeout)` and
+  `raise_if_cancelled()` (raises `InvokeCancelledError`). The first reason wins.
+- **Per session**, `_Session` tracks `{invoke_id: token}`. `Cancel` cancels that
+  token (an unknown id is ignored: the invoke already replied). `_run_session`'s
+  `finally` cancels every one still running with `SHUTDOWN` before closing the
+  session.
+- **Replies after a cancel:** a raise is sent as `CANCELLED` (non-retriable), a
+  return as `InvokeResult`. The slot wait polls `slots.acquire(timeout=...)`
+  every 50 ms, so an invoke cancelled while queued replies `CANCELLED` and never
+  runs.
+- **Protocol** `SIDECAR_PROTOCOL_VERSION = "2.0"`; a rejected registration is
+  logged as an error and is fatal, so the CLI exits 1. Same rules as the TS,
+  Rust and Go SDKs; change them together.
+
+Tests: `tests/test_cancel.py`, against `test_actor_worker.py`'s fake gateway.
+
 ## Environment variables (#438)
 
 Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):

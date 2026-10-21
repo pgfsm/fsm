@@ -12,7 +12,7 @@ REGISTRATIONS = [
         "async_operation_name": "checkBureau",
         "async_operation_version": "v01",
         "async_operation_language": "python",
-        "handler": lambda _input: None,
+        "handler": lambda _input, _token: None,
     }
 ]
 

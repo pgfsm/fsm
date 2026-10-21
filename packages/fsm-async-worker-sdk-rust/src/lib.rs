@@ -12,9 +12,13 @@
 //! [`run_actor_worker_cli`].
 //!
 //! ```no_run
-//! use pgfsm_async_worker_sdk::{run_actor_worker_cli, ActorRegistration};
+//! use pgfsm_async_worker_sdk::{run_actor_worker_cli, ActorRegistration, CancellationToken};
 //!
-//! fn check_bureau(input: serde_json::Value) -> serde_json::Value {
+//! fn check_bureau(input: serde_json::Value, token: CancellationToken) -> serde_json::Value {
+//!     // Check the token between steps; stop when it's cancelled (SPEC-012).
+//!     if token.is_cancelled() {
+//!         panic!("cancelled");
+//!     }
 //!     serde_json::json!({ "input": input })
 //! }
 //!
@@ -28,6 +32,7 @@
 //! ```
 
 mod actor_worker;
+mod cancellation;
 mod cli;
 
 pub use actor_worker::{
@@ -35,8 +40,10 @@ pub use actor_worker::{
     ActorRegistration, ActorWorker, ActorWorkerOptions, BoxError, GatewayAddress,
     RegistrationRejectedError, DEFAULT_HEARTBEAT_MS, DEFAULT_KEEPALIVE_INTERVAL_MS,
     DEFAULT_KEEPALIVE_TIMEOUT_MS, DEFAULT_RECONNECT_INITIAL_DELAY_MS,
-    DEFAULT_RECONNECT_MAX_DELAY_MS, DEFAULT_SHUTDOWN_GRACE_MS, FATAL_CODES, STABLE_SESSION_MS,
+    DEFAULT_RECONNECT_MAX_DELAY_MS, DEFAULT_SHUTDOWN_GRACE_MS, FATAL_CODES,
+    SIDECAR_PROTOCOL_VERSION, STABLE_SESSION_MS,
 };
+pub use cancellation::{CancelReason, CancellationToken};
 pub use cli::{env_var_for, run_actor_worker_cli, DEFAULT_GATEWAY_SOCKET_PATH, ENV_OPTIONS};
 /// The generated protocol message an [`ActorRegistration`]'s `meta` is.
 pub use pgfsm_proto_codegen::pgfsm::sidecargateway::v1::RegisteredActor;

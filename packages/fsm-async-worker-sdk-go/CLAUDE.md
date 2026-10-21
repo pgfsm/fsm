@@ -137,6 +137,28 @@ extension so OpenSSL 3.0 issues v3). The real connect-node gateway isn't started
 here (it's Deno); interop with it was checked by hand for #434 (mTLS + token,
 concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
+## Cancel (SPEC-012 (g), #543)
+
+- **Handler signature** `func(ctx context.Context, input any) (any, error)`.
+  Each invoke's context is a `context.WithCancelCause` child of its session's;
+  the cause is an `*InvokeCancelledError{Reason}` (the generated `CancelReason`,
+  aliased with `CancelReason*` constants). `CancelReasonOf(ctx)` unwraps it.
+- **Per session**, `runSession` keeps a `runningInvokes` map; `Cancel` cancels
+  that invoke's context (an unknown id is ignored), and when `serveLoop` returns
+  the session context is cancelled with `SHUTDOWN`, which every running invoke
+  inherits.
+- **Replies after a cancel:** an error or panic is sent as `CANCELLED`, a return
+  as `InvokeResult`. The slot wait `select`s on `ctx.Done()`, so an invoke
+  cancelled while queued replies `CANCELLED` and never runs.
+- **Protocol** `SidecarProtocolVersion = "2.0"`; a rejected registration is
+  logged as an error and is fatal, so the CLI exits 1. Same rules as the TS,
+  Python and Rust SDKs; change them together.
+- **Versioning:** still below 1.0, so this breaking change is a minor bump with
+  the module path unchanged; a `/vN` suffix is only needed from v2.
+
+Tests: `cancel_test.go`, against `actor_worker_test.go`'s fake gateway (its
+`end` channel ends a session).
+
 ## Environment variables (#438)
 
 Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):

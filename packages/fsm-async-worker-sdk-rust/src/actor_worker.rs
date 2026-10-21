@@ -24,6 +24,7 @@
 //! `watch` flag that the serve loop and the reconnect backoff wait on, and the
 //! drain runs inside `run()`.
 
+use crate::cancellation::{CancelReason, CancellationToken};
 use pgfsm_proto_codegen::pgfsm::sidecargateway::v1::sidecar_gateway_service_client::SidecarGatewayServiceClient;
 use pgfsm_proto_codegen::pgfsm::sidecargateway::v1::{
     session_request, session_response, Heartbeat, Invoke, InvokeError, InvokeErrorDetail,
@@ -130,7 +131,20 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// reported to the gateway as an `INTERNAL` invoke error rather than crashing
 /// the worker process — the Rust equivalent of a thrown exception in the
 /// TypeScript/Python SDKs.
-pub type ActorHandler = Box<dyn Fn(Value) -> Value + Send + Sync>;
+///
+/// The [`CancellationToken`] is cancelled when the gateway cancels this invoke
+/// (SPEC-012) or the worker's session ends; check it between steps and stop.
+/// After a cancel, a panic is reported as `CANCELLED`, and a returned value is
+/// still sent as the result, telling the gateway the work completed anyway.
+/// Handlers run in `spawn_blocking`.
+pub type ActorHandler = Box<dyn Fn(Value, CancellationToken) -> Value + Send + Sync>;
+
+/// The sidecar protocol this SDK speaks (SPEC-012: it honours `Cancel`). A 2.0
+/// gateway rejects 1.x workers.
+pub const SIDECAR_PROTOCOL_VERSION: &str = "2.0";
+
+/// A session's running invokes, by id, for `Cancel`.
+type RunningInvokes = Arc<Mutex<HashMap<String, CancellationToken>>>;
 
 /// One actor to register with the gateway: its identity (`meta`, the same
 /// `RegisteredActor` message the gateway receives) and its handler.
@@ -149,7 +163,7 @@ impl ActorRegistration {
         async_operation_name: &str,
         async_operation_version: &str,
         async_operation_language: &str,
-        handler: impl Fn(Value) -> Value + Send + Sync + 'static,
+        handler: impl Fn(Value, CancellationToken) -> Value + Send + Sync + 'static,
     ) -> Self {
         Self {
             meta: RegisteredActor {
@@ -602,7 +616,7 @@ impl ActorWorker {
             payload: Some(session_request::Payload::Register(Register {
                 worker_id: self.options.worker_id.clone(),
                 language: "rust".to_string(),
-                protocol_version: "1.0".to_string(),
+                protocol_version: SIDECAR_PROTOCOL_VERSION.to_string(),
                 actors: self.registered.clone(),
             })),
         })?;
@@ -626,7 +640,14 @@ impl ActorWorker {
             match first.payload {
                 Some(session_response::Payload::RegisterAck(ack)) if ack.accepted => {}
                 Some(session_response::Payload::RegisterAck(_)) => {
-                    return Err(Box::new(RegistrationRejectedError) as BoxError)
+                    // Not retried: e.g. a gateway that doesn't speak this
+                    // protocol version (SPEC-012) would refuse it again.
+                    log::error!(
+                        "The gateway rejected worker {}'s registration (sidecar protocol {}); exiting",
+                        self.options.worker_id,
+                        SIDECAR_PROTOCOL_VERSION
+                    );
+                    return Err(Box::new(RegistrationRejectedError) as BoxError);
                 }
                 other => return Err(format!("expected register_ack but got {:?}", other).into()),
             }
@@ -680,7 +701,25 @@ impl ActorWorker {
             })
         };
 
-        let serve_result = self.serve_loop(&mut inbound, &outbox).await;
+        let running: RunningInvokes = Arc::new(Mutex::new(HashMap::new()));
+        let serve_result = self.serve_loop(&mut inbound, &outbox, &running).await;
+
+        // Their results can no longer be delivered: stop them.
+        let still_running: Vec<CancellationToken> = running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain()
+            .map(|(_, token)| token)
+            .collect();
+        if !still_running.is_empty() {
+            log::info!(
+                "Cancelling {} invoke(s) still running: their gateway session ended",
+                still_running.len()
+            );
+        }
+        for token in still_running {
+            token.cancel(CancelReason::Shutdown);
+        }
 
         heartbeat_handle.abort();
         outbox.close(Some(self.unregister()));
@@ -700,6 +739,7 @@ impl ActorWorker {
         &self,
         inbound: &mut Streaming<SessionResponse>,
         outbox: &Arc<SessionOutbox>,
+        running: &RunningInvokes,
     ) -> Result<(), BoxError> {
         let mut stop_rx = self.stopping.subscribe();
         let mut draining = false;
@@ -721,8 +761,33 @@ impl ActorWorker {
                         }
                         None => break,
                     };
-                    let Some(session_response::Payload::Invoke(invoke)) = response.payload else {
-                        continue;
+                    let invoke = match response.payload {
+                        Some(session_response::Payload::Invoke(invoke)) => invoke,
+                        Some(session_response::Payload::Cancel(cancel)) => {
+                            let token = running
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .get(&cancel.invoke_id)
+                                .cloned();
+                            match token {
+                                Some(token) => {
+                                    log::info!(
+                                        "Cancelling invoke {}: {}",
+                                        cancel.invoke_id,
+                                        cancel.reason().as_str_name()
+                                    );
+                                    token.cancel(cancel.reason());
+                                }
+                                // Already finished: its reply is on its way,
+                                // and acknowledges the cancel.
+                                None => log::debug!(
+                                    "Ignoring cancel of unknown invoke {}",
+                                    cancel.invoke_id
+                                ),
+                            }
+                            continue;
+                        }
+                        _ => continue,
                     };
                     if self.is_stopping() {
                         // Draining: refuse as retriable, so the gateway
@@ -736,7 +801,7 @@ impl ActorWorker {
                             true,
                         );
                     } else {
-                        self.spawn_invoke(invoke, outbox.clone());
+                        self.spawn_invoke(invoke, outbox.clone(), running.clone());
                     }
                 }
                 _ = stop_rx.wait_for(|stopping| *stopping), if !draining => draining = true,
@@ -757,7 +822,7 @@ impl ActorWorker {
 
     /// Runs one invoke on its own task: not awaited, so invokes run
     /// concurrently, each actor bounded by its own slots.
-    fn spawn_invoke(&self, body: Invoke, outbox: Arc<SessionOutbox>) {
+    fn spawn_invoke(&self, body: Invoke, outbox: Arc<SessionOutbox>, running: RunningInvokes) {
         let key = actor_key(
             &body.parent_fsm_name,
             &body.parent_fsm_version,
@@ -800,21 +865,52 @@ impl ActorWorker {
         };
 
         let in_flight = InFlight::new(self.in_flight.clone());
+        let token = CancellationToken::new();
+        running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(body.invoke_id.clone(), token.clone());
         tokio::spawn(async move {
             let _in_flight = in_flight;
+            let _running = RemoveOnDrop {
+                running,
+                invoke_id: body.invoke_id.clone(),
+            };
             // Never run more of this actor than declared, even if the gateway
             // sends more (after its own invoke timeout, or through a direct
-            // Invoke() RPC).
-            let Ok(_permit) = slots.acquire_owned().await else {
+            // Invoke() RPC). Cancelled while waiting for a slot: it never
+            // starts.
+            let permit = tokio::select! {
+                permit = slots.acquire_owned() => permit,
+                _ = token.cancelled() => {
+                    send_error(
+                        &outbox,
+                        &body.invoke_id,
+                        "CANCELLED",
+                        "cancelled before it started",
+                        false,
+                    );
+                    return;
+                }
+            };
+            let Ok(_permit) = permit else {
                 return;
             };
             let started = Instant::now();
             // Handlers are sync and may block, so they run on the blocking
             // pool rather than a runtime worker thread.
+            let handler_token = token.clone();
             let outcome = tokio::task::spawn_blocking(move || {
-                catch_unwind(AssertUnwindSafe(|| handler(input)))
+                catch_unwind(AssertUnwindSafe(|| handler(input, handler_token)))
             })
             .await;
+            // After a cancel, a failure acknowledges it as CANCELLED
+            // (SPEC-012).
+            let failure_code = if token.is_cancelled() {
+                "CANCELLED"
+            } else {
+                "INTERNAL"
+            };
             match outcome {
                 Ok(Ok(output)) => {
                     let output_json =
@@ -834,20 +930,37 @@ impl ActorWorker {
                 }
                 Ok(Err(panic_payload)) => {
                     let message = panic_message(&panic_payload);
-                    log::error!("Actor {} panicked: {}", key, message);
-                    send_error(&outbox, &body.invoke_id, "INTERNAL", &message, false);
+                    if failure_code == "INTERNAL" {
+                        log::error!("Actor {} panicked: {}", key, message);
+                    }
+                    send_error(&outbox, &body.invoke_id, failure_code, &message, false);
                 }
                 Err(join_error) => {
                     send_error(
                         &outbox,
                         &body.invoke_id,
-                        "INTERNAL",
+                        failure_code,
                         &join_error.to_string(),
                         false,
                     );
                 }
             }
         });
+    }
+}
+
+/// Removes a finished invoke from its session's running set.
+struct RemoveOnDrop {
+    running: RunningInvokes,
+    invoke_id: String,
+}
+
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) {
+        self.running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.invoke_id);
     }
 }
 

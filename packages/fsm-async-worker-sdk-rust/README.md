@@ -183,6 +183,55 @@ Separately from concurrency, **handlers must be idempotent**: delivery is
 at-least-once, so an actor may run again for the same message (after a worker or
 gateway restart, a dropped connection, or a timeout).
 
+### Cancellation (SPEC-012)
+
+Every handler gets a `CancellationToken` as its second argument. It's cancelled
+when the gateway cancels the invoke, and `token.reason()` says why
+(`CancelReason::StateExited`, `Timeout` or `Shutdown`):
+
+| Reason         | When                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `STATE_EXITED` | The FSM state that invoked this actor exited: nothing needs the result    |
+| `TIMEOUT`      | The gateway's invoke timeout ran out; the message will be delivered again |
+| `SHUTDOWN`     | The gateway is stopping, or this worker's session with it ended           |
+
+Cancellation is cooperative: handlers run on tokio's blocking pool, and the SDK
+can't stop a running thread. Check the token between steps, and use
+`token.wait(timeout)` instead of `std::thread::sleep`; a handler that bridges to
+async code can `token.cancelled().await`:
+
+```rust
+use pgfsm_async_worker_sdk::CancellationToken;
+use serde_json::{json, Value};
+use std::time::Duration;
+
+fn check_bureau(input: Value, token: CancellationToken) -> Value {
+    for _ in 0..5 {
+        if token.is_cancelled() {
+            panic!("cancelled: {:?}", token.reason());
+        }
+        if try_bureau(&input) {
+            return json!({ "ok": true });
+        }
+        if token.wait(Duration::from_secs(2)) {
+            panic!("cancelled: {:?}", token.reason());
+        }
+    }
+    json!({ "ok": false })
+}
+```
+
+After a cancel, a handler that **panics** is reported as `CANCELLED`, and one
+that **returns** still sends its result, which tells the gateway the work
+completed anyway. Either reply frees the invoke's concurrency slot: a handler
+that ignores the cancel keeps its slot until it finishes. An invoke cancelled
+while still waiting for a slot never starts.
+
+This SDK speaks sidecar protocol **2.0**, which a 2.0 gateway requires. If the
+gateway rejects the registration (for example an older gateway), the worker logs
+an error and `run()` returns `RegistrationRejectedError`, so the CLI exits 1
+instead of reconnecting in a loop.
+
 ### Stopping
 
 `stop()` (and SIGINT/SIGTERM under `run_actor_worker_cli`) drains: invokes that
@@ -214,8 +263,8 @@ be stopped (Rust can't kill a thread): its result is dropped, and
   after `reconnect_max_attempts` consecutive failed attempts.
 - `ActorRegistration::new(parent_fsm_name, parent_fsm_version, async_operation_type, async_operation_name, async_operation_version, async_operation_language, handler)`,
   where `handler` is any
-  `Fn(serde_json::Value) -> serde_json::Value + Send + Sync`, optionally
-  followed by `.with_max_concurrency(n)`.
+  `Fn(serde_json::Value, CancellationToken) -> serde_json::Value + Send + Sync`,
+  optionally followed by `.with_max_concurrency(n)`.
 - `parse_gateway_address(address)` and
   `effective_max_concurrency(actor_max, worker_max)`: the helpers the worker and
   CLI use.
@@ -225,8 +274,8 @@ into the worker binary. If an actor function is missing or has the wrong
 signature, the worker fails to compile instead of failing at startup.
 
 A handler that panics is reported to the gateway as an `INTERNAL` invoke error
-(the worker keeps running); an invoke for an unregistered actor is reported as
-`NOT_FOUND`.
+(`CANCELLED` once its token is cancelled; the worker keeps running); an invoke
+for an unregistered actor is reported as `NOT_FOUND`.
 
 Logging goes through the [`log`](https://crates.io/crates/log) facade; the
 library never installs a logger itself. The generated `main.rs` uses

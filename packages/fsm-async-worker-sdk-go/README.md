@@ -191,6 +191,48 @@ Separately from concurrency, **handlers must be idempotent**: delivery is
 at-least-once, so an actor may run again for the same message (after a worker or
 gateway restart, a dropped connection, or a timeout).
 
+### Cancellation (SPEC-012)
+
+Every handler gets a `context.Context` as its first argument. It's cancelled
+when the gateway cancels the invoke, and `context.Cause(ctx)` is an
+`*InvokeCancelledError` whose `Reason` says why (`CancelReasonOf(ctx)` unwraps
+it):
+
+| Reason         | When                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `STATE_EXITED` | The FSM state that invoked this actor exited: nothing needs the result    |
+| `TIMEOUT`      | The gateway's invoke timeout ran out; the message will be delivered again |
+| `SHUTDOWN`     | The gateway is stopping, or this worker's session with it ended           |
+
+Cancellation is cooperative: Go can't stop a goroutine. Pass `ctx` to anything
+that takes one, and select on `ctx.Done()` instead of sleeping:
+
+```go
+func checkBureau(ctx context.Context, input any) (any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, bureauURL, body(input))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err // after a cancel, reported as CANCELLED
+	}
+	defer resp.Body.Close()
+	return decode(resp)
+}
+```
+
+After a cancel, a handler that **returns an error or panics** is reported as
+`CANCELLED`, and one that **returns** still sends its result, which tells the
+gateway the work completed anyway. Either reply frees the invoke's concurrency
+slot: a handler that ignores the cancel keeps its slot until it finishes. An
+invoke cancelled while still waiting for a slot never starts.
+
+This SDK speaks sidecar protocol **2.0**, which a 2.0 gateway requires. If the
+gateway rejects the registration (for example an older gateway), the worker logs
+an error and `Run()` returns `ErrRegistrationRejected`, so the CLI exits 1
+instead of reconnecting in a loop.
+
 ### Stopping
 
 `Stop()` (and SIGINT/SIGTERM under `RunActorWorkerCLI`) drains: invokes that
@@ -222,8 +264,8 @@ goroutine: its result is dropped, and the process exits when `main` returns.
   `Stop()` is safe from any goroutine, before `Run()` connects, and during a
   reconnect backoff.
 - `NewActorRegistration(parentFsmName, parentFsmVersion, asyncOperationType, asyncOperationName, asyncOperationVersion, asyncOperationLanguage, handler)`,
-  where `handler` is a `func(input any) (any, error)`, optionally followed by
-  `.WithMaxConcurrency(n)`.
+  where `handler` is a `func(ctx context.Context, input any) (any, error)`,
+  optionally followed by `.WithMaxConcurrency(n)`.
 - `ParseGatewayAddress(address)` and
   `EffectiveMaxConcurrency(actorMax, workerMax)`: the helpers the worker and CLI
   use.
@@ -233,8 +275,8 @@ are linked into the worker binary. If an actor function is missing or has the
 wrong signature, the worker fails to compile instead of failing at startup.
 
 A handler that returns an error or panics is reported to the gateway as an
-`INTERNAL` invoke error (the worker keeps running); an invoke for an
-unregistered actor is reported as `NOT_FOUND`.
+`INTERNAL` invoke error (`CANCELLED` once its context is cancelled; the worker
+keeps running); an invoke for an unregistered actor is reported as `NOT_FOUND`.
 
 Logging goes through `log/slog`'s default logger; configure it with
 `slog.SetDefault` before calling `RunActorWorkerCLI` to change the format or
