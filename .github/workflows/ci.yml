@@ -334,11 +334,8 @@ jobs:
 
       # The test loads spec011Parent/spec011Child itself and runs its own
       # scheduler, so neither `pgfsmctl fsm load` nor the pg_cron job is needed.
-      # --no-check: on a fresh clone `npm:pg` has no types, so its callbacks in
-      # fsm-ctl-ts and fsm-sync-worker-ts (both imported here) fail with
-      # TS7006. #479 fixes that; drop --no-check once it lands.
       - name: SPEC-011 journey test
         working-directory: apps/fsm-core-example
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: deno test --allow-all --no-check fsm/spec011Parent/v01/spec011-journey-test.ts
+        run: deno test --allow-all fsm/spec011Parent/v01/spec011-journey-test.ts
