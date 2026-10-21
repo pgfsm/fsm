@@ -227,12 +227,20 @@ fsm_core.finish_async_operation_event_v2(
    dropped late result stays visible.
 4. Return `{archive_result, reason, status, …}`.
 
-The gateway calls it with `completed`.
-`cancel_event_for_fsm_async_operation_type_worker_v2` and
-`archive_event_from_fsm_async_operation_type_worker_v2` stay as thin wrappers,
-marked deprecated, so the deprecated v1 worker (`fsm-async-worker-ts`, `.ts` and
-`.py`) needs no change. This is a schema change: follow
-`docs/schema-change-propagation.md` (types, `fsm-core-db-ts`'s
+The gateway calls it with `completed`, and `stop_invoked_async_operation_v2`
+with `cancelled`. Of the two old functions:
+
+- `cancel_event_for_fsm_async_operation_type_worker_v2` is **dropped**. Nothing
+  else called it, and no role was granted it.
+- `archive_event_from_fsm_async_operation_type_worker_v2` stays for one release
+  as a thin wrapper, marked deprecated. A gateway deployed before #533 calls it
+  by name, as do the deprecated v1 worker (`fsm-async-worker-ts`, `.ts` and
+  `.py`) and `@pgfsm/db`'s `archiveEventFromFsmAsyncOperationTypeWorker`.
+  Removing it is #548.
+
+The schema file is `20250219134752_finish_async_operation_event_v2.sql` (renamed
+from `…_archive_from_async_operation_worker_v2.sql`). This is a schema change:
+follow `docs/schema-change-propagation.md` (types, `fsm-core-db-ts`'s
 `asyncOperationCtl.ts`, the gateway's `asyncOpPollLoop.ts`,
 `test-apps/e2e/tools/load.ts`,
 `packages/database-src/docs/reference/pg-ts-function-mapping.md`).
@@ -458,10 +466,11 @@ child-side check was rejected (option 3A) because of lock order.
 ## Consequences & migration
 
 - **Ships before SPEC-012, and works with today's gateway and SDKs.** The old
-  function names stay as wrappers, the gate only drops results the parent
-  discarded anyway, and stopping children and the stale-event check need nothing
-  from the gateway. The `fsm_async_operation_cancel` notification keeps its
-  channel and payload; until SPEC-012 lands, nothing listens to it.
+  archive function stays as a wrapper (#548 removes it later), the gate only
+  drops results the parent discarded anyway, and stopping children and the
+  stale-event check need nothing from the gateway. The
+  `fsm_async_operation_cancel` notification keeps its channel and payload; until
+  SPEC-012 lands, nothing listens to it.
 - **New SQL functions:** `finish_async_operation_event_v2`,
   `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` and
   `stop_child_fsm_v2`. `archive_event_from_fsm_type_worker_v2` is reordered to
@@ -480,8 +489,9 @@ child-side check was rejected (option 3A) because of lock order.
   to a child by id should expect it.
 - **Rollback.** The new behaviour is behind new function names and wrappers. A
   migration that restores today's bodies of
-  `archive_event_from_fsm_type_worker_v2` and the two actor functions reverts
-  it; the new functions can stay unused.
+  `archive_event_from_fsm_type_worker_v2` and the two actor functions (the
+  dropped `cancel_event_for_fsm_async_operation_type_worker_v2` re-created)
+  reverts it; the new functions can stay unused.
 
 ## Acceptance criteria
 
@@ -490,8 +500,9 @@ child-side check was rejected (option 3A) because of lock order.
       (`cancelled`), and it logs `discarded`. When the archive returns true it
       behaves as the two old functions did. pgTAP covers both orders of a
       completion/cancel race.
-- [ ] The two old function names are wrappers over it, and the v1 worker still
-      works.
+- [ ] `archive_event_from_fsm_async_operation_type_worker_v2` is a wrapper over
+      it and the v1 worker still works;
+      `cancel_event_for_fsm_async_operation_type_worker_v2` is dropped.
 - [ ] Exiting a state calls `stop_invoked_async_operation_v2`. An actor entry is
       cancelled through `finish_async_operation_event_v2`, a `fsm` entry through
       `stop_child_fsm_v2`, and an unknown type raises.
@@ -540,8 +551,9 @@ End to end:
 
 Accepted with #531. Implementation issues:
 
-1. #533 — `finish_async_operation_event_v2` with the archive gate, wrappers for
-   the two old names, and the gateway switched to it; schema-change propagation.
+1. #533 — `finish_async_operation_event_v2` with the archive gate, a wrapper for
+   the old archive name (the cancel function dropped), and the gateway switched
+   to it; schema-change propagation. #548 removes the wrapper.
 2. #534 — `archive_event_from_fsm_type_worker_v2` reordered to the target
    sequence (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals
    from the row, final status before the entry side, terminal subtree stop),

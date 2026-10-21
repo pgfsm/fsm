@@ -96,7 +96,10 @@ export type {
   EnsureAsyncOperationQueueForWorkerResult,
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 
-export { archiveEventFromFsmAsyncOperationTypeWorker } from "./30_async_operation_worker_v2/asyncOperationCtl.ts";
+export {
+  archiveEventFromFsmAsyncOperationTypeWorker,
+  finishAsyncOperationEvent,
+} from "./30_async_operation_worker_v2/asyncOperationCtl.ts";
 
 export {
   API_KEY_ROLES,

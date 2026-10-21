@@ -14,8 +14,8 @@
 import { getLogger } from "@logtape/logtape";
 import type { AsyncOperationWorkerClaim, DBDeps, Json } from "@pgfsm/db";
 import {
-  archiveEventFromFsmAsyncOperationTypeWorker,
   claimPendingAsyncOperationEventsWithCapacity,
+  finishAsyncOperationEvent,
 } from "@pgfsm/db";
 import { ActivityInvokeError, type SidecarGateway } from "./sidecar/gateway.ts";
 
@@ -249,24 +249,31 @@ export async function dispatchAndArchive(
     },
   );
   try {
-    await archiveEventFromFsmAsyncOperationTypeWorker(
+    // Archived and sent to the parent only if its invoking state hasn't
+    // exited meanwhile: a cancel that archived the message first wins, and
+    // this result is logged as discarded (#533).
+    await finishAsyncOperationEvent(
       deps,
+      "completed",
       event.asyncOperationQueueName,
-      event.asyncOperationQueueType,
-      event.asyncOperationQueueVersion,
       event.msgId,
-      prefixedEventName,
-      event.eventActionType,
-      eventOutput,
-      event.eventDelay,
-      event.sendToParentQueueId,
-      event.sendToParentQueueIdEventName,
-      executionStartedAt.toISOString(),
-      executionFinishedAt.getTime() - executionStartedAt.getTime(),
-      executionFinishedAt.toISOString(),
-      eventStatus,
-      eventOutput,
-      errorMessage,
+      {
+        async_operation_queue_type: event.asyncOperationQueueType,
+        async_operation_queue_version: event.asyncOperationQueueVersion,
+        event_name: prefixedEventName,
+        event_action_type: event.eventActionType,
+        event_data: eventOutput,
+        event_delay: event.eventDelay,
+        send_to_parent_queue_id: event.sendToParentQueueId,
+        send_to_parent_queue_id_event_name: event.sendToParentQueueIdEventName,
+        execution_started_at: executionStartedAt.toISOString(),
+        execution_duration: executionFinishedAt.getTime() -
+          executionStartedAt.getTime(),
+        execution_finished_at: executionFinishedAt.toISOString(),
+        event_status: eventStatus,
+        event_output: eventOutput,
+        error_message: errorMessage,
+      },
     );
   } catch (archiveError) {
     logger.error("Failed to archive event for actor {actorKey}: {error}", {

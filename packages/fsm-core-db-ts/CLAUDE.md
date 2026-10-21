@@ -40,7 +40,9 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   polling) and `ensureAsyncOperationQueueForWorker` (PGMQ async-operation-queue
   creation)
 - `30_async_operation_worker_v2/asyncOperationCtl.ts` —
-  `archiveEventFromFsmAsyncOperationTypeWorker`
+  `finishAsyncOperationEvent` (SPEC-011 (a), #533: finishes an actor's message
+  as `completed` or `cancelled`, acting only if its own archive succeeded), and
+  the deprecated `archiveEventFromFsmAsyncOperationTypeWorker`
 - `40_access_control/apiKeys.ts` — API keys (SPEC-009 §2): `createApiKey`,
   `revokeApiKey`, `listApiKeys`, `verifyApiKey` (takes the hex SHA-256 from
   `hashApiKey`, so plaintext keys never reach the DB after creation)

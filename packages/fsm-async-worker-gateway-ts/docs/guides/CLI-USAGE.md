@@ -20,8 +20,8 @@ Concretely, it:
    and the "PGMQ message payload shape" section below), with zero dependency on
    any external orchestrator's poll loop.
 3. **Dispatches and archives** — for each claimed item, invokes the right worker
-   over its sidecar session (`sidecar.invoke()`) and archives the result
-   (`archiveEventFromFsmAsyncOperationTypeWorker`), non-blocking, per actor.
+   over its sidecar session (`sidecar.invoke()`) and finishes the result
+   (`finishAsyncOperationEvent(deps, "completed", …)`), non-blocking, per actor.
 4. **Optionally exposes a client-facing gRPC/Connect API** (`Invoke`,
    `ListRegisteredActors`) — the _original_ reason this package existed (a
    gateway another orchestrator calls into), now secondary to (2)/(3) since this
@@ -285,10 +285,16 @@ Every `--poll-interval-ms` (default 30s):
    while its invoke may still be running. Each row also carries `readCount`
    (PGMQ's `read_ct`).
 3. For each claimed row: dispatches via `sidecar.invoke()` (to the worker with
-   the most free slots for that actor), then archives the result via
-   `archiveEventFromFsmAsyncOperationTypeWorker()`. Fire-and-forget, so one
-   slow/failed dispatch never blocks another actor's dispatch or the next poll
-   tick.
+   the most free slots for that actor), then finishes the result via
+   `finishAsyncOperationEvent(deps, "completed", …)`
+   (`fsm_core.finish_async_operation_event_v2`, #533). That archives the message
+   and sends the result to the parent only if its own archive succeeded: if the
+   invoking state exited meanwhile, the cancel archived the message first, and
+   the late result is logged as `discarded` instead of reaching the parent. A
+   result that is sent carries its `source`
+   (`{invoke_id, queue_id, queue_msg_id}`) next to `eventData`. Fire-and-forget,
+   so one slow/failed dispatch never blocks another actor's dispatch or the next
+   poll tick.
 
 #### Retriable failures are delivered again (#396)
 
@@ -408,8 +414,8 @@ result (e.g. triggered directly via the API) uses
 }
 ```
 
-`archive_event_from_fsm_async_operation_type_worker_v2` recognizes `NULL` and
-both sentinel uuids — `fsm_core.pg_system_queue_uuid()` (`...0000`) and
+`finish_async_operation_event_v2` recognizes `NULL` and both sentinel uuids —
+`fsm_core.pg_system_queue_uuid()` (`...0000`) and
 `fsm_core.api_system_queue_uuid()` (`...0001`) — as "no real parent to notify"
 and skips the parent-notify send, returning
 `send_to_parent_result:

@@ -94,6 +94,7 @@ ALTER FUNCTION fsm_core.claim_pending_async_operation_events_for_workers_v2 SECU
 ALTER FUNCTION fsm_core.claim_pending_async_operation_events_with_capacity_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.compute_async_operation_queue_name_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.archive_event_from_fsm_async_operation_type_worker_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
+ALTER FUNCTION fsm_core.finish_async_operation_event_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.load_async_operation_meta_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.async_operation_schedule_next_pending SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.claim_scheduled_for_async_operation_workerlet SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
@@ -175,6 +176,7 @@ GRANT EXECUTE ON FUNCTION
   fsm_core.claim_pending_async_operation_events_with_capacity_v2,
   fsm_core.compute_async_operation_queue_name_v2,
   fsm_core.archive_event_from_fsm_async_operation_type_worker_v2,
+  fsm_core.finish_async_operation_event_v2,
   fsm_core.load_async_operation_meta_v2,
   fsm_core.async_operation_schedule_next_pending,
   fsm_core.claim_scheduled_for_async_operation_workerlet,

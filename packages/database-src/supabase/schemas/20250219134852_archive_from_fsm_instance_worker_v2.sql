@@ -390,11 +390,13 @@ DECLARE
     entry_type text := COALESCE(input_entry->>'async_operation_type', 'internalAsyncOperation');
 BEGIN
     IF entry_type IN ('internalAsyncOperation', 'sharedAsyncOperation') THEN
-        -- Its queued message is cancelled. An invoke a worker is already
-        -- running is stopped by the Activity Gateway (SPEC-012).
-        RETURN fsm_core.cancel_event_for_fsm_async_operation_type_worker_v2(
-            async_operation_type_worker_name := input_entry->>'queue_id',
-            queue_msg_id := (input_entry->>'queue_msg_id')::bigint
+        -- Its message is cancelled, unless its result was archived first
+        -- (#533). An invoke a worker is already running is stopped by the
+        -- Activity Gateway, on the notification this sends (SPEC-012).
+        RETURN fsm_core.finish_async_operation_event_v2(
+            input_archive_reason := 'cancelled',
+            input_async_operation_queue_name := input_entry->>'queue_id',
+            input_async_operation_queue_msg_id := (input_entry->>'queue_msg_id')::bigint
         );
     ELSIF entry_type = 'fsm' THEN
         RETURN fsm_core.stop_child_fsm_v2((input_entry->>'queue_id')::uuid);

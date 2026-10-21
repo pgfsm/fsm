@@ -13,15 +13,25 @@ import {
 } from "../src/asyncOpPollLoop.ts";
 import { ActivityInvokeError, SidecarGateway } from "../src/sidecar/gateway.ts";
 
-function fakeDeps(): { deps: DBDeps; archived: unknown[][] } {
+function fakeDeps(): {
+  deps: DBDeps;
+  archived: unknown[][];
+  queries: string[];
+} {
   const archived: unknown[][] = [];
+  const queries: string[] = [];
   const db = {
-    query: (_text: string, values: unknown[]) => {
+    query: (text: string, values: unknown[]) => {
+      queries.push(text);
       archived.push(values);
       return Promise.resolve({ rows: [{ result: null }] });
     },
   };
-  return { deps: { db, useSupabase: false } as unknown as DBDeps, archived };
+  return {
+    deps: { db, useSupabase: false } as unknown as DBDeps,
+    archived,
+    queries,
+  };
 }
 
 function claimedRow(readCount: number) {
@@ -104,6 +114,28 @@ Deno.test("a non-retriable failure (the actor threw) is archived on the first de
     5,
   );
   assertEquals(archived.length, 1);
+});
+
+Deno.test("a result is finished as completed through finish_async_operation_event_v2 (#533)", async () => {
+  const { deps, archived, queries } = fakeDeps();
+  const sidecar = new SidecarGateway({ socketPath: "/unused" });
+  sidecar.invoke = () => Promise.resolve({ output: { score: 7 } });
+  await dispatchAndArchive(sidecar, deps, claimedRow(1), 1_000, 5);
+  assertEquals(queries.length, 1);
+  assertEquals(
+    queries[0].includes("fsm_core.finish_async_operation_event_v2("),
+    true,
+  );
+  const values = archived[0];
+  // reason, queue, msg id first; the parent's invoke id rides along for the
+  // result's source.
+  assertEquals(values.slice(0, 3), ["completed", "q", 42]);
+  assertEquals(
+    values.includes("xstate.done.actor.0.(machine).creditCheck.Fetching"),
+    true,
+  );
+  assertEquals(values.includes("0.(machine).creditCheck.Fetching"), true);
+  assertEquals(values.includes("succeeded"), true);
 });
 
 Deno.test("claimed rows without readCount (the old claim function) count as delivery 1", () => {
