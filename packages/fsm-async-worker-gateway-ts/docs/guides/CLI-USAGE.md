@@ -459,8 +459,31 @@ A cancelled invoke keeps its worker slot until the worker replies, with
 `InvokeError{code: "CANCELLED"}` if the handler stopped or its result if it
 finished anyway. That reply only frees the slot; it is never archived. With no
 reply after `cancelAckGraceMs` (default 30 s) the gateway logs one warning; the
-slot stays held. `STATE_EXITED` detection (LISTEN and the sweep) is SPEC-012
-(b).
+slot stays held.
+
+#### Detecting a state exit: LISTEN and the sweep (SPEC-012 (b), #538)
+
+When an FSM state exits, the database archives its invoke's message and notifies
+`fsm_async_operation_cancel` with `{queue_name, msg_id}` when that commits. The
+gateway learns of it two ways, both ending in `Cancel{STATE_EXITED}` for the
+invoke running that message (and nothing, on a replica that isn't running it):
+
+- **LISTEN** with `--listen-db-url <url>` (or `PGFSM_LISTEN_DB_URL`): one
+  dedicated connection, outside the pool, so the cancel reaches the worker in
+  well under a second. It must be a **direct or session-mode** connection:
+  behind a transaction-mode pooler a LISTEN silently receives nothing, which is
+  why it is never derived from `--db-url`. It reconnects with backoff (1 s,
+  doubling to 30 s) and sweeps right after each (re)connect, since notifications
+  sent meanwhile are lost.
+- **The sweep**, every `--cancel-sweep-interval-ms` (default 5000; `0` turns it
+  off), only while invokes are in flight: one query
+  (`fsm_core.async_operation_messages_not_queued_v2`) for which of their
+  messages are no longer queued. It catches missed notifications, and is the
+  only way in without `--listen-db-url`: cancels then take up to one interval.
+
+Both run only with the poll loop (they need its database connection and its
+invokes' messages). The startup log says which are on; with no `--listen-db-url`
+and a sweep interval of 0 it warns that state-exit cancellation is off.
 
 ### Graceful shutdown
 

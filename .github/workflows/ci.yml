@@ -280,11 +280,21 @@ jobs:
       # postgres user is the schema owner (a member of every fsm_* role), which
       # the role/API-key tests need (SPEC-009, #470, #472). pgfsmctl's API-tier
       # tests start the real API as a subprocess against this database (#473).
-      - name: DB-backed Deno tests (@pgfsm/db, API auth, pgfsmctl incl. API tier)
+      # The gateway's two DB-backed files only (its other tests run in the
+      # Deno job): the capacity bound and redelivery (#396, #537), and
+      # detecting a state exit by LISTEN and the sweep (#538), which also
+      # needs this direct connection to LISTEN on.
+      - name: DB-backed Deno tests (@pgfsm/db, API auth, pgfsmctl incl. API tier, gateway)
         working-directory: .
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: deno test --allow-all packages/fsm-core-db-ts/test apps/fsm-core-ts-hono-deno/test packages/fsm-ctl-ts/test
+        run: >-
+          deno test --allow-all
+          packages/fsm-core-db-ts/test
+          apps/fsm-core-ts-hono-deno/test
+          packages/fsm-ctl-ts/test
+          packages/fsm-async-worker-gateway-ts/test/poll_loop_capacity_db_test.ts
+          packages/fsm-async-worker-gateway-ts/test/cancel_detection_db_test.ts
 
   # SPEC-011's end-to-end acceptance (#536): a parent FSM's state exits while
   # its invoked child FSM or actor is running, and is re-entered while one is

@@ -14,6 +14,8 @@ const ENSURE_ASYNC_OPERATION_QUEUE_FOR_WORKER_FN =
   `${FSM_SCHEMA}.ensure_async_operation_queue_for_worker_${FSM_SCHEMA_FN_VERSION}`;
 const COMPUTE_ASYNC_OPERATION_QUEUE_NAME_FN =
   `${FSM_SCHEMA}.compute_async_operation_queue_name_${FSM_SCHEMA_FN_VERSION}`;
+const ASYNC_OPERATION_MESSAGES_NOT_QUEUED_FN =
+  `${FSM_SCHEMA}.async_operation_messages_not_queued_${FSM_SCHEMA_FN_VERSION}`;
 
 /**
  * A registered async-operation-actor identity, as sent to
@@ -265,6 +267,52 @@ export async function computeAsyncOperationQueueName(
       error: err,
     });
     throw new Error("Failed to compute async-operation queue name", {
+      cause: err,
+    });
+  }
+}
+
+/** A message on an async operation's queue, by queue name and pgmq msg id. */
+export interface AsyncOperationQueueMessage {
+  queueName: string;
+  msgId: number | bigint | string;
+}
+
+/**
+ * Which of these messages are no longer on their queues (SPEC-012 (b),
+ * #538): the Activity Gateway's sweep, for the invokes it is running. A
+ * running invoke's message is gone only once a cancel archived it (its FSM
+ * state exited), so the gateway cancels those invokes. A queue that no longer
+ * exists counts as gone. Returns an empty array for no messages without a
+ * query.
+ */
+export async function asyncOperationMessagesNotQueued(
+  deps: DBDeps,
+  messages: AsyncOperationQueueMessage[],
+): Promise<AsyncOperationQueueMessage[]> {
+  if (messages.length === 0) return [];
+  try {
+    const res = await deps.db.query<{ result: Json }>(
+      `SELECT ${ASYNC_OPERATION_MESSAGES_NOT_QUEUED_FN}($1::jsonb) AS result`,
+      [
+        toJsonbParam(
+          messages.map((m) => ({
+            queue_name: m.queueName,
+            msg_id: String(m.msgId),
+          })),
+        ),
+      ],
+    );
+    const rows = (res.rows?.[0]?.result ?? []) as {
+      queue_name: string;
+      msg_id: number;
+    }[];
+    return rows.map((r) => ({ queueName: r.queue_name, msgId: r.msg_id }));
+  } catch (err) {
+    logger.error("Error in asyncOperationMessagesNotQueued: {error}", {
+      error: err,
+    });
+    throw new Error("Failed to check async-operation queue messages", {
       cause: err,
     });
   }

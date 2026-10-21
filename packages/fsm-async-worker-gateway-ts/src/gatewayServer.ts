@@ -38,6 +38,10 @@ import {
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
 import {
+  type CancelDetection,
+  startCancelDetection,
+} from "./cancelDetection.ts";
+import {
   closeHttp2Server,
   isNotFoundError,
   trackHttp2Sessions,
@@ -134,6 +138,22 @@ export interface GatewayServerOptions {
   ensureQueueOnRegister?: {
     deps: DBDeps;
   };
+  /**
+   * When set, cancels in-flight invokes whose FSM state exited (SPEC-012 (b),
+   * #538): by LISTEN on `listenDbUrl` (a direct connection, never a
+   * transaction pooler's) and/or by a sweep through `deps` every
+   * `sweepIntervalMs` (default 5000; 0 turns it off). See cancelDetection.ts.
+   */
+  cancelDetection?: {
+    deps: DBDeps;
+    listenDbUrl?: string;
+    sweepIntervalMs?: number;
+  };
+  /**
+   * How long a cancelled invoke may go without the worker's reply before a
+   * warning is logged (default 30000; 0 turns it off).
+   */
+  cancelAckGraceMs?: number;
 }
 
 const DEFAULT_INVOKE_TIMEOUT_MS = 10_000;
@@ -235,6 +255,7 @@ export async function startActivityGatewayServer(
     keepaliveTimeoutMs: options.keepaliveTimeoutMs,
     onActorRegistered,
     shutdownGraceMs: options.shutdownGraceMs,
+    cancelAckGraceMs: options.cancelAckGraceMs,
   });
   await sidecar.start();
   for (const address of sidecar.addresses()) {
@@ -253,6 +274,18 @@ export async function startActivityGatewayServer(
       maxDeliveryAttempts: options.asyncOpPollLoop.maxDeliveryAttempts,
       signal: options.signal,
     });
+  }
+
+  let cancelDetection: CancelDetection | undefined;
+  if (options.cancelDetection) {
+    cancelDetection = startCancelDetection(
+      sidecar,
+      options.cancelDetection.deps,
+      {
+        listenDbUrl: options.cancelDetection.listenDbUrl,
+        sweepIntervalMs: options.cancelDetection.sweepIntervalMs,
+      },
+    );
   }
 
   const serviceImpl: RawActivityGatewayServiceImpl = {
@@ -328,6 +361,7 @@ export async function startActivityGatewayServer(
     const shutdown = async () => {
       logger.info("Activity gateway shutting down...");
       await closeHttp2Server(server, sessions, options.shutdownGraceMs);
+      await cancelDetection?.stop();
       await sidecar.stop();
       cleanupUnixSocket(options.bindTarget);
       resolve();

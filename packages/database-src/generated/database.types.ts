@@ -718,6 +718,10 @@ export type Database = {
         Args: { input_fsm_instance_id: string };
         Returns: number[];
       };
+      async_operation_messages_not_queued_v2: {
+        Args: { input_messages: Json };
+        Returns: Json;
+      };
       async_operation_schedule_next_pending: {
         Args: { input_stale_threshold_seconds?: number };
         Returns: boolean;
