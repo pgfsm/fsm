@@ -38,8 +38,9 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 - `30_async_operation_worker_v2/asyncOperationWorker.ts` —
   `claimPendingAsyncOperationEventsForWorkers` (PGMQ async-operation-queue
   polling), `ensureAsyncOperationQueueForWorker` (PGMQ async-operation-queue
-  creation) and `asyncOperationMessagesNotQueued` (the gateway's cancel sweep,
-  #538)
+  creation), `asyncOperationMessagesNotQueued` (the gateway's cancel sweep,
+  #538) and `logAsyncOperationCancelAck` (the gateway's cancel-acknowledgement
+  event-log row, #539)
 - `30_async_operation_worker_v2/asyncOperationCtl.ts` —
   `finishAsyncOperationEvent` (SPEC-011 (a), #533: finishes an actor's message
   as `completed` or `cancelled`, acting only if its own archive succeeded), and

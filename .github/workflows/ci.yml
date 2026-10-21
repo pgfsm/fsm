@@ -295,6 +295,7 @@ jobs:
           packages/fsm-ctl-ts/test
           packages/fsm-async-worker-gateway-ts/test/poll_loop_capacity_db_test.ts
           packages/fsm-async-worker-gateway-ts/test/cancel_detection_db_test.ts
+          packages/fsm-async-worker-gateway-ts/test/cancel_ack_log_db_test.ts
 
   # SPEC-011's end-to-end acceptance (#536): a parent FSM's state exits while
   # its invoked child FSM or actor is running, and is re-entered while one is
