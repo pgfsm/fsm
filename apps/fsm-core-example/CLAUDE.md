@@ -36,3 +36,15 @@ isn't part of that project (the CLI doesn't generate it).
 
 The journey test imports `ActorWorker` from `@pgfsm/async-worker-sdk` by its
 workspace name, so it always runs against local source.
+
+## SPEC-011 end-to-end test (#536)
+
+`spec011Parent/` and `spec011Child/` are test machines, not examples: one state
+per SPEC-011 scenario (a child FSM stopped when its parent's state exits, a late
+actor result, re-entry while an invoke is finishing). Their stubs are in
+`test-apps/debug-only`, with sleeps the scenarios depend on.
+`spec011Parent/v01/spec011-journey-test.ts` runs the whole stack from source in
+one process (scheduler, fsmlet, gateway, TypeScript `ActorWorker`), loads both
+definitions itself, and skips without `DATABASE_URL`. CI runs it in the
+"SPEC-011 end-to-end" job; it takes about 30s, most of it waiting for late
+results.

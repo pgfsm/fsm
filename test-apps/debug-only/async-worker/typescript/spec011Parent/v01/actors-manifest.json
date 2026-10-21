@@ -1,0 +1,26 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec011Parent",
+      "parentFsmVersion": "v01",
+      "src": "spec011SlowWork",
+      "asyncOperationName": "spec011SlowWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/spec011SlowWork/spec011SlowWork.ts",
+      "exportedAsyncOperationName": "spec011SlowWork"
+    },
+    {
+      "parentFsmName": "spec011Parent",
+      "parentFsmVersion": "v01",
+      "src": "spec011RetryWork",
+      "asyncOperationName": "spec011RetryWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/spec011RetryWork/spec011RetryWork.ts",
+      "exportedAsyncOperationName": "spec011RetryWork"
+    }
+  ]
+}

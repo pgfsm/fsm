@@ -272,3 +272,46 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all packages/fsm-core-db-ts/test apps/fsm-core-ts-hono-deno/test packages/fsm-ctl-ts/test
+
+  # SPEC-011's end-to-end acceptance (#536): a parent FSM's state exits while
+  # its invoked child FSM or actor is running, and is re-entered while one is
+  # finishing. Runs the whole stack from repository source in one process
+  # (scheduler, fsmlet, Activity Gateway, TypeScript worker SDK) against a
+  # fresh local Supabase. Its own job, so the about 30s of waiting for late
+  # results doesn't lengthen the pgTAP job.
+  spec011-e2e:
+    name: SPEC-011 end-to-end
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/database-src
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Installs proto and runs `proto install` against the root .prototools.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      # Node is pinned in packages/database-src/.prototools (see the database
+      # job).
+      - name: Install Node (from packages/database-src/.prototools)
+        run: proto install
+
+      - name: npm install
+        run: npm install
+
+      - name: Start local Supabase
+        run: npm run supabase:start
+
+      # Compiles supabase/schemas/*.sql into migrations and applies them.
+      - name: Apply schema (db reset)
+        run: npm run supabase:db:reset
+
+      # The test loads spec011Parent/spec011Child itself and runs its own
+      # scheduler, so neither `pgfsmctl fsm load` nor the pg_cron job is needed.
+      - name: SPEC-011 journey test
+        working-directory: apps/fsm-core-example
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all fsm/spec011Parent/v01/spec011-journey-test.ts
