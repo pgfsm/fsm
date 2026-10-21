@@ -70,7 +70,9 @@ from `@pgfsm/sync-worker` to `@pgfsm/ctl`.
    `@pgfsm/db` to `^<its deno.json version>`.
 2. After merge, tag `ctl-v<version>` on `main` and push it (at most three tags
    per push, see the root `CLAUDE.md`). `.github/workflows/npm-publish.yml`
-   builds with `deno task build:npm` and publishes.
+   builds with `deno task build:npm` and publishes. It fails before building if
+   the tag's version isn't `deno.json`'s or the commit isn't on `main`, and
+   skips a version already on npm (#445).
 
 ## License
 
