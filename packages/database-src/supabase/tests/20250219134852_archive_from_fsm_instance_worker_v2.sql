@@ -1,5 +1,5 @@
 begin;
-select plan(42);
+select plan(63);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -91,10 +91,12 @@ select results_eq(
        NULL, NULL, NULL, NULL, NULL, NULL,
        '"active"'::jsonb, '{"foo": "bar"}'::jsonb, '{"ctx": 1}'::jsonb, '{"xs": 1}'::jsonb) $$,
   $$ values ('{
+       "discarded": false, "fsm_instance_status": "active",
+       "terminal_stopped_async_operation_queue_data": [], "terminal_archived_msg_ids": [],
        "parent_notify_result": null, "added_async_operation_queue_data": [], "added_schedule_queue_data": [],
        "internal_event_queue": [], "internal_event_count": 0,
-       "new_total_async_operation_queue_data": [], "old_total_async_operation_queue_data": null,
-       "new_total_schedule_queue_data": [], "old_total_schedule_queue_data": null,
+       "new_total_async_operation_queue_data": [], "old_total_async_operation_queue_data": [],
+       "new_total_schedule_queue_data": [], "old_total_schedule_queue_data": [],
        "not_confirmed_removed_async_operation_queue_data": [], "not_confirmed_removed_schedule_queue_data": [],
        "confirmed_removed_async_operation_queue_data_failed": [], "confirmed_removed_async_operation_queue_data_success": [],
        "confirmed_removed_schedule_queue_data_failed": [], "confirmed_removed_schedule_queue_data_success": []
@@ -132,8 +134,11 @@ select results_eq(
 -- These totals are jsonb arrays; array_append on them used to fail every
 -- macrostep that had any outstanding invoke or scheduled event.
 delete from fsm_core.fsm_instance where fsm_name = 'archTotalsFsm' and fsm_version = 'v1';
-insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
-values ('22223333-4444-5555-6666-777788889999'::uuid, 'archTotalsFsm', 'v1');
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, total_schedule_queue_data, total_async_operation_queue_data)
+values ('22223333-4444-5555-6666-777788889999'::uuid, 'archTotalsFsm', 'v1',
+  '[{"schedule_queue_name": "timer", "event": {"send_event_name_to_parent_queue_id": "t"}}]'::jsonb,
+  '[{"invoke_id": "a", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 1},
+    {"invoke_id": "b", "src": "work", "queue_id": "archTotals_v1_i_work_t", "queue_msg_id": 2}]'::jsonb);
 select pgmq.create(queue_name := '22223333-4444-5555-6666-777788889999');
 select pgmq.send(queue_name := '22223333-4444-5555-6666-777788889999', msg := '{"result": 1}'::jsonb);
 select pgmq.create(queue_name := 'archTotals_v1_i_work_t');
@@ -308,11 +313,14 @@ select results_eq(
 -- #526: a macrostep that starts a child FSM and a worker async operation keeps both
 -- entries next to the ones already there. The child's result had no
 -- queue_data, so step 6 appended NULL and wiped the whole list.
-insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
-values ('66667777-8888-9999-0000-111122223333'::uuid, 'chParent', 'v1');
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, total_async_operation_queue_data)
+values ('66667777-8888-9999-0000-111122223333'::uuid, 'chParent', 'v1',
+  '[{"invoke_id": "0.chParent.Earlier", "src": "older", "async_operation_type": "internalAsyncOperation",
+     "queue_id": "chParent_v1_i_older_t", "queue_msg_id": 9}]'::jsonb);
 select pgmq.create(queue_name := '66667777-8888-9999-0000-111122223333');
 select pgmq.send(queue_name := '66667777-8888-9999-0000-111122223333', msg := '{"enter": 1}'::jsonb);
 select pgmq.send(queue_name := '66667777-8888-9999-0000-111122223333', msg := '{"exit": 1}'::jsonb);
+select pgmq.send(queue_name := '66667777-8888-9999-0000-111122223333', msg := '{"reenter": 1}'::jsonb);
 
 create temp table both526 as
 select fsm_core.archive_event_from_fsm_type_worker_v2(
@@ -349,11 +357,30 @@ select results_eq(
   $$ values ('["older", "work526"]'::jsonb, '["chChild"]'::jsonb) $$,
   'on exit the entry is found by invoke_id and src, and the others stay (#526)'
 );
-select is(
-  (select count(*)::int from pgmq.read(
-     (select r->'new_total_async_operation_queue_data'->1->>'queue_id' from both526), 0, 10)),
-  0,
-  'the child''s queued start event is cancelled with the entry''s queue_id and queue_msg_id'
+select results_eq(
+  $$ select fi.fsm_instance_status,
+            (select array_agg(m.message->'eventData'->>'eventType') from pgmq.read(fi.id::text, 0, 10) m),
+            (select count(*)::int from fsm_core.fsm_instance_and_fsm_workerlet w where w.fsm_instance_id = fi.id)
+     from fsm_core.fsm_instance fi
+     where fi.id = (select (r->'new_total_async_operation_queue_data'->1->>'queue_id')::uuid from both526) $$,
+  $$ values ('"stopped"'::jsonb, ARRAY['xstate.stop'], 0) $$,
+  'the exited child is stopped: its start event archived, its dispatch removed, only the xstate.stop wake-up left (#534)'
+);
+
+-- Entering the state again starts a new child; the stopped one stays stopped (#534).
+select results_eq(
+  $$ select (r->'new_total_async_operation_queue_data'->2->>'queue_id')::uuid
+              <> (select (b.r->'new_total_async_operation_queue_data'->1->>'queue_id')::uuid from both526 b),
+            jsonb_path_query_array(r->'new_total_async_operation_queue_data', '$[*].src')
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       '66667777-8888-9999-0000-111122223333', 3::bigint,
+       NULL, NULL, NULL,
+       '[{"id": "0.chParent.Both", "src": "chChild", "input": {"n": 4}, "action_type": "entry",
+          "asyncOperationType": "fsm", "asyncOperationVersion": "v1"}]'::jsonb,
+       NULL, NULL,
+       '"active"'::jsonb, '{"s": 3}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values (true, '["older", "work526", "chChild"]'::jsonb) $$,
+  're-entering the invoking state starts a new child instance (#534)'
 );
 
 -- SPEC-010 (b), #519: the internal event queue. An event from pgmq raises two
@@ -396,13 +423,15 @@ select is(
   1,
   'an internal event archives no pgmq message: the waiting one is still there'
 );
-select throws_like(
-  $$ select fsm_core.archive_event_from_fsm_type_worker_v2(
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason', r->'internal_event_queue'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
        '88889999-aaaa-bbbb-cccc-dddd00001111', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
        '"active"'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-       '[]'::jsonb, '{"eventType": "xstate.done.state.e3"}'::jsonb) $$,
-  'internal event % is not the head of instance %',
-  'an internal event that isn''t the head of the queue is refused'
+       '[]'::jsonb, '{"eventType": "xstate.done.state.e3"}'::jsonb) r $$,
+  $$ values (true, 'internal_event_not_head'::text,
+             '[{"eventType": "xstate.done.state.e2"}, {"eventType": "xstate.done.state.e3"}]'::jsonb) $$,
+  'an internal event that isn''t the head of the queue was processed already: the macrostep is discarded, not raised (#534)'
 );
 
 -- A failing archive saves nothing: the raised events and the state go together.
@@ -464,6 +493,232 @@ select results_eq(
      from fsm_core.fsm_instance where id = '88889999-aaaa-bbbb-cccc-dddd00001111'::uuid $$,
   $$ values ('"error"'::jsonb, '{"message": "boom"}'::jsonb, '[]'::jsonb) $$,
   'status error saves the error passed and clears the internal queue (#520)'
+);
+
+-- ============================================================
+-- SPEC-011 (b), #534: the target sequence and stopping invokes.
+-- ============================================================
+select has_function('fsm_core', 'stop_invoked_async_operation_v2', ARRAY['jsonb'],
+  'stop_invoked_async_operation_v2(entry) exists (#534)');
+select has_function('fsm_core', 'stop_child_fsm_v2', ARRAY['uuid'],
+  'stop_child_fsm_v2(child id) exists (#534)');
+select has_function('fsm_core', 'stop_fsm_instance_v2', ARRAY['uuid', 'text'],
+  'stop_fsm_instance_v2(id, event name) exists (#534)');
+select has_function('fsm_core', 'archive_fsm_instance_queue_messages_v2', ARRAY['uuid'],
+  'archive_fsm_instance_queue_messages_v2(id) exists (#534)');
+select has_function('fsm_core', 'discard_fsm_macrostep_v2',
+  'discard_fsm_macrostep_v2 exists (#534)');
+
+select throws_ok(
+  $$ select fsm_core.stop_invoked_async_operation_v2('{"async_operation_type": "unsupported", "queue_id": "x"}'::jsonb) $$,
+  'P0001',
+  'stop_invoked_async_operation_v2: unsupported async operation type: unsupported',
+  'stopping an entry of an unknown type raises, as starting one does (#534)'
+);
+
+-- The same message saved twice (a second fsmlet after its visibility timeout):
+-- the second macrostep is discarded, so the message is applied once.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('a5340001-0000-0000-0000-000000000000'::uuid, 'dup534', 'v1');
+select pgmq.create(queue_name := 'a5340001-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5340001-0000-0000-0000-000000000000', msg := '{"once": 1}'::jsonb);
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  'a5340001-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+  '"active"'::jsonb, '{"s": "first"}'::jsonb, '{}'::jsonb, '{}'::jsonb);
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5340001-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{"s": "second"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values (true, 'message_already_archived'::text) $$,
+  'a message saved a second time is discarded (#534)'
+);
+select results_eq(
+  $$ select fsm_instance_state,
+            (select count(*)::int from fsm_core.fsm_instance_queue_event_logs l
+             where l.fsm_instance_id = fi.id and l.event_status = 'discarded' and l.fsm_instance_queue_msg_id = 1)
+     from fsm_core.fsm_instance fi where fi.id = 'a5340001-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('{"s": "first"}'::jsonb, 1) $$,
+  'the first save stands, and the discard is logged (#534)'
+);
+
+-- Status gate: an instance that isn't active takes no macrostep. Its message
+-- is archived, nothing is started, and the row is not changed.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_instance_status)
+values ('a5340002-0000-0000-0000-000000000000'::uuid, 'gate534', 'v1', '"stopped"'::jsonb);
+select pgmq.create(queue_name := 'a5340002-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5340002-0000-0000-0000-000000000000', msg := '{"late": 1}'::jsonb);
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason', r->'fsm_instance_status'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5340002-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL,
+       '[{"id": "w", "src": "gatework", "input": {}, "action_type": "entry",
+          "asyncOperationType": "internalAsyncOperation", "asyncOperationVersion": "v1",
+          "asyncOperationLanguage": "typescript", "parentFsmName": "gate534", "parentFsmVersion": "v1"}]'::jsonb,
+       NULL, NULL,
+       '"active"'::jsonb, '{"s": "x"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values (true, 'instance_not_active'::text, '"stopped"'::jsonb) $$,
+  'a macrostep for a stopped instance is discarded (#534)'
+);
+select results_eq(
+  $$ select fi.fsm_instance_status, fi.fsm_instance_state,
+            (select queue_length::int from pgmq.metrics('a5340002-0000-0000-0000-000000000000')),
+            exists (select 1 from pgmq.list_queues() q where q.queue_name = 'gate534_v1_i_gatework_t')
+     from fsm_core.fsm_instance fi where fi.id = 'a5340002-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('"stopped"'::jsonb, NULL::jsonb, 0, false) $$,
+  'its message is archived, its row unchanged, and its invoke never started (#534)'
+);
+
+-- A terminal status starts nothing and stops everything still running: the
+-- invoke left in the totals, and the delayed event on the queue.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, total_schedule_queue_data, total_async_operation_queue_data)
+values ('a5340003-0000-0000-0000-000000000000'::uuid, 'term534', 'v1',
+  '[{"queue_data": {"eventData": {"eventType": "xstate.after.3600000.term534.wait"}, "queueMsgId": 1}}]'::jsonb,
+  '[{"invoke_id": "w", "src": "work", "async_operation_type": "internalAsyncOperation",
+     "queue_id": "term534_v1_i_work_t", "queue_msg_id": 1}]'::jsonb);
+select pgmq.create(queue_name := 'a5340003-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5340003-0000-0000-0000-000000000000', msg := '{"timer": 1}'::jsonb, delay := 3600);
+select pgmq.send(queue_name := 'a5340003-0000-0000-0000-000000000000', msg := '{"finish": 1}'::jsonb);
+select pgmq.create(queue_name := 'term534_v1_i_work_t');
+select pgmq.send(queue_name := 'term534_v1_i_work_t', msg := '{"invoke": "w"}'::jsonb);
+create temp table term534 as
+select fsm_core.archive_event_from_fsm_type_worker_v2(
+  'a5340003-0000-0000-0000-000000000000', 2::bigint, NULL, NULL,
+  '[{"type": "xstate.raise", "id": "xstate.after.1000.term534.final", "delay": 1000,
+     "input": {"type": "xstate.after.1000.term534.final"}, "fsmType": "term534", "fsmVersion": "v1", "action_type": "entry"}]'::jsonb,
+  '[{"id": "n", "src": "newwork", "input": {}, "action_type": "entry",
+     "asyncOperationType": "internalAsyncOperation", "asyncOperationVersion": "v1",
+     "asyncOperationLanguage": "typescript", "parentFsmName": "term534", "parentFsmVersion": "v1"}]'::jsonb,
+  NULL, NULL,
+  '"done"'::jsonb, '{"s": "done"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r;
+select results_eq(
+  $$ select r->'terminal_archived_msg_ids', jsonb_array_length(r->'terminal_stopped_async_operation_queue_data'),
+            r->'added_async_operation_queue_data', r->'added_schedule_queue_data'
+     from term534 $$,
+  $$ values ('[1]'::jsonb, 1, '[]'::jsonb, '[]'::jsonb) $$,
+  'on done nothing is started or scheduled; the running invoke is stopped and the delayed event archived (#534)'
+);
+select results_eq(
+  $$ select fi.total_async_operation_queue_data, fi.total_schedule_queue_data,
+            (select queue_length::int from pgmq.metrics('a5340003-0000-0000-0000-000000000000')),
+            (select queue_length::int from pgmq.metrics('term534_v1_i_work_t')),
+            exists (select 1 from pgmq.list_queues() q where q.queue_name = 'term534_v1_i_newwork_t')
+     from fsm_core.fsm_instance fi where fi.id = 'a5340003-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('[]'::jsonb, '[]'::jsonb, 0, 0, false) $$,
+  'the finished instance keeps no totals, no queued messages, and its actor''s message is cancelled (#534)'
+);
+
+-- The cycle cap is decided before the entry side: past it, nothing is started.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_instance_status, internal_event_queue, internal_event_count)
+values ('a5340004-0000-0000-0000-000000000000'::uuid, 'cap534', 'v1', '"active"'::jsonb,
+  '[{"eventType": "xstate.done.state.loop"}]'::jsonb, 100);
+select pgmq.create(queue_name := 'a5340004-0000-0000-0000-000000000000');
+select results_eq(
+  $$ select r->'fsm_instance_status', r->'added_async_operation_queue_data',
+            exists (select 1 from pgmq.list_queues() q where q.queue_name = 'cap534_v1_i_capwork_t')
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5340004-0000-0000-0000-000000000000', NULL::bigint, NULL, NULL, NULL,
+       '[{"id": "c", "src": "capwork", "input": {}, "action_type": "entry",
+          "asyncOperationType": "internalAsyncOperation", "asyncOperationVersion": "v1",
+          "asyncOperationLanguage": "typescript", "parentFsmName": "cap534", "parentFsmVersion": "v1"}]'::jsonb,
+       NULL, NULL,
+       '"active"'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, '{"eventType": "xstate.done.state.loop"}'::jsonb) r $$,
+  $$ values ('"error"'::jsonb, '[]'::jsonb, false) $$,
+  'past the cycle cap the status is error and the invoke is never started (#534)'
+);
+
+-- A cancelled schedule whose message is already gone is reported as failed.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, total_schedule_queue_data)
+values ('a5340009-0000-0000-0000-000000000000'::uuid, 'fail534', 'v1',
+  '[{"queue_data": {"eventData": {"eventType": "xstate.after.5.fail534.s"}, "queueMsgId": 999}}]'::jsonb);
+select pgmq.create(queue_name := 'a5340009-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5340009-0000-0000-0000-000000000000', msg := '{"leave": 1}'::jsonb);
+select results_eq(
+  $$ select jsonb_array_length(r->'confirmed_removed_schedule_queue_data_failed'),
+            jsonb_array_length(r->'confirmed_removed_schedule_queue_data_success'),
+            r->'new_total_schedule_queue_data'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5340009-0000-0000-0000-000000000000', 1::bigint,
+       '[{"type": "xstate.cancel", "id": "xstate.after.5.fail534.s"}]'::jsonb, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values (1, 0, '[]'::jsonb) $$,
+  'a cancel whose message was already archived is recorded as failed, and the entry still removed (#534)'
+);
+
+-- stop_child_fsm_v2 on a running child: stopped, dispatch removed, every
+-- message archived (delayed included), its own actor cancelled, its own child
+-- stopped too, a stop_child log row, and nothing sent to the parent.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('a5340005-0000-0000-0000-000000000000'::uuid, 'stopP534', 'v1');
+select pgmq.create(queue_name := 'a5340005-0000-0000-0000-000000000000');
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_instance_status, parent_fsm_instance_id, parent_invoke_id)
+values ('a5340008-0000-0000-0000-000000000000'::uuid, 'stopG534', 'v1', '"active"'::jsonb,
+  'a5340006-0000-0000-0000-000000000000'::uuid, '0.stopC534.grand');
+select pgmq.create(queue_name := 'a5340008-0000-0000-0000-000000000000');
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, fsm_instance_status, parent_fsm_instance_id, parent_invoke_id,
+                                   total_async_operation_queue_data)
+values ('a5340006-0000-0000-0000-000000000000'::uuid, 'stopC534', 'v1', '"active"'::jsonb,
+  'a5340005-0000-0000-0000-000000000000'::uuid, '0.stopP534.child',
+  '[{"invoke_id": "0.stopC534.w", "src": "cw", "async_operation_type": "internalAsyncOperation",
+     "queue_id": "stopC534_v1_i_cw_t", "queue_msg_id": 1},
+    {"invoke_id": "0.stopC534.grand", "src": "stopG534", "async_operation_type": "fsm",
+     "queue_id": "a5340008-0000-0000-0000-000000000000", "queue_msg_id": 1}]'::jsonb);
+select pgmq.create(queue_name := 'a5340006-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5340006-0000-0000-0000-000000000000', msg := '{"timer": 1}'::jsonb, delay := 3600);
+select pgmq.send(queue_name := 'a5340006-0000-0000-0000-000000000000', msg := '{"event": 1}'::jsonb);
+select pgmq.create(queue_name := 'stopC534_v1_i_cw_t');
+select pgmq.send(queue_name := 'stopC534_v1_i_cw_t', msg := '{"invoke": "cw"}'::jsonb);
+insert into fsm_core.fsm_instance_and_fsm_workerlet (fsm_instance_id, fsm_name, fsm_version, status)
+values ('a5340006-0000-0000-0000-000000000000'::uuid, 'stopC534', 'v1', 'pending');
+
+create temp table stop534 as
+select fsm_core.stop_child_fsm_v2('a5340006-0000-0000-0000-000000000000'::uuid) r;
+select results_eq(
+  $$ select r->>'status', r->'archived_msg_ids', (r->>'cancelled_dispatch_count')::int,
+            jsonb_path_query_array(r->'stopped_invokes', '$[*].status')
+     from stop534 $$,
+  $$ values ('stopped'::text, '[1, 2]'::jsonb, 1, '["canceled", "stopped"]'::jsonb) $$,
+  'stop_child_fsm_v2 stops the child: dispatch removed, both messages archived, its actor and its child stopped (#534)'
+);
+select results_eq(
+  $$ select fi.fsm_instance_status, fi.total_async_operation_queue_data, fi.total_schedule_queue_data, fi.internal_event_queue,
+            (select array_agg(m.message->'eventData'->>'eventType') from pgmq.read(fi.id::text, 0, 10) m),
+            (select queue_length::int from pgmq.metrics('stopC534_v1_i_cw_t')),
+            (select g.fsm_instance_status from fsm_core.fsm_instance g where g.id = 'a5340008-0000-0000-0000-000000000000'::uuid)
+     from fsm_core.fsm_instance fi where fi.id = 'a5340006-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('"stopped"'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, ARRAY['xstate.stop'], 0, '"stopped"'::jsonb) $$,
+  'the child is stopped with nothing left but the xstate.stop wake-up; its actor''s message is cancelled and its own child stopped (#534)'
+);
+select results_eq(
+  $$ select l.event_status, l.event_data->>'parent_fsm_instance_id', l.event_data->>'parent_invoke_id',
+            (select queue_length::int from pgmq.metrics('a5340005-0000-0000-0000-000000000000'))
+     from fsm_core.fsm_instance_queue_event_logs l
+     where l.fsm_instance_id = 'a5340006-0000-0000-0000-000000000000'::uuid and l.event_name = 'stop_child' $$,
+  $$ values ('stopped'::text, 'a5340005-0000-0000-0000-000000000000'::text, '0.stopP534.child'::text, 0) $$,
+  'the stop is logged on the child, and the parent is sent nothing (#534)'
+);
+select results_eq(
+  $$ select fsm_core.stop_child_fsm_v2('a5340006-0000-0000-0000-000000000000'::uuid)->>'status' $$,
+  $$ values ('not_active'::text) $$,
+  'stopping a child that is already stopped does nothing (#534)'
+);
+
+-- A macrostep that was in flight when the child stopped is discarded; the
+-- xstate.stop wake-up is archived with it.
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason',
+            (select queue_length::int from pgmq.metrics('a5340006-0000-0000-0000-000000000000'))
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5340006-0000-0000-0000-000000000000', 3::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"done"'::jsonb, '{"s": "late"}'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values (true, 'instance_not_active'::text, 0) $$,
+  'a stopped child''s macrostep is discarded, and it never reports to its parent (#534)'
+);
+select is(
+  (select queue_length::int from pgmq.metrics('a5340005-0000-0000-0000-000000000000')),
+  0,
+  'the parent''s queue is still empty'
 );
 
 select * from finish();

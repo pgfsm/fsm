@@ -1,8 +1,10 @@
 import { assertEquals } from "@std/assert";
 import type { Database, Json } from "@pgfsm/db/database.types";
 import {
+  archiveOutcome,
   hasInternalEvents,
   internalEventMessage,
+  isActiveStatus,
   nextInternalEvent,
   takeNextEvent,
 } from "../src/fsmlet/internal-events.ts";
@@ -106,5 +108,46 @@ Deno.test("internalEventMessage: an internal event is a queue message with no ms
     queueId: "11112222-3333-4444-5555-666677778888",
     queueType: "fsm",
     queueVersion: "v01",
+  });
+});
+
+Deno.test("isActiveStatus: only active, or no status yet, takes more events (#534)", () => {
+  assertEquals(isActiveStatus("active"), true);
+  assertEquals(isActiveStatus(null), true);
+  assertEquals(isActiveStatus(undefined), true);
+  assertEquals(isActiveStatus("done"), false);
+  assertEquals(isActiveStatus("error"), false);
+  assertEquals(isActiveStatus("stopped"), false);
+});
+
+Deno.test("archiveOutcome reads the discard and the archive's status (#534)", () => {
+  assertEquals(
+    archiveOutcome(
+      {
+        discarded: true,
+        discarded_reason: "instance_not_active",
+        fsm_instance_status: "stopped",
+      },
+      "active",
+    ),
+    { discarded: true, reason: "instance_not_active", status: "stopped" },
+  );
+  // The cycle cap: the worker computed active, the archive saved error.
+  assertEquals(
+    archiveOutcome(
+      { discarded: false, fsm_instance_status: "error" },
+      "active",
+    ),
+    { discarded: false, reason: null, status: "error" },
+  );
+  // A result without a status (an older database) keeps the worker's.
+  assertEquals(
+    archiveOutcome({ internal_event_queue: [] }, "done"),
+    { discarded: false, reason: null, status: "done" },
+  );
+  assertEquals(archiveOutcome(null, "active"), {
+    discarded: false,
+    reason: null,
+    status: "active",
   });
 });

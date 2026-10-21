@@ -12,7 +12,12 @@ import {
 } from "@pgfsm/db";
 
 import { macrostepV2 } from "../fsmlet/fsmworker-helper.ts";
-import { hasInternalEvents, takeNextEvent } from "./internal-events.ts";
+import {
+  archiveOutcome,
+  hasInternalEvents,
+  isActiveStatus,
+  takeNextEvent,
+} from "./internal-events.ts";
 import type { SyncOperationRegistration } from "./type.ts";
 
 export async function startFSMWorker(
@@ -51,6 +56,43 @@ export async function startFSMWorker(
     const { next, instance } = taken;
 
     try {
+      // A stopped or finished instance takes no more events. A stop archives
+      // its queue and sends xstate.stop to wake this worker (SPEC-011, #534);
+      // the archive's status gate archives the message, and the instance is
+      // let go.
+      const rowStatus = instance.fsm_instance_row.fsm_instance_status;
+      if (!isActiveStatus(rowStatus)) {
+        const row = instance.fsm_instance_row;
+        const discarded = await archiveEventFromFsmTypeWorker(
+          deps,
+          queueName,
+          next.source === "queue" ? next.msg.msg_id : null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          rowStatus,
+          row.fsm_instance_state,
+          row.fsm_instance_context,
+          row.fsm_instance_xstate_state,
+          [],
+          next.source === "internal" ? next.event : null,
+          null,
+        );
+        logger.info(
+          "FSM instance {queueName} is {status}; discarded its {source} event and stopping its worker: {result}",
+          {
+            queueName,
+            status: rowStatus,
+            source: next.source,
+            result: discarded,
+          },
+        );
+        return;
+      }
+
       logger.info("Processing {source} event: {message}", {
         source: next.source,
         message: next.msg.message,
@@ -99,12 +141,32 @@ export async function startFSMWorker(
       });
       internalEventsPending = hasInternalEvents(archiveResult);
 
+      // The archive discards this macrostep, instead of saving it, when the
+      // instance is no longer active, when its pgmq message was already
+      // archived (another worker saved it first, or a stop archived the
+      // queue), or when its internal event is no longer the queue's head
+      // (SPEC-011, #534). Nothing was changed; it is not an error. The loop
+      // goes on with the next event, or stops below if the instance isn't
+      // active.
+      const outcome = archiveOutcome(
+        archiveResult,
+        macrostepV2Result.fsm_instance_data_save_fsm_status,
+      );
+      if (outcome.discarded) {
+        logger.info("{source} event's macrostep was discarded: {reason}", {
+          source: next.source,
+          reason: outcome.reason,
+        });
+      }
+
       // A finished instance needs no worker: returning releases its lock and
       // frees this fsmlet's slot for another instance
       // (startFSMWorkerWithDBLock's cleanup), instead of holding it forever
-      // (#500). An instance in error stops too, as an XState actor does (#520).
-      const status = macrostepV2Result.fsm_instance_data_save_fsm_status;
-      if (status === "done" || status === "error") {
+      // (#500). An instance in error stops too, as an XState actor does
+      // (#520), and so does a stopped one (#534). The status is the
+      // archive's: the cycle cap can set error.
+      const status = outcome.status;
+      if (!isActiveStatus(status)) {
         logger.info(
           "FSM instance {queueName} is {status}; stopping its worker",
           {

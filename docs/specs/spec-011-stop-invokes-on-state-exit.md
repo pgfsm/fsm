@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                     |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                     |
+| Status  | Accepted                                                                                                                                                                                  |
 | Date    | 2026-10-20                                                                                                                                                                                |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                  |
 | Issue   | #514                                                                                                                                                                                      |
@@ -314,6 +314,105 @@ lock first):
 - **The macrostep wins:** it saves normally. The stop then runs on the saved
   state and stops whatever that macrostep started.
 
+The same sequence as a flow. The three red exits are the discards (see
+"Discarded macrosteps" below); everything after them is skipped.
+
+```mermaid
+flowchart TD
+    start(["fsmlet calls archive_event_from_fsm_type_worker_v2<br/>with the transition it computed"])
+    s1["1 · Lock the instance row<br/>FOR NO KEY UPDATE"]
+    s2{"2 · Row status active?<br/>(no status yet counts as active)"}
+    d1["Archive the processed pgmq message, if any"]
+    src{"3 · Which kind of event?"}
+    head{"Is it still the head of<br/>internal_event_queue?"}
+    pop["Remove it from the queue<br/>internal_event_count + 1"]
+    arch{"pgmq.archive(msg_id)<br/>returns true?"}
+    reset["internal_event_count = 0"]
+    s4["4 · Stale done/error actor event check<br/>(SPEC-011 (c), #535)"]
+    s5["5 · Exit side, from the row's totals<br/>a: archive cancelled schedules<br/>b: stop exited invokes (stop_invoked_async_operation_v2)"]
+    s6{"6 · Final status<br/>(the cycle cap can set error)"}
+    s7["7 · Entry side<br/>a: schedule delayed events<br/>b: start invokes (start_invoked_async_operation_v2)"]
+    s8["8 · Terminal: stop every invoke left,<br/>archive every message on the queue"]
+    s9["9 · Internal queue: append raised events,<br/>or clear it when not active"]
+    s10["10 · Save the row"]
+    s11{"11 · done or error,<br/>and invoked by a parent?"}
+    notify["Send xstate.done.actor / xstate.error.actor<br/>to the parent"]
+    s12(["12 · Return {discarded: false, fsm_instance_status, ...}"])
+
+    x1(["Discard: instance_not_active"])
+    x2(["Discard: internal_event_not_head"])
+    x3(["Discard: message_already_archived"])
+    log["Log one 'discarded' row; return<br/>{discarded: true, discarded_reason, fsm_instance_status, internal_event_queue}"]
+
+    start --> s1 --> s2
+    s2 -- "no: stopped / done / error" --> d1 --> x1
+    s2 -- yes --> src
+    src -- internal event --> head
+    head -- no --> x2
+    head -- yes --> pop --> s4
+    src -- pgmq message --> arch
+    arch -- "false: already archived" --> x3
+    arch -- true --> reset --> s4
+    src -- "neither (direct SQL call): not gated" --> s4
+    s4 --> s5 --> s6
+    s6 -- active --> s7 --> s9
+    s6 -- "done / error" --> s8 --> s9
+    s9 --> s10 --> s11
+    s11 -- yes --> notify --> s12
+    s11 -- no --> s12
+    x1 --> log
+    x2 --> log
+    x3 --> log
+
+    classDef discard fill:#fde2e1,stroke:#c0392b,color:#7b241c
+    class x1,x2,x3,log discard
+```
+
+### Discarded macrosteps
+
+Steps 2 and 3 of the target sequence decide whether a macrostep is applied at
+all. The fsmlet has already run XState and computed a transition (new state and
+context, schedules and invokes to stop and start) before it calls the archive.
+**Discarding** throws that result away instead of saving it, as if the event had
+never been processed. The archive returns before step 5, so nothing is
+cancelled, stopped, started or saved, and no parent is told. Its only effects
+are archiving the processed pgmq message (when there is one), so it isn't
+delivered again, and one `discarded` row in `fsm_instance_queue_event_logs`. It
+returns
+`{discarded: true, discarded_reason, fsm_instance_status,
+internal_event_queue}`,
+and the fsmlet treats that as success, not as an error.
+
+A macrostep is discarded, instead of applied, in three cases:
+
+| Case                                                    | Check                                                                   | `discarded_reason`         | When it happens                                                                                                                                                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The instance isn't active                               | Step 2: the row's status (none yet counts as `active`) isn't `active`   | `instance_not_active`      | The row is `stopped`, `done` or `error`. Usually a parent stopped this child while its fsmlet was computing a macrostep, or the fsmlet is reading the `xstate.stop` message a stop sends to wake it. |
+| Its pgmq message was already archived                   | Step 3: `pgmq.archive(msg_id)` returns false                            | `message_already_archived` | Another fsmlet got the same message after this one's visibility timeout (or crash) and saved first, or a stop archived the whole queue.                                                              |
+| Its internal event isn't the head of the internal queue | Step 3: the processed internal event differs from the queue's first one | `internal_event_not_head`  | Another fsmlet already processed and removed it. Before #534 this raised an exception.                                                                                                               |
+
+Details:
+
+- **Under the lock.** All three checks run after step 1's row lock, so two
+  fsmlets saving for the same instance run one after the other; the checks
+  decide that only the first one counts. That makes each event applied at most
+  once.
+- **Order.** The status gate comes first: a stop clears `internal_event_queue`,
+  so without it a macrostep racing a stop would be discarded as
+  `internal_event_not_head`, the wrong reason.
+- **The status gate archives regardless.** In step 2 the processed message is
+  archived whatever `pgmq.archive` returns: the stop may have archived it
+  already, and the reason is already `instance_not_active`. An internal event
+  has nothing to archive.
+- **Nothing to gate.** When neither a message id nor an internal event is passed
+  (direct SQL callers), the macrostep is applied, as before #534.
+- **Known gap (#546).** The internal-event check compares contents, not
+  identity. With two identical events in a row, a duplicate fsmlet's late save
+  for the first matches the second and is applied, consuming it. It is rare (a
+  duplicate fsmlet racing a run of identical `done.state` events) and was
+  equally possible before #534. The fix is to give each internal event an id, as
+  pgmq gates on `msg_id`.
+
 ### Re-entry: a new child per start
 
 `start_child_fsm_v2` keeps creating a **new** `fsm_instance` each time the
@@ -439,15 +538,15 @@ End to end:
 
 ## Implementation
 
-To be cut after acceptance.
+Accepted with #531. Implementation issues:
 
-1. `finish_async_operation_event_v2` with the archive gate, wrappers for the two
-   old names, and the gateway switched to it; schema-change propagation.
-2. `archive_event_from_fsm_type_worker_v2` reordered to the target sequence
-   (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals from the
-   row, final status before the entry side, terminal subtree stop), with
-   `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` /
+1. #533 — `finish_async_operation_event_v2` with the archive gate, wrappers for
+   the two old names, and the gateway switched to it; schema-change propagation.
+2. #534 — `archive_event_from_fsm_type_worker_v2` reordered to the target
+   sequence (lock first in `FOR NO KEY UPDATE`, status and archive gates, totals
+   from the row, final status before the entry side, terminal subtree stop),
+   with `stop_invoked_async_operation_v2`, `stop_fsm_instance_v2` /
    `stop_child_fsm_v2`, and the fsmlet's handling of `discarded`.
-3. Sources on done/error events (actor and child) and the stale-event check
-   (step 4 of the target sequence).
-4. End-to-end tests: child FSM stop, re-entry, late actor result.
+3. #535 — Sources on done/error events (actor and child) and the stale-event
+   check (step 4 of the target sequence).
+4. #536 — End-to-end tests: child FSM stop, re-entry, late actor result.
