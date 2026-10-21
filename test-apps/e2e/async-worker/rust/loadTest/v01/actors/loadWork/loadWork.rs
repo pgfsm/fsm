@@ -11,13 +11,19 @@ pub const MAX_CONCURRENCY: u32 = 1;
 const MAX_WORK_MS: u64 = 600_000;
 
 #[allow(non_snake_case)]
-pub fn loadWork(input: serde_json::Value) -> serde_json::Value {
+pub fn loadWork(
+    input: serde_json::Value,
+    token: pgfsm_async_worker_sdk::CancellationToken,
+) -> serde_json::Value {
     let work_ms = input
         .get("workMs")
         .and_then(serde_json::Value::as_f64)
         .unwrap_or(0.0)
         .clamp(0.0, MAX_WORK_MS as f64) as u64;
-    std::thread::sleep(std::time::Duration::from_millis(work_ms));
+    // The work stops when the gateway cancels this invoke (SPEC-012).
+    if token.wait(std::time::Duration::from_millis(work_ms)) {
+        panic!("loadWork cancelled: {:?}", token.reason());
+    }
     // The pod name in Kubernetes (HOSTNAME, or /etc/hostname on Linux).
     let worker = std::env::var("HOSTNAME")
         .ok()

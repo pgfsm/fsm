@@ -29,7 +29,7 @@ Deno.test("createAsyncOperationLogic - writes a single actor under <writeRootAbs
     assertEquals(
       content,
       "// Actor: checkCreditScore\n" + MC_TS +
-        'export function checkCreditScore(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "checkCreditScore actor invoked by typescript" };\n}\n',
+        'export function checkCreditScore(input: unknown, signal: AbortSignal): unknown {\n  // TODO: implement actor logic\n  // signal aborts when the gateway cancels this invoke (e.g. its FSM state\n  // exited): pass it to fetch() and the like, or check signal.aborted.\n  return { input, msg: "checkCreditScore actor invoked by typescript" };\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });

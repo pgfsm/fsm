@@ -8,6 +8,6 @@
 MAX_CONCURRENCY = 5
 
 
-def checkBureau(input):
+def checkBureau(input, token):
     # TODO: implement actor logic
     return {"input": input, "msg": "checkBureau actor invoked by python"}

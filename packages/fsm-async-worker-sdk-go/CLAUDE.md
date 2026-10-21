@@ -199,9 +199,9 @@ no version field in `go.mod`.
 
 ### Letting generated projects use a new version
 
-Generated projects require `GO_ASYNC_WORKER_SDK_VERSION` (`v0.3.1` today) as a
-minimum. Go's minimal version selection never upgrades that on its own, so bump
-it whenever generated projects should get a new release (not just for minor
+Generated projects require `GO_ASYNC_WORKER_SDK_VERSION` (`v0.4.0` today, #544)
+as a minimum. Go's minimal version selection never upgrades that on its own, so
+bump it whenever generated projects should get a new release (not just for minor
 versions, unlike the other languages' ranges). It lives in:
 
 - `GO_ASYNC_WORKER_SDK_VERSION` in

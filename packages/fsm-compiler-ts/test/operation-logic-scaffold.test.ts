@@ -80,7 +80,7 @@ const cases: Case[] = [
     kind: "actors",
     name: "creditCheck",
     expected: "// Actor: creditCheck\n" + MC_TS +
-      'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+      'export function creditCheck(input: unknown, signal: AbortSignal): unknown {\n  // TODO: implement actor logic\n  // signal aborts when the gateway cancels this invoke (e.g. its FSM state\n  // exited): pass it to fetch() and the like, or check signal.aborted.\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
   },
   // python
   {
@@ -109,7 +109,7 @@ const cases: Case[] = [
     kind: "actors",
     name: "creditCheck",
     expected: "# Actor: creditCheck\n" + MC_PY +
-      'def creditCheck(input):\n    # TODO: implement actor logic\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
+      'def creditCheck(input, token):\n    # TODO: implement actor logic\n    # token is cancelled when the gateway cancels this invoke (e.g. its FSM\n    # state exited): check token.cancelled, or call token.raise_if_cancelled().\n    return {"input": input, "msg": "creditCheck actor invoked by python"}\n',
   },
   // rust
   {
@@ -138,7 +138,7 @@ const cases: Case[] = [
     kind: "actors",
     name: "creditCheck",
     expected: "// Actor: creditCheck\n" + MC_RS +
-      '#[allow(non_snake_case)]\npub fn creditCheck(input: serde_json::Value) -> serde_json::Value {\n    // TODO: implement actor logic\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
+      '#[allow(non_snake_case)]\npub fn creditCheck(\n    input: serde_json::Value,\n    _token: pgfsm_async_worker_sdk::CancellationToken,\n) -> serde_json::Value {\n    // TODO: implement actor logic\n    // _token is cancelled when the gateway cancels this invoke (e.g. its FSM\n    // state exited): check _token.is_cancelled() between steps.\n    serde_json::json!({ "input": input, "msg": "creditCheck actor invoked by rust" })\n}\n',
   },
   // go (renderOperationModule prefixes the `package <kind>` header — accounted
   // for separately below, these cases cover the per-name stub only)
@@ -171,13 +171,15 @@ const cases: Case[] = [
       // Go exports (capitalizes) actor function names for cross-package
       // access — see toGoExportedName / #83. Other kinds/languages don't.
       "// Actor: creditCheck\n" + MC_GO +
-      'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      'func CreditCheck(ctx context.Context, input any) (any, error) {\n\t// TODO: implement actor logic\n\t// ctx is cancelled when the gateway cancels this invoke (e.g. its FSM\n\t// state exited): pass it to anything that takes one.\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
   },
 ];
 
 for (const { lang, kind, name, expected } of cases) {
   Deno.test(`renderOperationModule - ${lang}/${kind}`, () => {
-    const goHeader = lang === "go" ? `package ${kind}\n\n` : "";
+    const goHeader = lang === "go"
+      ? `package ${kind}\n\n${kind === "actors" ? 'import "context"\n\n' : ""}`
+      : "";
     assertEquals(
       renderOperationModule(lang, kind, [name]),
       goHeader + expected,
@@ -207,8 +209,8 @@ Deno.test("writeActorFile - go actor gets a package header, exported (capitalize
     const content = await Deno.readTextFile(file);
     assertEquals(
       content,
-      "package actors\n\n// Actor: creditCheck\n" + MC_GO +
-        'func CreditCheck(input any) (any, error) {\n\t// TODO: implement actor logic\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
+      'package actors\n\nimport "context"\n\n// Actor: creditCheck\n' + MC_GO +
+        'func CreditCheck(ctx context.Context, input any) (any, error) {\n\t// TODO: implement actor logic\n\t// ctx is cancelled when the gateway cancels this invoke (e.g. its FSM\n\t// state exited): pass it to anything that takes one.\n\treturn map[string]any{"input": input, "msg": "creditCheck actor invoked by go"}, nil\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -265,7 +267,7 @@ Deno.test("writeActorFile - typescript actor has no package header", async () =>
     assertEquals(
       content,
       "// Actor: creditCheck\n" + MC_TS +
-        'export function creditCheck(input: unknown): unknown {\n  // TODO: implement actor logic\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
+        'export function creditCheck(input: unknown, signal: AbortSignal): unknown {\n  // TODO: implement actor logic\n  // signal aborts when the gateway cancels this invoke (e.g. its FSM state\n  // exited): pass it to fetch() and the like, or check signal.aborted.\n  return { input, msg: "creditCheck actor invoked by typescript" };\n}\n',
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -289,8 +291,13 @@ Deno.test("writeActorFile - typescript actor with a long name is wrapped to pass
       content,
       "// Actor: CheckingCreditScores3parallel\n" +
         MC_TS +
-        "export function CheckingCreditScores3parallel(input: unknown): unknown {\n" +
+        "export function CheckingCreditScores3parallel(\n" +
+        "  input: unknown,\n" +
+        "  signal: AbortSignal,\n" +
+        "): unknown {\n" +
         "  // TODO: implement actor logic\n" +
+        "  // signal aborts when the gateway cancels this invoke (e.g. its FSM state\n" +
+        "  // exited): pass it to fetch() and the like, or check signal.aborted.\n" +
         "  return {\n" +
         "    input,\n" +
         '    msg: "CheckingCreditScores3parallel actor invoked by typescript",\n' +
@@ -503,7 +510,7 @@ Deno.test("writeActorsRegistry - typescript carries the full activity-registrati
         "  asyncOperationLanguage: string;\n" +
         "  /** The actor's own limit, from its stub; unset falls back to the worker's --max-concurrency. */\n" +
         "  maxConcurrency?: number;\n" +
-        "  handler: (input: unknown) => unknown;\n" +
+        "  handler: (input: unknown, signal: AbortSignal) => unknown;\n" +
         "};\n" +
         "\n" +
         "export const ACTOR_REGISTRATIONS: ActorRegistration[] = [\n" +
@@ -587,7 +594,7 @@ Deno.test("writeActorsRegistry - rust reuses the barrel's #[path] module instead
         "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
         "    #[allow(dead_code)]\n" +
         "    pub max_concurrency: u32,\n" +
-        "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
+        "    pub handler: fn(serde_json::Value, pgfsm_async_worker_sdk::CancellationToken) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
         "pub fn actor_registrations() -> Vec<ActorRegistration> {\n" +
@@ -1110,7 +1117,7 @@ Deno.test("writeAggregateActorsRegistry - rust #[path]-includes each FSM-version
         "    /// to the worker's --max-concurrency. Unread by a main.rs from before #435.\n" +
         "    #[allow(dead_code)]\n" +
         "    pub max_concurrency: u32,\n" +
-        "    pub handler: fn(serde_json::Value) -> serde_json::Value,\n" +
+        "    pub handler: fn(serde_json::Value, pgfsm_async_worker_sdk::CancellationToken) -> serde_json::Value,\n" +
         "}\n" +
         "\n" +
         "pub fn actor_registrations() -> Vec<ActorRegistration> {\n" +
@@ -1187,6 +1194,8 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
         "package generatedregistry\n" +
         "\n" +
         "import (\n" +
+        '\t"context"\n' +
+        "\n" +
         '\tcreditcheck_v01_checkbureau "fsm-core-example/creditcheck/v01/go/actors/checkbureau"\n' +
         '\totherfsm_v02_someactor "fsm-core-example/otherfsm/v02/go/actors/someactor"\n' +
         ")\n" +
@@ -1201,7 +1210,7 @@ Deno.test("writeAggregateGoRegistry - writes a standalone Go module with one req
         "\t// MaxConcurrency is the actor's own limit, from its stub's MaxConcurrency;\n" +
         "\t// 0 falls back to the worker's --max-concurrency.\n" +
         "\tMaxConcurrency   uint32\n" +
-        "\tHandler          func(input any) (any, error)\n" +
+        "\tHandler          func(ctx context.Context, input any) (any, error)\n" +
         "}\n" +
         "\n" +
         "func ActorRegistrations() []ActorRegistration {\n" +
@@ -1321,7 +1330,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
       await Deno.readTextFile(`${base}/typescript/deno.json`),
     );
     assertEquals(tsDenoJson.imports, {
-      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.3.0",
+      "@pgfsm/async-worker-sdk": "npm:@pgfsm/async-worker-sdk@^0.4.0",
       "@pgfsm/logging": "npm:@pgfsm/logging@^0.1.0",
     });
 
@@ -1342,7 +1351,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // run_async_worker.py's only third-party import comes from this pin.
     const pyproject = await Deno.readTextFile(`${base}/python/pyproject.toml`);
     assertEquals(
-      pyproject.includes('"pgfsm-async-worker-sdk>=0.3.0,<0.4",'),
+      pyproject.includes('"pgfsm-async-worker-sdk>=0.4.0,<0.5",'),
       true,
     );
 
@@ -1363,7 +1372,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
     // main.rs's only external crates come from these; no monorepo `path =`
     // dependency (the SDK and its proto stubs come from crates.io).
     const cargoToml = await Deno.readTextFile(`${base}/rust/Cargo.toml`);
-    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.3"'), true);
+    assertEquals(cargoToml.includes('pgfsm-async-worker-sdk = "0.4"'), true);
     assertEquals(cargoToml.includes('serde_json = "1"'), true);
     assertEquals(cargoToml.includes('env_logger = "0.11"'), true);
     assertEquals(cargoToml.includes("{ path ="), false);
@@ -1390,7 +1399,7 @@ Deno.test("writeWorkerSdk - writes cli/main+sdk+manifest per language, only for 
         "require fsm-core-example/actor-registry-aggregate-generated v0.0.0\n" +
         "require fsm-core-example/creditcheck/v01/go/actors/checkbureau v0.0.0\n" +
         "require fsm-core-example/otherfsm/v02/go/actors/someactor v0.0.0\n" +
-        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.3.1\n\n" +
+        "require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.4.0\n\n" +
         "replace fsm-core-example/actor-registry-aggregate-generated => ./actor-registry-aggregate-generated\n" +
         "replace fsm-core-example/creditcheck/v01/go/actors/checkbureau => ./creditCheck/v01/actors/checkBureau\n" +
         "replace fsm-core-example/otherfsm/v02/go/actors/someactor => ./otherFsm/v02/actors/someActor\n",

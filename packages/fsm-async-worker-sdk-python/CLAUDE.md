@@ -185,9 +185,9 @@ section has the short version; the full procedure is below.
 
 ### Letting generated projects use a new minor version
 
-Generated projects pin `pgfsm-async-worker-sdk>=0.3.0,<0.4`, so they won't pick
-up `0.4.0` until that pin moves. Update it in the same PR as the bump, or a
-follow-up once the release is on PyPI. It lives in:
+Generated projects pin `pgfsm-async-worker-sdk>=0.4.0,<0.5` (#544), so they
+won't pick up `0.5.0` until that pin moves. Update it in the same PR as the
+bump, or a follow-up once the release is on PyPI. It lives in:
 
 - `packages/fsm-compiler-ts/src/scaffold-templates/eta/python/worker-sdk-pyproject.eta`,
   then, in `packages/fsm-compiler-ts`, run

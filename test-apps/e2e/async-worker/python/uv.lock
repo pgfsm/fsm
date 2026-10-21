@@ -82,31 +82,31 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pgfsm-async-worker-sdk", specifier = ">=0.3.0,<0.4" }]
+requires-dist = [{ name = "pgfsm-async-worker-sdk", specifier = ">=0.4.0,<0.5" }]
 
 [[package]]
 name = "pgfsm-async-worker-sdk"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pgfsm-proto-codegen" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/2b/cac45d7aef8c07df1ed5e6e490f049897fb38059446c3391e4d6236a810e/pgfsm_async_worker_sdk-0.3.0.tar.gz", hash = "sha256:3747717aa462f616080f5fd29a55092ea730777cc9b6b28646958201fb76cff2", size = 22356, upload-time = "2026-10-02T17:18:04.45Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/45/8860f6e1d253e98654cb988bb3771b6e06baae39d4fc6acbd8a895df0e23/pgfsm_async_worker_sdk-0.4.0.tar.gz", hash = "sha256:0f728515ca4ea1eadb232d4dbf8b41074f41a6f03fe953049f55062cdb3e5fdd", size = 30404, upload-time = "2026-10-21T13:30:27.871Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/98/a00ad722e17094f6717d9846979b641c5fb211672b6032494dfd9fe69edb/pgfsm_async_worker_sdk-0.3.0-py3-none-any.whl", hash = "sha256:fe6ab991644f135e298c6d689030c417955654f2e81f94b797d837577f725bb7", size = 25056, upload-time = "2026-10-02T17:18:03.382Z" },
+    { url = "https://files.pythonhosted.org/packages/44/f1/0252edbaef0208ab5a969c28869e3ca318f746d46468562dfce8ad6c0638/pgfsm_async_worker_sdk-0.4.0-py3-none-any.whl", hash = "sha256:457ad603f3f18d22d146031b2c7b31502dab5a5c908ed407da0d11e33101c986", size = 27993, upload-time = "2026-10-21T13:30:26.608Z" },
 ]
 
 [[package]]
 name = "pgfsm-proto-codegen"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/0f/77bf2e776ece54e9af9148e854e3a2785fca1b4a742a1a7e580018a4f968/pgfsm_proto_codegen-0.2.0.tar.gz", hash = "sha256:37c425cd8150107ae8a990b938faca37e50148801d1dc03d3c7ebecf4bd0ba3b", size = 9226, upload-time = "2026-09-29T14:50:09.538Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/7e/a843d5dc4b35c9f2edadc937c764e9b0dc33933d9e61c17e925b4c6cb788/pgfsm_proto_codegen-0.3.0.tar.gz", hash = "sha256:d7dc98fe489970e74dbdff93e51507d20a194aaa0814d1013aaa89ef7b816099", size = 9796, upload-time = "2026-10-21T09:10:44.348Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/28/aecf56694a9210fde3f893de3c954e53e5b45b48f7b128bf671d56b0b5ac/pgfsm_proto_codegen-0.2.0-py3-none-any.whl", hash = "sha256:dd4469270aa11a7ab03b1586748542f2f49af8cb060e49d7aa06bca2eb001d39", size = 11804, upload-time = "2026-09-29T14:50:08.267Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/ad/5ae4d3a16f91202088a9c292ee4bae9f9149fca9b24424c5d951dc3b523a/pgfsm_proto_codegen-0.3.0-py3-none-any.whl", hash = "sha256:75419ea8d45245892709c1fdf345734e77c4bfd209c600773adf9a8e09e658de", size = 12079, upload-time = "2026-10-21T09:10:42.988Z" },
 ]
 
 [[package]]

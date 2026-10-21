@@ -6,8 +6,10 @@
 // handler must also be idempotent: the same invoke can arrive more than once.
 const MaxConcurrency = 1
 
-func <%~ it.fnName %>(input any) (any, error) {
+func <%~ it.fnName %>(ctx context.Context, input any) (any, error) {
 	// <%~ it.todo %>
+	// ctx is cancelled when the gateway cancels this invoke (e.g. its FSM
+	// state exited): pass it to anything that takes one.
 	return map[string]any{"input": input, "msg": "<%~ it.name %> actor invoked by <%~ it.lang %>"}, nil
 }
 
