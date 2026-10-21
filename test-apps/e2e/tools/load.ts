@@ -19,6 +19,7 @@
 // `kubectl port-forward` to the kind cluster's test Postgres.
 
 import { parseArgs } from "@std/cli/parse-args";
+// @ts-types="@types/pg"
 import pg from "pg";
 
 const LANGUAGES = ["typescript", "python", "rust", "go"] as const;

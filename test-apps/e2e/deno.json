@@ -1,6 +1,9 @@
 {
   "nodeModulesDir": "auto",
   "imports": {
+    "@std/cli": "jsr:@std/cli@1",
+    "@types/pg": "npm:@types/pg@^8.18.0",
+    "pg": "npm:pg@^8.20.0",
     "xstate": "npm:xstate@^5.19.4"
   }
 }
