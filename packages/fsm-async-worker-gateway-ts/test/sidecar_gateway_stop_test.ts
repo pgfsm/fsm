@@ -171,7 +171,7 @@ Deno.test({
         value: new Register({
           workerId: "raw",
           language: "typescript",
-          protocolVersion: "1.0",
+          protocolVersion: "2.0",
           actors: [
             new RegisteredActor({ ...IDENTITY, asyncOperationName: "raw" }),
           ],

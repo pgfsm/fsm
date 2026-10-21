@@ -211,7 +211,7 @@ function openSession(
         value: new Register({
           workerId: `w-${crypto.randomUUID()}`,
           language: "go",
-          protocolVersion: "1.0",
+          protocolVersion: "2.0",
           actors: [new RegisteredActor({ ...ACTOR, maxConcurrency: 2 })],
         }),
       },

@@ -21,6 +21,65 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Why the gateway cancelled an in-flight invoke (SPEC-012).
+type CancelReason int32
+
+const (
+	CancelReason_CANCEL_REASON_UNSPECIFIED CancelReason = 0
+	// The FSM state that invoked the actor exited (its message was cancelled
+	// in the database).
+	CancelReason_CANCEL_REASON_STATE_EXITED CancelReason = 1
+	// The gateway's invoke timeout ran out; the message is delivered again
+	// later.
+	CancelReason_CANCEL_REASON_TIMEOUT CancelReason = 2
+	// The gateway is stopping, or its connection to this worker is being
+	// drained, with the invoke still running.
+	CancelReason_CANCEL_REASON_SHUTDOWN CancelReason = 3
+)
+
+// Enum value maps for CancelReason.
+var (
+	CancelReason_name = map[int32]string{
+		0: "CANCEL_REASON_UNSPECIFIED",
+		1: "CANCEL_REASON_STATE_EXITED",
+		2: "CANCEL_REASON_TIMEOUT",
+		3: "CANCEL_REASON_SHUTDOWN",
+	}
+	CancelReason_value = map[string]int32{
+		"CANCEL_REASON_UNSPECIFIED":  0,
+		"CANCEL_REASON_STATE_EXITED": 1,
+		"CANCEL_REASON_TIMEOUT":      2,
+		"CANCEL_REASON_SHUTDOWN":     3,
+	}
+)
+
+func (x CancelReason) Enum() *CancelReason {
+	p := new(CancelReason)
+	*p = x
+	return p
+}
+
+func (x CancelReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CancelReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_enumTypes[0].Descriptor()
+}
+
+func (CancelReason) Type() protoreflect.EnumType {
+	return &file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_enumTypes[0]
+}
+
+func (x CancelReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CancelReason.Descriptor instead.
+func (CancelReason) EnumDescriptor() ([]byte, []int) {
+	return file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDescGZIP(), []int{0}
+}
+
 // One actor entrypoint a worker process serves. Mirrors
 // ActorPluginValidationResult's identity fields (see @pgfsm/compiler's
 // util.ts) — actorKey() in fsm-core-async-op-worker's sidecar/gateway.ts is
@@ -139,7 +198,9 @@ func (x *RegisteredActor) GetMaxConcurrency() uint32 {
 	return 0
 }
 
-// First message a worker sends on a new Session stream.
+// First message a worker sends on a new Session stream. protocol_version is
+// "2.0" from SPEC-012 (workers that honour Cancel); a gateway at 2.0 rejects
+// any other major version with RegisterAck{accepted: false}.
 type Register struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	WorkerId        string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
@@ -581,7 +642,9 @@ func (x *InvokeErrorDetail) GetRetriable() bool {
 	return false
 }
 
-// Sent by the worker after a failed Invoke.
+// Sent by the worker after a failed Invoke. A handler that stopped because
+// its invoke was cancelled replies with error.code "CANCELLED" (not
+// retriable); see Cancel.
 type InvokeError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InvokeId      string                 `protobuf:"bytes,1,opt,name=invoke_id,json=invokeId,proto3" json:"invoke_id,omitempty"`
@@ -642,13 +705,18 @@ func (x *InvokeError) GetDurationMs() uint32 {
 	return 0
 }
 
-// Pushed by the gateway to ask a worker to abandon an in-flight invoke.
-// Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
-// and the generated worker SDKs accept it but ignore it — carried here so the
-// schema doesn't need a second breaking change once that lands.
+// Pushed by the gateway to ask a worker to abandon an in-flight invoke
+// (SPEC-012). Cancellation is cooperative: the worker cancels the invoke's
+// token, and replies either InvokeError{code: "CANCELLED"} (the handler
+// stopped) or its InvokeResult/InvokeError (it finished anyway). Either reply
+// acknowledges the cancel and frees the worker's slot; the gateway never
+// archives it. An unknown invoke_id (already finished) is ignored. Sent from
+// sidecar protocol 2.0; a 1.x worker ignores it and its late result is
+// dropped.
 type Cancel struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InvokeId      string                 `protobuf:"bytes,1,opt,name=invoke_id,json=invokeId,proto3" json:"invoke_id,omitempty"`
+	Reason        CancelReason           `protobuf:"varint,2,opt,name=reason,proto3,enum=pgfsm.sidecargateway.v1.CancelReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -688,6 +756,13 @@ func (x *Cancel) GetInvokeId() string {
 		return x.InvokeId
 	}
 	return ""
+}
+
+func (x *Cancel) GetReason() CancelReason {
+	if x != nil {
+		return x.Reason
+	}
+	return CancelReason_CANCEL_REASON_UNSPECIFIED
 }
 
 // Sent by the worker to end registration gracefully before closing the
@@ -1023,9 +1098,10 @@ const file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc = "" +
 	"\tinvoke_id\x18\x01 \x01(\tR\binvokeId\x12@\n" +
 	"\x05error\x18\x02 \x01(\v2*.pgfsm.sidecargateway.v1.InvokeErrorDetailR\x05error\x12\x1f\n" +
 	"\vduration_ms\x18\x03 \x01(\rR\n" +
-	"durationMs\"%\n" +
+	"durationMs\"d\n" +
 	"\x06Cancel\x12\x1b\n" +
-	"\tinvoke_id\x18\x01 \x01(\tR\binvokeId\")\n" +
+	"\tinvoke_id\x18\x01 \x01(\tR\binvokeId\x12=\n" +
+	"\x06reason\x18\x02 \x01(\x0e2%.pgfsm.sidecargateway.v1.CancelReasonR\x06reason\")\n" +
 	"\n" +
 	"Unregister\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\"\x80\x03\n" +
@@ -1042,7 +1118,12 @@ const file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc = "" +
 	"\fregister_ack\x18\x01 \x01(\v2$.pgfsm.sidecargateway.v1.RegisterAckH\x00R\vregisterAck\x129\n" +
 	"\x06invoke\x18\x02 \x01(\v2\x1f.pgfsm.sidecargateway.v1.InvokeH\x00R\x06invoke\x129\n" +
 	"\x06cancel\x18\x03 \x01(\v2\x1f.pgfsm.sidecargateway.v1.CancelH\x00R\x06cancelB\t\n" +
-	"\apayload2y\n" +
+	"\apayload*\x84\x01\n" +
+	"\fCancelReason\x12\x1d\n" +
+	"\x19CANCEL_REASON_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aCANCEL_REASON_STATE_EXITED\x10\x01\x12\x19\n" +
+	"\x15CANCEL_REASON_TIMEOUT\x10\x02\x12\x1a\n" +
+	"\x16CANCEL_REASON_SHUTDOWN\x10\x032y\n" +
 	"\x15SidecarGatewayService\x12`\n" +
 	"\aSession\x12'.pgfsm.sidecargateway.v1.SessionRequest\x1a(.pgfsm.sidecargateway.v1.SessionResponse(\x010\x01B\xfa\x01\n" +
 	"\x1bcom.pgfsm.sidecargateway.v1B\x13SidecarGatewayProtoP\x01ZHgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1\xa2\x02\x03PSX\xaa\x02\x17Pgfsm.Sidecargateway.V1\xca\x02\x17Pgfsm\\Sidecargateway\\V1\xe2\x02#Pgfsm\\Sidecargateway\\V1\\GPBMetadata\xea\x02\x19Pgfsm::Sidecargateway::V1b\x06proto3"
@@ -1059,39 +1140,42 @@ func file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDescGZIP() []byte {
 	return file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDescData
 }
 
+var file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_goTypes = []any{
-	(*RegisteredActor)(nil),   // 0: pgfsm.sidecargateway.v1.RegisteredActor
-	(*Register)(nil),          // 1: pgfsm.sidecargateway.v1.Register
-	(*RegisterAck)(nil),       // 2: pgfsm.sidecargateway.v1.RegisterAck
-	(*Heartbeat)(nil),         // 3: pgfsm.sidecargateway.v1.Heartbeat
-	(*Invoke)(nil),            // 4: pgfsm.sidecargateway.v1.Invoke
-	(*InvokeResult)(nil),      // 5: pgfsm.sidecargateway.v1.InvokeResult
-	(*InvokeErrorDetail)(nil), // 6: pgfsm.sidecargateway.v1.InvokeErrorDetail
-	(*InvokeError)(nil),       // 7: pgfsm.sidecargateway.v1.InvokeError
-	(*Cancel)(nil),            // 8: pgfsm.sidecargateway.v1.Cancel
-	(*Unregister)(nil),        // 9: pgfsm.sidecargateway.v1.Unregister
-	(*SessionRequest)(nil),    // 10: pgfsm.sidecargateway.v1.SessionRequest
-	(*SessionResponse)(nil),   // 11: pgfsm.sidecargateway.v1.SessionResponse
+	(CancelReason)(0),         // 0: pgfsm.sidecargateway.v1.CancelReason
+	(*RegisteredActor)(nil),   // 1: pgfsm.sidecargateway.v1.RegisteredActor
+	(*Register)(nil),          // 2: pgfsm.sidecargateway.v1.Register
+	(*RegisterAck)(nil),       // 3: pgfsm.sidecargateway.v1.RegisterAck
+	(*Heartbeat)(nil),         // 4: pgfsm.sidecargateway.v1.Heartbeat
+	(*Invoke)(nil),            // 5: pgfsm.sidecargateway.v1.Invoke
+	(*InvokeResult)(nil),      // 6: pgfsm.sidecargateway.v1.InvokeResult
+	(*InvokeErrorDetail)(nil), // 7: pgfsm.sidecargateway.v1.InvokeErrorDetail
+	(*InvokeError)(nil),       // 8: pgfsm.sidecargateway.v1.InvokeError
+	(*Cancel)(nil),            // 9: pgfsm.sidecargateway.v1.Cancel
+	(*Unregister)(nil),        // 10: pgfsm.sidecargateway.v1.Unregister
+	(*SessionRequest)(nil),    // 11: pgfsm.sidecargateway.v1.SessionRequest
+	(*SessionResponse)(nil),   // 12: pgfsm.sidecargateway.v1.SessionResponse
 }
 var file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_depIdxs = []int32{
-	0,  // 0: pgfsm.sidecargateway.v1.Register.actors:type_name -> pgfsm.sidecargateway.v1.RegisteredActor
-	6,  // 1: pgfsm.sidecargateway.v1.InvokeError.error:type_name -> pgfsm.sidecargateway.v1.InvokeErrorDetail
-	1,  // 2: pgfsm.sidecargateway.v1.SessionRequest.register:type_name -> pgfsm.sidecargateway.v1.Register
-	3,  // 3: pgfsm.sidecargateway.v1.SessionRequest.heartbeat:type_name -> pgfsm.sidecargateway.v1.Heartbeat
-	5,  // 4: pgfsm.sidecargateway.v1.SessionRequest.invoke_result:type_name -> pgfsm.sidecargateway.v1.InvokeResult
-	7,  // 5: pgfsm.sidecargateway.v1.SessionRequest.invoke_error:type_name -> pgfsm.sidecargateway.v1.InvokeError
-	9,  // 6: pgfsm.sidecargateway.v1.SessionRequest.unregister:type_name -> pgfsm.sidecargateway.v1.Unregister
-	2,  // 7: pgfsm.sidecargateway.v1.SessionResponse.register_ack:type_name -> pgfsm.sidecargateway.v1.RegisterAck
-	4,  // 8: pgfsm.sidecargateway.v1.SessionResponse.invoke:type_name -> pgfsm.sidecargateway.v1.Invoke
-	8,  // 9: pgfsm.sidecargateway.v1.SessionResponse.cancel:type_name -> pgfsm.sidecargateway.v1.Cancel
-	10, // 10: pgfsm.sidecargateway.v1.SidecarGatewayService.Session:input_type -> pgfsm.sidecargateway.v1.SessionRequest
-	11, // 11: pgfsm.sidecargateway.v1.SidecarGatewayService.Session:output_type -> pgfsm.sidecargateway.v1.SessionResponse
-	11, // [11:12] is the sub-list for method output_type
-	10, // [10:11] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	1,  // 0: pgfsm.sidecargateway.v1.Register.actors:type_name -> pgfsm.sidecargateway.v1.RegisteredActor
+	7,  // 1: pgfsm.sidecargateway.v1.InvokeError.error:type_name -> pgfsm.sidecargateway.v1.InvokeErrorDetail
+	0,  // 2: pgfsm.sidecargateway.v1.Cancel.reason:type_name -> pgfsm.sidecargateway.v1.CancelReason
+	2,  // 3: pgfsm.sidecargateway.v1.SessionRequest.register:type_name -> pgfsm.sidecargateway.v1.Register
+	4,  // 4: pgfsm.sidecargateway.v1.SessionRequest.heartbeat:type_name -> pgfsm.sidecargateway.v1.Heartbeat
+	6,  // 5: pgfsm.sidecargateway.v1.SessionRequest.invoke_result:type_name -> pgfsm.sidecargateway.v1.InvokeResult
+	8,  // 6: pgfsm.sidecargateway.v1.SessionRequest.invoke_error:type_name -> pgfsm.sidecargateway.v1.InvokeError
+	10, // 7: pgfsm.sidecargateway.v1.SessionRequest.unregister:type_name -> pgfsm.sidecargateway.v1.Unregister
+	3,  // 8: pgfsm.sidecargateway.v1.SessionResponse.register_ack:type_name -> pgfsm.sidecargateway.v1.RegisterAck
+	5,  // 9: pgfsm.sidecargateway.v1.SessionResponse.invoke:type_name -> pgfsm.sidecargateway.v1.Invoke
+	9,  // 10: pgfsm.sidecargateway.v1.SessionResponse.cancel:type_name -> pgfsm.sidecargateway.v1.Cancel
+	11, // 11: pgfsm.sidecargateway.v1.SidecarGatewayService.Session:input_type -> pgfsm.sidecargateway.v1.SessionRequest
+	12, // 12: pgfsm.sidecargateway.v1.SidecarGatewayService.Session:output_type -> pgfsm.sidecargateway.v1.SessionResponse
+	12, // [12:13] is the sub-list for method output_type
+	11, // [11:12] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_init() }
@@ -1116,13 +1200,14 @@ func file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc), len(file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_goTypes,
 		DependencyIndexes: file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_depIdxs,
+		EnumInfos:         file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_enumTypes,
 		MessageInfos:      file_pgfsm_sidecargateway_v1_sidecar_gateway_proto_msgTypes,
 	}.Build()
 	File_pgfsm_sidecargateway_v1_sidecar_gateway_proto = out.File

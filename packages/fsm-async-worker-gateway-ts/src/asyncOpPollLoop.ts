@@ -196,9 +196,20 @@ export async function dispatchAndArchive(
         correlationId: event.correlationId,
       },
       invokeTimeoutMs,
+      // So a cancel of this message reaches the invoke (SPEC-012).
+      { queueName: event.asyncOperationQueueName, msgId: event.msgId },
     );
     eventOutput = (result.output ?? null) as Json;
   } catch (error) {
+    if (error instanceof ActivityInvokeError && error.code === "CANCELLED") {
+      // Its state exited and the cancel archived the message (SPEC-011/012):
+      // there is nothing to finish, and no result to send.
+      logger.info(
+        "Invoke of {actorKey} for message {msgId} was cancelled; not finishing it",
+        { actorKey: actorKeyOf(event), msgId: event.msgId },
+      );
+      return;
+    }
     if (
       error instanceof ActivityInvokeError && error.retriable &&
       event.readCount < maxDeliveryAttempts
