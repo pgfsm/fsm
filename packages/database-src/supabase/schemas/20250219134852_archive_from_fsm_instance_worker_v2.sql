@@ -965,9 +965,13 @@ BEGIN
     --     the parent, as XState does for a child actor (#523):
     --     xstate.done.actor.<invoke id> when done, xstate.error.actor.<invoke
     --     id> on error, nothing when stopped (step 2 returned already). The
-    --     parent row is only read, never locked: the event-log insert takes
-    --     FOR KEY SHARE on it, which doesn't conflict with the parent's own
-    --     FOR NO KEY UPDATE.
+    --     payload is what XState puts on those events: the error on error
+    --     (event.error), the one step 10 saved as this instance's error,
+    --     which the parent saves as its own if no transition takes the event
+    --     (#520); on done, the context, as fsm.json has no output yet (#532:
+    --     the error event used to carry the context too). The parent row is
+    --     only read, never locked: the event-log insert takes FOR KEY SHARE on
+    --     it, which doesn't conflict with the parent's own FOR NO KEY UPDATE.
     IF instance_row.parent_fsm_instance_id IS NOT NULL
         AND final_status IN ('done', 'completed', 'final', 'error')
     THEN
@@ -986,11 +990,18 @@ BEGIN
                                                       ELSE 'xstate.done.actor.'
                                                   END || instance_row.parent_invoke_id,
             input_event_action_type            := 'childFsm_completed',
-            input_event_data                   := fsm_instance_data_save_fsm_context,
+            input_event_data                   := CASE
+                                                      WHEN final_status = 'error'
+                                                      THEN COALESCE(saved_error, fsm_instance_data_save_fsm_error, instance_row.fsm_instance_error)
+                                                      ELSE fsm_instance_data_save_fsm_context
+                                                  END,
             input_event_delay                  := 0,
             input_event_status                 := 'ACTIVE',
             input_event_output                 := '{}'::jsonb,
-            input_error_message                := NULL,
+            input_error_message                := CASE
+                                                      WHEN final_status = 'error'
+                                                      THEN COALESCE(saved_error, fsm_instance_data_save_fsm_error, instance_row.fsm_instance_error)->>'message'
+                                                  END,
             -- This child, as the parent's entry for it names it, for the
             -- parent's stale-event check (step 4, #535).
             input_event_source                 := jsonb_build_object(

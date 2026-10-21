@@ -1,5 +1,5 @@
 begin;
-select plan(74);
+select plan(78);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -832,6 +832,74 @@ select results_eq(
        '"done"'::jsonb, '"Done"'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
   $$ values ('{"invoke_id": "C", "queue_id": "a5350002-0000-0000-0000-000000000000"}'::jsonb) $$,
   'a child FSM''s done event carries {invoke_id, queue_id: <child id>}, matching its parent''s entry (#535)'
+);
+
+-- ============================================================
+-- #532: a child ending in error sends its error, not its context, as the
+-- xstate.error.actor.<id> payload; done still sends the context.
+-- ============================================================
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version)
+values ('a5320000-0000-0000-0000-000000000000'::uuid, 'par532', 'v1');
+select pgmq.create(queue_name := 'a5320000-0000-0000-0000-000000000000');
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, parent_fsm_instance_id, parent_invoke_id, fsm_instance_error,
+                                   fsm_instance_status, internal_event_queue, internal_event_count)
+values
+  ('a5320001-0000-0000-0000-000000000000'::uuid, 'kid532', 'v1', 'a5320000-0000-0000-0000-000000000000'::uuid, 'E1',
+   NULL, NULL, '[]'::jsonb, 0),
+  ('a5320002-0000-0000-0000-000000000000'::uuid, 'kid532', 'v1', 'a5320000-0000-0000-0000-000000000000'::uuid, 'E2',
+   NULL, '"active"'::jsonb, '[{"eventType": "xstate.done.state.loop"}]'::jsonb, 100),
+  ('a5320003-0000-0000-0000-000000000000'::uuid, 'kid532', 'v1', 'a5320000-0000-0000-0000-000000000000'::uuid, 'E3',
+   '{"message": "earlier"}'::jsonb, NULL, '[]'::jsonb, 0),
+  ('a5320004-0000-0000-0000-000000000000'::uuid, 'kid532', 'v1', 'a5320000-0000-0000-0000-000000000000'::uuid, 'D4',
+   NULL, NULL, '[]'::jsonb, 0);
+select pgmq.create(queue_name := q) from unnest(ARRAY[
+  'a5320001-0000-0000-0000-000000000000', 'a5320003-0000-0000-0000-000000000000',
+  'a5320004-0000-0000-0000-000000000000']) q;
+select pgmq.create(queue_name := 'a5320002-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := q, msg := '{"go": 1}'::jsonb) from unnest(ARRAY[
+  'a5320001-0000-0000-0000-000000000000', 'a5320003-0000-0000-0000-000000000000',
+  'a5320004-0000-0000-0000-000000000000']) q;
+
+-- An unhandled actor error (#520): the worker saves status error with it.
+select results_eq(
+  $$ select r->'parent_notify_result'->'queue_data'->'eventData'->>'eventType',
+            r->'parent_notify_result'->'queue_data'->'eventData'->'eventPayload',
+            r->'parent_notify_result'->>'error_message'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5320001-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"error"'::jsonb, '"Failed"'::jsonb, '{"ctx": "not this"}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, NULL, '{"message": "boom"}'::jsonb) r $$,
+  $$ values ('xstate.error.actor.E1'::text, '{"message": "boom"}'::jsonb, 'boom'::text) $$,
+  'a child ending in error sends its error as the payload, not its context (#532)'
+);
+-- The cycle cap sets error itself: its infinite-loop error is sent.
+select results_eq(
+  $$ select r->'parent_notify_result'->'queue_data'->'eventData'->'eventPayload'->>'message' like 'Infinite loop: more than 100 internal events in a row%'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5320002-0000-0000-0000-000000000000', NULL::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"active"'::jsonb, '{}'::jsonb, '{"ctx": "not this"}'::jsonb, '{}'::jsonb,
+       '[]'::jsonb, '{"eventType": "xstate.done.state.loop"}'::jsonb) r $$,
+  $$ values (true) $$,
+  'a child set to error by the cycle cap sends the infinite-loop error (#532)'
+);
+-- No new error passed: the error already on the row is sent.
+select results_eq(
+  $$ select r->'parent_notify_result'->'queue_data'->'eventData'->'eventPayload'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5320003-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"error"'::jsonb, '"Failed"'::jsonb, '{"ctx": "not this"}'::jsonb, '{}'::jsonb) r $$,
+  $$ values ('{"message": "earlier"}'::jsonb) $$,
+  'with no new error, the error the child already has is sent (#532)'
+);
+-- done is unchanged: the context stands in for the machine's output.
+select results_eq(
+  $$ select r->'parent_notify_result'->'queue_data'->'eventData'->'eventPayload',
+            r->'parent_notify_result'->>'error_message'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5320004-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"done"'::jsonb, '"Done"'::jsonb, '{"ctx": "this"}'::jsonb, '{}'::jsonb) r $$,
+  $$ values ('{"ctx": "this"}'::jsonb, NULL::text) $$,
+  'a child reaching done still sends its context, with no error message (#532)'
 );
 
 select * from finish();
