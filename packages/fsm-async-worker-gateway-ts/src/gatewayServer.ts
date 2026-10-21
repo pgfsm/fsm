@@ -37,6 +37,7 @@ import {
 } from "./sidecar/gateway.ts";
 import { ActivityGatewayService } from "@pgfsm/proto-codegen/activitygateway/v1/connect";
 import { startAsyncOpPollLoop } from "./asyncOpPollLoop.ts";
+import { recordCancelAck } from "./cancelAckLog.ts";
 import {
   type CancelDetection,
   startCancelDetection,
@@ -244,6 +245,7 @@ export async function startActivityGatewayServer(
     }
     : undefined;
 
+  const pollLoopDeps = options.asyncOpPollLoop?.deps;
   const sidecar = new SidecarGateway({
     socketPath: options.sidecarSocketPath,
     listeners: options.sidecarListeners,
@@ -256,6 +258,12 @@ export async function startActivityGatewayServer(
     onActorRegistered,
     shutdownGraceMs: options.shutdownGraceMs,
     cancelAckGraceMs: options.cancelAckGraceMs,
+    // Every acknowledged cancel of a poll-loop invoke gets a
+    // cancel_acknowledged event-log row (SPEC-012 (c), #539), written in the
+    // background: a failure is logged and never holds the slot.
+    onCancelAcknowledged: pollLoopDeps
+      ? (ack) => void recordCancelAck(pollLoopDeps, ack)
+      : undefined,
   });
   await sidecar.start();
   for (const address of sidecar.addresses()) {

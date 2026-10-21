@@ -90,8 +90,10 @@ export {
   claimPendingAsyncOperationEventsWithCapacity,
   computeAsyncOperationQueueName,
   ensureAsyncOperationQueueForWorker,
+  logAsyncOperationCancelAck,
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 export type {
+  AsyncOperationCancelAck,
   AsyncOperationQueueMessage,
   AsyncOperationWorkerClaim,
   AsyncOperationWorkerIdentity,

@@ -10,6 +10,7 @@ export type {
   CancelDetection,
   CancelDetectionOptions,
 } from "./cancelDetection.ts";
+export { recordCancelAck } from "./cancelAckLog.ts";
 export type { GatewayServerOptions } from "./gatewayServer.ts";
 export {
   ActivityGatewayClient,

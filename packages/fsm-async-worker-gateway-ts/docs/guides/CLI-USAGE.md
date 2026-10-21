@@ -461,6 +461,26 @@ finished anyway. That reply only frees the slot; it is never archived. With no
 reply after `cancelAckGraceMs` (default 30 s) the gateway logs one warning; the
 slot stays held.
 
+With the poll loop running, each reply to a `TIMEOUT` or `STATE_EXITED` cancel
+is also recorded in `fsm_core.fsm_async_operation_queue_event_logs` (SPEC-012
+(c), #539): one row for the message with `event_name = 'cancel_ack'`,
+`event_status = 'cancel_acknowledged'` and `event_data`
+`{invoke_id, reason, outcome, cancel_to_ack_ms}`, where `outcome` is `aborted`
+(the handler stopped), `completed` or `failed` (it finished anyway). A
+`SHUTDOWN` cancel gets no row, since the stream ends before a reply can come
+back. The row is written in the background, after the slot is freed; a failed
+write is logged as a warning and not retried. For example, how quickly workers
+honour cancels:
+
+```sql
+SELECT event_data->>'reason' AS reason, event_data->>'outcome' AS outcome,
+       count(*), percentile_cont(0.95) WITHIN GROUP
+         (ORDER BY (event_data->>'cancel_to_ack_ms')::int) AS p95_ms
+  FROM fsm_core.fsm_async_operation_queue_event_logs
+ WHERE event_status = 'cancel_acknowledged'
+ GROUP BY 1, 2;
+```
+
 #### Detecting a state exit: LISTEN and the sweep (SPEC-012 (b), #538)
 
 When an FSM state exits, the database archives its invoke's message and notifies

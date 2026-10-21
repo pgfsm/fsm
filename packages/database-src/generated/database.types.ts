@@ -1252,6 +1252,17 @@ export type Database = {
         Args: { input_fsm_instance_id: string; input_locked_by: string };
         Returns: boolean;
       };
+      log_async_operation_cancel_ack_v2: {
+        Args: {
+          input_async_operation_queue_msg_id: number;
+          input_async_operation_queue_name: string;
+          input_cancel_to_ack_ms: number;
+          input_invoke_id: string;
+          input_outcome: string;
+          input_reason: string;
+        };
+        Returns: string;
+      };
       macrostep_v1: {
         Args: {
           event_name: string;

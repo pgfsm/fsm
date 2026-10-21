@@ -242,9 +242,16 @@ Install section, which documents this. Same issue applies to
   with the poll loop. Unit tests in `test/cancel_detection_test.ts`; LISTEN
   timing, the sweep, a killed listener and two replicas against a real database
   in `test/cancel_detection_db_test.ts` (needs `DATABASE_URL`). CI runs both
-  DB-backed files here (this one and `poll_loop_capacity_db_test.ts`) in the
-  Database job's DB-backed Deno step; the Deno job runs the rest without a
-  database.
+  DB-backed files here (this one, `cancel_ack_log_db_test.ts` and
+  `poll_loop_capacity_db_test.ts`) in the Database job's DB-backed Deno step;
+  the Deno job runs the rest without a database.
+- `cancelAckLog.ts` (SPEC-012 (c), #539) — `recordCancelAck`, wired by
+  `startActivityGatewayServer` to `onCancelAcknowledged` when the poll loop
+  runs: one `cancel_acknowledged` event-log row per acknowledged cancel through
+  `@pgfsm/db`'s `logAsyncOperationCancelAck`. Skips `SHUTDOWN` and invokes
+  without a queue message; fire-and-forget (the slot is already free), and a
+  failed write only logs. Unit tests in `test/cancel_ack_log_test.ts`; the rows
+  against a real database in `test/cancel_ack_log_db_test.ts`.
 - `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop. It claims at most
   each actor's free slots via
   `claim_pending_async_operation_events_with_capacity_v2`, with a visibility

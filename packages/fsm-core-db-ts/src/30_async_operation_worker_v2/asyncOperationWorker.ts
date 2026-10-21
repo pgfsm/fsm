@@ -16,6 +16,8 @@ const COMPUTE_ASYNC_OPERATION_QUEUE_NAME_FN =
   `${FSM_SCHEMA}.compute_async_operation_queue_name_${FSM_SCHEMA_FN_VERSION}`;
 const ASYNC_OPERATION_MESSAGES_NOT_QUEUED_FN =
   `${FSM_SCHEMA}.async_operation_messages_not_queued_${FSM_SCHEMA_FN_VERSION}`;
+const LOG_ASYNC_OPERATION_CANCEL_ACK_FN =
+  `${FSM_SCHEMA}.log_async_operation_cancel_ack_${FSM_SCHEMA_FN_VERSION}`;
 
 /**
  * A registered async-operation-actor identity, as sent to
@@ -313,6 +315,57 @@ export async function asyncOperationMessagesNotQueued(
       error: err,
     });
     throw new Error("Failed to check async-operation queue messages", {
+      cause: err,
+    });
+  }
+}
+
+/** A worker's reply to an invoke the Activity Gateway cancelled. */
+export interface AsyncOperationCancelAck {
+  /** The cancelled invoke's message. */
+  queueName: string;
+  msgId: number | bigint | string;
+  invokeId: string;
+  /** The cancel's reason, by name: `STATE_EXITED` or `TIMEOUT`. */
+  reason: string;
+  /** What the handler did: stopped (`aborted`), or finished anyway. */
+  outcome: "aborted" | "completed" | "failed";
+  /** From sending the cancel to the worker's reply. */
+  cancelToAckMs: number;
+}
+
+/**
+ * Records a cancel acknowledgement (SPEC-012 (c), #539): one
+ * `cancel_acknowledged` row in `fsm_async_operation_queue_event_logs` for the
+ * message, with `event_data` `{invoke_id, reason, outcome, cancel_to_ack_ms}`.
+ * Returns the row's id.
+ */
+export async function logAsyncOperationCancelAck(
+  deps: DBDeps,
+  ack: AsyncOperationCancelAck,
+): Promise<string> {
+  try {
+    const res = await deps.db.query<{ id: string }>(
+      `SELECT ${LOG_ASYNC_OPERATION_CANCEL_ACK_FN}($1, $2::bigint, $3, $4, $5, $6) AS id`,
+      [
+        ack.queueName,
+        String(ack.msgId),
+        ack.invokeId,
+        ack.reason,
+        ack.outcome,
+        Math.round(ack.cancelToAckMs),
+      ],
+    );
+    const id = res.rows?.[0]?.id;
+    if (!id) {
+      throw new Error("log_async_operation_cancel_ack_v2 returned no rows");
+    }
+    return id;
+  } catch (err) {
+    logger.error("Error in logAsyncOperationCancelAck: {error}", {
+      error: err,
+    });
+    throw new Error("Failed to log async-operation cancel acknowledgement", {
       cause: err,
     });
   }

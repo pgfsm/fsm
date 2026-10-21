@@ -445,7 +445,10 @@ export interface SidecarGatewayOptions {
    * held either way (SPEC-012).
    */
   cancelAckGraceMs?: number;
-  /** Called for every worker reply to a cancelled invoke (SPEC-012). */
+  /**
+   * Called for every worker reply to a cancelled invoke (SPEC-012), after its
+   * slot is freed. A throw is logged and otherwise ignored.
+   */
   onCancelAcknowledged?: (ack: CancelAcknowledgement) => void;
 }
 
@@ -1035,7 +1038,11 @@ export class SidecarGateway {
       "Worker {workerId} acknowledged the cancel of invoke {invokeId} ({actorKey}, {reason}): {outcome} after {cancelToAckMs}ms; reply dropped",
       { ...ack, reason: cancelReasonName(ack.reason) },
     );
-    this.onCancelAcknowledged?.(ack);
+    try {
+      this.onCancelAcknowledged?.(ack);
+    } catch (error) {
+      logger.warn("onCancelAcknowledged threw: {error}", { error });
+    }
     return undefined;
   }
 
