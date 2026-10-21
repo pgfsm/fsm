@@ -138,6 +138,21 @@ Deno.test("a result is finished as completed through finish_async_operation_even
   assertEquals(values.includes("succeeded"), true);
 });
 
+Deno.test("a cancelled invoke (its state exited) is not finished, and invoke() gets the claimed message (SPEC-012, #537)", async () => {
+  const { deps, archived } = fakeDeps();
+  const sidecar = new SidecarGateway({ socketPath: "/unused" });
+  let message: unknown;
+  sidecar.invoke = (_request, _timeoutMs, claimed) => {
+    message = claimed;
+    return Promise.reject(
+      new ActivityInvokeError("invoke cancelled", "CANCELLED", false),
+    );
+  };
+  await dispatchAndArchive(sidecar, deps, claimedRow(1), 1_000, 5);
+  assertEquals(archived.length, 0, "the cancel already archived the message");
+  assertEquals(message, { queueName: "q", msgId: 42 });
+});
+
 Deno.test("claimed rows without readCount (the old claim function) count as delivery 1", () => {
   const row = claimedRow(3) as unknown as Record<string, unknown>;
   delete row.readCount;

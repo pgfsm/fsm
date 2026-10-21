@@ -437,12 +437,37 @@ SELECT pgmq.send('creditCheck_v01_i_checkBureau_t', jsonb_build_object(
 ), 0);
 ```
 
+### Sidecar protocol 2.0 and cancelling invokes (SPEC-012)
+
+Workers register with a sidecar protocol version. This gateway speaks **2.0**
+and rejects any other major version: the worker gets
+`RegisterAck{accepted: false}` and its stream ends, and the gateway logs an
+error naming the worker and its version. So roll out worker SDK upgrades
+**before** gateway upgrades.
+
+The gateway sends a worker `Cancel{invoke_id, reason}` for an invoke it gives up
+on, so the worker can stop the handler (cooperatively: the SDK cancels the
+invoke's token):
+
+| Reason         | When                                                                                     | The invoke                                                       |
+| -------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `TIMEOUT`      | The invoke timeout ran out                                                               | Fails `TIMEOUT` (retriable): the message is delivered again      |
+| `SHUTDOWN`     | `stop()`, or a max-age drain reached its deadline, with the invoke still running         | Fails `WORKER_DISCONNECTED` (retriable)                          |
+| `STATE_EXITED` | Its message was cancelled because its FSM state exited (`cancelByMessage`; see SPEC-012) | Fails `CANCELLED`: not finished, the cancel archived its message |
+
+A cancelled invoke keeps its worker slot until the worker replies, with
+`InvokeError{code: "CANCELLED"}` if the handler stopped or its result if it
+finished anyway. That reply only frees the slot; it is never archived. With no
+reply after `cancelAckGraceMs` (default 30 s) the gateway logs one warning; the
+slot stays held. `STATE_EXITED` detection (LISTEN and the sweep) is SPEC-012
+(b).
+
 ### Graceful shutdown
 
-| Signal                             | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections and gives open ones up to 5 s to finish. Then it closes the sidecar: in-flight invokes fail as `WORKER_DISCONNECTED` (retriable, so their messages are delivered again), every worker's session ends (so it reconnects to the next gateway), and any worker connection still open after another 5 s is dropped, on every listener. Finally it removes the Unix sockets and closes the DB pool (if the poll loop was running). Shutdown no longer waits indefinitely on connected workers (#397). |
-| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Signal                             | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ctrl+C once** (SIGINT / SIGTERM) | Stops accepting new gRPC connections and gives open ones up to 5 s to finish. Then it closes the sidecar: each worker is sent `Cancel{SHUTDOWN}` for the invokes it is still running, those invokes fail as `WORKER_DISCONNECTED` (retriable, so their messages are delivered again), every worker's session ends (so it reconnects to the next gateway), and any worker connection still open after another 5 s is dropped, on every listener. Finally it removes the Unix sockets and closes the DB pool (if the poll loop was running). Shutdown no longer waits indefinitely on connected workers (#397). |
+| **Ctrl+C twice**                   | Force-exit (`Deno.exit(0)`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ### Environment variables
 

@@ -102,7 +102,7 @@ async function connectWorker(
         value: new Register({
           workerId,
           language: ACTOR.asyncOperationLanguage,
-          protocolVersion: "1.0",
+          protocolVersion: "2.0",
           actors: [new RegisteredActor(ACTOR)],
         }),
       },

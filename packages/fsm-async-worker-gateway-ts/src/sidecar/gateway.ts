@@ -39,6 +39,7 @@ import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import { SidecarGatewayService } from "@pgfsm/proto-codegen/sidecargateway/v1/connect";
 import {
+  Cancel,
   Invoke,
   type Register,
   RegisterAck,
@@ -236,6 +237,63 @@ interface PendingInvoke {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
   key: string;
+  /** The claimed queue message this invoke runs (SPEC-012), if known. */
+  message?: InvokeMessage;
+  /**
+   * Set once a Cancel was sent (SPEC-012). The invoke's promise is already
+   * settled, but it stays in pendingByInvokeId, so its slot stays counted,
+   * until the worker replies: the reply only frees the slot.
+   */
+  cancelling?: {
+    reason: CancelReasonValue;
+    at: number;
+    graceTimer?: ReturnType<typeof setTimeout>;
+  };
+}
+
+/**
+ * The values of `pgfsm.sidecargateway.v1.CancelReason` (SPEC-012). The
+ * generated enum is built at runtime (`proto3.makeEnum`) and typed loosely,
+ * so the gateway uses these; a test pins them to the generated values.
+ */
+export const CANCEL_REASON = {
+  UNSPECIFIED: 0,
+  STATE_EXITED: 1,
+  TIMEOUT: 2,
+  SHUTDOWN: 3,
+} as const;
+
+/** A CancelReason value. */
+export type CancelReasonValue = number;
+
+const CANCEL_REASON_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(CANCEL_REASON).map(([name, value]) => [value, name]),
+);
+
+/** A CancelReason's name, for logs. */
+export function cancelReasonName(reason: CancelReasonValue): string {
+  return CANCEL_REASON_NAMES[reason] ?? `UNKNOWN(${reason})`;
+}
+
+/** A claimed message on an actor's queue, which an invoke runs. */
+export interface InvokeMessage {
+  queueName: string;
+  msgId: number | bigint | string;
+}
+
+/** A worker's reply to a cancelled invoke (SPEC-012). */
+export interface CancelAcknowledgement {
+  workerId: string;
+  invokeId: string;
+  actorKey: string;
+  reason: CancelReasonValue;
+  /**
+   * aborted: the handler stopped (InvokeError CANCELLED); completed: it
+   * returned anyway; failed: it failed anyway.
+   */
+  outcome: "aborted" | "completed" | "failed";
+  cancelToAckMs: number;
+  message?: InvokeMessage;
 }
 
 interface WorkerState {
@@ -381,7 +439,25 @@ export interface SidecarGatewayOptions {
    * them (default 5 s).
    */
   shutdownGraceMs?: number;
+  /**
+   * How long a cancelled invoke may go without the worker's reply before a
+   * warning is logged (default 30 s; 0 turns the warning off). Its slot stays
+   * held either way (SPEC-012).
+   */
+  cancelAckGraceMs?: number;
+  /** Called for every worker reply to a cancelled invoke (SPEC-012). */
+  onCancelAcknowledged?: (ack: CancelAcknowledgement) => void;
 }
+
+/** The sidecar protocol this gateway speaks (SPEC-012: workers honour Cancel). */
+export const SIDECAR_PROTOCOL_VERSION = "2.0";
+
+/** Whether a worker's Register.protocol_version is one this gateway accepts. */
+export function isSupportedProtocolVersion(version: string): boolean {
+  return version.split(".")[0] === SIDECAR_PROTOCOL_VERSION.split(".")[0];
+}
+
+export const DEFAULT_CANCEL_ACK_GRACE_MS = 30_000;
 
 export const DEFAULT_MAX_CONNECTION_AGE_MS = 10 * 60_000;
 export const DEFAULT_CONNECTION_DRAIN_GRACE_MS = 30_000;
@@ -425,6 +501,11 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/** The index key of a queue message (queue names don't contain `#`). */
+function messageKey(message: InvokeMessage): string {
+  return `${message.queueName}#${String(message.msgId)}`;
+}
+
 export class SidecarGateway {
   private readonly listeners: SidecarListener[];
   private readonly authTokenFiles: string[];
@@ -435,6 +516,14 @@ export class SidecarGateway {
   private readonly keepaliveTimeoutMs: number;
   private readonly onActorRegistered?: (actor: RegisteredActor) => void;
   private readonly shutdownGraceMs: number;
+  private readonly cancelAckGraceMs: number;
+  private readonly onCancelAcknowledged?: (ack: CancelAcknowledgement) => void;
+  /**
+   * In-flight invokes by the queue message they run (SPEC-012): message key
+   * → (invokeId → workerId). Several, when a redelivered message is in
+   * flight again while an earlier invoke of it waits for its cancel's reply.
+   */
+  private readonly invokesByMessage = new Map<string, Map<string, string>>();
   private running: RunningListener[] = [];
   private readonly workers = new Map<string, WorkerState>();
   private readonly actorRoutes = new Map<string, ActorRoute>();
@@ -466,6 +555,9 @@ export class SidecarGateway {
     this.onActorRegistered = options.onActorRegistered;
     this.shutdownGraceMs = options.shutdownGraceMs ??
       DEFAULT_SHUTDOWN_GRACE_MS;
+    this.cancelAckGraceMs = options.cancelAckGraceMs ??
+      DEFAULT_CANCEL_ACK_GRACE_MS;
+    this.onCancelAcknowledged = options.onCancelAcknowledged;
   }
 
   async start(): Promise<void> {
@@ -611,13 +703,17 @@ export class SidecarGateway {
   }
 
   /**
-   * Unregisters every worker — failing their in-flight invokes as
+   * Unregisters every worker — sending Cancel{SHUTDOWN} for each invoke it
+   * is still running (SPEC-012) and failing those invokes as
    * WORKER_DISCONNECTED (retriable) rather than leaving callers to wait out
    * the invoke timeout — ends each Session stream so workers see EOF and go
    * reconnect, then closes every listener (#397).
    */
   async stop(): Promise<void> {
     for (const worker of [...this.workers.values()]) {
+      // Tell the worker to stop what it is still running (SPEC-012); the
+      // Cancel goes out before its stream ends.
+      this.cancelAllShutdown(worker);
       this.unregisterWorker(worker);
     }
     this.actorRoutes.clear();
@@ -698,9 +794,17 @@ export class SidecarGateway {
       });
   }
 
+  /**
+   * Sends one invoke to a worker serving its actor and waits for the reply.
+   * `message` is the claimed queue message it runs: it lets a cancel of that
+   * message reach this invoke (`cancelByMessage`, SPEC-012). On timeout the
+   * worker is sent Cancel{TIMEOUT} and the invoke rejects with a retriable
+   * TIMEOUT; its slot stays held until the worker replies.
+   */
   async invoke(
     request: ActivityInvokeInput,
     timeoutMs: number,
+    message?: InvokeMessage,
   ): Promise<ActivityInvokeResult> {
     const key = actorKey(
       request.parentFsmName,
@@ -734,8 +838,11 @@ export class SidecarGateway {
 
     return await new Promise<ActivityInvokeResult>((resolve, reject) => {
       const timer = setTimeout(() => {
-        worker.pendingByInvokeId.delete(invokeId);
-        reject(
+        // The worker is told to stop; the message is delivered again later.
+        this.cancelInvoke(
+          worker,
+          invokeId,
+          CANCEL_REASON.TIMEOUT,
           new ActivityInvokeError(
             `actor invocation timed out after ${timeoutMs}ms`,
             "TIMEOUT",
@@ -749,7 +856,9 @@ export class SidecarGateway {
         reject,
         timer,
         key,
+        message,
       });
+      if (message) this.indexInvoke(message, invokeId, worker.workerId);
 
       worker.outbox.push(
         new SessionResponse({
@@ -782,6 +891,157 @@ export class SidecarGateway {
       if (worker?.alive) workers.push(worker);
     }
     return workers;
+  }
+
+  /**
+   * Cancels every invoke running the given queue message (SPEC-012): its
+   * worker is sent Cancel{reason}, and the invoke's promise rejects with a
+   * non-retriable CANCELLED for STATE_EXITED (its message is already
+   * archived, so the result has nowhere to go). Returns how many invokes were
+   * cancelled; 0 when this gateway runs none of that message, which is how a
+   * notification meant for another gateway replica is ignored.
+   */
+  cancelByMessage(
+    message: InvokeMessage,
+    reason: CancelReasonValue = CANCEL_REASON.STATE_EXITED,
+  ): number {
+    const invokes = this.invokesByMessage.get(messageKey(message));
+    if (!invokes) return 0;
+    let cancelled = 0;
+    for (const [invokeId, workerId] of [...invokes]) {
+      const worker = this.workers.get(workerId);
+      if (!worker) continue;
+      if (
+        this.cancelInvoke(
+          worker,
+          invokeId,
+          reason,
+          new ActivityInvokeError(
+            `invoke cancelled (${cancelReasonName(reason)})`,
+            "CANCELLED",
+            false,
+          ),
+        )
+      ) {
+        cancelled++;
+      }
+    }
+    return cancelled;
+  }
+
+  /**
+   * Sends Cancel{reason} for one in-flight invoke and settles its promise
+   * with `error` (SPEC-012). The invoke stays in pendingByInvokeId, holding
+   * its slot, until the worker replies; after cancelAckGraceMs without a
+   * reply a warning is logged once. Returns false when there is nothing to
+   * cancel (unknown, or already cancelling).
+   */
+  private cancelInvoke(
+    worker: WorkerState,
+    invokeId: string,
+    reason: CancelReasonValue,
+    error: ActivityInvokeError,
+  ): boolean {
+    const pending = worker.pendingByInvokeId.get(invokeId);
+    if (!pending || pending.cancelling) return false;
+    clearTimeout(pending.timer);
+    pending.cancelling = { reason, at: Date.now() };
+    worker.outbox.push(
+      new SessionResponse({
+        payload: { case: "cancel", value: new Cancel({ invokeId, reason }) },
+      }),
+    );
+    logger.info(
+      "Sent cancel of invoke {invokeId} ({actorKey}) to worker {workerId}: {reason}",
+      {
+        invokeId,
+        actorKey: pending.key,
+        workerId: worker.workerId,
+        reason: cancelReasonName(reason),
+        queueName: pending.message?.queueName,
+        msgId: pending.message ? String(pending.message.msgId) : undefined,
+      },
+    );
+    // A shutdown ends the stream right after, so no reply can come back.
+    if (this.cancelAckGraceMs > 0 && reason !== CANCEL_REASON.SHUTDOWN) {
+      const graceTimer = setTimeout(() => {
+        worker.timers.delete(graceTimer);
+        if (worker.pendingByInvokeId.get(invokeId) !== pending) return;
+        logger.warn(
+          "Worker {workerId} hasn't replied to the cancel of invoke {invokeId} ({actorKey}) after {graceMs}ms; its slot stays held",
+          {
+            workerId: worker.workerId,
+            invokeId,
+            actorKey: pending.key,
+            graceMs: this.cancelAckGraceMs,
+          },
+        );
+      }, this.cancelAckGraceMs);
+      pending.cancelling.graceTimer = graceTimer;
+      worker.timers.add(graceTimer);
+    }
+    pending.reject(error);
+    return true;
+  }
+
+  /**
+   * Removes a replied-to invoke. A cancelled one only frees its slot: its
+   * promise is already settled, and its reply is never archived (SPEC-012).
+   * Returns the pending invoke if it was still waiting for its result.
+   */
+  private settlePendingInvoke(
+    worker: WorkerState,
+    invokeId: string,
+    outcome: CancelAcknowledgement["outcome"],
+  ): PendingInvoke | undefined {
+    const pending = worker.pendingByInvokeId.get(invokeId);
+    if (!pending) return undefined;
+    worker.pendingByInvokeId.delete(invokeId);
+    clearTimeout(pending.timer);
+    if (pending.message) this.unindexInvoke(pending.message, invokeId);
+    if (!pending.cancelling) return pending;
+
+    if (pending.cancelling.graceTimer) {
+      clearTimeout(pending.cancelling.graceTimer);
+      worker.timers.delete(pending.cancelling.graceTimer);
+    }
+    const ack: CancelAcknowledgement = {
+      workerId: worker.workerId,
+      invokeId,
+      actorKey: pending.key,
+      reason: pending.cancelling.reason,
+      outcome,
+      cancelToAckMs: Date.now() - pending.cancelling.at,
+      message: pending.message,
+    };
+    logger.info(
+      "Worker {workerId} acknowledged the cancel of invoke {invokeId} ({actorKey}, {reason}): {outcome} after {cancelToAckMs}ms; reply dropped",
+      { ...ack, reason: cancelReasonName(ack.reason) },
+    );
+    this.onCancelAcknowledged?.(ack);
+    return undefined;
+  }
+
+  private indexInvoke(
+    message: InvokeMessage,
+    invokeId: string,
+    workerId: string,
+  ): void {
+    const key = messageKey(message);
+    let invokes = this.invokesByMessage.get(key);
+    if (!invokes) {
+      invokes = new Map();
+      this.invokesByMessage.set(key, invokes);
+    }
+    invokes.set(invokeId, workerId);
+  }
+
+  private unindexInvoke(message: InvokeMessage, invokeId: string): void {
+    const key = messageKey(message);
+    const invokes = this.invokesByMessage.get(key);
+    if (!invokes) return;
+    invokes.delete(invokeId);
+    if (invokes.size === 0) this.invokesByMessage.delete(key);
   }
 
   private inFlightOf(worker: WorkerState, key: string): number {
@@ -933,7 +1193,36 @@ export class SidecarGateway {
       );
     }
 
-    const worker = this.registerWorker(first.value.payload.value);
+    const register = first.value.payload.value;
+    if (!isSupportedProtocolVersion(register.protocolVersion)) {
+      // Only workers that honour Cancel (SPEC-012), so the gateway never has
+      // to reason about ones that ignore it. Roll out SDKs before gateways.
+      logger.error(
+        "Rejected worker {workerId} ({language}): it speaks sidecar protocol {protocolVersion}, this gateway {gatewayProtocolVersion}; upgrade its worker SDK",
+        {
+          workerId: register.workerId,
+          language: register.language,
+          protocolVersion: register.protocolVersion || "(none)",
+          gatewayProtocolVersion: SIDECAR_PROTOCOL_VERSION,
+        },
+      );
+      yield new SessionResponse({
+        payload: {
+          case: "registerAck",
+          value: new RegisterAck({
+            accepted: false,
+            gatewayProtocolVersion: SIDECAR_PROTOCOL_VERSION,
+            registeredActors: [],
+            rejectedActors: register.actors.map((a: RegisteredActor) =>
+              keyOf(a)
+            ),
+          }),
+        },
+      });
+      return;
+    }
+
+    const worker = this.registerWorker(register);
     if (tokenName) {
       logger.info("Worker {workerId} authenticated with token {token}", {
         workerId: worker.workerId,
@@ -948,7 +1237,7 @@ export class SidecarGateway {
     yield new SessionResponse({
       payload: {
         case: "registerAck",
-        value: this.buildRegisterAck(first.value.payload.value),
+        value: this.buildRegisterAck(register),
       },
     });
 
@@ -989,6 +1278,26 @@ export class SidecarGateway {
   }
 
   /**
+   * Sends Cancel{SHUTDOWN} for every invoke a worker is still running, and
+   * rejects them as retriable WORKER_DISCONNECTED: their messages are
+   * delivered again (SPEC-012).
+   */
+  private cancelAllShutdown(worker: WorkerState): void {
+    for (const [invokeId, pending] of [...worker.pendingByInvokeId]) {
+      this.cancelInvoke(
+        worker,
+        invokeId,
+        CANCEL_REASON.SHUTDOWN,
+        new ActivityInvokeError(
+          `gateway stopped while invoking ${pending.key}`,
+          "WORKER_DISCONNECTED",
+          true,
+        ),
+      );
+    }
+  }
+
+  /**
    * After the max connection age (±10 % jitter), stop routing to the worker,
    * let its in-flight invokes finish (up to connectionDrainGraceMs), then
    * end its stream and close its connection (GOAWAY). The worker reconnects,
@@ -1018,6 +1327,9 @@ export class SidecarGateway {
           return;
         }
         const session = worker.http2Session;
+        // Past the drain grace with invokes still running: tell the worker to
+        // stop them (SPEC-012) before its stream ends.
+        this.cancelAllShutdown(worker);
         this.unregisterWorker(worker);
         // GOAWAY once the stream has ended, so the worker's next session
         // opens a new connection (and can land on another replica).
@@ -1033,7 +1345,7 @@ export class SidecarGateway {
   private buildRegisterAck(register: RegisterMessage): RegisterAckMessage {
     return new RegisterAck({
       accepted: true,
-      gatewayProtocolVersion: "1.0",
+      gatewayProtocolVersion: SIDECAR_PROTOCOL_VERSION,
       registeredActors: register.actors.map((a: RegisteredActor) => keyOf(a)),
       rejectedActors: [],
     });
@@ -1053,7 +1365,7 @@ export class SidecarGateway {
           "Received invoke_result from worker {workerId} (invoke_id={invokeId})",
           { workerId: worker.workerId, invokeId: body.invokeId },
         );
-        this.resolvePendingInvoke(worker.workerId, body.invokeId, {
+        this.resolvePendingInvoke(worker, body.invokeId, {
           output: parseOutputJson(body.outputJson),
         });
         return;
@@ -1072,7 +1384,7 @@ export class SidecarGateway {
           },
         );
         this.rejectPendingInvoke(
-          worker.workerId,
+          worker,
           body.invokeId,
           new ActivityInvokeError(
             body.error?.message ||
@@ -1163,8 +1475,10 @@ export class SidecarGateway {
       }
     }
 
-    for (const pending of worker.pendingByInvokeId.values()) {
+    for (const [invokeId, pending] of worker.pendingByInvokeId) {
       clearTimeout(pending.timer);
+      if (pending.message) this.unindexInvoke(pending.message, invokeId);
+      // A cancelled invoke's promise is already settled; this is a no-op.
       pending.reject(
         new ActivityInvokeError(
           `worker disconnected while invoking ${pending.key}`,
@@ -1182,35 +1496,23 @@ export class SidecarGateway {
   }
 
   private resolvePendingInvoke(
-    workerId: string,
+    worker: WorkerState,
     invokeId: string,
     result: ActivityInvokeResult,
   ): void {
-    const worker = this.workers.get(workerId);
-    const pending = worker?.pendingByInvokeId.get(invokeId);
-    if (!pending || !worker) {
-      return;
-    }
-
-    worker.pendingByInvokeId.delete(invokeId);
-    clearTimeout(pending.timer);
-    pending.resolve(result);
+    this.settlePendingInvoke(worker, invokeId, "completed")?.resolve(result);
   }
 
   private rejectPendingInvoke(
-    workerId: string,
+    worker: WorkerState,
     invokeId: string,
-    error: Error,
+    error: ActivityInvokeError,
   ): void {
-    const worker = this.workers.get(workerId);
-    const pending = worker?.pendingByInvokeId.get(invokeId);
-    if (!pending || !worker) {
-      return;
-    }
-
-    worker.pendingByInvokeId.delete(invokeId);
-    clearTimeout(pending.timer);
-    pending.reject(error);
+    this.settlePendingInvoke(
+      worker,
+      invokeId,
+      error.code === "CANCELLED" ? "aborted" : "failed",
+    )?.reject(error);
   }
 
   private cleanupSocket(path: string): void {

@@ -9,12 +9,22 @@ export type {
   InvokeActorRequest,
   InvokeActorResult,
 } from "./gatewayClient.ts";
-export { ActivityInvokeError, SidecarGateway } from "./sidecar/gateway.ts";
+export {
+  ActivityInvokeError,
+  CANCEL_REASON,
+  cancelReasonName,
+  isSupportedProtocolVersion,
+  SIDECAR_PROTOCOL_VERSION,
+  SidecarGateway,
+} from "./sidecar/gateway.ts";
 export type {
   ActivityInvokeInput,
   ActivityInvokeResult,
   ActorRoutingSnapshot,
+  CancelAcknowledgement,
+  CancelReasonValue,
   ClaimableActor,
+  InvokeMessage,
   RegisteredActor,
   SidecarGatewayOptions,
   SidecarListener,

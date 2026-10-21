@@ -646,7 +646,10 @@ export class ActorWorker {
           value: new Register({
             workerId: this.options.workerId,
             language: this.options.language,
-            protocolVersion: "1.0",
+            // SPEC-012: gateways at 2.0 reject 1.x workers. Honouring Cancel
+            // (aborting the handler) lands in #540; until then a Cancel is
+            // ignored and the gateway drops the late result.
+            protocolVersion: "2.0",
             actors: registeredActors,
           }),
         },

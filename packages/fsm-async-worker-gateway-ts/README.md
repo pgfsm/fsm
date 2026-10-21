@@ -159,6 +159,10 @@ your project's actors, so build those from the worker Dockerfiles.
   compiled actors (`npx @pgfsm/cli create`), or see
   `test-apps/debug-only/async-worker/<lang>/` in the
   [repo](https://github.com/pgfsm/fsm) for a worked example
+- **Worker SDKs that speak sidecar protocol 2.0.** The gateway rejects a worker
+  that registers with any other major version (`RegisterAck{accepted: false}`,
+  logged as an error). Upgrade every worker's SDK before the gateway: a 2.0 SDK
+  also works with an older gateway, the reverse doesn't.
 
 ## Programmatic usage
 

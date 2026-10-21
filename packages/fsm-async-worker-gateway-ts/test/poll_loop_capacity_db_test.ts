@@ -10,6 +10,8 @@ import { assert, assertEquals } from "@std/assert";
 // @ts-types="@types/pg"
 import { Pool } from "pg";
 import {
+  InvokeError,
+  InvokeErrorDetail,
   InvokeResult,
   Register,
   RegisteredActor,
@@ -17,7 +19,7 @@ import {
   type SessionResponse,
 } from "@pgfsm/proto-codegen/sidecargateway/v1/pb";
 import { startAsyncOpPollLoop } from "../src/asyncOpPollLoop.ts";
-import { SidecarGateway } from "../src/sidecar/gateway.ts";
+import { CANCEL_REASON, SidecarGateway } from "../src/sidecar/gateway.ts";
 
 type SessionRequestMessage = InstanceType<typeof SessionRequest>;
 type SessionResponseMessage = InstanceType<typeof SessionResponse>;
@@ -102,7 +104,9 @@ Deno.test({
     const gateway = new SidecarGateway({ socketPath: "/unused" });
     const controller = new AbortController();
     try {
-      // One worker declaring max_concurrency 2, which only records invokes.
+      // One worker declaring max_concurrency 2, which only records invokes,
+      // and acknowledges a cancel the way a 2.0 SDK does (SPEC-012): a
+      // cancelled invoke holds its slot until the worker replies.
       const requests = new PushStream<SessionRequestMessage>();
       requests.push(
         new SessionRequest({
@@ -111,7 +115,7 @@ Deno.test({
             value: new Register({
               workerId: "w",
               language: "go",
-              protocolVersion: "1.0",
+              protocolVersion: "2.0",
               actors: [
                 new RegisteredActor({
                   ...identity,
@@ -130,6 +134,7 @@ Deno.test({
       }).handleSession(requests)[Symbol.asyncIterator]();
       assertEquals((await responses.next()).value?.payload.case, "registerAck");
       const received: string[] = [];
+      const cancelled: number[] = [];
       let peakInFlight = 0;
       (async () => {
         while (true) {
@@ -140,6 +145,23 @@ Deno.test({
             peakInFlight = Math.max(
               peakInFlight,
               gateway.routingSnapshot()[0]?.inFlight ?? 0,
+            );
+          } else if (value.payload.case === "cancel") {
+            cancelled.push(value.payload.value.reason);
+            requests.push(
+              new SessionRequest({
+                payload: {
+                  case: "invokeError",
+                  value: new InvokeError({
+                    invokeId: value.payload.value.invokeId,
+                    error: new InvokeErrorDetail({
+                      code: "CANCELLED",
+                      message: "cancelled",
+                      retriable: false,
+                    }),
+                  }),
+                },
+              }),
             );
           }
         }
@@ -178,10 +200,16 @@ Deno.test({
       assert(peakInFlight <= 2, `peak in-flight ${peakInFlight} > 2`);
 
       // The two still in flight time out after 3 s (retriable), so they
-      // aren't archived: they come back once their 4 s visibility timeout
-      // ends and a slot is free, with read_ct 2. Only the one answered
+      // aren't archived: the worker is sent Cancel{TIMEOUT} for each, and
+      // once it acknowledges, their slots are free. They come back once their
+      // 4 s visibility timeout ends, with read_ct 2. Only the one answered
       // successfully may have been archived.
       await sleep(7_000);
+      assert(
+        cancelled.length >= 2 &&
+          cancelled.every((reason) => reason === CANCEL_REASON.TIMEOUT),
+        `expected Cancel{TIMEOUT} for the timed-out invokes: ${cancelled}`,
+      );
       const readCounts = (await pool.query(
         `SELECT read_ct FROM pgmq.q_${queue.toLowerCase()} ORDER BY msg_id`,
       )).rows.map((r: { read_ct: number }) => r.read_ct);

@@ -218,6 +218,20 @@ Install section, which documents this. Same issue applies to
     `routingSnapshot()` reports per actor its live workers, Σ max_concurrency
     and in-flight invokes (exposing it is SPEC-008's job). Covered by
     `test/sidecar_gateway_capacity_test.ts`.
+  - Sidecar protocol 2.0 and cancels (SPEC-012, #537): a `Register` whose
+    `protocol_version` major isn't 2 gets `RegisterAck{accepted: false}` and its
+    stream ends (`isSupportedProtocolVersion`; SDKs roll out first). The gateway
+    sends `Cancel{invoke_id, reason}` on an invoke timeout (`TIMEOUT`, still a
+    retriable failure), from `stop()` and at a drain deadline (`SHUTDOWN`), and
+    from `cancelByMessage` (`STATE_EXITED`, a non-retriable `CANCELLED`; its
+    detection is #538). `invoke()` takes the claimed queue message, indexed in
+    `invokesByMessage`. A cancelled invoke stays in `pendingByInvokeId`
+    (`cancelling`), so its slot stays counted until the worker replies; the
+    reply only frees it (`settlePendingInvoke`) and is reported to
+    `onCancelAcknowledged`, never archived. No reply after `cancelAckGraceMs`
+    logs one warning. Use `CANCEL_REASON`, not the generated `CancelReason`
+    (built at runtime by `proto3.makeEnum`, so typed `string | number`); a test
+    pins the two together. Covered by `test/sidecar_gateway_cancel_test.ts`.
 - `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop. It claims at most
   each actor's free slots via
   `claim_pending_async_operation_events_with_capacity_v2`, with a visibility

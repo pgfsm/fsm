@@ -31,7 +31,9 @@ pub struct RegisteredActor {
     #[prost(uint32, tag = "9")]
     pub max_concurrency: u32,
 }
-/// First message a worker sends on a new Session stream.
+/// First message a worker sends on a new Session stream. protocol_version is
+/// "2.0" from SPEC-012 (workers that honour Cancel); a gateway at 2.0 rejects
+/// any other major version with RegisterAck{accepted: false}.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Register {
     #[prost(string, tag = "1")]
@@ -113,7 +115,9 @@ pub struct InvokeErrorDetail {
     #[prost(bool, tag = "3")]
     pub retriable: bool,
 }
-/// Sent by the worker after a failed Invoke.
+/// Sent by the worker after a failed Invoke. A handler that stopped because
+/// its invoke was cancelled replies with error.code "CANCELLED" (not
+/// retriable); see Cancel.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InvokeError {
     #[prost(string, tag = "1")]
@@ -123,14 +127,20 @@ pub struct InvokeError {
     #[prost(uint32, tag = "3")]
     pub duration_ms: u32,
 }
-/// Pushed by the gateway to ask a worker to abandon an in-flight invoke.
-/// Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
-/// and the generated worker SDKs accept it but ignore it — carried here so the
-/// schema doesn't need a second breaking change once that lands.
+/// Pushed by the gateway to ask a worker to abandon an in-flight invoke
+/// (SPEC-012). Cancellation is cooperative: the worker cancels the invoke's
+/// token, and replies either InvokeError{code: "CANCELLED"} (the handler
+/// stopped) or its InvokeResult/InvokeError (it finished anyway). Either reply
+/// acknowledges the cancel and frees the worker's slot; the gateway never
+/// archives it. An unknown invoke_id (already finished) is ignored. Sent from
+/// sidecar protocol 2.0; a 1.x worker ignores it and its late result is
+/// dropped.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Cancel {
     #[prost(string, tag = "1")]
     pub invoke_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "CancelReason", tag = "2")]
+    pub reason: i32,
 }
 /// Sent by the worker to end registration gracefully before closing the
 /// stream.
@@ -175,6 +185,45 @@ pub mod session_response {
         Invoke(super::Invoke),
         #[prost(message, tag = "3")]
         Cancel(super::Cancel),
+    }
+}
+/// Why the gateway cancelled an in-flight invoke (SPEC-012).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CancelReason {
+    Unspecified = 0,
+    /// The FSM state that invoked the actor exited (its message was cancelled
+    /// in the database).
+    StateExited = 1,
+    /// The gateway's invoke timeout ran out; the message is delivered again
+    /// later.
+    Timeout = 2,
+    /// The gateway is stopping, or its connection to this worker is being
+    /// drained, with the invoke still running.
+    Shutdown = 3,
+}
+impl CancelReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CANCEL_REASON_UNSPECIFIED",
+            Self::StateExited => "CANCEL_REASON_STATE_EXITED",
+            Self::Timeout => "CANCEL_REASON_TIMEOUT",
+            Self::Shutdown => "CANCEL_REASON_SHUTDOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CANCEL_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "CANCEL_REASON_STATE_EXITED" => Some(Self::StateExited),
+            "CANCEL_REASON_TIMEOUT" => Some(Self::Timeout),
+            "CANCEL_REASON_SHUTDOWN" => Some(Self::Shutdown),
+            _ => None,
+        }
     }
 }
 include!("pgfsm.sidecargateway.v1.tonic.rs");

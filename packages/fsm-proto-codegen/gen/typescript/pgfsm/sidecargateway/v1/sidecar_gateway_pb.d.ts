@@ -7,6 +7,42 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3 } from "@bufbuild/protobuf";
 
 /**
+ * Why the gateway cancelled an in-flight invoke (SPEC-012).
+ *
+ * @generated from enum pgfsm.sidecargateway.v1.CancelReason
+ */
+export declare enum CancelReason {
+  /**
+   * @generated from enum value: CANCEL_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The FSM state that invoked the actor exited (its message was cancelled
+   * in the database).
+   *
+   * @generated from enum value: CANCEL_REASON_STATE_EXITED = 1;
+   */
+  STATE_EXITED = 1,
+
+  /**
+   * The gateway's invoke timeout ran out; the message is delivered again
+   * later.
+   *
+   * @generated from enum value: CANCEL_REASON_TIMEOUT = 2;
+   */
+  TIMEOUT = 2,
+
+  /**
+   * The gateway is stopping, or its connection to this worker is being
+   * drained, with the invoke still running.
+   *
+   * @generated from enum value: CANCEL_REASON_SHUTDOWN = 3;
+   */
+  SHUTDOWN = 3,
+}
+
+/**
  * One actor entrypoint a worker process serves. Mirrors
  * ActorPluginValidationResult's identity fields (see @pgfsm/compiler's
  * util.ts) — actorKey() in fsm-core-async-op-worker's sidecar/gateway.ts is
@@ -83,7 +119,9 @@ export declare class RegisteredActor extends Message<RegisteredActor> {
 }
 
 /**
- * First message a worker sends on a new Session stream.
+ * First message a worker sends on a new Session stream. protocol_version is
+ * "2.0" from SPEC-012 (workers that honour Cancel); a gateway at 2.0 rejects
+ * any other major version with RegisterAck{accepted: false}.
  *
  * @generated from message pgfsm.sidecargateway.v1.Register
  */
@@ -349,7 +387,9 @@ export declare class InvokeErrorDetail extends Message<InvokeErrorDetail> {
 }
 
 /**
- * Sent by the worker after a failed Invoke.
+ * Sent by the worker after a failed Invoke. A handler that stopped because
+ * its invoke was cancelled replies with error.code "CANCELLED" (not
+ * retriable); see Cancel.
  *
  * @generated from message pgfsm.sidecargateway.v1.InvokeError
  */
@@ -385,10 +425,14 @@ export declare class InvokeError extends Message<InvokeError> {
 }
 
 /**
- * Pushed by the gateway to ask a worker to abandon an in-flight invoke.
- * Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
- * and the generated worker SDKs accept it but ignore it — carried here so the
- * schema doesn't need a second breaking change once that lands.
+ * Pushed by the gateway to ask a worker to abandon an in-flight invoke
+ * (SPEC-012). Cancellation is cooperative: the worker cancels the invoke's
+ * token, and replies either InvokeError{code: "CANCELLED"} (the handler
+ * stopped) or its InvokeResult/InvokeError (it finished anyway). Either reply
+ * acknowledges the cancel and frees the worker's slot; the gateway never
+ * archives it. An unknown invoke_id (already finished) is ignored. Sent from
+ * sidecar protocol 2.0; a 1.x worker ignores it and its late result is
+ * dropped.
  *
  * @generated from message pgfsm.sidecargateway.v1.Cancel
  */
@@ -397,6 +441,11 @@ export declare class Cancel extends Message<Cancel> {
    * @generated from field: string invoke_id = 1;
    */
   invokeId: string;
+
+  /**
+   * @generated from field: pgfsm.sidecargateway.v1.CancelReason reason = 2;
+   */
+  reason: CancelReason;
 
   constructor(data?: PartialMessage<Cancel>);
 

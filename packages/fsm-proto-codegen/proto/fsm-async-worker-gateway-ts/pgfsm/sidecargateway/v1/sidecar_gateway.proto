@@ -59,7 +59,9 @@ message RegisteredActor {
   uint32 max_concurrency = 9;
 }
 
-// First message a worker sends on a new Session stream.
+// First message a worker sends on a new Session stream. protocol_version is
+// "2.0" from SPEC-012 (workers that honour Cancel); a gateway at 2.0 rejects
+// any other major version with RegisterAck{accepted: false}.
 message Register {
   string worker_id = 1;
   string language = 2;
@@ -114,19 +116,40 @@ message InvokeErrorDetail {
   bool retriable = 3;
 }
 
-// Sent by the worker after a failed Invoke.
+// Sent by the worker after a failed Invoke. A handler that stopped because
+// its invoke was cancelled replies with error.code "CANCELLED" (not
+// retriable); see Cancel.
 message InvokeError {
   string invoke_id = 1;
   InvokeErrorDetail error = 2;
   uint32 duration_ms = 3;
 }
 
-// Pushed by the gateway to ask a worker to abandon an in-flight invoke.
-// Not yet wired up to real cancellation: sidecar/gateway.ts never sends it,
-// and the generated worker SDKs accept it but ignore it — carried here so the
-// schema doesn't need a second breaking change once that lands.
+// Why the gateway cancelled an in-flight invoke (SPEC-012).
+enum CancelReason {
+  CANCEL_REASON_UNSPECIFIED = 0;
+  // The FSM state that invoked the actor exited (its message was cancelled
+  // in the database).
+  CANCEL_REASON_STATE_EXITED = 1;
+  // The gateway's invoke timeout ran out; the message is delivered again
+  // later.
+  CANCEL_REASON_TIMEOUT = 2;
+  // The gateway is stopping, or its connection to this worker is being
+  // drained, with the invoke still running.
+  CANCEL_REASON_SHUTDOWN = 3;
+}
+
+// Pushed by the gateway to ask a worker to abandon an in-flight invoke
+// (SPEC-012). Cancellation is cooperative: the worker cancels the invoke's
+// token, and replies either InvokeError{code: "CANCELLED"} (the handler
+// stopped) or its InvokeResult/InvokeError (it finished anyway). Either reply
+// acknowledges the cancel and frees the worker's slot; the gateway never
+// archives it. An unknown invoke_id (already finished) is ignored. Sent from
+// sidecar protocol 2.0; a 1.x worker ignores it and its late result is
+// dropped.
 message Cancel {
   string invoke_id = 1;
+  CancelReason reason = 2;
 }
 
 // Sent by the worker to end registration gracefully before closing the
