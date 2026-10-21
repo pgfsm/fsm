@@ -41,7 +41,7 @@ IDENTITY = {
     "async_operation_language": "python",
 }
 
-DOUBLE = {**IDENTITY, "async_operation_name": "double", "handler": lambda i: {"doubled": i["n"] * 2}}
+DOUBLE = {**IDENTITY, "async_operation_name": "double", "handler": lambda i, _token: {"doubled": i["n"] * 2}}
 
 
 def _read(path: str) -> bytes:
@@ -199,7 +199,7 @@ class Gated:
         self.peak = 0
         self.started = 0
 
-    def handler(self, input_value):
+    def handler(self, input_value, _token):
         gate = threading.Event()
         with self._lock:
             self.started += 1

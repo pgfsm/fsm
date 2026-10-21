@@ -47,9 +47,23 @@ import grpc
 from pgfsm.sidecargateway.v1 import sidecar_gateway_pb2 as pb
 from pgfsm.sidecargateway.v1 import sidecar_gateway_pb2_grpc as pb_grpc
 
+from .cancellation import CancellationToken, cancel_reason_name
+
 logger = logging.getLogger("pgfsm.async_worker_sdk")
 
-ActorHandler = Callable[[Any], Any]
+#: An actor's handler: `handler(input, token)`, sync or async. The token is
+#: cancelled when the gateway cancels the invoke (SPEC-012) or the worker's
+#: session ends; check it and stop. After a cancel, a raise is reported as
+#: CANCELLED, and a return is still sent as the result, telling the gateway
+#: the work completed anyway.
+ActorHandler = Callable[[Any, CancellationToken], Any]
+
+#: The sidecar protocol this SDK speaks (SPEC-012: it honours Cancel). A 2.0
+#: gateway rejects 1.x workers.
+SIDECAR_PROTOCOL_VERSION = "2.0"
+
+# How often an invoke waiting for its actor's slot checks for a cancel.
+_SLOT_POLL_S = 0.05
 ActorRegistration = Dict[str, Any]
 
 DEFAULT_HEARTBEAT_MS = 5000
@@ -158,6 +172,36 @@ class _Session:
         self.done = threading.Event()
         self._worker_id = worker_id
         self._lock = threading.Lock()
+        # This session's running invokes, for Cancel (SPEC-012).
+        self._running: Dict[str, CancellationToken] = {}
+
+    def track(self, invoke_id: str) -> CancellationToken:
+        token = CancellationToken()
+        with self._lock:
+            self._running[invoke_id] = token
+        return token
+
+    def untrack(self, invoke_id: str, token: CancellationToken) -> None:
+        with self._lock:
+            if self._running.get(invoke_id) is token:
+                del self._running[invoke_id]
+
+    def cancel(self, invoke_id: str, reason: str) -> bool:
+        """Cancels a running invoke; False if it isn't running."""
+        with self._lock:
+            token = self._running.get(invoke_id)
+        if token is None:
+            return False
+        token._cancel(reason)
+        return True
+
+    def cancel_all(self, reason: str) -> int:
+        with self._lock:
+            tokens = list(self._running.values())
+            self._running.clear()
+        for token in tokens:
+            token._cancel(reason)
+        return len(tokens)
 
     def send(self, request: pb.SessionRequest) -> bool:
         """Queues `request`; False once the session is closed."""
@@ -462,7 +506,7 @@ class ActorWorker:
                 register=pb.Register(
                     worker_id=self.worker_id,
                     language=self.language,
-                    protocol_version="1.0",
+                    protocol_version=SIDECAR_PROTOCOL_VERSION,
                     actors=registered_actors,
                 )
             )
@@ -482,6 +526,14 @@ class ActorWorker:
                     f"expected register_ack but got {first.WhichOneof('payload')}"
                 )
             if not first.register_ack.accepted:
+                # Not retried: e.g. a gateway that doesn't speak this protocol
+                # version (SPEC-012) would just refuse it again.
+                logger.error(
+                    "The gateway rejected worker %s's registration (sidecar "
+                    "protocol %s); exiting",
+                    self.worker_id,
+                    SIDECAR_PROTOCOL_VERSION,
+                )
                 raise RegistrationRejectedError()
             session.registered = True
 
@@ -497,6 +549,14 @@ class ActorWorker:
 
             self._serve_loop(session, response_iter)
         finally:
+            # Their results can no longer be delivered: stop them.
+            cancelled = session.cancel_all("SHUTDOWN")
+            if cancelled:
+                logger.info(
+                    "Cancelling %d invoke(s) still running: their gateway "
+                    "session ended",
+                    cancelled,
+                )
             # Ends the request stream on every exit path (including a rejected
             # registration or a dropped connection) before the channel goes
             # away.
@@ -516,7 +576,18 @@ class ActorWorker:
         for response in response_iter:
             if self._stopped.is_set():
                 break
-            if response.WhichOneof("payload") != "invoke":
+            payload = response.WhichOneof("payload")
+            if payload == "cancel":
+                invoke_id = response.cancel.invoke_id
+                reason = cancel_reason_name(response.cancel.reason)
+                if session.cancel(invoke_id, reason):
+                    logger.info("Cancelling invoke %s: %s", invoke_id, reason)
+                else:
+                    # Already finished: its reply is on its way, and
+                    # acknowledges the cancel.
+                    logger.debug("Ignoring cancel of unknown invoke %s", invoke_id)
+                continue
+            if payload != "invoke":
                 continue
             body = response.invoke
             with self._lock:
@@ -525,8 +596,11 @@ class ActorWorker:
                     # Not run inline: invokes run concurrently, each actor
                     # bounded by its own slots (see _handle_invoke). Started
                     # under the lock so _drain never sees an unstarted thread.
+                    token = session.track(body.invoke_id)
                     thread = threading.Thread(
-                        target=self._run_invoke, args=(session, body), daemon=True
+                        target=self._run_invoke,
+                        args=(session, body, token),
+                        daemon=True,
                     )
                     self._in_flight.add(thread)
                     thread.start()
@@ -541,14 +615,19 @@ class ActorWorker:
                     retriable=True,
                 )
 
-    def _run_invoke(self, session: _Session, body: "pb.Invoke") -> None:
+    def _run_invoke(
+        self, session: _Session, body: "pb.Invoke", token: CancellationToken
+    ) -> None:
         try:
-            self._handle_invoke(session, body)
+            self._handle_invoke(session, body, token)
         finally:
+            session.untrack(body.invoke_id, token)
             with self._lock:
                 self._in_flight.discard(threading.current_thread())
 
-    def _handle_invoke(self, session: _Session, body: "pb.Invoke") -> None:
+    def _handle_invoke(
+        self, session: _Session, body: "pb.Invoke", token: CancellationToken
+    ) -> None:
         key = actor_key(
             body.parent_fsm_name,
             body.parent_fsm_version,
@@ -566,15 +645,25 @@ class ActorWorker:
 
         # Never run more of this actor than declared, even if the gateway
         # sends more (after its own invoke timeout, or through a direct
-        # Invoke() RPC).
-        with slots:
+        # Invoke() RPC). Cancelled while waiting for a slot: it never starts.
+        while not slots.acquire(timeout=_SLOT_POLL_S):
+            if token.cancelled:
+                _send_error(
+                    session,
+                    body.invoke_id,
+                    "CANCELLED",
+                    "cancelled before it started",
+                    key=key,
+                )
+                return
+        try:
             started = time.perf_counter()
             try:
                 input_value = _parse_input_json(body.input_json)
                 if asyncio.iscoroutinefunction(handler):
-                    output = asyncio.run(handler(input_value))
+                    output = asyncio.run(handler(input_value, token))
                 else:
-                    output = handler(input_value)
+                    output = handler(input_value, token)
                 duration_ms = max(0, round((time.perf_counter() - started) * 1000))
                 result = pb.SessionRequest(
                     invoke_result=pb.InvokeResult(
@@ -585,8 +674,13 @@ class ActorWorker:
                 )
             except Exception as exc:  # noqa: BLE001 — reported to the gateway, not raised
                 logger.debug("Actor %s failed: %s", key, exc, exc_info=True)
-                _send_error(session, body.invoke_id, "INTERNAL", str(exc), key=key)
+                # After a cancel, any failure acknowledges it as CANCELLED
+                # (SPEC-012), whatever the handler raised.
+                code = "CANCELLED" if token.cancelled else "INTERNAL"
+                _send_error(session, body.invoke_id, code, str(exc), key=key)
                 return
+        finally:
+            slots.release()
         if not session.send(result):
             _warn_session_gone(body.invoke_id, key)
 
