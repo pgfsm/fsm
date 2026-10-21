@@ -15,8 +15,8 @@ the named PGMQ queue to already exist (it does not create one — the caller is
 responsible, matching startFSMAsyncOperationWorker.ts's pgmqQueueExists guard),
 then polls it with a 30s visibility timeout, invokes the actor function for each
 message, and archives the result through
-fsm_core.archive_event_from_fsm_async_operation_type_worker_v2 — the same RPC the
-TypeScript async-operation worker calls — so parent-FSM routing behaves
+fsm_core.finish_async_operation_event_v2('completed', ...) — the same RPC the
+TypeScript async-operation worker calls (#548) — so parent-FSM routing behaves
 identically regardless of actor language. Spawned as a subprocess by
 asyncOperationWorkerlet.ts for lang="python" actors. Uses psycopg2
 (pip install psycopg2-binary).
@@ -90,11 +90,24 @@ def _process_message(cur, psycopg2_extras, queue_name, async_operation_queue_typ
 
     cur.execute(
         """
-        SELECT * FROM fsm_core.archive_event_from_fsm_async_operation_type_worker_v2(
-            %s::text, %s::text, %s::text, %s::bigint,
-            %s::text, %s::text, %s::jsonb, %s::integer,
-            %s::uuid, %s::text, %s::timestamptz, %s::integer,
-            %s::timestamptz, %s::text, %s::jsonb, %s::text
+        SELECT fsm_core.finish_async_operation_event_v2(
+            input_archive_reason := 'completed',
+            input_async_operation_queue_name := %s::text,
+            input_async_operation_queue_type := %s::text,
+            input_async_operation_queue_version := %s::text,
+            input_async_operation_queue_msg_id := %s::bigint,
+            input_event_name := %s::text,
+            input_event_action_type := %s::text,
+            input_event_data := %s::jsonb,
+            input_event_delay := %s::integer,
+            input_send_to_parent_queue_id := %s::uuid,
+            input_send_to_parent_queue_id_event_name := %s::text,
+            input_execution_started_at := %s::timestamptz,
+            input_execution_duration := %s::integer,
+            input_execution_finished_at := %s::timestamptz,
+            input_event_status := %s::text,
+            input_event_output := %s::jsonb,
+            input_error_message := %s::text
         )
         """,
         (

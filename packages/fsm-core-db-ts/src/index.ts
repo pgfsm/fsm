@@ -101,7 +101,6 @@ export type {
 } from "./30_async_operation_worker_v2/asyncOperationWorker.ts";
 
 export {
-  archiveEventFromFsmAsyncOperationTypeWorker,
   finishAsyncOperationEvent,
 } from "./30_async_operation_worker_v2/asyncOperationCtl.ts";
 

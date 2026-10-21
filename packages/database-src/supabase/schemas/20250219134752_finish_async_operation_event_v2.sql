@@ -4,9 +4,8 @@
 -- result or by a cancel. It replaces the two functions that each did their
 -- side effects whatever pgmq.archive returned:
 --   archive_event_from_fsm_async_operation_type_worker_v2  (completion)
---     now a deprecated wrapper over this one (below), kept for one release:
---     a gateway deployed before #533 calls it by name, and so do the v1
---     worker and @pgfsm/db's archiveEventFromFsmAsyncOperationTypeWorker
+--     a deprecated wrapper over this one for a release after #533, then
+--     dropped (#548): every caller now calls this function directly
 --   cancel_event_for_fsm_async_operation_type_worker_v2    (cancel)
 --     dropped (#533): stop_invoked_async_operation_v2 calls this function
 --     directly, and nothing else called it
@@ -195,49 +194,3 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
--- Deprecated (#533): finish_async_operation_event_v2('completed', ...). Kept
--- for the v1 worker (fsm-async-worker-ts), which calls it by name. Before
--- #533 it sent the result to the parent even when its archive returned false.
-CREATE OR REPLACE FUNCTION fsm_core.archive_event_from_fsm_async_operation_type_worker_v2(
-    input_async_operation_queue_name text,
-    input_async_operation_queue_type text,
-    input_async_operation_queue_version text,
-    input_async_operation_queue_msg_id bigint,
-    input_event_name text,
-    input_event_action_type text,
-    input_event_data jsonb,
-    input_event_delay integer,
-    input_send_to_parent_queue_id uuid,
-    input_send_to_parent_queue_id_event_name text,
-    input_execution_started_at timestamp with time zone,
-    input_execution_duration integer,
-    input_execution_finished_at timestamp with time zone,
-    input_event_status text,
-    input_event_output jsonb,
-    input_error_message text
-)
-RETURNS jsonb
-AS $$
-BEGIN
-    RETURN fsm_core.finish_async_operation_event_v2(
-        input_archive_reason := 'completed',
-        input_async_operation_queue_name := input_async_operation_queue_name,
-        input_async_operation_queue_msg_id := input_async_operation_queue_msg_id,
-        input_async_operation_queue_type := input_async_operation_queue_type,
-        input_async_operation_queue_version := input_async_operation_queue_version,
-        input_event_name := input_event_name,
-        input_event_action_type := input_event_action_type,
-        input_event_data := input_event_data,
-        input_event_delay := input_event_delay,
-        input_send_to_parent_queue_id := input_send_to_parent_queue_id,
-        input_send_to_parent_queue_id_event_name := input_send_to_parent_queue_id_event_name,
-        input_execution_started_at := input_execution_started_at,
-        input_execution_duration := input_execution_duration,
-        input_execution_finished_at := input_execution_finished_at,
-        input_event_status := input_event_status,
-        input_event_output := input_event_output,
-        input_error_message := input_error_message
-    );
-END;
-$$ LANGUAGE plpgsql;

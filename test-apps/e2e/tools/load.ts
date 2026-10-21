@@ -4,7 +4,7 @@
 //   activity tier alone (claim, gateway, workers, archive), for throughput,
 //   loss and connection counts. Messages name the system queue as their
 //   parent, so the gateway archives them without notifying an FSM instance
-//   (fsm_core.archive_event_from_fsm_async_operation_type_worker_v2), and each
+//   (fsm_core.finish_async_operation_event_v2), and each
 //   processed message leaves a row in fsm_core.fsm_async_operation_queue_event_logs.
 // - `instances` creates loadTest FSM instances (create_fsm_instance_from_name_v2):
 //   the full cycle, through the sync worker, all four actors and back. Each
