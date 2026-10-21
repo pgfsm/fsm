@@ -120,6 +120,12 @@ export async function makeTestTls(): Promise<{
     "-subj",
     "/CN=pgfsm-test-worker",
   ], dir);
+  // Without -extfile, OpenSSL before 3.2 (Ubuntu 24.04 has 3.0) signs an
+  // X.509 v1 certificate, which the gateway's rustls-backed TLS rejects (#579).
+  await Deno.writeTextFile(
+    `${dir}/client.ext`,
+    "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=clientAuth\n",
+  );
   await openssl([
     "x509",
     "-req",
@@ -134,6 +140,8 @@ export async function makeTestTls(): Promise<{
     "1",
     "-out",
     "client.crt",
+    "-extfile",
+    "client.ext",
   ], dir);
   return {
     dir,

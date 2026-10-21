@@ -39,14 +39,6 @@ jobs:
         run: deno lint
         continue-on-error: true
 
-      # DB-free unit suites only. The route/db integration tests
-      # (apps/fsm-core-ts-hono-deno/routes, apps/fsm-core-example) need a live
-      # Postgres + fsm_core extension and are excluded until a service
-      # container is wired up. The fsm-core-db-ts and fsm-sync-worker-ts test/
-      # dirs are included: their DB tests skip themselves without DATABASE_URL.
-      # Non-blocking: 8 CLI exit-code tests in
-      # packages/fsm-compiler-ts/test/cli.test.ts are currently red — remove
-      # `continue-on-error` once they're fixed so tests gate merges again.
       # Blocking: every pg import must carry `// @ts-types="@types/pg"`.
       # Without it pg is `any` here (CI has no deno.lock), and the type-check
       # below would pass while catching nothing pg-related (#479).
@@ -65,9 +57,12 @@ jobs:
           packages/fsm-ctl-ts/src/index.ts packages/fsm-ctl-ts/src/cli/pgfsmctl.ts packages/fsm-ctl-ts/test
           packages/fsm-sync-worker-ts/src/index.ts packages/fsm-sync-worker-ts/test
 
+      # Blocking (#579; it was continue-on-error while failures were left red).
+      # DB-free unit suites only: the DB-backed suites run in the Database job.
+      # The fsm-core-db-ts and fsm-sync-worker-ts test/ dirs are included
+      # because their DB tests skip themselves without DATABASE_URL.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test apps/fsm-core-ts-hono-deno/stoker-src
-        continue-on-error: true
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test apps/fsm-core-ts-hono-deno/stoker-src
 
   python-async-worker-sdk:
     name: Python async worker SDK (test · build)

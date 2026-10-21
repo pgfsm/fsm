@@ -49,7 +49,13 @@ export async function makeTestTls(): Promise<TestTls> {
         "/CN=localhost",
         "subjectAltName=DNS:localhost,IP:127.0.0.1\n",
       ],
-      ["client", "/CN=pgfsm-test-worker", ""],
+      // Never without extensions: OpenSSL before 3.2 (Ubuntu 24.04 has 3.0)
+      // then signs an X.509 v1 certificate, which rustls rejects (#579).
+      [
+        "client",
+        "/CN=pgfsm-test-worker",
+        "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=clientAuth\n",
+      ],
     ]
   ) {
     await openssl([
