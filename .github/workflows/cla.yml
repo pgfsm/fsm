@@ -34,7 +34,8 @@ jobs:
           branch: cla-signatures
           # The allowlist match is case-sensitive against the GitHub login;
           # keep both casings so a login-case mismatch never flags the owner.
-          allowlist: Nirajkashyap,nirajkashyap
+          # Dependency bots can't sign a CLA, so their PRs are exempt (#575).
+          allowlist: Nirajkashyap,nirajkashyap,renovate[bot],dependabot[bot]
 
           create-file-commit-message: "docs: store CLA signatures"
           signed-commit-message: "docs: $contributorName has signed the CLA in $owner/$repo#$pullRequestNo"
