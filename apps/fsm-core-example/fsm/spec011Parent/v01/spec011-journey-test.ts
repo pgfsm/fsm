@@ -197,7 +197,7 @@ async function actorEventsSent(pool: Pool, id: string): Promise<string[]> {
        AND event_source IS DISTINCT FROM 'internal'`,
     [id],
   );
-  return rows.map((r) => r.event_name);
+  return rows.map((r: { event_name: string }) => r.event_name);
 }
 
 /** Async-operation log rows for one actor since `since`, in no order. */
