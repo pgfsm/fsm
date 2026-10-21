@@ -171,6 +171,47 @@ Separately from concurrency, **handlers must be idempotent**: delivery is
 at-least-once, so an actor may run again for the same message (after a worker or
 gateway restart, a dropped connection, or a timeout).
 
+### Cancellation (SPEC-012)
+
+Every handler gets an `AbortSignal` as its second argument. It aborts when the
+gateway cancels the invoke, with an `InvokeCancelledError` as `signal.reason`
+whose `cancelReason` says why:
+
+| `cancelReason` | When                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `STATE_EXITED` | The FSM state that invoked this actor exited: nothing needs the result    |
+| `TIMEOUT`      | The gateway's invoke timeout ran out; the message will be delivered again |
+| `SHUTDOWN`     | The gateway is stopping, or this worker's session with it ended           |
+
+Cancellation is cooperative: the SDK can't stop JavaScript that ignores the
+signal. Pass it to anything that accepts one (`fetch`, timers, database drivers)
+and check it between steps:
+
+```ts
+import type { ActorHandler } from "@pgfsm/async-worker-sdk";
+
+const checkBureau: ActorHandler = async (input, signal) => {
+  const res = await fetch("https://bureau.example/check", {
+    method: "POST",
+    body: JSON.stringify(input),
+    signal,
+  });
+  signal.throwIfAborted();
+  return await res.json();
+};
+```
+
+After a cancel, a handler that **throws** is reported as `CANCELLED`, and one
+that **returns** still sends its result, which tells the gateway the work
+completed anyway. Either reply frees the invoke's concurrency slot: a handler
+that ignores the signal keeps its slot until it finishes. An invoke cancelled
+while still waiting for a slot never starts.
+
+This SDK speaks sidecar protocol **2.0**, which a 2.0 gateway requires. If the
+gateway rejects the registration (for example an older gateway), the worker logs
+an error and `run()` rejects with `RegistrationRejectedError`, so
+`runActorWorkerCli` exits 1 instead of reconnecting in a loop.
+
 ### Stopping
 
 `stop()` (and SIGINT/SIGTERM under `runActorWorkerCli`) drains: invokes that
@@ -192,7 +233,7 @@ const registrations: ActorRegistration[] = [{
   asyncOperationName: "checkBureau",
   asyncOperationVersion: "v01",
   asyncOperationLanguage: "typescript",
-  handler: (input) => ({ ok: true, input }),
+  handler: (input, signal) => ({ ok: !signal.aborted, input }),
 }];
 
 const worker = new ActorWorker(
@@ -212,8 +253,9 @@ Over TCP, pass `gatewayAddress` instead of `gatewaySocketPath`, plus `caFile`,
 `tokenFile`, `certFile`/`keyFile` as needed. Give a registration
 `maxConcurrency` to let that actor run several invokes at once.
 
-A handler that throws is reported to the gateway as an `INTERNAL` invoke error;
-an invoke for an actor this worker didn't register is reported as `NOT_FOUND`.
+A handler that throws is reported to the gateway as an `INTERNAL` invoke error
+(`CANCELLED` once its signal has aborted); an invoke for an actor this worker
+didn't register is reported as `NOT_FOUND`.
 
 ## License
 
