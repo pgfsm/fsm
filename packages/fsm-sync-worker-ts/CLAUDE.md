@@ -145,6 +145,27 @@ waiting. An `xstate.error.actor.*` event no transition takes sets status
 `error`, saving the event's payload as the instance's error, and the worker
 stops, as it does on `done`.
 
+## Discarded macrosteps and stopped instances (SPEC-011, #534)
+
+The archive can **discard** a macrostep: it throws away the transition the
+worker computed, instead of saving it, and changes nothing else. It does that
+when the instance isn't active (`instance_not_active`: stopped, done or error),
+when the pgmq message was already archived (`message_already_archived`: another
+worker got it after this one's visibility timeout and saved first, or a stop
+archived the queue), or when the internal event is no longer the queue's head
+(`internal_event_not_head`: another worker processed it). The result says
+`{discarded: true, discarded_reason, fsm_instance_status, ...}`;
+`archiveOutcome` (`src/fsmlet/internal-events.ts`) reads it, and the worker logs
+it and goes on. It is not an error. The full explanation is in SPEC-011,
+"Discarded macrosteps".
+
+The worker stops on any status that isn't active (`isActiveStatus`), and takes
+that status from the archive result, not from its own computation (the cycle cap
+can set `error`). A stopped instance's queue gets one `xstate.stop` message, so
+a worker waiting on it wakes up. When the instance it has just read isn't
+active, the worker doesn't run XState: it calls the archive, whose status gate
+archives the message, and returns.
+
 ## Startup FSM definition check (SPEC-006)
 
 Before `registerFsmlet`, `startFsmlet` calls `checkFsmDefinitions`

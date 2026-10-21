@@ -714,6 +714,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      archive_fsm_instance_queue_messages_v2: {
+        Args: { input_fsm_instance_id: string };
+        Returns: number[];
+      };
       async_operation_schedule_next_pending: {
         Args: { input_stale_threshold_seconds?: number };
         Returns: boolean;
@@ -843,6 +847,16 @@ export type Database = {
           input_fsm_version: string;
           input_parent_fsm_instance_id?: string;
           input_parent_invoke_id?: string;
+        };
+        Returns: Json;
+      };
+      discard_fsm_macrostep_v2: {
+        Args: {
+          input_instance_row:
+            Database["fsm_core"]["Tables"]["fsm_instance"]["Row"];
+          input_processed_internal_event: Json;
+          input_processed_queue_msg_id: number;
+          input_reason: string;
         };
         Returns: Json;
       };
@@ -1466,12 +1480,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      stop_child_fsm_v2: {
+        Args: { input_child_fsm_instance_id: string };
+        Returns: Json;
+      };
       stop_event_for_fsm_worker_v1: {
         Args: { input_fsm_instance_id: string };
         Returns: Json;
       };
       stop_event_for_fsm_worker_v2: {
         Args: { input_fsm_instance_id: string };
+        Returns: Json;
+      };
+      stop_fsm_instance_v2: {
+        Args: { input_event_name?: string; input_fsm_instance_id: string };
+        Returns: Json;
+      };
+      stop_invoked_async_operation_v2: {
+        Args: { input_entry: Json };
         Returns: Json;
       };
       test_event_transition_for_entry_v1: {

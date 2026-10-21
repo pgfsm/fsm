@@ -31,6 +31,54 @@ export function hasInternalEvents(archiveResult: Json): boolean {
 }
 
 /**
+ * Whether an instance status takes more events: `active`, or none yet (a new
+ * instance). `done`, `error` and `stopped` don't (SPEC-011, #534).
+ */
+export function isActiveStatus(status: Json | undefined): boolean {
+  return status === null || status === undefined || status === "active";
+}
+
+/**
+ * What an archive result says about the macrostep (SPEC-011, #534).
+ *
+ * `discarded`: the archive threw away the transition this worker computed
+ * instead of saving it, as if the event had never been processed. Nothing was
+ * cancelled, started or saved, and no parent was told. `reason` says why:
+ * - `instance_not_active`: the instance is stopped, done or error (a parent
+ *   stopped this child, or the worker woke on the `xstate.stop` a stop sends);
+ * - `message_already_archived`: the pgmq message was archived by someone else
+ *   (another worker got it after this one's visibility timeout and saved
+ *   first, or a stop archived the queue);
+ * - `internal_event_not_head`: the internal event is no longer the head of the
+ *   internal queue (another worker processed it).
+ * A discard is not an error: the event was handled, just not by this worker's
+ * transition.
+ *
+ * `status` is the instance's status after the archive, which can differ from
+ * the one the worker computed (the cycle cap sets `error`; a discard reports
+ * the row's status). `fallbackStatus` is used when the result has none (a
+ * database before #534).
+ */
+export function archiveOutcome(
+  archiveResult: Json,
+  fallbackStatus: Json,
+): { discarded: boolean; reason: string | null; status: Json } {
+  const result = archiveResult !== null && typeof archiveResult === "object" &&
+      !Array.isArray(archiveResult)
+    ? archiveResult
+    : {};
+  return {
+    discarded: result.discarded === true,
+    reason: typeof result.discarded_reason === "string"
+      ? result.discarded_reason
+      : null,
+    status: "fsm_instance_status" in result
+      ? result.fsm_instance_status ?? null
+      : fallbackStatus,
+  };
+}
+
+/**
  * An internal event in the shape of a message from the instance's queue, so
  * transition selection, guards and actions see it as they see any event. A
  * raised event is `{ eventType }`; it has no payload.
