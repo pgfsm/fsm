@@ -11,7 +11,7 @@ import {
   classifyFsmDefinitions,
   FsmDefinitionCheckError,
 } from "../src/fsmlet/fsm-definition-check.ts";
-import { startFsmlet } from "../src/fsmlet/fsmlet.ts";
+import { fsmModulesToServe, startFsmlet } from "../src/fsmlet/fsmlet.ts";
 import type { SyncOperationRegistration } from "../src/fsmlet/type.ts";
 
 const mod = (fsm_name: string) => ({ fsm_name, fsm_version: "v1" });
@@ -93,6 +93,45 @@ Deno.test("startFsmlet requires fsmDefinitions before opening a connection", asy
   );
 });
 
+Deno.test("fsmModulesToServe: every FSM_DEFINITIONS entry, actor-only FSMs too (#497)", () => {
+  const digest = (fsmName: string) => ({
+    fsmName,
+    fsmVersion: "v1",
+    fsmJsonSha256: "x",
+  });
+  const op = (fsmName: string): SyncOperationRegistration => ({
+    fsmName,
+    fsmVersion: "v1",
+    syncOperationType: "action",
+    syncOperationName: "noop",
+    syncOperationLanguage: "typescript",
+    handler: () => undefined,
+  });
+  // actorOnly has no sync operations; withOps has two; orphan has no
+  // definition, and stays so the definition check reports it.
+  assertEquals(
+    fsmModulesToServe(
+      [op("withOps"), op("withOps"), op("orphan")],
+      [digest("actorOnly"), digest("withOps")],
+    ),
+    [mod("actorOnly"), mod("withOps"), mod("orphan")],
+  );
+  assertEquals(fsmModulesToServe([], []), []);
+});
+
+Deno.test("startFsmlet refuses to start with no FSMs at all (#497)", async () => {
+  await assertRejects(
+    () =>
+      startFsmlet(
+        { connectionString: "postgresql://nobody@127.0.0.1:1/none" },
+        [],
+        [],
+      ),
+    Error,
+    "no FSMs to serve",
+  );
+});
+
 // --- Integration: needs a pgfsm database (DATABASE_URL), e.g. local Supabase.
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL");
@@ -170,6 +209,44 @@ Deno.test(
         FsmDefinitionCheckError,
         `${name}/v1: drifted`,
       );
+    } finally {
+      await pool.query(
+        "DELETE FROM fsm_core.fsm_states WHERE fsm_name = $1",
+        [name],
+      );
+      await pool.query("DELETE FROM fsm_core.fsm_json WHERE fsm_name = $1", [
+        name,
+      ]);
+      await pool.end();
+    }
+  },
+);
+
+Deno.test(
+  "startFsmlet serves an actor-only FSM, with no sync operations (#497)",
+  integration,
+  async () => {
+    const name = `fsm497_actor_only_${crypto.randomUUID().slice(0, 8)}`;
+    const pool = new Pool({ connectionString: DATABASE_URL });
+    const controller = new AbortController();
+    try {
+      await loadFsmDefinitions({ db: pool, useSupabase: false }, [
+        { fsmName: name, fsmVersion: "v1", fsmJson: machine(name) },
+      ]);
+      const handle = await startFsmlet(
+        { connectionString: DATABASE_URL! },
+        [],
+        [{
+          fsmName: name,
+          fsmVersion: "v1",
+          fsmJsonSha256: await fsmJsonDigest(machine(name)),
+        }],
+        { signal: controller.signal },
+      );
+      assertEquals(handle.registeredFsmModules, [mod(name)]);
+      controller.abort();
+      await handle.daemon;
+      await handle.pool?.end();
     } finally {
       await pool.query(
         "DELETE FROM fsm_core.fsm_states WHERE fsm_name = $1",

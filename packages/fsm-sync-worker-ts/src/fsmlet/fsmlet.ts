@@ -30,18 +30,28 @@ const FALLBACK_POLL_INTERVAL_MS = 30_000;
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** Every distinct `<fsmName>/<fsmVersion>` pair present in `registrations`, first-seen order. */
-function distinctFsmModules(
+/**
+ * The FSM versions an fsmlet serves: every one in `definitions` (the
+ * generated `FSM_DEFINITIONS`), then any other that only `registrations`
+ * names, first-seen order. An FSM whose states only invoke actors has no
+ * sync operations, so it appears in `definitions` alone (#497). One that only
+ * `registrations` names is kept so the definition check reports it as
+ * missing from `FSM_DEFINITIONS`.
+ */
+export function fsmModulesToServe(
   registrations: SyncOperationRegistration[],
+  definitions: FsmDefinitionDigest[],
 ): FsmModule[] {
   const seen = new Set<string>();
   const modules: FsmModule[] = [];
-  for (const r of registrations) {
-    const key = `${r.fsmName}/${r.fsmVersion}`;
-    if (seen.has(key)) continue;
+  const add = (fsmName: string, fsmVersion: string) => {
+    const key = `${fsmName}/${fsmVersion}`;
+    if (seen.has(key)) return;
     seen.add(key);
-    modules.push({ fsm_name: r.fsmName, fsm_version: r.fsmVersion });
-  }
+    modules.push({ fsm_name: fsmName, fsm_version: fsmVersion });
+  };
+  for (const d of definitions) add(d.fsmName, d.fsmVersion);
+  for (const r of registrations) add(r.fsmName, r.fsmVersion);
   return modules;
 }
 
@@ -74,11 +84,12 @@ class Semaphore {
 /**
  * FSM fsmlet — node agent (kubelet equivalent).
  *
- * FSM modules served by this fsmlet come directly from the
- * `syncOperationRegistrations` the caller passes in — normally the
- * compiler-generated `SYNC_OPERATION_REGISTRATIONS` aggregate registry (see
- * fsm-compiler-ts #338), imported by the caller and handed straight through —
- * every `<fsmName>/<fsmVersion>` in it is this fsmlet's full workload. There
+ * FSM modules served by this fsmlet are every `<fsmName>/<fsmVersion>` in
+ * the `fsmDefinitions` the caller passes in (the compiler-generated
+ * `FSM_DEFINITIONS`), including actor-only FSMs with no sync operations
+ * (#497), plus any other the `syncOperationRegistrations` name (normally the
+ * generated `SYNC_OPERATION_REGISTRATIONS`, see fsm-compiler-ts #338). That
+ * is this fsmlet's full workload; see `fsmModulesToServe`. There
  * is deliberately no discovery/validation pass, no async-operation-actor
  * registry verification (assumed unnecessary for now — a project's FSMs and
  * their actors are trusted once compiled), and no per-fsmlet
@@ -92,8 +103,7 @@ class Semaphore {
  *      compiled from (`fsmDefinitions`, the compiler-generated
  *      `FSM_DEFINITIONS`); throws before registering otherwise (SPEC-006).
  *      The check is mandatory: there is no way to turn it off.
- *   1. Registers itself with every FSM module in `syncOperationRegistrations`
- *      in fsm_workerlet.
+ *   1. Registers itself with every FSM module it serves in fsm_workerlet.
  *   2. Opens a dedicated LISTEN connection for two channels:
  *        fsm_fsmlet_work_<id>  — scheduler routed work here
  *        fsm_worker_stop       — abort a specific running worker
@@ -131,10 +141,13 @@ export async function startFsmlet(
     { fsmletId, max: maxConcurrency },
   );
 
-  const registeredFsmModules = distinctFsmModules(syncOperationRegistrations);
+  const registeredFsmModules = fsmModulesToServe(
+    syncOperationRegistrations,
+    fsmDefinitions,
+  );
   if (registeredFsmModules.length === 0) {
     throw new Error(
-      `Fsmlet ${fsmletId}: no FSM modules found in the aggregate sync-operation registry.`,
+      `Fsmlet ${fsmletId}: no FSMs to serve: FSM_DEFINITIONS and the sync-operation registry are both empty.`,
     );
   }
 

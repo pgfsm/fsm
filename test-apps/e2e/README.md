@@ -32,8 +32,10 @@ deno run -A tools/load.ts stats --run-id run1 --wait 300 [--json]
 Throughput is bounded by the gateway's poll loop: it claims each actor's free
 slots once per `--poll-interval-ms`, so use a short interval when measuring.
 
-`recordFinished` is also what lets the sync worker serve `loadTest` at all: it
-only serves FSMs with at least one sync operation.
+`recordFinished` also let `@pgfsm/sync-worker` 0.4.0 and earlier serve
+`loadTest` at all: they only served FSMs with at least one sync operation. From
+0.4.1 (#497) the sync worker serves every FSM in `FSM_DEFINITIONS`, actor-only
+ones too.
 
 The source of `loadTest` is `fsm/loadTest/v01/fsm.json`. After editing it,
 regenerate with the local CLI (from this directory):

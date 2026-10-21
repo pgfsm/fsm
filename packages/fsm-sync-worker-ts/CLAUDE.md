@@ -82,6 +82,11 @@ and their actors are trusted once compiled), and no `loadFsmFromJson` call —
 FSMs are loaded by a separate deploy step, `pgfsmctl fsm load` (SPEC-006). What
 it does do (SPEC-006, see the next section) is check, read-only, that they were.
 
+The FSMs it serves are every one in `FSM_DEFINITIONS` (the third argument), plus
+any other the registrations name (`fsmModulesToServe`). Before #497 they came
+from the registrations alone, so an actor-only FSM (no actions, guards or
+delays) was never served and a project of only such FSMs refused to start.
+
 Instead, `fsmlet.ts` statically imports the compiler-generated aggregate
 registry directly:
 
