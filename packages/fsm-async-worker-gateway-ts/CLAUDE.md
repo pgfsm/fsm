@@ -241,7 +241,10 @@ Install section, which documents this. Same issue applies to
   `listPendingMessages()` isn't empty. Started by `startActivityGatewayServer`
   with the poll loop. Unit tests in `test/cancel_detection_test.ts`; LISTEN
   timing, the sweep, a killed listener and two replicas against a real database
-  in `test/cancel_detection_db_test.ts` (needs `DATABASE_URL`).
+  in `test/cancel_detection_db_test.ts` (needs `DATABASE_URL`). CI runs both
+  DB-backed files here (this one and `poll_loop_capacity_db_test.ts`) in the
+  Database job's DB-backed Deno step; the Deno job runs the rest without a
+  database.
 - `asyncOpPollLoop.ts` — the Postgres poll/claim/archive loop. It claims at most
   each actor's free slots via
   `claim_pending_async_operation_events_with_capacity_v2`, with a visibility
