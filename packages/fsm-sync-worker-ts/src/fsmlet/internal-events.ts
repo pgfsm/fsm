@@ -84,7 +84,10 @@ export function archiveOutcome(
 /**
  * An internal event in the shape of a message from the instance's queue, so
  * transition selection, guards and actions see it as they see any event. A
- * raised event is `{ eventType }`; it has no payload.
+ * raised event is `{ eventType }`; it has no payload. The `internalEventId`
+ * the archive gives it (#546) stays out of the message: it is only the
+ * event's identity for the archive's gate, which gets the event back as the
+ * worker read it (`processed_internal_event`).
  */
 export function internalEventMessage(
   event: Json,
