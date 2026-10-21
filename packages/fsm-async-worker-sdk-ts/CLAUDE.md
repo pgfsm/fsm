@@ -119,6 +119,33 @@ plaintext, worker-wide and per-actor concurrency, drain, max-age reconnect),
 with TLS fixtures made by `openssl` at test time (`test/tls_fixture.ts`; no
 committed keys).
 
+## Cancel (SPEC-012 (d), #540)
+
+- **Handler signature** `(input, signal: AbortSignal)`: every handler gets the
+  signal (a handler declared with one parameter still type-checks).
+  `signal.reason` is an `InvokeCancelledError` whose `cancelReason` is the
+  proto's `CancelReason` by name. `CANCEL_REASON` mirrors the generated enum,
+  for the same reason the gateway has its own (`proto3.makeEnum` types it
+  `string | number`); `test/cancel.test.ts` pins the two together.
+- **Per session**, `runSession` keeps a `Map<invokeId, AbortController>`.
+  `Cancel` aborts that invoke's controller (an unknown id is ignored: the invoke
+  already replied). When the session ends, its `finally` aborts every one still
+  running with `SHUTDOWN`; their results are then dropped by
+  `warnIfSessionGone`.
+- **Replies after a cancel:** a throw is sent as `CANCELLED` (non-retriable), a
+  return as `InvokeResult`; either acknowledges the cancel and frees the
+  gateway's slot. `Semaphore.acquire(signal)` stops waiting on abort, so an
+  invoke cancelled while queued for a slot replies `CANCELLED` at once and never
+  runs.
+- **Protocol** `SIDECAR_PROTOCOL_VERSION = "2.0"`. A rejected registration is
+  logged as an error and is fatal (`RegistrationRejectedError`), so the CLI
+  exits 1. Python, Rust and Go follow in #541–#543; keep the rules the same.
+
+Tests: `test/cancel.test.ts`, against a real in-process gateway
+(`cancelByMessage`, an invoke timeout, `onCancelAcknowledged`'s outcome) and a
+scripted sidecar (session end, an unknown cancel, a cancel while queued, a
+rejected registration).
+
 ## Environment variables (#438)
 
 Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
