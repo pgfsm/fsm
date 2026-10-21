@@ -7,10 +7,17 @@ on:
   schedule:
     - cron: "30 4 * * 1" # weekly, Monday 04:30 UTC
 
+# Same scheme as ci.yml: a new PR push cancels the older run; push/schedule
+# runs never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       security-events: write # upload results to the Security tab
       contents: read
