@@ -848,6 +848,7 @@ export type Database = {
           input_instance_row:
             Database["fsm_core"]["Tables"]["fsm_instance"]["Row"];
           input_processed_internal_event: Json;
+          input_processed_message?: Json;
           input_processed_queue_msg_id: number;
           input_reason: string;
         };

@@ -50,7 +50,10 @@ export function isActiveStatus(status: Json | undefined): boolean {
  *   (another worker got it after this one's visibility timeout and saved
  *   first, or a stop archived the queue);
  * - `internal_event_not_head`: the internal event is no longer the head of the
- *   internal queue (another worker processed it).
+ *   internal queue (another worker processed it);
+ * - `stale_actor_event`: a done/error actor event whose source is not an invoke
+ *   the instance still holds, the result of an earlier invoke under the same
+ *   id (#535).
  * A discard is not an error: the event was handled, just not by this worker's
  * transition.
  *

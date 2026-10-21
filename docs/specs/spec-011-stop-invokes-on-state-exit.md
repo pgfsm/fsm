@@ -322,8 +322,8 @@ lock first):
 - **The macrostep wins:** it saves normally. The stop then runs on the saved
   state and stops whatever that macrostep started.
 
-The same sequence as a flow. The three red exits are the discards (see
-"Discarded macrosteps" below); everything after them is skipped.
+The same sequence as a flow. The four red exits are the discards (see "Discarded
+macrosteps" below); everything after them is skipped.
 
 ```mermaid
 flowchart TD
@@ -336,7 +336,7 @@ flowchart TD
     pop["Remove it from the queue<br/>internal_event_count + 1"]
     arch{"pgmq.archive(msg_id)<br/>returns true?"}
     reset["internal_event_count = 0"]
-    s4["4 · Stale done/error actor event check<br/>(SPEC-011 (c), #535)"]
+    s4{"4 · A done/error actor event with a source:<br/>is it an invoke the instance still holds?<br/>(same invoke_id, queue_id, queue_msg_id)"}
     s5["5 · Exit side, from the row's totals<br/>a: archive cancelled schedules<br/>b: stop exited invokes (stop_invoked_async_operation_v2)"]
     s6{"6 · Final status<br/>(the cycle cap can set error)"}
     s7["7 · Entry side<br/>a: schedule delayed events<br/>b: start invokes (start_invoked_async_operation_v2)"]
@@ -350,6 +350,7 @@ flowchart TD
     x1(["Discard: instance_not_active"])
     x2(["Discard: internal_event_not_head"])
     x3(["Discard: message_already_archived"])
+    x4(["Discard: stale_actor_event"])
     log["Log one 'discarded' row; return<br/>{discarded: true, discarded_reason, fsm_instance_status, internal_event_queue}"]
 
     start --> s1 --> s2
@@ -362,7 +363,8 @@ flowchart TD
     arch -- "false: already archived" --> x3
     arch -- true --> reset --> s4
     src -- "neither (direct SQL call): not gated" --> s4
-    s4 --> s5 --> s6
+    s4 -- "no: an earlier invoke's result" --> x4
+    s4 -- "yes, or not such an event" --> s5 --> s6
     s6 -- active --> s7 --> s9
     s6 -- "done / error" --> s8 --> s9
     s9 --> s10 --> s11
@@ -371,14 +373,15 @@ flowchart TD
     x1 --> log
     x2 --> log
     x3 --> log
+    x4 --> log
 
     classDef discard fill:#fde2e1,stroke:#c0392b,color:#7b241c
-    class x1,x2,x3,log discard
+    class x1,x2,x3,x4,log discard
 ```
 
 ### Discarded macrosteps
 
-Steps 2 and 3 of the target sequence decide whether a macrostep is applied at
+Steps 2 to 4 of the target sequence decide whether a macrostep is applied at
 all. The fsmlet has already run XState and computed a transition (new state and
 context, schedules and invokes to stop and start) before it calls the archive.
 **Discarding** throws that result away instead of saving it, as if the event had
@@ -391,13 +394,14 @@ returns
 internal_event_queue}`,
 and the fsmlet treats that as success, not as an error.
 
-A macrostep is discarded, instead of applied, in three cases:
+A macrostep is discarded, instead of applied, in four cases:
 
-| Case                                                    | Check                                                                   | `discarded_reason`         | When it happens                                                                                                                                                                                      |
-| ------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The instance isn't active                               | Step 2: the row's status (none yet counts as `active`) isn't `active`   | `instance_not_active`      | The row is `stopped`, `done` or `error`. Usually a parent stopped this child while its fsmlet was computing a macrostep, or the fsmlet is reading the `xstate.stop` message a stop sends to wake it. |
-| Its pgmq message was already archived                   | Step 3: `pgmq.archive(msg_id)` returns false                            | `message_already_archived` | Another fsmlet got the same message after this one's visibility timeout (or crash) and saved first, or a stop archived the whole queue.                                                              |
-| Its internal event isn't the head of the internal queue | Step 3: the processed internal event differs from the queue's first one | `internal_event_not_head`  | Another fsmlet already processed and removed it. Before #534 this raised an exception.                                                                                                               |
+| Case                                                    | Check                                                                                                                                            | `discarded_reason`         | When it happens                                                                                                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The instance isn't active                               | Step 2: the row's status (none yet counts as `active`) isn't `active`                                                                            | `instance_not_active`      | The row is `stopped`, `done` or `error`. Usually a parent stopped this child while its fsmlet was computing a macrostep, or the fsmlet is reading the `xstate.stop` message a stop sends to wake it. |
+| Its pgmq message was already archived                   | Step 3: `pgmq.archive(msg_id)` returns false                                                                                                     | `message_already_archived` | Another fsmlet got the same message after this one's visibility timeout (or crash) and saved first, or a stop archived the whole queue.                                                              |
+| Its internal event isn't the head of the internal queue | Step 3: the processed internal event differs from the queue's first one                                                                          | `internal_event_not_head`  | Another fsmlet already processed and removed it. Before #534 this raised an exception.                                                                                                               |
+| It is a stale actor result                              | Step 4: a done/error actor event's `source` matches no entry of the row's totals (same `invoke_id`, `queue_id`, and `queue_msg_id` for an actor) | `stale_actor_event`        | The result of an earlier invoke under the same id: the invoking state was exited (and maybe re-entered) before or after the result was queued (#535).                                                |
 
 Details:
 

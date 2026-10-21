@@ -1,5 +1,5 @@
 begin;
-select plan(63);
+select plan(74);
 
 select has_function('fsm_core', 'start_async_operation_for_worker_v2',
   ARRAY['text', 'text', 'jsonb', 'text', 'text', 'text', 'text', 'uuid', 'text', 'text'],
@@ -719,6 +719,119 @@ select is(
   (select queue_length::int from pgmq.metrics('a5340005-0000-0000-0000-000000000000')),
   0,
   'the parent''s queue is still empty'
+);
+
+-- ============================================================
+-- SPEC-011 (c), #535: stale done/error actor events. The parent holds an
+-- actor invoke X (its current message is 2 on st535_v1_i_w_t) and a child
+-- FSM invoke C (the child a5350002-...).
+-- ============================================================
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, total_async_operation_queue_data)
+values ('a5350001-0000-0000-0000-000000000000'::uuid, 'st535', 'v1',
+  '[{"invoke_id": "X", "src": "w", "async_operation_type": "internalAsyncOperation",
+     "queue_id": "st535_v1_i_w_t", "queue_msg_id": 2},
+    {"invoke_id": "C", "src": "kid535", "async_operation_type": "fsm",
+     "queue_id": "a5350002-0000-0000-0000-000000000000", "queue_msg_id": 1}]'::jsonb);
+select pgmq.create(queue_name := 'a5350001-0000-0000-0000-000000000000');
+
+-- Sends eventType to the parent with the given source (NULL: none), returns
+-- its message id.
+create function pg_temp.send535(event_type text, source jsonb) returns bigint language sql as $$
+  select (fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+    input_fsm_instance_id := 'a5350001-0000-0000-0000-000000000000'::uuid,
+    input_fsm_instance_id_fsm_type := 'st535', input_fsm_instance_id_fsm_version := 'v1',
+    input_event_name := event_type, input_event_action_type := 'async_operation_completed',
+    input_event_data := '{}'::jsonb, input_event_source := source)->'queue_data'->>'queueMsgId')::bigint
+$$;
+-- Saves a macrostep for that message with the given state; returns the result.
+create function pg_temp.save535(msg_id bigint, state jsonb) returns jsonb language sql as $$
+  select fsm_core.archive_event_from_fsm_type_worker_v2(
+    'a5350001-0000-0000-0000-000000000000', msg_id, NULL, NULL, NULL, NULL, NULL, NULL,
+    '"active"'::jsonb, state, '{}'::jsonb, '{}'::jsonb)
+$$;
+
+select results_eq(
+  $$ select (r->>'discarded')::boolean, r->>'discarded_reason'
+     from pg_temp.save535(pg_temp.send535('xstate.done.actor.X',
+       '{"invoke_id": "X", "queue_id": "st535_v1_i_w_t", "queue_msg_id": 1}'::jsonb), '{"s": "stale X"}'::jsonb) r $$,
+  $$ values (true, 'stale_actor_event'::text) $$,
+  'an actor result from an earlier invoke under the same id (queue_msg_id 1, not 2) is discarded (#535)'
+);
+select results_eq(
+  $$ select l.event_name, l.event_data->'source'->>'queue_msg_id', l.event_status
+     from fsm_core.fsm_instance_queue_event_logs l
+     where l.fsm_instance_id = 'a5350001-0000-0000-0000-000000000000'::uuid and l.event_status = 'discarded' $$,
+  $$ values ('xstate.done.actor.X'::text, '1'::text, 'discarded'::text) $$,
+  'the discard is logged under the dropped event, with its source (#535)'
+);
+select results_eq(
+  $$ select fsm_instance_state, jsonb_array_length(total_async_operation_queue_data)
+     from fsm_core.fsm_instance where id = 'a5350001-0000-0000-0000-000000000000'::uuid $$,
+  $$ values (NULL::jsonb, 2) $$,
+  'a stale result changes nothing: no state saved, both invokes still held (#535)'
+);
+select results_eq(
+  $$ select (r->>'discarded')::boolean
+     from pg_temp.save535(pg_temp.send535('xstate.done.actor.X',
+       '{"invoke_id": "X", "queue_id": "st535_v1_i_w_t", "queue_msg_id": 2}'::jsonb), '{"s": "current X"}'::jsonb) r $$,
+  $$ values (false) $$,
+  'the result of the invoke the parent holds is applied (#535)'
+);
+-- Read in its own statement: one statement doesn't see what a function it
+-- calls has saved.
+select results_eq(
+  $$ select fsm_instance_state from fsm_core.fsm_instance where id = 'a5350001-0000-0000-0000-000000000000'::uuid $$,
+  $$ values ('{"s": "current X"}'::jsonb) $$,
+  'its state is saved (#535)'
+);
+select results_eq(
+  $$ select r->>'discarded_reason'
+     from pg_temp.save535(pg_temp.send535('xstate.error.actor.C',
+       '{"invoke_id": "C", "queue_id": "a5359999-0000-0000-0000-000000000000"}'::jsonb), '{"s": "stale C"}'::jsonb) r $$,
+  $$ values ('stale_actor_event'::text) $$,
+  'a child''s result from another child instance under the same invoke id is discarded, error events too (#535)'
+);
+select results_eq(
+  $$ select (r->>'discarded')::boolean
+     from pg_temp.save535(pg_temp.send535('xstate.done.actor.C',
+       '{"invoke_id": "C", "queue_id": "a5350002-0000-0000-0000-000000000000"}'::jsonb), '{"s": "current C"}'::jsonb) r $$,
+  $$ values (false) $$,
+  'the result of the child the parent holds is applied (#535)'
+);
+select results_eq(
+  $$ select r->>'discarded_reason'
+     from pg_temp.save535(pg_temp.send535('xstate.done.actor.Q',
+       '{"invoke_id": "Q", "queue_id": "st535_v1_i_q_t", "queue_msg_id": 7}'::jsonb), '{"s": "exited"}'::jsonb) r $$,
+  $$ values ('stale_actor_event'::text) $$,
+  'a result for an invoke the parent no longer holds at all (its state exited) is discarded (#535)'
+);
+select results_eq(
+  $$ select (r->>'discarded')::boolean
+     from pg_temp.save535(pg_temp.send535('xstate.done.actor.Z', NULL), '{"s": "no source"}'::jsonb) r $$,
+  $$ values (false) $$,
+  'a result without a source (sent before #533, or by the API) is processed as before (#535)'
+);
+select results_eq(
+  $$ select (r->>'discarded')::boolean
+     from pg_temp.save535(pg_temp.send535('ORDER_PLACED',
+       '{"invoke_id": "nope", "queue_id": "nope"}'::jsonb), '{"s": "external"}'::jsonb) r $$,
+  $$ values (false) $$,
+  'only done/error actor events are checked: another event with a source is processed (#535)'
+);
+
+-- Step 11: a child's result carries the source its parent's entry names.
+insert into fsm_core.fsm_instance (id, fsm_name, fsm_version, parent_fsm_instance_id, parent_invoke_id)
+values ('a5350002-0000-0000-0000-000000000000'::uuid, 'kid535', 'v1',
+  'a5350001-0000-0000-0000-000000000000'::uuid, 'C');
+select pgmq.create(queue_name := 'a5350002-0000-0000-0000-000000000000');
+select pgmq.send(queue_name := 'a5350002-0000-0000-0000-000000000000', msg := '{"finish": 1}'::jsonb);
+select results_eq(
+  $$ select r->'parent_notify_result'->'queue_data'->'source'
+     from fsm_core.archive_event_from_fsm_type_worker_v2(
+       'a5350002-0000-0000-0000-000000000000', 1::bigint, NULL, NULL, NULL, NULL, NULL, NULL,
+       '"done"'::jsonb, '"Done"'::jsonb, '{}'::jsonb, '{}'::jsonb) r $$,
+  $$ values ('{"invoke_id": "C", "queue_id": "a5350002-0000-0000-0000-000000000000"}'::jsonb) $$,
+  'a child FSM''s done event carries {invoke_id, queue_id: <child id>}, matching its parent''s entry (#535)'
 );
 
 select * from finish();
