@@ -37,6 +37,9 @@ const args = parseArgs(Deno.args, {
     "max-delivery-attempts",
     "db-url",
     "poll-interval-ms",
+    "listen-db-url",
+    "cancel-sweep-interval-ms",
+    "cancel-ack-grace-ms",
   ],
   // Several accepted tokens, e.g. old and new during a rotation (#429).
   collect: ["auth-token-file"],
@@ -96,6 +99,12 @@ OPTIONS
   -d, --db-url <url>               Database connection URL (overrides DATABASE_URL from .env)
   --poll-interval-ms <ms>          Async-op poll loop interval (default: 30000)
   --disable-poll-loop              Don't start the poll loop -- gateway/sidecar only
+  --listen-db-url <url>            Direct (not transaction-pooled) connection to LISTEN for cancelled invokes
+                                   on (overrides PGFSM_LISTEN_DB_URL; default: none, sweep only)
+  --cancel-sweep-interval-ms <ms>  How often to check in-flight invokes' messages are still queued
+                                   (default: 5000; 0 turns the sweep off)
+  --cancel-ack-grace-ms <ms>       Warn when a cancelled invoke's worker hasn't replied after this long
+                                   (default: 30000; 0 turns the warning off)
   --ensure-queue-on-register       Ensure a PGMQ queue exists for every actor a worker registers (default: off)
   -v, --version                    Print @pgfsm/async-worker-gateway's version and exit
   -h, --help                       Show this help message
@@ -157,6 +166,12 @@ const keepaliveIntervalMs = integerFlag("keepalive-interval-ms");
 const keepaliveTimeoutMs = integerFlag("keepalive-timeout-ms", 1);
 const vtMarginSeconds = integerFlag("vt-margin-seconds");
 const maxDeliveryAttempts = integerFlag("max-delivery-attempts", 1);
+const cancelSweepIntervalMs = integerFlag("cancel-sweep-interval-ms");
+const cancelAckGraceMs = integerFlag("cancel-ack-grace-ms");
+// LISTEN needs a direct connection: never derived from --db-url, which may
+// be a transaction pooler's (SPEC-007, SPEC-012).
+const listenDbUrl = args["listen-db-url"] ??
+  (Deno.env.get("PGFSM_LISTEN_DB_URL") || undefined);
 
 // With neither --sidecar-socket nor --sidecar-listen, serve today's default
 // socket, so a plain `async-operation-worker-gateway` behaves as before.
@@ -250,6 +265,9 @@ let asyncOpPollLoopOption:
   }
   | undefined;
 let ensureQueueOnRegisterOption: { deps: DBDeps } | undefined;
+let cancelDetectionOption:
+  | { deps: DBDeps; listenDbUrl?: string; sweepIntervalMs?: number }
+  | undefined;
 
 if (needsDb) {
   const resolvedDbUrl = args["db-url"] ?? Deno.env.get("DATABASE_URL") ?? "";
@@ -280,6 +298,12 @@ if (needsDb) {
       invokeTimeoutMs: defaultInvokeTimeoutMs,
       vtMarginSeconds,
       maxDeliveryAttempts,
+    };
+    // Only the poll loop's invokes run queue messages a cancel can name.
+    cancelDetectionOption = {
+      deps,
+      listenDbUrl,
+      sweepIntervalMs: cancelSweepIntervalMs,
     };
   }
 
@@ -330,6 +354,8 @@ try {
     signal: controller.signal,
     asyncOpPollLoop: asyncOpPollLoopOption,
     ensureQueueOnRegister: ensureQueueOnRegisterOption,
+    cancelDetection: cancelDetectionOption,
+    cancelAckGraceMs,
   });
   logger.info("Activity gateway stopped.");
 } catch (err) {

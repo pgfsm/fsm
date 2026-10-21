@@ -930,6 +930,23 @@ export class SidecarGateway {
   }
 
   /**
+   * The queue messages of the invokes this gateway is running and hasn't
+   * cancelled yet (SPEC-012 (b)): what the sweep checks are still queued.
+   * Distinct; empty when nothing is in flight.
+   */
+  listPendingMessages(): InvokeMessage[] {
+    const messages = new Map<string, InvokeMessage>();
+    for (const worker of this.workers.values()) {
+      for (const pending of worker.pendingByInvokeId.values()) {
+        if (pending.message && !pending.cancelling) {
+          messages.set(messageKey(pending.message), pending.message);
+        }
+      }
+    }
+    return [...messages.values()];
+  }
+
+  /**
    * Sends Cancel{reason} for one in-flight invoke and settles its promise
    * with `error` (SPEC-012). The invoke stays in pendingByInvokeId, holding
    * its slot, until the worker replies; after cancelAckGraceMs without a

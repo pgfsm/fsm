@@ -1,4 +1,15 @@
 export { startActivityGatewayServer } from "./gatewayServer.ts";
+export {
+  CANCEL_CHANNEL,
+  DEFAULT_CANCEL_SWEEP_INTERVAL_MS,
+  parseCancelNotification,
+  startCancelDetection,
+  sweepOnce,
+} from "./cancelDetection.ts";
+export type {
+  CancelDetection,
+  CancelDetectionOptions,
+} from "./cancelDetection.ts";
 export type { GatewayServerOptions } from "./gatewayServer.ts";
 export {
   ActivityGatewayClient,
