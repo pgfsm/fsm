@@ -1,9 +1,8 @@
 begin;
 select plan(19);
 
-select has_function('fsm_core', 'archive_event_from_fsm_async_operation_type_worker_v2',
-  ARRAY['text', 'text', 'text', 'bigint', 'text', 'text', 'jsonb', 'integer', 'uuid', 'text', 'timestamptz', 'integer', 'timestamptz', 'text', 'jsonb', 'text'],
-  'archive_event_from_fsm_async_operation_type_worker_v2(...) exists');
+select hasnt_function('fsm_core', 'archive_event_from_fsm_async_operation_type_worker_v2',
+  'the deprecated archive_event_from_fsm_async_operation_type_worker_v2 wrapper is gone (#548)');
 
 delete from fsm_core.fsm_async_operation_queue_event_logs where async_operation_queue_name = 'archAsyncOpQ1';
 delete from fsm_core.fsm_instance_queue_event_logs
@@ -18,11 +17,22 @@ select pgmq.send(queue_name := 'archAsyncOpQ1', msg := '{"foo": "bar"}'::jsonb);
 select results_eq(
   $$ select (r->>'async_operation_queue_archive_result')::boolean, (r->>'async_operation_queue_name'),
             (r->>'async_operation_queue_msg_id')::bigint, (r->'send_to_parent_result'->'queue_data'->'eventData'->>'eventType')
-     from fsm_core.archive_event_from_fsm_async_operation_type_worker_v2(
-       'archAsyncOpQ1', 'internalAsyncOperation', 'v1', 1::bigint,
-       'asyncOpDone', 'async_operation', '{"result": "ok"}'::jsonb, 0,
-       'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid, 'asyncOpDoneEvt',
-       now(), NULL, now(), 'success', '{"result": "ok"}'::jsonb, NULL) r $$,
+     from fsm_core.finish_async_operation_event_v2(
+       input_archive_reason := 'completed',
+       input_async_operation_queue_name := 'archAsyncOpQ1',
+       input_async_operation_queue_msg_id := 1::bigint,
+       input_async_operation_queue_type := 'internalAsyncOperation',
+       input_async_operation_queue_version := 'v1',
+       input_event_name := 'asyncOpDone',
+       input_event_action_type := 'async_operation',
+       input_event_data := '{"result": "ok"}'::jsonb,
+       input_event_delay := 0,
+       input_send_to_parent_queue_id := 'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,
+       input_send_to_parent_queue_id_event_name := 'asyncOpDoneEvt',
+       input_execution_started_at := now(),
+       input_execution_finished_at := now(),
+       input_event_status := 'success',
+       input_event_output := '{"result": "ok"}'::jsonb) r $$,
   $$ values (true, 'archAsyncOpQ1'::text, 1::bigint, 'asyncOpDone'::text) $$,
   'archiving a completed async-operation event: message archived, and forwarded to the parent FSM queue'
 );
@@ -40,11 +50,13 @@ select results_eq(
 );
 
 select throws_ok(
-  $$ select fsm_core.archive_event_from_fsm_async_operation_type_worker_v2(
-       'neverCreatedAsyncOpQ', 'internalAsyncOperation', 'v1', 1::bigint,
-       'asyncOpDone', 'async_operation', '{}'::jsonb, 0,
-       'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid, 'asyncOpDoneEvt',
-       now(), NULL, now(), 'success', '{}'::jsonb, NULL) $$,
+  $$ select fsm_core.finish_async_operation_event_v2(
+       input_archive_reason := 'completed',
+       input_async_operation_queue_name := 'neverCreatedAsyncOpQ',
+       input_async_operation_queue_msg_id := 1::bigint,
+       input_event_name := 'asyncOpDone',
+       input_send_to_parent_queue_id := 'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,
+       input_event_status := 'success') $$,
   '42P01',
   'relation "pgmq.q_nevercreatedasyncopq" does not exist',
   'archiving from a queue that was never created raises the raw pgmq relation-not-found error (not wrapped)'

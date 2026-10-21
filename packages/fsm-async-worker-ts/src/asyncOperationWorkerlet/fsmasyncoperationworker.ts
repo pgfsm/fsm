@@ -4,7 +4,7 @@ import type { DBDeps } from "@pgfsm/db";
 const logger = getLogger(["@pgfsm/worker", "internalAsyncOperation"]);
 
 import {
-  archiveEventFromFsmAsyncOperationTypeWorker,
+  finishAsyncOperationEvent,
   pgmqQueueExists,
   readMessage,
 } from "@pgfsm/db";
@@ -86,26 +86,31 @@ export async function startFSMAsyncOperationWorker(
           );
 
           if (archiveData) {
-            const archiveResult =
-              await archiveEventFromFsmAsyncOperationTypeWorker(
-                deps,
-                archiveData.async_operation_queue_name,
-                archiveData.async_operation_queue_type,
-                archiveData.async_operation_queue_version,
-                archiveData.msg_id!,
-                archiveData.event_name,
-                archiveData.event_action_type,
-                archiveData.event_data,
-                archiveData.event_delay,
-                archiveData.send_to_parent_queue_id,
-                archiveData.send_to_parent_queue_id_msg_id,
-                archiveData.execution_started_at,
-                archiveData.execution_duration,
-                archiveData.execution_finished_at,
-                archiveData.event_status,
-                archiveData.event_output,
-                archiveData.error_message,
-              );
+            const archiveResult = await finishAsyncOperationEvent(
+              deps,
+              "completed",
+              archiveData.async_operation_queue_name,
+              archiveData.msg_id!,
+              {
+                async_operation_queue_type:
+                  archiveData.async_operation_queue_type,
+                async_operation_queue_version:
+                  archiveData.async_operation_queue_version,
+                event_name: archiveData.event_name,
+                event_action_type: archiveData.event_action_type,
+                event_data: archiveData.event_data,
+                event_delay: archiveData.event_delay,
+                send_to_parent_queue_id: archiveData.send_to_parent_queue_id,
+                send_to_parent_queue_id_event_name:
+                  archiveData.send_to_parent_queue_id_msg_id,
+                execution_started_at: archiveData.execution_started_at,
+                execution_duration: archiveData.execution_duration,
+                execution_finished_at: archiveData.execution_finished_at,
+                event_status: archiveData.event_status,
+                event_output: archiveData.event_output,
+                error_message: archiveData.error_message,
+              },
+            );
             logger.info("Message archived with result: {result}", {
               result: archiveResult,
             });
