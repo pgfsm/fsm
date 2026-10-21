@@ -94,7 +94,57 @@ interface RawSidecarGatewayClient {
   ): AsyncIterable<SessionResponseMessage>;
 }
 
-export type ActorHandler = (input: unknown) => unknown | Promise<unknown>;
+/**
+ * Why the gateway cancelled an invoke (the proto's `CancelReason`, by name):
+ * its FSM state exited (`STATE_EXITED`), its invoke timeout ran out
+ * (`TIMEOUT`), or the gateway or this session is going away (`SHUTDOWN`).
+ */
+export type CancelReasonName =
+  | "UNSPECIFIED"
+  | "STATE_EXITED"
+  | "TIMEOUT"
+  | "SHUTDOWN";
+
+/** The proto's `CancelReason` numbers, by name (pinned by a test). */
+export const CANCEL_REASON = {
+  UNSPECIFIED: 0,
+  STATE_EXITED: 1,
+  TIMEOUT: 2,
+  SHUTDOWN: 3,
+} as const satisfies Record<CancelReasonName, number>;
+
+/** A `CancelReason` number's name; an unknown number counts as UNSPECIFIED. */
+export function cancelReasonName(reason: number): CancelReasonName {
+  for (const [name, value] of Object.entries(CANCEL_REASON)) {
+    if (value === reason) return name as CancelReasonName;
+  }
+  return "UNSPECIFIED";
+}
+
+/**
+ * The `reason` of a cancelled invoke's `AbortSignal` (SPEC-012): what
+ * `signal.throwIfAborted()` throws, with the gateway's `CancelReason` in
+ * `cancelReason`.
+ */
+export class InvokeCancelledError extends Error {
+  constructor(readonly cancelReason: CancelReasonName) {
+    super(`invoke cancelled (${cancelReason})`);
+    this.name = "InvokeCancelledError";
+  }
+}
+
+/**
+ * An actor's handler. `signal` aborts when the gateway cancels this invoke
+ * (SPEC-012), with an `InvokeCancelledError` as `signal.reason`: stop the
+ * work (pass `signal` to `fetch`, check `signal.aborted` between steps, or
+ * call `signal.throwIfAborted()`). A throw after the abort is reported as
+ * `CANCELLED`; a return is still sent as the result, telling the gateway the
+ * work completed anyway.
+ */
+export type ActorHandler = (
+  input: unknown,
+  signal: AbortSignal,
+) => unknown | Promise<unknown>;
 
 /**
  * One entry from a compiler-generated actor registry (see module doc
@@ -105,6 +155,9 @@ export type ActorHandler = (input: unknown) => unknown | Promise<unknown>;
 export type ActorRegistration = RegisteredActor & {
   handler: ActorHandler;
 };
+
+/** The sidecar protocol this SDK speaks (SPEC-012: it honours Cancel). */
+export const SIDECAR_PROTOCOL_VERSION = "2.0";
 
 const DEFAULT_HEARTBEAT_MS = 5_000;
 export const DEFAULT_KEEPALIVE_INTERVAL_MS = 30_000;
@@ -249,17 +302,34 @@ export function effectiveMaxConcurrency(
   return 1;
 }
 
-/** Counting semaphore: at most `permits` holders, extra acquirers wait. */
+/**
+ * Counting semaphore: at most `permits` holders, extra acquirers wait. An
+ * acquirer whose `signal` aborts stops waiting (rejecting with its reason)
+ * without taking a permit.
+ */
 class Semaphore {
   private readonly waiters: Array<() => void> = [];
   constructor(private permits: number) {}
 
-  acquire(): Promise<void> {
+  acquire(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     if (this.permits > 0) {
       this.permits--;
       return Promise.resolve();
     }
-    return new Promise((resolve) => this.waiters.push(resolve));
+    return new Promise((resolve, reject) => {
+      const waiter = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      const onAbort = () => {
+        const index = this.waiters.indexOf(waiter);
+        if (index !== -1) this.waiters.splice(index, 1);
+        reject(signal!.reason);
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.waiters.push(waiter);
+    });
   }
 
   release(): void {
@@ -646,10 +716,8 @@ export class ActorWorker {
           value: new Register({
             workerId: this.options.workerId,
             language: this.options.language,
-            // SPEC-012: gateways at 2.0 reject 1.x workers. Honouring Cancel
-            // (aborting the handler) lands in #540; until then a Cancel is
-            // ignored and the gateway drops the late result.
-            protocolVersion: "2.0",
+            // SPEC-012: 2.0 workers honour Cancel; 2.0 gateways reject 1.x.
+            protocolVersion: SIDECAR_PROTOCOL_VERSION,
             actors: registeredActors,
           }),
         },
@@ -659,6 +727,8 @@ export class ActorWorker {
     const responses = client.session(outbox, { headers });
     const iterator = responses[Symbol.asyncIterator]();
     let heartbeat: ReturnType<typeof setInterval> | undefined;
+    // This session's running invokes, for Cancel (SPEC-012).
+    const running = new Map<string, AbortController>();
 
     try {
       const first = await iterator.next();
@@ -670,6 +740,15 @@ export class ActorWorker {
         );
       }
       if (!first.value.payload.value.accepted) {
+        // Not retried: e.g. a gateway that doesn't speak this SDK's
+        // protocol version (SPEC-012) would just refuse it again.
+        logger.error(
+          "The gateway rejected worker {workerId}'s registration (sidecar protocol {protocolVersion}); exiting",
+          {
+            workerId: this.options.workerId,
+            protocolVersion: SIDECAR_PROTOCOL_VERSION,
+          },
+        );
         throw new RegistrationRejectedError();
       }
       session.registered = true;
@@ -690,9 +769,18 @@ export class ActorWorker {
         );
       }, this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
 
-      await this.serveLoop(iterator, outbox);
+      await this.serveLoop(iterator, outbox, running);
     } finally {
       clearInterval(heartbeat);
+      // Their results can't be delivered on another session: stop them.
+      for (const [invokeId, controller] of running) {
+        logger.info(
+          "Cancelling invoke {invokeId}: its gateway session ended",
+          { invokeId },
+        );
+        controller.abort(new InvokeCancelledError("SHUTDOWN"));
+      }
+      running.clear();
       outbox.push(
         new SessionRequest({
           payload: {
@@ -712,11 +800,30 @@ export class ActorWorker {
   private async serveLoop(
     iterator: AsyncIterator<SessionResponseMessage>,
     outbox: AsyncQueue<SessionRequestMessage>,
+    running: Map<string, AbortController>,
   ): Promise<void> {
     while (!this.stopped) {
       const { value, done } = await iterator.next();
       if (done) {
         break;
+      }
+      if (value.payload.case === "cancel") {
+        const { invokeId, reason } = value.payload.value;
+        const controller = running.get(invokeId);
+        if (!controller) {
+          // Already finished: its reply is on its way, and acknowledges it.
+          logger.debug("Ignoring cancel of unknown invoke {invokeId}", {
+            invokeId,
+          });
+          continue;
+        }
+        const name = cancelReasonName(reason);
+        logger.info("Cancelling invoke {invokeId}: {reason}", {
+          invokeId,
+          reason: name,
+        });
+        controller.abort(new InvokeCancelledError(name));
+        continue;
       }
       if (value.payload.case !== "invoke") {
         continue;
@@ -736,16 +843,26 @@ export class ActorWorker {
       }
       // Not awaited: invokes run concurrently, each actor bounded by its
       // own slots (see handleInvoke).
-      const running: Promise<void> = this.handleInvoke(body, outbox).finally(
-        () => this.inFlight.delete(running),
-      );
-      this.inFlight.add(running);
+      const controller = new AbortController();
+      running.set(body.invokeId, controller);
+      const task: Promise<void> = this.handleInvoke(
+        body,
+        outbox,
+        controller.signal,
+      ).finally(() => {
+        this.inFlight.delete(task);
+        if (running.get(body.invokeId) === controller) {
+          running.delete(body.invokeId);
+        }
+      });
+      this.inFlight.add(task);
     }
   }
 
   private async handleInvoke(
     body: InvokeMessage,
     outbox: AsyncQueue<SessionRequestMessage>,
+    signal: AbortSignal,
   ): Promise<void> {
     const key = actorKey({
       parentFsmName: body.parentFsmName,
@@ -770,11 +887,23 @@ export class ActorWorker {
 
     // Never run more of this actor than declared, even if the gateway sends
     // more (after its own invoke timeout, or through a direct Invoke() RPC).
-    await slots.acquire();
+    try {
+      // Cancelled while waiting for a slot: it never starts.
+      await slots.acquire(signal);
+    } catch {
+      if (warnIfSessionGone(outbox, body.invokeId, key)) return;
+      sendError(
+        outbox,
+        body.invokeId,
+        "CANCELLED",
+        "cancelled before it started",
+      );
+      return;
+    }
     const started = performance.now();
     try {
       const output = await Promise.resolve(
-        handler(parseInputJson(body.inputJson)),
+        handler(parseInputJson(body.inputJson), signal),
       );
       const durationMs = Math.max(0, Math.round(performance.now() - started));
       if (warnIfSessionGone(outbox, body.invokeId, key)) return;
@@ -792,10 +921,12 @@ export class ActorWorker {
       );
     } catch (error) {
       if (warnIfSessionGone(outbox, body.invokeId, key)) return;
+      // After a cancel, any failure acknowledges it as CANCELLED (SPEC-012),
+      // whatever the handler threw.
       sendError(
         outbox,
         body.invokeId,
-        "INTERNAL",
+        signal.aborted ? "CANCELLED" : "INTERNAL",
         error instanceof Error ? error.message : "unknown worker error",
       );
     } finally {
