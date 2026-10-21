@@ -1,3 +1,12 @@
+-- input_event_source (#533, SPEC-011): where a done/error actor event came
+-- from, so the parent can tell a result of the invoke it holds from a stale
+-- one of an earlier invoke under the same id (SPEC-011 (c), #535). It goes on
+-- the message next to eventData, as `source`, not inside it: the event
+-- XState sees is unchanged. Omitted when NULL.
+DROP FUNCTION IF EXISTS fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+    uuid, text, text, text, text, jsonb, integer, text, jsonb, text,
+    timestamp with time zone, integer, timestamp with time zone
+);
 CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
     input_fsm_instance_id uuid,
     input_fsm_instance_id_fsm_type text,
@@ -11,7 +20,8 @@ CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
     input_error_message text DEFAULT NULL,
     input_execution_started_at timestamp with time zone DEFAULT now(),
     input_execution_duration integer DEFAULT NULL,
-    input_execution_finished_at timestamp with time zone DEFAULT now()
+    input_execution_finished_at timestamp with time zone DEFAULT now(),
+    input_event_source jsonb DEFAULT NULL
 )
 RETURNS JSONB
 AS $$
@@ -36,6 +46,10 @@ BEGIN
         -- No reply-to (sendToParent*) on an FSM queue's messages: nothing reads
         -- it; a child FSM's parent is on its fsm_instance row (#523, #526).
     );
+
+    IF input_event_source IS NOT NULL THEN
+        queue_msg_data := queue_msg_data || jsonb_build_object('source', input_event_source);
+    END IF;
 
     BEGIN
         SELECT pgmq.send(queue_name := input_fsm_instance_id::text, msg := queue_msg_data, delay := input_event_delay)

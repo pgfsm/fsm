@@ -723,13 +723,6 @@ export type Database = {
         Returns: boolean;
       };
       build_nested_json_recursive: { Args: { paths: string[] }; Returns: Json };
-      cancel_event_for_fsm_async_operation_type_worker_v2: {
-        Args: {
-          async_operation_type_worker_name: string;
-          queue_msg_id: number;
-        };
-        Returns: Json;
-      };
       check_registry_and_working_for_async_actors_for_fsm_instance_an: {
         Args: {
           input_async_actors: Json;
@@ -917,6 +910,28 @@ export type Database = {
           input_paths: unknown[];
         };
         Returns: unknown;
+      };
+      finish_async_operation_event_v2: {
+        Args: {
+          input_archive_reason: string;
+          input_async_operation_queue_msg_id: number;
+          input_async_operation_queue_name: string;
+          input_async_operation_queue_type?: string;
+          input_async_operation_queue_version?: string;
+          input_error_message?: string;
+          input_event_action_type?: string;
+          input_event_data?: Json;
+          input_event_delay?: number;
+          input_event_name?: string;
+          input_event_output?: Json;
+          input_event_status?: string;
+          input_execution_duration?: number;
+          input_execution_finished_at?: string;
+          input_execution_started_at?: string;
+          input_send_to_parent_queue_id?: string;
+          input_send_to_parent_queue_id_event_name?: string;
+        };
+        Returns: Json;
       };
       fsm_get_all_state_nodes_v1: {
         Args: {
@@ -1427,6 +1442,7 @@ export type Database = {
           input_event_delay?: number;
           input_event_name: string;
           input_event_output?: Json;
+          input_event_source?: Json;
           input_event_status?: string;
           input_execution_duration?: number;
           input_execution_finished_at?: string;

@@ -2,8 +2,8 @@ begin;
 select plan(15);
 
 select has_function('fsm_core', 'send_event_to_fsm_queue_with_event_logs_v2',
-  ARRAY['uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz'],
-  'send_event_to_fsm_queue_with_event_logs_v2(...) exists');
+  ARRAY['uuid', 'text', 'text', 'text', 'text', 'jsonb', 'integer', 'text', 'jsonb', 'text', 'timestamptz', 'integer', 'timestamptz', 'jsonb'],
+  'send_event_to_fsm_queue_with_event_logs_v2(...) exists, with the event''s source (#533)');
 select has_function('fsm_core', 'create_fsm_instance_from_name_v2', ARRAY['text', 'text', 'jsonb', 'boolean', 'uuid', 'text'],
   'create_fsm_instance_from_name_v2(text, text, jsonb, boolean, uuid, text) exists');
 

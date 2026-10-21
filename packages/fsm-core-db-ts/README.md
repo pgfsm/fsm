@@ -9,8 +9,8 @@ this.
 - Creates FSM instances (`createFsmInstanceFromName`)
 - Sends events to queues (`sendEventToFsmQueueWithEventLogs`)
 - Runs microsteps (`microstep`)
-- Archives macrostep results (`archiveEventFromFsmTypeWorker`,
-  `archiveEventFromFsmAsyncOperationTypeWorker`)
+- Archives macrostep results (`archiveEventFromFsmTypeWorker`) and finishes
+  actor results (`finishAsyncOperationEvent`)
 - Manages pgmq queues (`createPgmqQueue`, `readMessage`, `deleteMessage`)
 - Provides advisory lock helpers (`fsm-instance-lock.ts`)
 
