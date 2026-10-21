@@ -313,7 +313,7 @@ async fn wait_for(condition: impl Fn() -> bool) {
 
 fn actor(
     name: &str,
-    handler: impl Fn(Value) -> Value + Send + Sync + 'static,
+    handler: impl Fn(Value, pgfsm_async_worker_sdk::CancellationToken) -> Value + Send + Sync + 'static,
 ) -> ActorRegistration {
     ActorRegistration::new(
         "creditCheck",
@@ -329,7 +329,7 @@ fn actor(
 fn double() -> ActorRegistration {
     actor(
         "double",
-        |input| json!({ "doubled": input["n"].as_i64().unwrap() * 2 }),
+        |input, _token| json!({ "doubled": input["n"].as_i64().unwrap() * 2 }),
     )
 }
 
@@ -394,9 +394,12 @@ struct GateState {
 }
 
 impl Gate {
-    fn handler(self: &Arc<Self>) -> impl Fn(Value) -> Value + Send + Sync + 'static {
+    fn handler(
+        self: &Arc<Self>,
+    ) -> impl Fn(Value, pgfsm_async_worker_sdk::CancellationToken) -> Value + Send + Sync + 'static
+    {
         let gate = self.clone();
-        move |input| {
+        move |input, _token| {
             let mut state = gate.state.lock().unwrap();
             state.started += 1;
             state.running += 1;

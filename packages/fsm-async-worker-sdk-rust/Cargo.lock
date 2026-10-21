@@ -450,9 +450,9 @@ dependencies = [
 
 [[package]]
 name = "pgfsm-proto-codegen"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9886b2f1d3751229936f96a229b9aba076fd24b600018ea9a900243acc13e4a1"
+checksum = "56044fcced07c992abfd6ddd251570490e58e763a4ccf57dac0835057d14716d"
 dependencies = [
  "prost",
  "tonic",

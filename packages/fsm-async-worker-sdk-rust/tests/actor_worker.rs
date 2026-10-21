@@ -241,11 +241,11 @@ fn temp_dir() -> Arc<tempfile::TempDir> {
     )
 }
 
-fn check_bureau(input: Value) -> Value {
+fn check_bureau(input: Value, _token: pgfsm_async_worker_sdk::CancellationToken) -> Value {
     json!({ "input": input, "msg": "checkBureau actor invoked by rust" })
 }
 
-fn failing(_input: Value) -> Value {
+fn failing(_input: Value, _token: pgfsm_async_worker_sdk::CancellationToken) -> Value {
     panic!("boom")
 }
 
@@ -447,7 +447,7 @@ async fn cli_exits_without_waiting_for_a_stuck_handler() {
             "stuck",
             "v01",
             "rust",
-            move |_input: Value| {
+            move |_input: Value, _token: pgfsm_async_worker_sdk::CancellationToken| {
                 started.store(true, std::sync::atomic::Ordering::SeqCst);
                 std::thread::sleep(Duration::from_secs(60));
                 Value::Null
@@ -630,4 +630,280 @@ async fn flapping_gateway_counts_toward_reconnect_max_attempts() {
         err
     );
     assert_eq!(h.sessions(), 3);
+}
+
+// SPEC-012 (f), #542: every handler gets a CancellationToken, and the worker
+// honours Cancel. A Cancel cancels the invoke's token with its reason, a panic
+// after it is reported as CANCELLED and a return as the result, the session
+// ending cancels every running invoke with Shutdown, an unknown invoke's
+// Cancel is ignored, one still waiting for its slot never runs, and the worker
+// sends protocol 2.0 and the CLI exits 1 on a rejected registration.
+
+use pgfsm_async_worker_sdk::{CancelReason, CancellationToken, SIDECAR_PROTOCOL_VERSION};
+use pgfsm_proto_codegen::pgfsm::sidecargateway::v1::Cancel;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// What the cancel handlers saw: how many started, and each reason.
+#[derive(Clone, Default)]
+struct Seen {
+    started: Arc<AtomicUsize>,
+    reasons: Arc<Mutex<Vec<CancelReason>>>,
+}
+
+impl Seen {
+    async fn wait(&self, what: impl Fn(&Seen) -> bool) {
+        tokio::time::timeout(TIMEOUT, async {
+            while !what(self) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting on the handlers");
+    }
+
+    fn reasons(&self) -> Vec<CancelReason> {
+        self.reasons.lock().unwrap().clone()
+    }
+}
+
+/// "waitThenPanic" blocks until cancelled, then panics (a handler that
+/// stops); "waitThenReturn" blocks until cancelled, then returns anyway.
+fn cancel_registrations(seen: &Seen) -> Vec<ActorRegistration> {
+    let wait = |seen: Seen| {
+        move |token: &CancellationToken| {
+            seen.started.fetch_add(1, Ordering::SeqCst);
+            while !token.wait(Duration::from_secs(10)) {}
+            seen.reasons.lock().unwrap().push(token.reason().unwrap());
+        }
+    };
+    let panicking = wait(seen.clone());
+    let returning = wait(seen.clone());
+    let reg =
+        |name: &str, handler: Box<dyn Fn(Value, CancellationToken) -> Value + Send + Sync>| {
+            ActorRegistration::new(
+                "creditCheck",
+                "v01",
+                "internalAsyncOperation",
+                name,
+                "v01",
+                "rust",
+                handler,
+            )
+        };
+    vec![
+        reg(
+            "waitThenPanic",
+            Box::new(move |_input, token| {
+                panicking(&token);
+                panic!("stopped: cancelled");
+            }),
+        ),
+        reg(
+            "waitThenReturn",
+            Box::new(move |_input, token| {
+                returning(&token);
+                json!({ "finishedAnyway": true })
+            }),
+        ),
+    ]
+}
+
+fn cancel_worker(socket_path: &Path, seen: &Seen, max_concurrency: u32) -> Arc<ActorWorker> {
+    Arc::new(ActorWorker::new(
+        ActorWorkerOptions {
+            worker_id: "w-cancel".into(),
+            gateway_socket_path: socket_path.to_string_lossy().into_owned(),
+            heartbeat_ms: 50,
+            reconnect_initial_delay_ms: 10,
+            reconnect_max_delay_ms: 50,
+            max_concurrency,
+            shutdown_grace_ms: 100,
+            ..Default::default()
+        },
+        cancel_registrations(seen),
+    ))
+}
+
+impl Harness {
+    fn cancel(&self, invoke_id: &str, reason: CancelReason) {
+        self.to_worker
+            .send(SessionResponse {
+                payload: Some(session_response::Payload::Cancel(Cancel {
+                    invoke_id: invoke_id.to_string(),
+                    reason: reason as i32,
+                })),
+            })
+            .unwrap();
+    }
+
+    /// The next invoke reply: (invoke id, "RESULT" or the error code).
+    async fn next_reply(&mut self) -> (String, String) {
+        match self
+            .next_of(|p| {
+                matches!(
+                    p,
+                    session_request::Payload::InvokeResult(_)
+                        | session_request::Payload::InvokeError(_)
+                )
+            })
+            .await
+        {
+            session_request::Payload::InvokeResult(r) => (r.invoke_id, "RESULT".into()),
+            session_request::Payload::InvokeError(e) => {
+                (e.invoke_id, e.error.map(|d| d.code).unwrap_or_default())
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sends_protocol_2_and_cancel_reasons_match_the_proto() {
+    assert_eq!(SIDECAR_PROTOCOL_VERSION, "2.0");
+    assert_eq!(CancelReason::StateExited as i32, 1);
+    assert_eq!(CancelReason::Timeout as i32, 2);
+    assert_eq!(CancelReason::Shutdown as i32, 3);
+    let mut h = Harness::start(true, false).await;
+    let worker = worker(&h.socket_path);
+    let running = spawn_run(&worker);
+    let session_request::Payload::Register(register) = h.next_of(is_register).await else {
+        unreachable!()
+    };
+    assert_eq!(register.protocol_version, "2.0");
+    stop_and_wait(&worker, running).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancel_cancels_the_token_and_a_panic_after_it_is_cancelled() {
+    let mut h = Harness::start(true, false).await;
+    let seen = Seen::default();
+    let worker = cancel_worker(&h.socket_path, &seen, 2);
+    let running = spawn_run(&worker);
+    h.next_of(is_register).await;
+
+    h.invoke("panic", "waitThenPanic", Value::Null);
+    seen.wait(|s| s.started.load(Ordering::SeqCst) == 1).await;
+    h.cancel("panic", CancelReason::StateExited);
+    assert_eq!(h.next_reply().await, ("panic".into(), "CANCELLED".into()));
+    assert_eq!(seen.reasons(), vec![CancelReason::StateExited]);
+
+    // A return after the cancel is still the result.
+    h.invoke("ret", "waitThenReturn", Value::Null);
+    seen.wait(|s| s.started.load(Ordering::SeqCst) == 2).await;
+    h.cancel("ret", CancelReason::Timeout);
+    assert_eq!(h.next_reply().await, ("ret".into(), "RESULT".into()));
+    assert_eq!(
+        seen.reasons(),
+        vec![CancelReason::StateExited, CancelReason::Timeout]
+    );
+    stop_and_wait(&worker, running).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_session_ending_cancels_running_invokes_with_shutdown() {
+    let mut h = Harness::start(true, false).await;
+    let seen = Seen::default();
+    let worker = cancel_worker(&h.socket_path, &seen, 2);
+    let running = spawn_run(&worker);
+    h.next_of(is_register).await;
+
+    h.invoke("a", "waitThenPanic", Value::Null);
+    h.invoke("b", "waitThenReturn", Value::Null);
+    seen.wait(|s| s.started.load(Ordering::SeqCst) == 2).await;
+    let _dir = h.crash();
+    seen.wait(|s| s.reasons().len() == 2).await;
+    assert_eq!(
+        seen.reasons(),
+        vec![CancelReason::Shutdown, CancelReason::Shutdown]
+    );
+    stop_and_wait(&worker, running).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_cancel_is_ignored_and_a_queued_invoke_never_runs() {
+    let mut h = Harness::start(true, false).await;
+    let seen = Seen::default();
+    // One slot: "second" waits behind "first".
+    let worker = cancel_worker(&h.socket_path, &seen, 1);
+    let running = spawn_run(&worker);
+    h.next_of(is_register).await;
+
+    h.cancel("unknown", CancelReason::StateExited);
+    h.invoke("first", "waitThenReturn", Value::Null);
+    seen.wait(|s| s.started.load(Ordering::SeqCst) == 1).await;
+    h.invoke("second", "waitThenReturn", Value::Null);
+    // Let it reach the slot wait before cancelling it.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    h.cancel("second", CancelReason::StateExited);
+    assert_eq!(h.next_reply().await, ("second".into(), "CANCELLED".into()));
+
+    h.cancel("first", CancelReason::Timeout);
+    assert_eq!(h.next_reply().await, ("first".into(), "RESULT".into()));
+    assert_eq!(seen.started.load(Ordering::SeqCst), 1);
+    stop_and_wait(&worker, running).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_cli_exits_1_on_a_rejected_registration() {
+    let h = Harness::start(false, false).await;
+    let socket = h.socket_path.to_string_lossy().into_owned();
+    let code = tokio::task::spawn_blocking(move || {
+        run_actor_worker_cli(
+            registrations(),
+            ["start", "--gateway-socket", &socket].map(String::from),
+            None,
+        )
+    })
+    .await
+    .unwrap();
+    assert_eq!(code, 1);
+    assert_eq!(h.sessions(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_token_also_resolves_cancelled_for_async_code() {
+    let mut h = Harness::start(true, false).await;
+    let (tx, rx) = std::sync::mpsc::channel::<CancellationToken>();
+    let tx = Mutex::new(tx);
+    let reg = ActorRegistration::new(
+        "creditCheck",
+        "v01",
+        "internalAsyncOperation",
+        "handsOutItsToken",
+        "v01",
+        "rust",
+        move |_input, token: CancellationToken| {
+            tx.lock().unwrap().send(token.clone()).unwrap();
+            while !token.wait(Duration::from_secs(10)) {}
+            Value::Null
+        },
+    );
+    let worker = Arc::new(ActorWorker::new(
+        ActorWorkerOptions {
+            worker_id: "w-async".into(),
+            gateway_socket_path: h.socket_path.to_string_lossy().into_owned(),
+            heartbeat_ms: 50,
+            ..Default::default()
+        },
+        vec![reg],
+    ));
+    let running = spawn_run(&worker);
+    h.next_of(is_register).await;
+    h.invoke("x", "handsOutItsToken", Value::Null);
+    let token = tokio::task::spawn_blocking(move || rx.recv_timeout(TIMEOUT).unwrap())
+        .await
+        .unwrap();
+    assert!(!token.is_cancelled());
+    let waiter = tokio::spawn({
+        let token = token.clone();
+        async move { token.cancelled().await }
+    });
+    h.cancel("x", CancelReason::StateExited);
+    tokio::time::timeout(TIMEOUT, waiter)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(token.reason(), Some(CancelReason::StateExited));
+    assert_eq!(h.next_reply().await, ("x".into(), "RESULT".into()));
+    stop_and_wait(&worker, running).await;
 }

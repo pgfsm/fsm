@@ -142,6 +142,29 @@ its grace limit, max-age reconnect, an invalid address. TLS fixtures come from
 started here (it's Deno); interop with it was checked by hand for #433 (mTLS +
 token, concurrency, max-age reconnect, SIGTERM drain, wrong token).
 
+## Cancel (SPEC-012 (f), #542)
+
+- **Handler signature** `Fn(Value, CancellationToken) -> Value`, run in
+  `spawn_blocking`. `CancellationToken` (`src/cancellation.rs`, re-exported with
+  the generated `CancelReason`) is a `Mutex<Option<CancelReason>>` plus a
+  `Condvar` (for the blocking `wait(timeout)`) and a `tokio::sync::Notify` (for
+  the async `cancelled()`). The first reason wins. No `tokio-util` dependency,
+  so the token type is ours to keep stable.
+- **Per session**, `run_session` keeps a `RunningInvokes` map; `Cancel` cancels
+  that token (an unknown id is ignored), `RemoveOnDrop` takes a finished invoke
+  out, and after `serve_loop` returns every one still running is cancelled with
+  `Shutdown`.
+- **Replies after a cancel:** a panic is sent as `CANCELLED`, a return as
+  `InvokeResult`. The slot wait `select!`s on `token.cancelled()`, so an invoke
+  cancelled while queued replies `CANCELLED` and never runs.
+- **Protocol** `SIDECAR_PROTOCOL_VERSION = "2.0"`; a rejected registration is
+  logged as an error and is fatal, so the CLI exits 1. Same rules as the TS,
+  Python and Go SDKs; change them together.
+
+Tests: the SPEC-012 block at the end of `tests/actor_worker.rs`. Send invokes
+only after the worker's `Register` arrives: the fake gateway can otherwise relay
+an `Invoke` ahead of its `RegisterAck`.
+
 ## Environment variables (#438)
 
 Every CLI option except `--help` falls back to `PGFSM_<LONG_NAME>` (`-` → `_`):
