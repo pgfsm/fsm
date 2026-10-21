@@ -8,6 +8,7 @@ package asyncworkersdk
 // stubs; same coverage as the Python and Rust SDKs' tests.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,6 +35,8 @@ type fakeGateway struct {
 	toWorker      chan *sidecargatewayv1.SessionResponse
 	fromWorker    chan *sidecargatewayv1.SessionRequest
 	server        *grpc.Server
+	// end, when closed, ends every open session (SPEC-012 tests).
+	end chan struct{}
 	// abortWith, when set, fails every session with this code.
 	abortWith codes.Code
 	sessions  atomic.Int32
@@ -81,6 +84,8 @@ func (g *fakeGateway) Session(stream sidecargatewayv1.SidecarGatewayService_Sess
 			}
 		case <-recvDone:
 			return nil // the worker half-closed its side
+		case <-g.end:
+			return nil
 		}
 	}
 }
@@ -110,6 +115,7 @@ func serveGateway(t *testing.T, socket string, accept, closeAfterAck bool) *fake
 		closeAfterAck: closeAfterAck,
 		toWorker:      make(chan *sidecargatewayv1.SessionResponse, 16),
 		fromWorker:    make(chan *sidecargatewayv1.SessionRequest, 64),
+		end:           make(chan struct{}),
 	}
 	g.server = grpc.NewServer()
 	sidecargatewayv1.RegisterSidecarGatewayServiceServer(g.server, g)
@@ -156,11 +162,11 @@ func testRegistrations() []ActorRegistration {
 		return NewActorRegistration("creditCheck", "v01", "internalAsyncOperation", name, "v01", "go", h)
 	}
 	return []ActorRegistration{
-		reg("checkBureau", func(input any) (any, error) {
+		reg("checkBureau", func(_ context.Context, input any) (any, error) {
 			return map[string]any{"input": input, "msg": "checkBureau actor invoked by go"}, nil
 		}),
-		reg("failing", func(any) (any, error) { return nil, errors.New("boom") }),
-		reg("panicking", func(any) (any, error) { panic("kaboom") }),
+		reg("failing", func(context.Context, any) (any, error) { return nil, errors.New("boom") }),
+		reg("panicking", func(context.Context, any) (any, error) { panic("kaboom") }),
 	}
 }
 

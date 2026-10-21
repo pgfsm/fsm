@@ -3,7 +3,7 @@ module github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go
 go 1.26.0
 
 require (
-	github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go v0.2.0
+	github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go v0.3.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
