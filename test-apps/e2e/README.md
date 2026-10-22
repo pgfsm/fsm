@@ -22,7 +22,7 @@ returns which worker processed it (`worker` is the pod name in Kubernetes).
 ```bash
 export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 deno run -A tools/load.ts enqueue --language go --count 200 --work-ms 500 --run-id run1
-deno run -A tools/load.ts instances --count 50 --run-id run1
+deno run -A tools/load.ts instances --count 50 --work-ms 200 --run-id run1
 # per language: sent, queued, succeeded, failed, duplicates, redelivered, lost,
 # succeeded per minute, per worker; instances: created, done, per status.
 # --wait polls until everything of the run is done.
@@ -37,10 +37,17 @@ slots once per `--poll-interval-ms`, so use a short interval when measuring.
 0.4.1 (#497) the sync worker serves every FSM in `FSM_DEFINITIONS`, actor-only
 ones too.
 
-The source of `loadTest` is `fsm/loadTest/v01/fsm.json`. After editing it,
-regenerate with the local CLI (from this directory):
-`deno run -A ../../packages/fsm-cli-ts/src/cli/pgfsm.ts add fsm/loadTest/v01/fsm.json --force`
-(the actors' stubs are kept).
+The source of `loadTest` is its `fsm.json` (`fsm/loadTest/v01/`,
+`fsm/loadTest/v02/`). After editing one, regenerate it with the local CLI (from
+this directory), e.g.
+`deno run -A ../../packages/fsm-cli-ts/src/cli/pgfsm.ts add fsm/loadTest/v02/fsm.json --force`
+(the stubs are kept).
+
+`instances` creates loadTest **v02** instances (SPEC-013): their four invokes
+share the input `loadWorkInput` (`sync-worker/typescript/loadTest/v02/inputs/`),
+which gives each actor `{ n, runId, workMs }` from the instance's context, so
+`--work-ms` sets the actors' work per instance. v01 is the same FSM without
+input, kept because a loaded version can't change.
 
 The rest of this README is what `pgfsm create` generates.
 

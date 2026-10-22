@@ -202,3 +202,21 @@ it.
 
 Tests: `test/fsm-definition-check.test.ts` (unit tests for the classifier;
 `startFsmlet` refusal/drift/happy-path tests run only with `DATABASE_URL`).
+
+## Invoke input (SPEC-013, #586)
+
+`macrostepV2` queues each `xstate.invoke` entry action through `invokeWithInput`
+(`src/fsmlet/invoke-input.ts`):
+
+- a static `input` from fsm.json is queued as is;
+- an `inputName` calls the registered `input` sync operation (a compiler
+  generated stub) with `(current_context, msgData.eventData)`: the context after
+  this step's transition and entry actions, and the event that entered the
+  state. The result is stored as the invoke's `input`, which the archive passes
+  on (`start_invoked_async_operation_v2`'s `input`: the actor's payload, or a
+  child FSM's context), so redelivery reuses it;
+- a stub that's missing, throws, or returns something that isn't JSON is logged
+  and gives `null` (the actions policy; #590 tracks one policy for all sync
+  operations). `undefined` gives `null` silently.
+
+Unit tests: `test/invoke-input.test.ts`.

@@ -1,0 +1,47 @@
+{
+  "id": "spec013Child",
+  "key": "spec013Child",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec013Child.Waiting"
+    ],
+    "source": "#spec013Child",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Waiting": {
+      "id": "spec013Child.Waiting",
+      "key": "Waiting",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec013Child.Waiting",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": [],
+  "context": {
+    "tries": 0,
+    "ssn": ""
+  }
+}

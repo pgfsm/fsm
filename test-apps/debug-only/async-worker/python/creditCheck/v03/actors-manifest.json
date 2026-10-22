@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "checkBureau",
+      "asyncOperationName": "checkBureau",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "python",
+      "filePath": "actors/checkBureau/checkBureau.py",
+      "exportedAsyncOperationName": "checkBureau"
+    }
+  ]
+}

@@ -76,8 +76,11 @@ export function extractFsmPluginRefs(fsmData: FsmMachineJson): {
   guards: string[];
   delays: string[];
   actors: ActorReference[];
+  /** Invoke input functions' names (`inputName`, SPEC-013). */
+  inputs: string[];
 } {
   const actionsSet = new Set<string>();
+  const inputsSet = new Set<string>();
   const guardsSet = new Set<string>();
   const delaysSet = new Set<string>();
   const actorsArr: ActorReference[] = [];
@@ -124,6 +127,7 @@ export function extractFsmPluginRefs(fsmData: FsmMachineJson): {
 
     if ("invoke" in state && state.invoke) {
       for (const inv of state.invoke) {
+        if (typeof inv.inputName === "string") inputsSet.add(inv.inputName);
         actorsArr.push({
           src: inv.src,
           asyncOperationType: inv.asyncOperationType,
@@ -146,6 +150,7 @@ export function extractFsmPluginRefs(fsmData: FsmMachineJson): {
     guards: Array.from(guardsSet).filter(Boolean),
     delays: Array.from(delaysSet).filter(Boolean),
     actors: actorsArr,
+    inputs: Array.from(inputsSet).filter(Boolean),
   };
 }
 
