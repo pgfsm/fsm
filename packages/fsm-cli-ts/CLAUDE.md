@@ -100,4 +100,6 @@ Published by `.github/workflows/npm-publish.yml`'s `cli` matrix entry on a
 `cli-v<version>` tag (dnt path, `--copy-readme`). Tag only after the compiler
 release it depends on is on npm (#383): the build maps `@pgfsm/compiler` to
 `^<its deno.json version>`, so against an older published compiler the dnt
-type-check fails and nothing is published.
+type-check fails and nothing is published. Its preflight fails before building
+if the tag's version isn't `deno.json`'s or the commit isn't on `main`, and
+skips a version already on npm (#445).

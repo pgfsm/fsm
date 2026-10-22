@@ -47,7 +47,9 @@ below); keep source-only detail here instead of there.
 entry point, `src/index.ts`, no bins), but stays on dnt to map `@pgfsm/db` and
 `@pgfsm/logging` to real npm dependencies and declare `@types/pg`.
 `.github/workflows/npm-publish.yml` builds this package's `sync-worker` matrix
-entry through the dnt path.
+entry through the dnt path. Its preflight fails before building if the tag's
+version isn't `deno.json`'s or the commit isn't on `main`, and skips a version
+already on npm (#445).
 
 `postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
