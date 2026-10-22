@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                                                    |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status  | Draft                                                                                                                                                                                                                                                                    |
+| Status  | Implemented                                                                                                                                                                                                                                                              |
 | Date    | 2026-10-20                                                                                                                                                                                                                                                               |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                                                                 |
 | Issue   | #514                                                                                                                                                                                                                                                                     |
@@ -348,17 +348,19 @@ End to end:
 
 ## Implementation
 
-To be cut after SPEC-011's database issues land.
+1. #537 (PR #554): proto `Cancel.reason` and protocol `2.0`; the gateway's
+   in-flight index, cancelling state, slot release on reply, `TIMEOUT` /
+   `SHUTDOWN` triggers and protocol gate. Released as `proto-v0.3.0`.
+2. #538 (PR #555): gateway `STATE_EXITED` detection: the `--listen-db-url`
+   listener, the sweep, and the SQL sweep function.
+3. #539 (PR #556): the SQL ack-log function and the gateway's write.
+4. #540 (PR #559): TS SDK, released as `@pgfsm/async-worker-sdk` 0.4.0.
+5. #541, #542, #543 (PR #560): Python, Rust and Go SDKs, released as 0.4.0.
+6. #544 (PR #571): `fsm-compiler-ts` scaffolds and `test-apps/` on the 0.4 SDKs,
+   released in `@pgfsm/compiler` 0.4.0.
+7. #545: end-to-end test, `spec012Cancel/v01/spec012-journey-test.ts`: in each
+   language the handler observes its token, the side effect after the check
+   doesn't happen, and the FSM ends in the post-exit state.
 
-1. Proto `Cancel.reason` and protocol `2.0`; the gateway's in-flight index,
-   cancelling state, slot release on reply, `TIMEOUT` / `SHUTDOWN` triggers and
-   protocol gate.
-2. Gateway `STATE_EXITED` detection: the `--listen-db-url` listener, the sweep,
-   and the SQL sweep function.
-3. The SQL ack-log function and the gateway's write.
-4. TS SDK.
-5. Python SDK.
-6. Rust SDK.
-7. Go SDK.
-8. `fsm-compiler-ts` scaffolds and `test-apps/` regeneration.
-9. End-to-end test: actor cancel in each language.
+The gateway release carrying (1)–(3), 0.5.0, ships last: it rejects workers
+below protocol 2.0.

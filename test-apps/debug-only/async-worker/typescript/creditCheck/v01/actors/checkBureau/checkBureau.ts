@@ -6,7 +6,9 @@
 // also be idempotent: the same invoke can arrive more than once.
 export const maxConcurrency = 5;
 
-export function checkBureau(input: unknown): unknown {
+export function checkBureau(input: unknown, signal: AbortSignal): unknown {
   // TODO: implement actor logic
+  // signal aborts when the gateway cancels this invoke (e.g. its FSM state
+  // exited): pass it to fetch() and the like, or check signal.aborted.
   return { input, msg: "checkBureau actor invoked by typescript" };
 }

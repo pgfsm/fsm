@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec012Cancel",
+      "parentFsmVersion": "v01",
+      "src": "spec012WorkRs",
+      "asyncOperationName": "spec012WorkRs",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "rust",
+      "filePath": "actors/spec012WorkRs/spec012WorkRs.rs",
+      "exportedAsyncOperationName": "spec012WorkRs"
+    }
+  ]
+}

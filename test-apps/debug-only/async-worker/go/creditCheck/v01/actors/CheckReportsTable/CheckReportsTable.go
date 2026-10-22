@@ -12,5 +12,7 @@ const MaxConcurrency = 5
 
 func CheckReportsTable(ctx context.Context, input any) (any, error) {
 	// TODO: implement actor logic
+	// ctx is cancelled when the gateway cancels this invoke (e.g. its FSM
+	// state exited): pass it to anything that takes one.
 	return map[string]any{"input": input, "msg": "CheckReportsTable actor invoked by go"}, nil
 }

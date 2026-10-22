@@ -29,7 +29,7 @@ import { delayvc2000delay } from "./delays/vc2000delay/vc2000delay.ts";
 export type SyncOperationRegistration = {
   fsmName: string;
   fsmVersion: string;
-  syncOperationType: "action" | "guard" | "delay";
+  syncOperationType: "action" | "guard" | "delay" | "input";
   syncOperationName: string;
   syncOperationLanguage: string;
   handler: (...args: unknown[]) => unknown;

@@ -18,8 +18,10 @@ if _PLUGIN_ROOT not in sys.path:
 
 from creditCheck.v01.actor_registry_generated import ACTOR_REGISTRATIONS as creditcheck_v01
 from creditCheck.v03.actor_registry_generated import ACTOR_REGISTRATIONS as creditcheck_v03
+from spec012Cancel.v01.actor_registry_generated import ACTOR_REGISTRATIONS as spec012cancel_v01
 
 ACTOR_REGISTRATIONS = [
     *creditcheck_v01,
     *creditcheck_v03,
+    *spec012cancel_v01,
 ]

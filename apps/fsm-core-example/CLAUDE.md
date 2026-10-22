@@ -69,3 +69,18 @@ In this runtime an input function's `event` is the processed message's
 `eventData`, so an event's own fields are under `event.eventPayload`.
 `input-mappers.json` next to a version's fsm.json is compile-time only (the
 input functions' source, for pre-filling stubs).
+
+## SPEC-012 end-to-end test (#545)
+
+`spec012Cancel/` has one state per language, each invoking that language's
+`spec012Work*` actor (5s of work) with a 1.5s `after` timer that exits it first.
+Each actor waits on its cancellation signal and only writes a marker file (its
+side effect, path passed through SPEC-013 input) if it wasn't cancelled.
+`spec012Cancel/v01/spec012-journey-test.ts` runs the gateway with cancel
+detection, the TypeScript worker in process and `test-apps/debug-only`'s Python
+(`uv run`), Rust (`cargo build`, then the binary) and Go (`go run`) workers as
+subprocesses, waits for each to log its registration, and checks per language:
+one `cancel_acknowledged` row with reason `STATE_EXITED` and outcome `aborted`,
+no marker file after the 5s, and the instance in `Abandoned` with no actor
+event. `SPEC012_LANGUAGES` narrows the languages. CI runs it last in the
+"SPEC-011 end-to-end" job, which installs uv, Go and Rust for it.

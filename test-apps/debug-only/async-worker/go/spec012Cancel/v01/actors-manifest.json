@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec012Cancel",
+      "parentFsmVersion": "v01",
+      "src": "spec012WorkGo",
+      "asyncOperationName": "spec012WorkGo",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "go",
+      "filePath": "actors/spec012WorkGo/spec012WorkGo.go",
+      "exportedAsyncOperationName": "Spec012WorkGo"
+    }
+  ]
+}
