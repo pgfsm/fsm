@@ -13,6 +13,7 @@ import { stateValueWithoutRoot } from "./state-value.ts";
 import { orderEntryActions } from "./entry-actions.ts";
 import { selectTransitions } from "./select-transitions.ts";
 import { delayedEventType, resolveRaiseDelay } from "./delays.ts";
+import { invokeWithInput } from "./invoke-input.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -382,8 +383,37 @@ export async function macrostepV2(
         "fsmVersion": action.parentFsmVersion,
       });
     } else if (action.type === "xstate.invoke") {
-      // this is equivalent to xstate.spawnChild from worker-helper.ts
-      new_async_operation_queue_data.push({ ...action, "type": action.type });
+      // this is equivalent to xstate.spawnChild from worker-helper.ts. Its
+      // input (SPEC-013) is computed now, from the context after this step's
+      // transition and entry actions and the event that entered the state,
+      // and queued with it.
+      const invoke = await invokeWithInput(
+        action as Record<string, unknown>,
+        async (name) => {
+          const inputFn = findSyncOperationHandler(
+            syncOperationRegistrations,
+            "input",
+            name,
+          );
+          if (typeof inputFn !== "function") return { found: false };
+          // Generated input stubs take (context, event).
+          return {
+            found: true,
+            value: await inputFn(current_context, msgData.eventData),
+          };
+        },
+        (problem) =>
+          logger.error(
+            "Input {inputName} of invoke {invokeId} ({reason}): the actor gets null. {error}",
+            {
+              inputName: problem.inputName,
+              invokeId: (action as { id?: unknown }).id,
+              reason: problem.reason,
+              error: problem.error,
+            },
+          ),
+      );
+      new_async_operation_queue_data.push({ ...invoke, "type": action.type });
     } else {
       // fsm events - try to execute implementation from actionsModule
       current_context = await runActionImplementation(
