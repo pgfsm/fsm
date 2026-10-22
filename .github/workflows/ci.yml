@@ -319,11 +319,13 @@ jobs:
       - name: npm install
         run: npm install
 
-      # Full local Supabase stack (Postgres + gotrue + storage + pgmq, etc.) via
-      # Docker, which ubuntu-latest already has. First pull is several GB and
-      # takes a couple of minutes — no image-layer caching here yet.
-      - name: Start local Supabase
-        run: npm run supabase:start
+      # Postgres only (#612): every test here talks to it directly on 54322
+      # (pgTAP, db reset, DATABASE_URL; the API and pgfsmctl tests run with
+      # DB_TYPE=postgres, so no Supabase client). -x skips pulling and starting
+      # the rest of the stack (auth, storage, realtime, kong, PostgREST, studio,
+      # …). Local `npm run supabase:start` still starts everything.
+      - name: Start local Supabase (Postgres only)
+        run: npm run supabase:start -- -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       # Compiles supabase/schemas/*.sql into migrations and applies them.
       - name: Apply schema (db reset)
@@ -394,8 +396,9 @@ jobs:
       - name: npm install
         run: npm install
 
-      - name: Start local Supabase
-        run: npm run supabase:start
+      # Postgres only, as in the database job (#612).
+      - name: Start local Supabase (Postgres only)
+        run: npm run supabase:start -- -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
       # Compiles supabase/schemas/*.sql into migrations and applies them.
       - name: Apply schema (db reset)
