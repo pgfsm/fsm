@@ -93,7 +93,7 @@ jobs:
           image_tags="$IMAGE:$version"
           if [[ "$version" != *-* ]]; then
             # Released (non-prerelease) versions, newest first.
-            released=$(git tag -l "$TAG_PREFIX[0-9]*" | sed "s/^$TAG_PREFIX//" | grep -v -- - | sort -rV)
+            released=$(git tag -l "${TAG_PREFIX}[0-9]*" | sed "s/^$TAG_PREFIX//" | grep -v -- - | sort -rV)
             minor=${version%.*}
             if [[ "$(grep "^${minor//./\\.}\." <<<"$released" | head -1)" == "$version" ]]; then
               image_tags="$image_tags,$IMAGE:$minor"
