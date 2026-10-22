@@ -21,11 +21,13 @@ export function deriveTemplateInput(
   const fnName = (lang === "go" && kind === "actors")
     ? toGoExportedName(rawFnName)
     : rawFnName;
-  const label = kind.slice(0, 1).toUpperCase() + kind.slice(1, -1); // Action/Guard/Delay/Actor
+  const label = kind.slice(0, 1).toUpperCase() + kind.slice(1, -1); // Action/Guard/Delay/Actor/Input
   const todo = kind === "actors"
     ? "TODO: implement actor logic"
     : kind === "delays"
     ? "TODO: implement delay logic (return ms)"
+    : kind === "inputs"
+    ? "TODO: return this invoke's input, built from context and event"
     : "TODO: implement";
 
   return { name, fnName, label, todo, lang };

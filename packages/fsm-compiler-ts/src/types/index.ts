@@ -123,8 +123,16 @@ export type OperationLang = Exclude<
   "llm"
 >;
 
-/** The kind of operation logic being scaffolded. */
-export type OperationKind = "actions" | "guards" | "delays" | "actors";
+/**
+ * The kind of operation logic being scaffolded. `inputs` (SPEC-013) are
+ * invoke input functions: sync operations, so TypeScript only.
+ */
+export type OperationKind =
+  | "actions"
+  | "guards"
+  | "delays"
+  | "actors"
+  | "inputs";
 
 /** One actor file written by `writeActorFile` (`operation-logic-scaffold.ts`), recorded for the manifest/barrel. */
 export type WrittenActor = {
@@ -171,7 +179,7 @@ export type RegisteredActor = WrittenActor & {
  * (whose plural values name the on-disk directories: `actions`/`guards`/
  * `delays`/`actors`).
  */
-export type SyncOperationType = "action" | "guard" | "delay";
+export type SyncOperationType = "action" | "guard" | "delay" | "input";
 
 /**
  * One entry {@linkcode writeSyncOperationRegistry} (`operation-logic-scaffold.ts`)
@@ -265,4 +273,6 @@ export type FsmDraftStateNode = {
   transitions?: FsmDraftTransition[];
   invoke?: FsmDraftInvoke[];
   states?: Record<string, FsmDraftStateNode>;
+  /** A machine's static context (SPEC-013); only on the root. */
+  context?: unknown;
 };

@@ -61,6 +61,28 @@ what's written).
   raise/cancel delay names filled in, invoke actors'
   `asyncOperationType`/`asyncOperationVersion` resolved). This is what every
   other command below reads.
+- `input-mappers.json` — only when an invoke's `input` is a function (see
+  below): those functions' source, read once to pre-fill their input stubs.
+  Compile-time only; never loaded into the database.
+
+**Invoke input** (SPEC-013). XState's `invoke.input` is either a value or a
+function of the instance:
+
+- a **value** (`input: { bureauName: "EquiGavin" }`, or a string, number, array)
+  is written into the invoke in `fsm.json` as `"input"`, unchanged. A string is
+  a value, not a reference. It must be JSON (a `Date`, `Map` or `undefined`
+  field fails the compile), and an object when the invoke is a child FSM.
+- a **function** (`input: ({ context, event }) => ({ ssn: context.SSN })`) is
+  written as `"inputName"` and gets a TypeScript input stub (see
+  `generate-sync-logic`). The name is the invoke's `id`, or else
+  `<state path>_<src>` (e.g.
+  `CheckingEquiGavin_CheckingForExistingReport_checkReportsTable`, with `_2` for
+  the same `src` invoked again in one state). Renaming or moving that state
+  renames the stub; give the invoke an `id` to avoid that.
+
+A machine's static `context` object is written to `fsm.json` too (its
+`undefined` properties dropped), and becomes every new instance's starting
+context, merged under the context it's created with.
 
 ```bash
 npx @pgfsm/compiler -c generate-fsm-json -f fsm
@@ -103,6 +125,12 @@ from the same working directory don't collide:
   guard
 - `sync-worker/<lang>/<fsmName>/<fsmVersion>/delays/<name>/<name>.*` — one per
   delay
+- `sync-worker/typescript/<fsmName>/<fsmVersion>/inputs/<name>/<name>.ts` — one
+  per invoke input function (`inputName`), TypeScript only: the sync worker
+  calls it with `(context, event)` when the invoke starts, and the actor (or
+  child FSM) receives what it returns. A new stub is pre-filled with the
+  function copied from `machine.ts` (via `input-mappers.json`); after that it's
+  yours, and edits to `machine.ts` don't update it.
 
 Two names of one kind that differ only by case are rejected, since their folders
 would collide on a case-insensitive file system. Code shared by several

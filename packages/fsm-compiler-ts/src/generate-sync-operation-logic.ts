@@ -2,11 +2,13 @@ import { getLogger } from "@logtape/logtape";
 import { fsmJsonDigest } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db/database.types";
 import { writeOwnedFile } from "./write-policy.ts";
+import { readInputMappers } from "./generate-fsm-json.ts";
 import { extractFsmPluginRefs, RAISE_CANCEL } from "./util.ts";
 import {
   eachVersionedFsmFolder,
   formatTsFilesBestEffort,
   fsmIdentityFromVersionFolderPath,
+  operationFileBaseName,
   writeAggregateSyncOperationRegistry,
   writeOperationModule,
   writeSyncOperationRegistry,
@@ -57,8 +59,10 @@ async function scaffoldSyncLogicForVersion(
   fsmData: FsmMachineJson,
   langs: OperationLang[],
   tsFiles: string[],
+  /** The folder holding this fsm.json, where its input-mappers.json is (SPEC-013). */
+  fsmJsonDirAbsPath?: string,
 ): Promise<void> {
-  const { actions, guards, delays } = extractFsmPluginRefs(fsmData);
+  const { actions, guards, delays, inputs } = extractFsmPluginRefs(fsmData);
   // xstate.raise / xstate.cancel are built-ins, not user code.
   const filteredActions = actions.filter((a) => !RAISE_CANCEL.has(a));
   const absSyncWorkerRootPath = `${writeRootAbsPath}/${SYNC_WORKER_DIR_NAME}`;
@@ -88,6 +92,28 @@ async function scaffoldSyncLogicForVersion(
     );
     const absVersionLangOutputPath =
       `${absSyncWorkerRootPath}/${lang}/${fsmVersionSubPath}`;
+    // Input stubs (SPEC-013) are TypeScript only: the sync worker runs them.
+    // A new stub is pre-filled from its machine.ts function's source, read
+    // from the compile-time input-mappers.json next to fsm.json.
+    if (lang === "typescript" && inputs.length > 0) {
+      await writeOperationModule(
+        absSyncWorkerRootPath,
+        lang,
+        "inputs",
+        inputs,
+        fsmVersionSubPath,
+        fsmJsonDirAbsPath ? await readInputMappers(fsmJsonDirAbsPath) : {},
+      );
+      // A pre-filled stub carries the function's source as the loader printed
+      // it, so it goes through deno fmt with the rest of the run's files (a
+      // kept stub is skipped there).
+      for (const name of new Set(inputs)) {
+        const base = operationFileBaseName(name);
+        tsFiles.push(
+          `${absSyncWorkerRootPath}/${lang}/${fsmVersionSubPath}/inputs/${base}/${base}.ts`,
+        );
+      }
+    }
     logger.info("Wrote {lang} action/guard/delay stubs in {path}", {
       lang,
       path: absVersionLangOutputPath,
@@ -103,6 +129,7 @@ async function scaffoldSyncLogicForVersion(
         guards,
         delays,
         await fsmJsonDigest(fsmData as unknown as Json),
+        inputs,
       );
       tsFiles.push(registryFile);
       logger.info("Wrote sync operation registry {file}", {
@@ -226,6 +253,7 @@ export async function generateSyncOperationLogicFromFolders(
         fsmData,
         langs,
         tsFiles,
+        absFolderPath,
       );
     },
   );
@@ -277,6 +305,9 @@ export async function generateSyncOperationLogicFromFsmJson(
     await Deno.readTextFile(fsmJsonPath),
   );
   const tsFiles: string[] = [];
+  const absFsmJsonPath = fsmJsonPath.startsWith("/")
+    ? fsmJsonPath
+    : `${Deno.cwd()}/${fsmJsonPath}`;
   await scaffoldSyncLogicForVersion(
     writeRootAbsPath,
     fsmName,
@@ -284,6 +315,7 @@ export async function generateSyncOperationLogicFromFsmJson(
     fsmData,
     langs,
     tsFiles,
+    absFsmJsonPath.substring(0, absFsmJsonPath.lastIndexOf("/")),
   );
 
   await writeSyncAggregateArtifacts(writeRootAbsPath, tsFiles, projectName);
