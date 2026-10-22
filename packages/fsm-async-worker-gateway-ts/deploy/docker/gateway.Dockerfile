@@ -21,7 +21,7 @@
 # --no-check: without node_modules `pg`'s types don't resolve; type checking
 # is CI's job (`deno check`).
 
-ARG DENO_VERSION=2.9.4
+ARG DENO_VERSION=2.9.8
 
 FROM denoland/deno:${DENO_VERSION} AS build
 # The release version (gateway-release.yml sets it); the binary must report it.
