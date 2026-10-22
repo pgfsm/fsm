@@ -15,6 +15,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether the two Supabase jobs (database, spec011-e2e: ~4 min each,
+  # mostly image pulls) can be affected by this PR (#606). They're skipped
+  # only when every changed file is on the can't-matter list below, so a new
+  # path runs them by default. Pushes to main always run everything.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      db: ${{ steps.filter.outputs.db }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2 # the PR merge commit's first parent is the base tip
+
+      - name: Can this change affect the Supabase jobs?
+        id: filter
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            echo "db=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Docs and licensing, the pgrx extension (local Supabase doesn't load
+          # it), editor/agent config, and every workflow except this one. Not
+          # the Python/Rust/Go SDKs or rust-toolchain.toml: SPEC-012's e2e runs
+          # workers in those languages (#545).
+          skip='^(.*\.md|docs/.*|LICENSES/.*|LICENSE|NOTICE|REUSE\.toml|\.github/ISSUE_TEMPLATE/.*|\.github/[^/]+\.(md|yml|yaml)|packages/database-src-extension/.*|renovate\.json|\.gitleaks\.toml|\.vscode/.*|\.claude/.*|\.agents/.*)$'
+          db=false
+          while IFS= read -r f; do
+            if [[ "$f" == .github/workflows/ci.yml ]] ||
+              { [[ ! "$f" =~ $skip ]] && [[ "$f" != .github/workflows/* ]]; }; then
+              echo "affects the Supabase jobs: $f"
+              db=true
+              break
+            fi
+          done < <(git diff --name-only HEAD^1 HEAD)
+          echo "db=$db" | tee -a "$GITHUB_OUTPUT"
+
   deno:
     name: Deno (fmt · lint · test)
     runs-on: ubuntu-latest
@@ -254,6 +294,8 @@ jobs:
 
   database:
     name: Database (pgTAP)
+    needs: changes
+    if: needs.changes.outputs.db == 'true'
     runs-on: ubuntu-latest
     # Cold Supabase image pull is several GB.
     timeout-minutes: 30
@@ -329,6 +371,8 @@ jobs:
   # results doesn't lengthen the pgTAP job.
   spec011-e2e:
     name: SPEC-011 end-to-end
+    needs: changes
+    if: needs.changes.outputs.db == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -393,3 +437,34 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all fsm/spec012Cancel/v01/spec012-journey-test.ts
+
+  # The one check the main ruleset requires from this workflow (#606), so a
+  # skipped job can't leave a PR waiting on a check that never reports, and a
+  # failure in any job here blocks the merge. Skipped counts as fine; add new
+  # jobs to `needs`.
+  ci-result:
+    name: CI result
+    if: always()
+    needs:
+      - changes
+      - deno
+      - python-async-worker-sdk
+      - rust-async-worker-sdk
+      - go-async-worker-sdk
+      - rust-fmt
+      - rust-clippy
+      - database
+      - spec011-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if [[ "$FAILED" == true ]]; then
+            echo "::error::a CI job failed or was cancelled"
+            exit 1
+          fi
