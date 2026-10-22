@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                         |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                                         |
+| Status  | Accepted                                                                                                                                                                                                                                      |
 | Date    | 2026-10-22                                                                                                                                                                                                                                    |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                                      |
 | Issue   | #498                                                                                                                                                                                                                                          |
@@ -332,4 +332,14 @@ export function equiGavinDBActor(context: any, event: any): unknown {
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Implemented as four stacked PRs, one per issue:
+
+1. #584: FSM JSON schema (`input`, `inputName`) and instance creation from the
+   declared static context.
+2. #585: compiler: `fsm.json` input fields and the pre-filled input stubs.
+3. #586: sync worker: computing the input when an invoke starts.
+4. #587: examples and test-apps: creditCheck as a new version, `loadTest`
+   passing `workMs`.
+
+Follow-ups: #588 (mapper `params`), #589 (context factories), #590 (one error
+policy for sync operations).
