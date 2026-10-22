@@ -5,6 +5,9 @@ mod creditcheck_v01;
 #[path = "./creditCheck/v03/actors/mod.rs"]
 mod creditcheck_v03;
 
+#[path = "./spec012Cancel/v01/actors/mod.rs"]
+mod spec012cancel_v01;
+
 pub struct ActorRegistration {
     pub parent_fsm_name: &'static str,
     pub parent_fsm_version: &'static str,
@@ -41,6 +44,16 @@ pub fn actor_registrations() -> Vec<ActorRegistration> {
             async_operation_language: "rust",
             max_concurrency: creditcheck_v03::checkBureauRust::MAX_CONCURRENCY as u32,
             handler: creditcheck_v03::checkBureauRust,
+        },
+        ActorRegistration {
+            parent_fsm_name: "spec012Cancel",
+            parent_fsm_version: "v01",
+            async_operation_type: "internalAsyncOperation",
+            async_operation_name: "spec012WorkRs",
+            async_operation_version: "v01",
+            async_operation_language: "rust",
+            max_concurrency: spec012cancel_v01::spec012WorkRs::MAX_CONCURRENCY as u32,
+            handler: spec012cancel_v01::spec012WorkRs,
         },
     ]
 }

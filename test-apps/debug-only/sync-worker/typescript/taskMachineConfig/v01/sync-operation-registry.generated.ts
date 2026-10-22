@@ -5,7 +5,7 @@ import { assignError } from "./actions/assignError/assignError.ts";
 export type SyncOperationRegistration = {
   fsmName: string;
   fsmVersion: string;
-  syncOperationType: "action" | "guard" | "delay";
+  syncOperationType: "action" | "guard" | "delay" | "input";
   syncOperationName: string;
   syncOperationLanguage: string;
   handler: (...args: unknown[]) => unknown;

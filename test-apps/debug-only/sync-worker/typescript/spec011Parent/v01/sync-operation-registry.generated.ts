@@ -6,7 +6,7 @@ import { delay1000 } from "./delays/1000/1000.ts";
 export type SyncOperationRegistration = {
   fsmName: string;
   fsmVersion: string;
-  syncOperationType: "action" | "guard" | "delay";
+  syncOperationType: "action" | "guard" | "delay" | "input";
   syncOperationName: string;
   syncOperationLanguage: string;
   handler: (...args: unknown[]) => unknown;

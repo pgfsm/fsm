@@ -10,4 +10,6 @@ MAX_CONCURRENCY = 5
 
 def checkBureau(input, token):
     # TODO: implement actor logic
+    # token is cancelled when the gateway cancels this invoke (e.g. its FSM
+    # state exited): check token.cancelled, or call token.raise_if_cancelled().
     return {"input": input, "msg": "checkBureau actor invoked by python"}

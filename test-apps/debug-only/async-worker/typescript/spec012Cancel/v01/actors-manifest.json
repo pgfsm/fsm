@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec012Cancel",
+      "parentFsmVersion": "v01",
+      "src": "spec012WorkTs",
+      "asyncOperationName": "spec012WorkTs",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/spec012WorkTs/spec012WorkTs.ts",
+      "exportedAsyncOperationName": "spec012WorkTs"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { ACTOR_REGISTRATIONS as vitalsworkflow_v01 } from "./vitalsWorkflow/v01/
 import { ACTOR_REGISTRATIONS as vitalsworkflow_v02 } from "./vitalsWorkflow/v02/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as taskmachineconfig_v01 } from "./taskMachineConfig/v01/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as taskmachineconfig_v02 } from "./taskMachineConfig/v02/actor-registry.generated.ts";
+import { ACTOR_REGISTRATIONS as spec012cancel_v01 } from "./spec012Cancel/v01/actor-registry.generated.ts";
 
 export const ACTOR_REGISTRATIONS = [
   ...spec011parent_v01,
@@ -21,4 +22,5 @@ export const ACTOR_REGISTRATIONS = [
   ...vitalsworkflow_v02,
   ...taskmachineconfig_v01,
   ...taskmachineconfig_v02,
+  ...spec012cancel_v01,
 ];

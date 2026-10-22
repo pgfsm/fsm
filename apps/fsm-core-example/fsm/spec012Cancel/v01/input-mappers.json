@@ -1,0 +1,6 @@
+{
+  "workTs": "({ context })=>({\n            markerPath: context.markerPath\n          })",
+  "workPy": "({ context })=>({\n            markerPath: context.markerPath\n          })",
+  "workRs": "({ context })=>({\n            markerPath: context.markerPath\n          })",
+  "workGo": "({ context })=>({\n            markerPath: context.markerPath\n          })"
+}

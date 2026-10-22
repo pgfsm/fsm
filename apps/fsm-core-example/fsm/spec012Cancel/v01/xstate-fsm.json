@@ -1,0 +1,489 @@
+{
+  "id": "spec012Cancel",
+  "key": "spec012Cancel",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec012Cancel.Idle"
+    ],
+    "source": "#spec012Cancel",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Idle": {
+      "id": "spec012Cancel.Idle",
+      "key": "Idle",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.Idle",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "START_TS": [
+          {
+            "target": [
+              "#spec012Cancel.WorkTs"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.Idle",
+            "reenter": false,
+            "eventType": "START_TS"
+          }
+        ],
+        "START_PY": [
+          {
+            "target": [
+              "#spec012Cancel.WorkPy"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.Idle",
+            "reenter": false,
+            "eventType": "START_PY"
+          }
+        ],
+        "START_RS": [
+          {
+            "target": [
+              "#spec012Cancel.WorkRs"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.Idle",
+            "reenter": false,
+            "eventType": "START_RS"
+          }
+        ],
+        "START_GO": [
+          {
+            "target": [
+              "#spec012Cancel.WorkGo"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.Idle",
+            "reenter": false,
+            "eventType": "START_GO"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec012Cancel.WorkTs"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.Idle",
+          "reenter": false,
+          "eventType": "START_TS"
+        },
+        {
+          "target": [
+            "#spec012Cancel.WorkPy"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.Idle",
+          "reenter": false,
+          "eventType": "START_PY"
+        },
+        {
+          "target": [
+            "#spec012Cancel.WorkRs"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.Idle",
+          "reenter": false,
+          "eventType": "START_RS"
+        },
+        {
+          "target": [
+            "#spec012Cancel.WorkGo"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.Idle",
+          "reenter": false,
+          "eventType": "START_GO"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    },
+    "WorkTs": {
+      "id": "spec012Cancel.WorkTs",
+      "key": "WorkTs",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.WorkTs",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.workTs": [
+          {
+            "target": [
+              "#spec012Cancel.Finished"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.WorkTs",
+            "reenter": false,
+            "eventType": "xstate.done.actor.workTs"
+          }
+        ],
+        "xstate.after.1500.spec012Cancel.WorkTs": [
+          {
+            "target": [
+              "#spec012Cancel.Abandoned"
+            ],
+            "event": "xstate.after.1500.spec012Cancel.WorkTs",
+            "delay": 1500,
+            "actions": [],
+            "source": "#spec012Cancel.WorkTs",
+            "reenter": false,
+            "eventType": "xstate.after.1500.spec012Cancel.WorkTs"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec012Cancel.Finished"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.WorkTs",
+          "reenter": false,
+          "eventType": "xstate.done.actor.workTs"
+        },
+        {
+          "target": [
+            "#spec012Cancel.Abandoned"
+          ],
+          "event": "xstate.after.1500.spec012Cancel.WorkTs",
+          "delay": 1500,
+          "actions": [],
+          "source": "#spec012Cancel.WorkTs",
+          "reenter": false,
+          "eventType": "xstate.after.1500.spec012Cancel.WorkTs"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel"
+        }
+      ],
+      "order": 2,
+      "invoke": [
+        {
+          "id": "workTs",
+          "src": "spec012WorkTs",
+          "asyncOperationLanguage": "typescript",
+          "type": "xstate.invoke"
+        }
+      ],
+      "tags": []
+    },
+    "WorkPy": {
+      "id": "spec012Cancel.WorkPy",
+      "key": "WorkPy",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.WorkPy",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.workPy": [
+          {
+            "target": [
+              "#spec012Cancel.Finished"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.WorkPy",
+            "reenter": false,
+            "eventType": "xstate.done.actor.workPy"
+          }
+        ],
+        "xstate.after.1500.spec012Cancel.WorkPy": [
+          {
+            "target": [
+              "#spec012Cancel.Abandoned"
+            ],
+            "event": "xstate.after.1500.spec012Cancel.WorkPy",
+            "delay": 1500,
+            "actions": [],
+            "source": "#spec012Cancel.WorkPy",
+            "reenter": false,
+            "eventType": "xstate.after.1500.spec012Cancel.WorkPy"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec012Cancel.Finished"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.WorkPy",
+          "reenter": false,
+          "eventType": "xstate.done.actor.workPy"
+        },
+        {
+          "target": [
+            "#spec012Cancel.Abandoned"
+          ],
+          "event": "xstate.after.1500.spec012Cancel.WorkPy",
+          "delay": 1500,
+          "actions": [],
+          "source": "#spec012Cancel.WorkPy",
+          "reenter": false,
+          "eventType": "xstate.after.1500.spec012Cancel.WorkPy"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel"
+        }
+      ],
+      "order": 3,
+      "invoke": [
+        {
+          "id": "workPy",
+          "src": "spec012WorkPy",
+          "asyncOperationLanguage": "python",
+          "type": "xstate.invoke"
+        }
+      ],
+      "tags": []
+    },
+    "WorkRs": {
+      "id": "spec012Cancel.WorkRs",
+      "key": "WorkRs",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.WorkRs",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.workRs": [
+          {
+            "target": [
+              "#spec012Cancel.Finished"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.WorkRs",
+            "reenter": false,
+            "eventType": "xstate.done.actor.workRs"
+          }
+        ],
+        "xstate.after.1500.spec012Cancel.WorkRs": [
+          {
+            "target": [
+              "#spec012Cancel.Abandoned"
+            ],
+            "event": "xstate.after.1500.spec012Cancel.WorkRs",
+            "delay": 1500,
+            "actions": [],
+            "source": "#spec012Cancel.WorkRs",
+            "reenter": false,
+            "eventType": "xstate.after.1500.spec012Cancel.WorkRs"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec012Cancel.Finished"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.WorkRs",
+          "reenter": false,
+          "eventType": "xstate.done.actor.workRs"
+        },
+        {
+          "target": [
+            "#spec012Cancel.Abandoned"
+          ],
+          "event": "xstate.after.1500.spec012Cancel.WorkRs",
+          "delay": 1500,
+          "actions": [],
+          "source": "#spec012Cancel.WorkRs",
+          "reenter": false,
+          "eventType": "xstate.after.1500.spec012Cancel.WorkRs"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel"
+        }
+      ],
+      "order": 4,
+      "invoke": [
+        {
+          "id": "workRs",
+          "src": "spec012WorkRs",
+          "asyncOperationLanguage": "rust",
+          "type": "xstate.invoke"
+        }
+      ],
+      "tags": []
+    },
+    "WorkGo": {
+      "id": "spec012Cancel.WorkGo",
+      "key": "WorkGo",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.WorkGo",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.workGo": [
+          {
+            "target": [
+              "#spec012Cancel.Finished"
+            ],
+            "actions": [],
+            "source": "#spec012Cancel.WorkGo",
+            "reenter": false,
+            "eventType": "xstate.done.actor.workGo"
+          }
+        ],
+        "xstate.after.1500.spec012Cancel.WorkGo": [
+          {
+            "target": [
+              "#spec012Cancel.Abandoned"
+            ],
+            "event": "xstate.after.1500.spec012Cancel.WorkGo",
+            "delay": 1500,
+            "actions": [],
+            "source": "#spec012Cancel.WorkGo",
+            "reenter": false,
+            "eventType": "xstate.after.1500.spec012Cancel.WorkGo"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec012Cancel.Finished"
+          ],
+          "actions": [],
+          "source": "#spec012Cancel.WorkGo",
+          "reenter": false,
+          "eventType": "xstate.done.actor.workGo"
+        },
+        {
+          "target": [
+            "#spec012Cancel.Abandoned"
+          ],
+          "event": "xstate.after.1500.spec012Cancel.WorkGo",
+          "delay": 1500,
+          "actions": [],
+          "source": "#spec012Cancel.WorkGo",
+          "reenter": false,
+          "eventType": "xstate.after.1500.spec012Cancel.WorkGo"
+        }
+      ],
+      "entry": [
+        {
+          "type": "xstate.raise"
+        }
+      ],
+      "exit": [
+        {
+          "type": "xstate.cancel"
+        }
+      ],
+      "order": 5,
+      "invoke": [
+        {
+          "id": "workGo",
+          "src": "spec012WorkGo",
+          "asyncOperationLanguage": "go",
+          "type": "xstate.invoke"
+        }
+      ],
+      "tags": []
+    },
+    "Finished": {
+      "id": "spec012Cancel.Finished",
+      "key": "Finished",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.Finished",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 6,
+      "invoke": [],
+      "tags": []
+    },
+    "Abandoned": {
+      "id": "spec012Cancel.Abandoned",
+      "key": "Abandoned",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec012Cancel.Abandoned",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 7,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

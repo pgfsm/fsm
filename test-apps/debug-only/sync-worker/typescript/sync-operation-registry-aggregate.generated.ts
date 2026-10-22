@@ -24,6 +24,10 @@ import {
   SYNC_OPERATION_REGISTRATIONS as spec011parent_v01,
 } from "./spec011Parent/v01/sync-operation-registry.generated.ts";
 import {
+  FSM_DEFINITION as spec012cancel_v01_definition,
+  SYNC_OPERATION_REGISTRATIONS as spec012cancel_v01,
+} from "./spec012Cancel/v01/sync-operation-registry.generated.ts";
+import {
   FSM_DEFINITION as spec013child_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as spec013child_v01,
 } from "./spec013Child/v01/sync-operation-registry.generated.ts";
@@ -55,6 +59,7 @@ export const SYNC_OPERATION_REGISTRATIONS = [
   ...creditcheck_v03,
   ...spec011child_v01,
   ...spec011parent_v01,
+  ...spec012cancel_v01,
   ...spec013child_v01,
   ...spec013input_v01,
   ...taskmachineconfig_v01,
@@ -70,6 +75,7 @@ export const FSM_DEFINITIONS = [
   creditcheck_v03_definition,
   spec011child_v01_definition,
   spec011parent_v01_definition,
+  spec012cancel_v01_definition,
   spec013child_v01_definition,
   spec013input_v01_definition,
   taskmachineconfig_v01_definition,

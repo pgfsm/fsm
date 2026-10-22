@@ -12,5 +12,7 @@ pub fn checkBureauRust(
     _token: pgfsm_async_worker_sdk::CancellationToken,
 ) -> serde_json::Value {
     // TODO: implement actor logic
+    // _token is cancelled when the gateway cancels this invoke (e.g. its FSM
+    // state exited): check _token.is_cancelled() between steps.
     serde_json::json!({ "input": input, "msg": "checkBureauRust actor invoked by rust" })
 }

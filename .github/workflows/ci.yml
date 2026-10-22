@@ -330,7 +330,7 @@ jobs:
   spec011-e2e:
     name: SPEC-011 end-to-end
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: packages/database-src
@@ -372,3 +372,24 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all fsm/spec013Input/v01/spec013-journey-test.ts
+
+      # SPEC-012's end-to-end test (#545) runs test-apps/debug-only's Python,
+      # Rust and Go workers as subprocesses, beside the in-process TypeScript
+      # one: uv, cargo (rust-toolchain.toml) and go must be on PATH.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: test-apps/debug-only/async-worker/go/go.mod
+          cache-dependency-path: test-apps/debug-only/async-worker/go/go.sum
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        working-directory: .
+        run: rustup toolchain install
+      - name: SPEC-012 journey test
+        working-directory: apps/fsm-core-example
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all fsm/spec012Cancel/v01/spec012-journey-test.ts
