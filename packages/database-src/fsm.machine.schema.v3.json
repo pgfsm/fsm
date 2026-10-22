@@ -319,7 +319,14 @@
           "description": "Language runtime that executes the invoked service. Defaults to typescript. Aligns with the actor folder convention (typescript/, python/, rust/, go/, llm/)."
         },
         "input": {
-          "type": ["string", "number", "boolean", "null", "array", "object"],
+          "anyOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "null" },
+            { "type": "array" },
+            { "type": "object" }
+          ],
           "description": "SPEC-013: the invoke's static input, passed to the actor (or merged into an invoked child FSM's context) unchanged. Any JSON value; a string is a value, not a reference. Mutually exclusive with inputName."
         },
         "inputName": {
@@ -334,7 +341,10 @@
         "asyncOperationType",
         "asyncOperationVersion"
       ],
-      "not": { "required": ["input", "inputName"] },
+      "not": {
+        "properties": { "input": true, "inputName": true },
+        "required": ["input", "inputName"]
+      },
       "additionalProperties": false
     },
     "invokeArray": {
