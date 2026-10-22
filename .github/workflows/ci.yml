@@ -364,3 +364,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all fsm/spec011Parent/v01/spec011-journey-test.ts
+
+      # SPEC-013's end-to-end test (#587): actors and child FSMs receive
+      # per-instance input. Same stack and database as SPEC-011's.
+      - name: SPEC-013 journey test
+        working-directory: apps/fsm-core-example
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all fsm/spec013Input/v01/spec013-journey-test.ts

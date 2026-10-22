@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                         |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Accepted                                                                                                                                                                                                                                      |
+| Status  | Implemented                                                                                                                                                                                                                                   |
 | Date    | 2026-10-22                                                                                                                                                                                                                                    |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                                      |
 | Issue   | #498                                                                                                                                                                                                                                          |
@@ -42,19 +42,22 @@ input = typeof input === "function"
 - An **invoked child machine** gets the input only through its own context
   factory (`context: ({ input }) => ({ ...defaults, ...input })`).
 
-None of this survives into our runtime:
+Most of this doesn't survive into our runtime:
 
-1. The compiler serializes the machine to `fsm.json`. A mapper is a function, so
-   it's dropped.
-2. The FSM JSON schema's `invokeObject` has no `input` property and
-   `additionalProperties: false`, so even a static input has nowhere to go. No
-   `fsm.json` in the repo carries `input`.
-3. The sync worker forwards the invoke as it is (`fsmworker-helper.ts`, the
-   `xstate.invoke` entry action), so every actor's input is `null`, and
-   `start_child_fsm_v2` starts every child with `COALESCE(input, '{}')`.
-4. A definition's own static `context` is stored by `fsm_load_v2` but never
-   applied when an instance is created: `create_fsm_instance_from_name_v2` uses
-   only the context its caller passes.
+1. The compiler builds `fsm.json` from XState's `machine.toJSON()`. A mapper is
+   a function, which JSON can't hold, so it's dropped: the invoke in
+   `xstate-fsm.json` has no `input` key at all.
+2. A **static** input does survive `toJSON()`, so it was already copied into
+   `fsm.json`, and the sync worker and archive would pass it to the actor. But
+   the FSM JSON schema's `invokeObject` has no `input` property and sets
+   `additionalProperties: false`, so such an `fsm.json` is invalid. Load-time
+   validation is only an advisory `NOTICE`, which is why nothing failed. No
+   machine in the repo used a static input, so this path was never exercised.
+3. So every actor whose invoke uses a mapper gets `null`, and
+   `start_child_fsm_v2` starts every such child with `COALESCE(input, '{}')`.
+4. A definition's own static `context` is dropped too: `toJSON()` writes
+   `"context": null` even for a static context object, and
+   `create_fsm_instance_from_name_v2` uses only the context its caller passes.
 
 **Who is affected:**
 
@@ -334,12 +337,16 @@ export function equiGavinDBActor(context: any, event: any): unknown {
 
 Implemented as four stacked PRs, one per issue:
 
-1. #584: FSM JSON schema (`input`, `inputName`) and instance creation from the
-   declared static context.
-2. #585: compiler: `fsm.json` input fields and the pre-filled input stubs.
-3. #586: sync worker: computing the input when an invoke starts.
-4. #587: examples and test-apps: creditCheck as a new version, `loadTest`
-   passing `workMs`.
+1. #584 (PR #592): FSM JSON schema (`input`, `inputName`) and instance creation
+   from the declared static context.
+2. #585 (PR #593): compiler: `fsm.json` input fields and the pre-filled input
+   stubs; generated sync workers pin `@pgfsm/sync-worker` `^0.5.0`.
+3. #586 (PR #594): sync worker: computing the input when an invoke starts.
+4. #587: examples and test-apps: creditCheck `v03`, the `spec013Input`
+   end-to-end test (CI), and `loadTest` `v02` passing `workMs`.
+
+Release order: the database migration (2.1.18), then `@pgfsm/sync-worker` 0.5.0,
+then the compiler (its generated projects pin `^0.5.0`).
 
 Follow-ups: #588 (mapper `params`), #589 (context factories), #590 (one error
 policy for sync operations).

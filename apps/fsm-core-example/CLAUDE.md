@@ -48,3 +48,24 @@ one process (scheduler, fsmlet, gateway, TypeScript `ActorWorker`), loads both
 definitions itself, and skips without `DATABASE_URL`. CI runs it in the
 "SPEC-011 end-to-end" job; it takes about 30s, most of it waiting for late
 results.
+
+## SPEC-013 end-to-end test and creditCheck v03 (#587)
+
+`spec013Input/` and `spec013Child/` are SPEC-013's test machines: an input
+function over context and event (`mappedEcho`, built from the instance's `ssn`
+and the START event's `eventPayload.requestId`), a static input, and an invoked
+child FSM whose input is merged over its declared static context. The
+`spec013Echo` actor returns its input, and `saveMapped`/`saveFixed` keep it in
+context, so `spec013Input/v01/spec013-journey-test.ts` can check what each actor
+received, for two instances with different contexts. CI runs it after SPEC-011's
+journey test, in the same job.
+
+`creditCheck/v03/` is `v01` recompiled with SPEC-013: its input functions become
+`inputName`s with pre-filled input stubs in `test-apps/debug-only`. It's a new
+version, not an edit of `v01`, because a loaded FSM version is immutable
+(SPEC-006) and `v01`'s fsm.json would change.
+
+In this runtime an input function's `event` is the processed message's
+`eventData`, so an event's own fields are under `event.eventPayload`.
+`input-mappers.json` next to a version's fsm.json is compile-time only (the
+input functions' source, for pre-filling stubs).

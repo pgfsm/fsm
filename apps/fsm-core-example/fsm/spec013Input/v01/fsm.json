@@ -1,0 +1,222 @@
+{
+  "id": "spec013Input",
+  "key": "spec013Input",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec013Input.Idle"
+    ],
+    "source": "#spec013Input",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Idle": {
+      "id": "spec013Input.Idle",
+      "key": "Idle",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec013Input.Idle",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "START": [
+          {
+            "target": [
+              "#spec013Input.Mapped"
+            ],
+            "actions": [],
+            "source": "#spec013Input.Idle",
+            "reenter": false,
+            "eventType": "START"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec013Input.Mapped"
+          ],
+          "actions": [],
+          "source": "#spec013Input.Idle",
+          "reenter": false,
+          "eventType": "START"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    },
+    "Mapped": {
+      "id": "spec013Input.Mapped",
+      "key": "Mapped",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec013Input.Mapped",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.mappedEcho": [
+          {
+            "target": [
+              "#spec013Input.Fixed"
+            ],
+            "actions": [
+              {
+                "type": "saveMapped"
+              }
+            ],
+            "source": "#spec013Input.Mapped",
+            "reenter": false,
+            "eventType": "xstate.done.actor.mappedEcho"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec013Input.Fixed"
+          ],
+          "actions": [
+            {
+              "type": "saveMapped"
+            }
+          ],
+          "source": "#spec013Input.Mapped",
+          "reenter": false,
+          "eventType": "xstate.done.actor.mappedEcho"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [
+        {
+          "id": "mappedEcho",
+          "src": "spec013Echo",
+          "type": "xstate.invoke",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v01",
+          "asyncOperationLanguage": "typescript",
+          "inputName": "mappedEcho"
+        }
+      ],
+      "tags": []
+    },
+    "Fixed": {
+      "id": "spec013Input.Fixed",
+      "key": "Fixed",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec013Input.Fixed",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.done.actor.0.spec013Input.Fixed": [
+          {
+            "target": [
+              "#spec013Input.WithChild"
+            ],
+            "actions": [
+              {
+                "type": "saveFixed"
+              }
+            ],
+            "source": "#spec013Input.Fixed",
+            "reenter": false,
+            "eventType": "xstate.done.actor.0.spec013Input.Fixed"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec013Input.WithChild"
+          ],
+          "actions": [
+            {
+              "type": "saveFixed"
+            }
+          ],
+          "source": "#spec013Input.Fixed",
+          "reenter": false,
+          "eventType": "xstate.done.actor.0.spec013Input.Fixed"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 3,
+      "invoke": [
+        {
+          "src": "spec013Echo",
+          "input": {
+            "bureauName": "GavUnion"
+          },
+          "type": "xstate.invoke",
+          "id": "0.spec013Input.Fixed",
+          "asyncOperationType": "internalAsyncOperation",
+          "asyncOperationVersion": "v01",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "WithChild": {
+      "id": "spec013Input.WithChild",
+      "key": "WithChild",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec013Input.WithChild",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 4,
+      "invoke": [
+        {
+          "asyncOperationType": "fsm",
+          "asyncOperationVersion": "v01",
+          "src": "spec013Child",
+          "type": "xstate.invoke",
+          "id": "0.spec013Input.WithChild",
+          "asyncOperationLanguage": "typescript",
+          "inputName": "WithChild_spec013Child"
+        }
+      ],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": [],
+  "context": {
+    "ssn": "",
+    "mapped": null,
+    "fixed": null
+  }
+}

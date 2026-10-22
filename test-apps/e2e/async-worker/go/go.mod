@@ -6,6 +6,8 @@ require e2e/actor-registry-aggregate-generated v0.0.0
 
 require e2e/loadtest/v01/go/actors/loadwork v0.0.0 // indirect
 
+require e2e/loadtest/v02/go/actors/loadwork v0.0.0 // indirect
+
 require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.4.0
 
 require (
@@ -21,3 +23,5 @@ require (
 replace e2e/actor-registry-aggregate-generated => ./actor-registry-aggregate-generated
 
 replace e2e/loadtest/v01/go/actors/loadwork => ./loadTest/v01/actors/loadWork
+
+replace e2e/loadtest/v02/go/actors/loadwork => ./loadTest/v02/actors/loadWork

@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "spec013Input",
+      "parentFsmVersion": "v01",
+      "src": "spec013Echo",
+      "asyncOperationName": "spec013Echo",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v01",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/spec013Echo/spec013Echo.ts",
+      "exportedAsyncOperationName": "spec013Echo"
+    }
+  ]
+}

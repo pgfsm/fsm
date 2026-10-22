@@ -1,0 +1,15 @@
+# Actor: checkBureau
+
+# How many invokes of this actor one worker runs at once. Above 1, the
+# handler runs on several threads at once and must be thread-safe (no
+# unguarded shared state, only thread-safe clients). Delivery is
+# at-least-once, so the handler must also be idempotent: the same invoke can
+# arrive more than once.
+MAX_CONCURRENCY = 1
+
+
+def checkBureau(input, token):
+    # TODO: implement actor logic
+    # token is cancelled when the gateway cancels this invoke (e.g. its FSM
+    # state exited): check token.cancelled, or call token.raise_if_cancelled().
+    return {"input": input, "msg": "checkBureau actor invoked by python"}
