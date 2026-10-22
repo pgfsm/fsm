@@ -80,8 +80,12 @@ function renderStub(
   lang: OperationLang,
   kind: OperationKind,
   name: string,
+  mapperSource?: string,
 ): string {
-  return getTemplate(lang, kind)(deriveTemplateInput(kind, name, lang));
+  return getTemplate(lang, kind)({
+    ...deriveTemplateInput(kind, name, lang),
+    ...(mapperSource !== undefined && { mapperSource }),
+  });
 }
 
 /**
@@ -104,11 +108,12 @@ export function renderOperationModule(
   lang: OperationLang,
   kind: OperationKind,
   names: string[],
+  mapperSources: Record<string, string> = {},
 ): string {
   const unique = [...new Set(names)];
   let out = getPreamble(lang, kind);
   for (const name of unique) {
-    out += renderStub(lang, kind, name);
+    out += renderStub(lang, kind, name, mapperSources[name]);
   }
   return withSingleTrailingNewline(out);
 }
@@ -161,6 +166,8 @@ export async function writeOperationModule(
   kind: OperationKind,
   names: string[],
   subPath?: string,
+  /** Input stubs' pre-fill (SPEC-013): mapper source by input name. */
+  mapperSources: Record<string, string> = {},
 ): Promise<void> {
   const dir = subPath
     ? `${absFolderPath}/${lang}/${subPath}/${kind}`
@@ -172,7 +179,7 @@ export async function writeOperationModule(
     await Deno.mkdir(opDir, { recursive: true });
     await writeOwnedFile(
       `${opDir}/${base}.${operationFileExtension(lang)}`,
-      renderOperationModule(lang, kind, [name]),
+      renderOperationModule(lang, kind, [name], mapperSources),
       "scaffolded",
     );
   }
@@ -204,7 +211,7 @@ type SyncOperationGroup = {
 
 type SyncOperationModuleKind = Extract<
   OperationKind,
-  "actions" | "guards" | "delays"
+  "actions" | "guards" | "delays" | "inputs"
 >;
 
 function syncOperationImports(
@@ -247,6 +254,8 @@ export async function writeSyncOperationRegistry(
   guards: string[],
   delays: string[],
   fsmJsonSha256: string,
+  /** Input stubs (SPEC-013), registered as sync-operation type `input`. */
+  inputs: string[] = [],
 ): Promise<string> {
   const kinds: {
     kind: SyncOperationType;
@@ -270,6 +279,11 @@ export async function writeSyncOperationRegistry(
         name,
         importName: `${DELAY_ACTION_NAME_PREFIX}${name}`,
       })),
+    },
+    {
+      kind: "input",
+      moduleKind: "inputs",
+      entries: inputs.map((name) => ({ name, importName: name })),
     },
   ];
   const groups: SyncOperationGroup[] = kinds.map(
