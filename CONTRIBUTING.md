@@ -35,8 +35,11 @@ Key runtimes:
 ### Pre-commit hooks
 
 We use [prek](https://github.com/j178/prek) (`prek.toml`) to run fast local
-checks on commit: **gitleaks** (secret scan), **deno fmt**, and **cargo fmt**.
-Install once with `prek install`.
+checks on commit: **gitleaks** (secret scan), **deno fmt**, **cargo fmt**, and
+**actionlint** on `.github/workflows/` changes. Install once with
+`prek install`. prek builds actionlint with Go on first use. It runs shellcheck
+on `run:` scripts only when `shellcheck` is on your `PATH`; CI's prek job always
+has it.
 
 The hooks assume the pinned toolchain is on your `PATH` (which `proto` handles
 in your shell). **If your GUI git client reports `deno`/`cargo` not found on
