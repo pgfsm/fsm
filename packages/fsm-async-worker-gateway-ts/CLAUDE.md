@@ -73,14 +73,16 @@ sync: **preflight → build image (pushed by digest, untagged) → npm publish �
 image + attest → verify**. (`npm-publish.yml` no longer handles this package.)
 
 - **preflight** fails before anything is published if the tag doesn't match
-  `deno.json`, if the `@pgfsm/db` / `@pgfsm/logging` versions in their
-  `deno.json` aren't on npm, or if either package's shipped files (not `test/`
-  or `*.md`) changed since its own `db-v*` / `logging-v*` tag. The image
-  compiles those packages from source while the npm package depends on
-  `^<their version>`, so this is what makes both the same code: release them
-  first. `workflow_dispatch` has `allow_unreleased_deps` for changes that don't
-  ship. `@pgfsm/proto-codegen` comes from the workspace and dnt inlines it, so
-  both builds take it from the same commit.
+  `deno.json`, if the `@pgfsm/db` / `@pgfsm/logging` / `@pgfsm/proto-codegen`
+  versions in their `deno.json` aren't on npm, or if any of those packages'
+  shipped files (not `test/` or `*.md`) changed since its own `db-v*` /
+  `logging-v*` / `proto-v*` tag. The image compiles those packages from source
+  while the npm package depends on `^<their version>`, so this is what makes
+  both the same code: release them first. `workflow_dispatch` has
+  `allow_unreleased_deps` for changes that don't ship. Until 0.5.0 dnt inlined
+  `@pgfsm/proto-codegen`; SPEC-012's `CancelReason`, its first enum, broke that
+  (dnt's declaration emit for the generated `.js` fails with TS2883), so it's
+  mapped to npm like the SDK's build does (#609).
 - The image is built before the npm publish (an npm version can't be
   republished) and tagged only after it, so no tagged image exists without its
   npm package. `<version>` always; `<major>.<minor>` / `latest` only when it's
@@ -117,11 +119,9 @@ npm in favour of the new name.
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
 local `deno task build:npm` skips it.
 
-This package also depends on `@pgfsm/proto-codegen` (generated
-Connect/protobuf/gRPC-Node code, `node:net` usage) — unlike sync-worker's dnt
-build, this one has to carry that dependency graph through dnt's type-check and
-bundling. Verified clean as of #176; if it breaks again, that's the first place
-to look.
+This package also depends on `@pgfsm/proto-codegen` (generated Connect/protobuf
+code). Since 0.5.0 (#609) the build maps it to the published npm package instead
+of inlining it; see "Releasing".
 
 **`Deno.remove`/`Deno.removeSync` don't throw `Deno.errors.NotFound` under the
 npm/npx build (#278)**: `@deno/shim-deno`'s `remove`/`removeSync` rethrow a

@@ -42,7 +42,7 @@ on:
         required: true
         type: string
       allow_unreleased_deps:
-        description: Release even if @pgfsm/db or @pgfsm/logging changed since their release tags (only for changes that aren't shipped, e.g. comments)
+        description: Release even if @pgfsm/db, @pgfsm/logging or @pgfsm/proto-codegen changed since their release tags (only for changes that aren't shipped, e.g. comments)
         type: boolean
         default: false
 
@@ -115,8 +115,9 @@ jobs:
             echo "image: $image_tags"
           } >>"$GITHUB_STEP_SUMMARY"
 
-      # build-npm.ts maps @pgfsm/db and @pgfsm/logging to `^<their deno.json
-      # version>`; the image compiles their source at this commit instead.
+      # build-npm.ts maps @pgfsm/db, @pgfsm/logging and @pgfsm/proto-codegen
+      # to `^<their deno.json version>`; the image compiles their source at
+      # this commit instead.
       - name: Dependencies are released, and unchanged since
         env:
           ALLOW_UNRELEASED: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_unreleased_deps || false }}
@@ -153,6 +154,7 @@ jobs:
           }
           check @pgfsm/db packages/fsm-core-db-ts db-v
           check @pgfsm/logging packages/fsm-logging-ts logging-v
+          check @pgfsm/proto-codegen packages/fsm-proto-codegen/gen/typescript proto-v
           exit $failed
 
   build:
