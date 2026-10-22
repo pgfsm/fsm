@@ -32,14 +32,16 @@ hooks = [
 # issue (it isn't inheriting your shell PATH); see CONTRIBUTING.md. cargo fmt uses
 # --manifest-path instead of `cd` so no shell is needed on Windows.
 #
-# deno lint is intentionally OFF for now — the repo carries a ~541-issue backlog
-# (mostly no-explicit-any / no-unused-vars). Re-enable the `deno-lint` hook below
-# once the backlog is worked down (or to gate new code on touched files).
+# deno lint runs on the staged files only, like CI's "Lint (changed files)"
+# step (#602): the repo still carries a whole-repo lint backlog, so committing a
+# file with old issues means fixing them first. It skips the scaffold stubs
+# under test-apps/, which the compiler's templates write with `any` and unused
+# params (#604 removes this); keep that list in sync with ci.yml.
 [[repos]]
 repo = "local"
 hooks = [
   { id = "deno-fmt", name = "deno fmt", entry = "deno fmt --check", language = "system", pass_filenames = false, types_or = ["ts", "tsx", "javascript", "jsx", "json", "markdown"] },
-  # { id = "deno-lint", name = "deno lint", entry = "deno lint", language = "system", pass_filenames = true, types_or = ["ts", "tsx", "javascript", "jsx"] },
+  { id = "deno-lint", name = "deno lint", entry = "deno lint", language = "system", pass_filenames = true, types_or = ["ts", "tsx", "javascript", "jsx"], exclude = '^test-apps/[^/]+/(sync-worker/.*/(actions|guards|delays|inputs)|async-worker/typescript/.*/actors)/' },
   { id = "cargo-fmt", name = "cargo fmt", entry = "cargo fmt --manifest-path packages/database-src-extension/fsm_core/Cargo.toml --all --check", language = "system", pass_filenames = false, files = '^packages/database-src-extension/fsm_core/.*\.rs$' },
 ]
 
