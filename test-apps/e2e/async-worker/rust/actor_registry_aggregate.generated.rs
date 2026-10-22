@@ -2,6 +2,9 @@
 #[path = "./loadTest/v01/actors/mod.rs"]
 mod loadtest_v01;
 
+#[path = "./loadTest/v02/actors/mod.rs"]
+mod loadtest_v02;
+
 pub struct ActorRegistration {
     pub parent_fsm_name: &'static str,
     pub parent_fsm_version: &'static str,
@@ -18,14 +21,26 @@ pub struct ActorRegistration {
 }
 
 pub fn actor_registrations() -> Vec<ActorRegistration> {
-    vec![ActorRegistration {
-        parent_fsm_name: "loadTest",
-        parent_fsm_version: "v01",
-        async_operation_type: "internalAsyncOperation",
-        async_operation_name: "loadWork",
-        async_operation_version: "v01",
-        async_operation_language: "rust",
-        max_concurrency: loadtest_v01::loadWork::MAX_CONCURRENCY as u32,
-        handler: loadtest_v01::loadWork,
-    }]
+    vec![
+        ActorRegistration {
+            parent_fsm_name: "loadTest",
+            parent_fsm_version: "v01",
+            async_operation_type: "internalAsyncOperation",
+            async_operation_name: "loadWork",
+            async_operation_version: "v01",
+            async_operation_language: "rust",
+            max_concurrency: loadtest_v01::loadWork::MAX_CONCURRENCY as u32,
+            handler: loadtest_v01::loadWork,
+        },
+        ActorRegistration {
+            parent_fsm_name: "loadTest",
+            parent_fsm_version: "v02",
+            async_operation_type: "internalAsyncOperation",
+            async_operation_name: "loadWork",
+            async_operation_version: "v02",
+            async_operation_language: "rust",
+            max_concurrency: loadtest_v02::loadWork::MAX_CONCURRENCY as u32,
+            handler: loadtest_v02::loadWork,
+        },
+    ]
 }

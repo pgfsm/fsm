@@ -9,10 +9,12 @@
 // - `instances` creates loadTest FSM instances (create_fsm_instance_from_name_v2):
 //   the full cycle, through the sync worker, all four actors and back. Each
 //   finished instance means four actor results reached their FSM. Needs the
-//   FSM loaded and a sync worker running.
+//   FSM loaded and a sync worker running. They're loadTest v02, whose actors
+//   get `{ n, runId, workMs }` from the instance's context through invoke
+//   input (SPEC-013), so `--work-ms` sets each actor's work.
 //
 //   deno run -A test-apps/e2e/tools/load.ts enqueue --language go --count 200 --work-ms 500
-//   deno run -A test-apps/e2e/tools/load.ts instances --count 50 --run-id <id>
+//   deno run -A test-apps/e2e/tools/load.ts instances --count 50 [--work-ms 200] --run-id <id>
 //   deno run -A test-apps/e2e/tools/load.ts stats --run-id <id> [--wait 300] [--json]
 //
 // Needs DATABASE_URL (Postgres with the fsm_core migrations), e.g. a
@@ -70,7 +72,7 @@ function usage(): never {
   load.ts enqueue --language <${
     LANGUAGES.join("|")
   }> --count <n> [--work-ms <ms>] [--run-id <id>]
-  load.ts instances --count <n> [--run-id <id>]
+  load.ts instances --count <n> [--work-ms <ms>] [--run-id <id>]
   load.ts stats --run-id <id> [--language <l>]... [--wait <seconds>] [--json]`);
   Deno.exit(2);
 }
@@ -138,23 +140,28 @@ async function enqueue(
   }));
 }
 
+/** The loadTest version `instances` creates and `stats` counts (SPEC-013). */
+const LOAD_TEST_VERSION = "v02";
+
 /**
  * Creates `count` loadTest instances, tagged with the run id in their context
- * so `stats` can find them. Their actors get no per-instance input (fsm.json
- * keeps no invoke input function), so they do no work: this is about the
- * cycle completing, not throughput.
+ * so `stats` can find them, with `n` and `workMs` beside it: loadTest v02's
+ * `loadWorkInput` stub turns them into each actor's input (SPEC-013), so its
+ * four actors each work `workMs`.
  */
 async function createInstances(
   db: pg.Pool,
   count: number,
+  workMs: number,
   runId: string,
 ): Promise<void> {
   const { rows } = await db.query(
     `SELECT count(*) AS created FROM (
        SELECT fsm_core.create_fsm_instance_from_name_v2(
-         'loadTest', 'v01', jsonb_build_object('e2eRunId', $1::text))
-       FROM generate_series(1, $2::int)) made`,
-    [runId, count],
+         'loadTest', $4::text,
+         jsonb_build_object('e2eRunId', $1::text, 'n', n, 'workMs', $3::int))
+       FROM generate_series(1, $2::int) n) made`,
+    [runId, count, workMs, LOAD_TEST_VERSION],
   );
   console.log(JSON.stringify({ runId, instances: Number(rows[0].created) }));
 }
@@ -166,10 +173,10 @@ async function instanceStats(
   const { rows } = await db.query(
     `SELECT coalesce(fsm_instance_status #>> '{}', 'null') AS status, count(*) AS n
        FROM fsm_core.fsm_instance
-      WHERE fsm_name = 'loadTest' AND fsm_version = 'v01'
+      WHERE fsm_name = 'loadTest' AND fsm_version = $2
         AND fsm_instance_context->>'e2eRunId' = $1
       GROUP BY 1`,
-    [runId],
+    [runId, LOAD_TEST_VERSION],
   );
   const byStatus = Object.fromEntries(
     rows.map((
@@ -339,6 +346,7 @@ if (import.meta.main) {
       await createInstances(
         db,
         Number(args.count),
+        Number(args["work-ms"] ?? 0),
         args["run-id"] ?? crypto.randomUUID(),
       );
     } else if (command === "stats") {

@@ -5,6 +5,7 @@ import (
 	"context"
 
 	loadtest_v01_loadwork "e2e/loadtest/v01/go/actors/loadwork"
+	loadtest_v02_loadwork "e2e/loadtest/v02/go/actors/loadwork"
 )
 
 type ActorRegistration struct {
@@ -31,6 +32,16 @@ func ActorRegistrations() []ActorRegistration {
 			AsyncOperationLanguage: "go",
 			MaxConcurrency:         uint32(loadtest_v01_loadwork.MaxConcurrency),
 			Handler:                loadtest_v01_loadwork.LoadWork,
+		},
+		{
+			ParentFsmName:          "loadTest",
+			ParentFsmVersion:       "v02",
+			AsyncOperationType:     "internalAsyncOperation",
+			AsyncOperationName:     "loadWork",
+			AsyncOperationVersion:  "v02",
+			AsyncOperationLanguage: "go",
+			MaxConcurrency:         uint32(loadtest_v02_loadwork.MaxConcurrency),
+			Handler:                loadtest_v02_loadwork.LoadWork,
 		},
 	}
 }
