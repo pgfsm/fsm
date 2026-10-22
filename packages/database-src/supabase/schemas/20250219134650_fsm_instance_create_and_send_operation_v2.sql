@@ -136,16 +136,37 @@ DECLARE
     derived_fsm_type text;
     fsm_json_exists boolean;
     fsm_instance_row      fsm_core.fsm_instance;
+    declared_context jsonb;
+    instance_context jsonb;
 BEGIN
-    -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json
-    SELECT EXISTS (
-        SELECT 1
-        FROM fsm_core.fsm_json fj
-        WHERE fj.fsm_name = input_fsm_name AND fj.fsm_version = input_fsm_version
-    ) INTO fsm_json_exists;
+    -- 1. Check if fsm_name and fsm_version exist in fsm_core.fsm_json, and
+    --    read the definition's static context (SPEC-013, #584).
+    SELECT true, fj.fsm_json->'context'
+    INTO fsm_json_exists, declared_context
+    FROM fsm_core.fsm_json fj
+    WHERE fj.fsm_name = input_fsm_name AND fj.fsm_version = input_fsm_version;
 
-    IF NOT fsm_json_exists THEN
+    IF NOT COALESCE(fsm_json_exists, false) THEN
         RAISE EXCEPTION 'FSM with name % and version % not found in fsm_core.fsm_json', input_fsm_name, input_fsm_version;
+    END IF;
+
+    -- 1.0. The instance's context (SPEC-013): the definition's static context,
+    --      when fsm.json has one, shallow-merged with the context it's created
+    --      with, which wins (the API payload, or an invoked child FSM's
+    --      input). Without a declared context the given one is used as before.
+    --      A non-object given context can't be merged: it's dropped with a
+    --      warning, and the instance starts from the declared context alone.
+    IF jsonb_typeof(declared_context) IS DISTINCT FROM 'object' THEN
+        declared_context := NULL;
+    END IF;
+    IF input_fsm_context IS NULL OR jsonb_typeof(input_fsm_context) = 'null' THEN
+        instance_context := COALESCE(declared_context, input_fsm_context);
+    ELSIF jsonb_typeof(input_fsm_context) = 'object' THEN
+        instance_context := COALESCE(declared_context, '{}'::jsonb) || input_fsm_context;
+    ELSE
+        RAISE WARNING 'FSM %@%: ignoring a non-object initial context (%); starting from its declared context',
+            input_fsm_name, input_fsm_version, jsonb_typeof(input_fsm_context);
+        instance_context := COALESCE(declared_context, '{}'::jsonb);
     END IF;
 
     -- 1.1. Derive fsm_type from fsm_core.fsm_dependencies: a row where this FSM
@@ -162,7 +183,7 @@ BEGIN
 
     -- 2. Create new fsm_instance
     INSERT INTO fsm_core.fsm_instance (fsm_name, fsm_version, fsm_type, fsm_instance_context, parent_fsm_instance_id, parent_invoke_id)
-    VALUES (input_fsm_name, input_fsm_version, derived_fsm_type, input_fsm_context, input_parent_fsm_instance_id, input_parent_invoke_id)
+    VALUES (input_fsm_name, input_fsm_version, derived_fsm_type, instance_context, input_parent_fsm_instance_id, input_parent_invoke_id)
     RETURNING * INTO fsm_instance_row;
 
     fsm_instance_id := fsm_instance_row.id;
@@ -234,7 +255,7 @@ BEGIN
         'fsm_name', input_fsm_name,
         'fsm_version', input_fsm_version,
         'fsm_instance_id', fsm_instance_id,
-        'fsm_instance_context', input_fsm_context,
+        'fsm_instance_context', instance_context,
         'send_event_result', send_event_result,
         'message', output_message,
         'extra_message', output_extra_message

@@ -49,7 +49,7 @@ Flow:
 | [SPEC-010](spec-010-done-state-internal-event-queue.md)    | `done.state` Events Through a Per-Instance Internal Event Queue          | Accepted    |
 | [SPEC-011](spec-011-stop-invokes-on-state-exit.md)         | Stop Invokes and Child FSMs When Their State Exits                       | Implemented |
 | [SPEC-012](spec-012-cancel-inflight-actor-invoke.md)       | Cancel an In-Flight Actor Invoke in Its Worker                           | Draft       |
-| [SPEC-013](spec-013-invoke-input.md)                       | Per-Instance Input for Invoked Actors and Child FSMs                     | Draft       |
+| [SPEC-013](spec-013-invoke-input.md)                       | Per-Instance Input for Invoked Actors and Child FSMs                     | Accepted    |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to

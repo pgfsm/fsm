@@ -121,6 +121,14 @@ export interface InvokeObject {
    * Language runtime that executes the invoked service. Defaults to typescript. Aligns with the actor folder convention (typescript/, python/, rust/, go/, llm/).
    */
   asyncOperationLanguage?: "typescript" | "python" | "rust" | "go" | "llm";
+  /**
+   * SPEC-013: the invoke's static input, passed to the actor (or merged into an invoked child FSM's context) unchanged. Any JSON value; a string is a value, not a reference. Mutually exclusive with inputName.
+   */
+  input?: string | number | boolean | null | unknown[] | {};
+  /**
+   * SPEC-013: the input sync operation (a generated TypeScript stub taking (context, event)) the sync worker calls when the invoke starts, for an input mapper. Mutually exclusive with input.
+   */
+  inputName?: string;
 }
 export interface TransitionsObject {
   /**
