@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "loadTest",
+      "parentFsmVersion": "v02",
+      "src": "loadWork",
+      "asyncOperationName": "loadWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
+      "asyncOperationLanguage": "rust",
+      "filePath": "actors/loadWork/loadWork.rs",
+      "exportedAsyncOperationName": "loadWork"
+    }
+  ]
+}

@@ -3,11 +3,17 @@ import {
   FSM_DEFINITION as loadtest_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as loadtest_v01,
 } from "./loadTest/v01/sync-operation-registry.generated.ts";
+import {
+  FSM_DEFINITION as loadtest_v02_definition,
+  SYNC_OPERATION_REGISTRATIONS as loadtest_v02,
+} from "./loadTest/v02/sync-operation-registry.generated.ts";
 
 export const SYNC_OPERATION_REGISTRATIONS = [
   ...loadtest_v01,
+  ...loadtest_v02,
 ];
 
 export const FSM_DEFINITIONS = [
   loadtest_v01_definition,
+  loadtest_v02_definition,
 ];

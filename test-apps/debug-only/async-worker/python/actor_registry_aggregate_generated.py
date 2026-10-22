@@ -17,7 +17,9 @@ if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
 from creditCheck.v01.actor_registry_generated import ACTOR_REGISTRATIONS as creditcheck_v01
+from creditCheck.v03.actor_registry_generated import ACTOR_REGISTRATIONS as creditcheck_v03
 
 ACTOR_REGISTRATIONS = [
     *creditcheck_v01,
+    *creditcheck_v03,
 ]

@@ -6,6 +6,8 @@ require debug-only/actor-registry-aggregate-generated v0.0.0
 
 require debug-only/creditcheck/v01/go/actors/checkreportstable v0.0.0 // indirect
 
+require debug-only/creditcheck/v03/go/actors/checkreportstable v0.0.0 // indirect
+
 require github.com/pgfsm/fsm/packages/fsm-async-worker-sdk-go v0.4.0
 
 require (
@@ -21,3 +23,5 @@ require (
 replace debug-only/actor-registry-aggregate-generated => ./actor-registry-aggregate-generated
 
 replace debug-only/creditcheck/v01/go/actors/checkreportstable => ./creditCheck/v01/actors/CheckReportsTable
+
+replace debug-only/creditcheck/v03/go/actors/checkreportstable => ./creditCheck/v03/actors/CheckReportsTable

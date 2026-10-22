@@ -24,15 +24,15 @@ tooling.
 }
 ```
 
-| Field     | Type                         | Description                                            |
-| --------- | ---------------------------- | ------------------------------------------------------ |
-| `id`      | string                       | Machine identifier — typically `"(machine)"`           |
-| `key`     | string                       | Same as `id`                                           |
-| `type`    | `"compound"` \| `"parallel"` | Root must be `compound` or `parallel`                  |
-| `version` | string                       | Version string matching the folder name (e.g. `"v01"`) |
-| `context` | object                       | Initial context shape                                  |
-| `initial` | InitialTransition            | Which state to enter on creation                       |
-| `states`  | object                       | Map of state key → State node                          |
+| Field     | Type                         | Description                                                                                                                                                                               |
+| --------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`      | string                       | Machine identifier — typically `"(machine)"`                                                                                                                                              |
+| `key`     | string                       | Same as `id`                                                                                                                                                                              |
+| `type`    | `"compound"` \| `"parallel"` | Root must be `compound` or `parallel`                                                                                                                                                     |
+| `version` | string                       | Version string matching the folder name (e.g. `"v01"`)                                                                                                                                    |
+| `context` | object                       | Static initial context (SPEC-013): every new instance starts from it, shallow-merged with the context it's created with (that one wins). A context function in `machine.ts` isn't carried |
+| `initial` | InitialTransition            | Which state to enter on creation                                                                                                                                                          |
+| `states`  | object                       | Map of state key → State node                                                                                                                                                             |
 
 ## State node types
 
@@ -186,6 +186,37 @@ Invocations spawn actors when a state is entered. Each invocation has a `src`
 
 When the actor completes, XState sends `xstate.done.actor.<id>` back to the
 parent FSM. On error: `xstate.error.actor.<id>`.
+
+### Input (SPEC-013)
+
+An invocation passes per-invoke data to its actor (or child FSM) in one of two
+mutually exclusive fields:
+
+```json
+{ "src": "checkReportsTable", "input": { "bureauName": "GavUnion" } }
+{ "src": "checkReportsTable", "inputName": "equiGavinDBActor" }
+```
+
+| Field       | From `machine.ts`                            | At runtime                                                                                                                                            |
+| ----------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`     | a static `input` value (any JSON)            | passed unchanged. A string is a value, not a reference                                                                                                |
+| `inputName` | an `input` function (`({ context, event })`) | the sync worker calls the TypeScript input stub of that name with the instance's context and the event that entered the state, when the invoke starts |
+
+The actor receives the value as its input. An invoked child FSM (`fsm`) receives
+it as its context, merged over the child's own static `context`, so it must be
+an object. The value is computed once and stored in the actor's queue message
+(and event log), so a redelivery reuses it. A stub that's missing, throws or
+returns something that isn't JSON is logged, and the actor gets `null`.
+
+`inputName` is the invoke's `id`, or else `<state path>_<src>` (with `_2`… for
+the same `src` invoked again in one state). Renaming or moving an id-less
+invoke's state renames its stub, and the old one is left unused; giving the
+invoke an `id` avoids that.
+
+**Migrating a loaded FSM version.** Adding input to a version that's already
+loaded changes its fsm.json, and a loaded version can't change (SPEC-006): add
+the machine again as a new version (e.g. `creditCheck` `v03`) and create new
+instances from it. Instances of the old version keep running without input.
 
 ## InitialTransition
 

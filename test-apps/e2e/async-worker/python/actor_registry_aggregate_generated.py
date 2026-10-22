@@ -17,7 +17,9 @@ if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
 from loadTest.v01.actor_registry_generated import ACTOR_REGISTRATIONS as loadtest_v01
+from loadTest.v02.actor_registry_generated import ACTOR_REGISTRATIONS as loadtest_v02
 
 ACTOR_REGISTRATIONS = [
     *loadtest_v01,
+    *loadtest_v02,
 ]

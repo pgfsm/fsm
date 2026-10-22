@@ -5,6 +5,7 @@ import (
 	"context"
 
 	creditcheck_v01_checkreportstable "debug-only/creditcheck/v01/go/actors/checkreportstable"
+	creditcheck_v03_checkreportstable "debug-only/creditcheck/v03/go/actors/checkreportstable"
 )
 
 type ActorRegistration struct {
@@ -31,6 +32,16 @@ func ActorRegistrations() []ActorRegistration {
 			AsyncOperationLanguage: "go",
 			MaxConcurrency:         uint32(creditcheck_v01_checkreportstable.MaxConcurrency),
 			Handler:                creditcheck_v01_checkreportstable.CheckReportsTable,
+		},
+		{
+			ParentFsmName:          "creditCheck",
+			ParentFsmVersion:       "v03",
+			AsyncOperationType:     "internalAsyncOperation",
+			AsyncOperationName:     "CheckReportsTable",
+			AsyncOperationVersion:  "v03",
+			AsyncOperationLanguage: "go",
+			MaxConcurrency:         uint32(creditcheck_v03_checkreportstable.MaxConcurrency),
+			Handler:                creditcheck_v03_checkreportstable.CheckReportsTable,
 		},
 	}
 }

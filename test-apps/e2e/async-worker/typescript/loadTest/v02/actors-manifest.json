@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "loadTest",
+      "parentFsmVersion": "v02",
+      "src": "loadWork",
+      "asyncOperationName": "loadWork",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v02",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/loadWork/loadWork.ts",
+      "exportedAsyncOperationName": "loadWork"
+    }
+  ]
+}

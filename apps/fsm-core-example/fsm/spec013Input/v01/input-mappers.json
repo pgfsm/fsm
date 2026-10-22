@@ -1,0 +1,4 @@
+{
+  "mappedEcho": "({ context, event })=>({\n            bureauName: \"EquiGavin\",\n            ssn: context.ssn,\n            requestId: event?.eventPayload?.requestId ?? null\n          })",
+  "WithChild_spec013Child": "({ context })=>({\n            ssn: context.ssn\n          })"
+}
