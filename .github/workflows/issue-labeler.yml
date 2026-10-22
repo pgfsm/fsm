@@ -16,16 +16,16 @@ jobs:
     if: contains(github.event.issue.labels.*.name, 'bug')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Parse issue form
         id: issue-parser
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
         with:
           template-path: .github/ISSUE_TEMPLATE/bug_report.yml
 
       - name: Apply labels from form inputs
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           template: bug_report.yml
@@ -35,16 +35,16 @@ jobs:
     if: contains(github.event.issue.labels.*.name, 'enhancement')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Parse issue form
         id: issue-parser
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
         with:
           template-path: .github/ISSUE_TEMPLATE/feature_request.yml
 
       - name: Apply labels from form inputs
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           template: feature_request.yml
@@ -54,16 +54,16 @@ jobs:
     if: contains(github.event.issue.labels.*.name, 'design')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Parse issue form
         id: issue-parser
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
         with:
           template-path: .github/ISSUE_TEMPLATE/design_request.yml
 
       - name: Apply labels from form inputs
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           template: design_request.yml
@@ -73,16 +73,16 @@ jobs:
     if: contains(github.event.issue.labels.*.name, 'chore')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Parse issue form
         id: issue-parser
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@cb6e97157cbf851e3a393ff8d57c93a484cc323f # v3.2.5
         with:
           template-path: .github/ISSUE_TEMPLATE/chore.yml
 
       - name: Apply labels from form inputs
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@v3
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           template: chore.yml
