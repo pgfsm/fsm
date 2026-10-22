@@ -12,6 +12,10 @@ import {
   SYNC_OPERATION_REGISTRATIONS as creditcheck_v02,
 } from "./creditCheck/v02/sync-operation-registry.generated.ts";
 import {
+  FSM_DEFINITION as creditcheck_v03_definition,
+  SYNC_OPERATION_REGISTRATIONS as creditcheck_v03,
+} from "./creditCheck/v03/sync-operation-registry.generated.ts";
+import {
   FSM_DEFINITION as spec011child_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as spec011child_v01,
 } from "./spec011Child/v01/sync-operation-registry.generated.ts";
@@ -40,6 +44,7 @@ export const SYNC_OPERATION_REGISTRATIONS = [
   ...carvitals_v01,
   ...creditcheck_v01,
   ...creditcheck_v02,
+  ...creditcheck_v03,
   ...spec011child_v01,
   ...spec011parent_v01,
   ...taskmachineconfig_v01,
@@ -52,6 +57,7 @@ export const FSM_DEFINITIONS = [
   carvitals_v01_definition,
   creditcheck_v01_definition,
   creditcheck_v02_definition,
+  creditcheck_v03_definition,
   spec011child_v01_definition,
   spec011parent_v01_definition,
   taskmachineconfig_v01_definition,

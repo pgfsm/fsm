@@ -2,6 +2,7 @@
 import { ACTOR_REGISTRATIONS as spec011parent_v01 } from "./spec011Parent/v01/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as spec011child_v01 } from "./spec011Child/v01/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as creditcheck_v01 } from "./creditCheck/v01/actor-registry.generated.ts";
+import { ACTOR_REGISTRATIONS as creditcheck_v03 } from "./creditCheck/v03/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as creditcheck_v02 } from "./creditCheck/v02/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as vitalsworkflow_v01 } from "./vitalsWorkflow/v01/actor-registry.generated.ts";
 import { ACTOR_REGISTRATIONS as vitalsworkflow_v02 } from "./vitalsWorkflow/v02/actor-registry.generated.ts";
@@ -12,6 +13,7 @@ export const ACTOR_REGISTRATIONS = [
   ...spec011parent_v01,
   ...spec011child_v01,
   ...creditcheck_v01,
+  ...creditcheck_v03,
   ...creditcheck_v02,
   ...vitalsworkflow_v01,
   ...vitalsworkflow_v02,

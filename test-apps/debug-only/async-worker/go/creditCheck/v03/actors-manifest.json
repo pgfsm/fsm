@@ -1,0 +1,15 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "CheckReportsTable",
+      "asyncOperationName": "CheckReportsTable",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "go",
+      "filePath": "actors/CheckReportsTable/CheckReportsTable.go",
+      "exportedAsyncOperationName": "CheckReportsTable"
+    }
+  ]
+}

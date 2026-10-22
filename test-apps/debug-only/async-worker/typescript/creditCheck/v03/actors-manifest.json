@@ -1,0 +1,59 @@
+{
+  "actors": [
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "verifyCredentials",
+      "asyncOperationName": "verifyCredentials",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/verifyCredentials/verifyCredentials.ts",
+      "exportedAsyncOperationName": "verifyCredentials"
+    },
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "checkReportsTable",
+      "asyncOperationName": "checkReportsTable",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkReportsTable/checkReportsTable.ts",
+      "exportedAsyncOperationName": "checkReportsTable"
+    },
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "checkBureau",
+      "asyncOperationName": "checkBureau",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/checkBureau/checkBureau.ts",
+      "exportedAsyncOperationName": "checkBureau"
+    },
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "determineMiddleScore",
+      "asyncOperationName": "determineMiddleScore",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/determineMiddleScore/determineMiddleScore.ts",
+      "exportedAsyncOperationName": "determineMiddleScore"
+    },
+    {
+      "parentFsmName": "creditCheck",
+      "parentFsmVersion": "v03",
+      "src": "generateInterestRates",
+      "asyncOperationName": "generateInterestRates",
+      "asyncOperationType": "internalAsyncOperation",
+      "asyncOperationVersion": "v03",
+      "asyncOperationLanguage": "typescript",
+      "filePath": "actors/generateInterestRates/generateInterestRates.ts",
+      "exportedAsyncOperationName": "generateInterestRates"
+    }
+  ]
+}

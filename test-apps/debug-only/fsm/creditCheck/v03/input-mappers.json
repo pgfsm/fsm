@@ -1,0 +1,11 @@
+{
+  "creditCheck_Verifying_Credentials_verifyCredentials": "({ event })=>event",
+  "equiGavinDBActor": "({ context: { SSN } })=>({\n                        bureauName: \"EquiGavin\",\n                        ssn: SSN\n                      })",
+  "equiGavinFetchActor": "({ context: { SSN } })=>({\n                        bureauName: \"EquiGavin\",\n                        ssn: SSN\n                      })",
+  "gavUnionDBActor": "({ context: { SSN } })=>({\n                        bureauName: \"GavUnion\",\n                        ssn: SSN\n                      })",
+  "gavUnionFetchActor": "({ context: { SSN } })=>({\n                        bureauName: \"GavUnion\",\n                        ssn: SSN\n                      })",
+  "gavperianCheckActor": "({ context: { SSN } })=>({\n                        bureauName: \"Gavperian\",\n                        ssn: SSN\n                      })",
+  "checkGavPerianActor": "({ context: { SSN } })=>({\n                        ssn: SSN,\n                        bureauName: \"Gavperian\"\n                      })",
+  "scoreDeterminationActor": "({ context: { EquiGavinScore, GavUnionScore, GavperianScore } })=>[\n                    EquiGavinScore,\n                    GavUnionScore,\n                    GavperianScore\n                  ]",
+  "creditCheck_DeterminingInterestRateOptions_FetchingRates_generateInterestRates": "({ context: { MiddleScore } })=>MiddleScore"
+}
