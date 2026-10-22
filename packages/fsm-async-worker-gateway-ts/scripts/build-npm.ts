@@ -34,6 +34,19 @@ const loggingDenoJson = JSON.parse(
 );
 const loggingVersionRange = `^${loggingDenoJson.version}`;
 
+// @pgfsm/proto-codegen too (#609): dnt can't inline its generated .js once it
+// has an enum (CancelReason, SPEC-012): emitting declarations for that file
+// fails with TS2883. Same mapping as fsm-async-worker-sdk-ts's build-npm.ts.
+const protoCodegenDenoJson = JSON.parse(
+  await Deno.readTextFile("../fsm-proto-codegen/gen/typescript/deno.json"),
+);
+const protoCodegenVersionRange = `^${protoCodegenDenoJson.version}`;
+const protoCodegen = (subPath: string) => ({
+  name: "@pgfsm/proto-codegen",
+  version: protoCodegenVersionRange,
+  subPath,
+});
+
 await build({
   entryPoints: [
     "./src/index.ts",
@@ -69,6 +82,15 @@ await build({
     "./src/cli/version.ts": "./src/cli/version.node.ts",
     "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
     "@pgfsm/logging": { name: "@pgfsm/logging", version: loggingVersionRange },
+    "@pgfsm/proto-codegen/activitygateway/v1/connect": protoCodegen(
+      "activitygateway/v1/connect",
+    ),
+    "@pgfsm/proto-codegen/sidecargateway/v1/connect": protoCodegen(
+      "sidecargateway/v1/connect",
+    ),
+    "@pgfsm/proto-codegen/sidecargateway/v1/pb": protoCodegen(
+      "sidecargateway/v1/pb",
+    ),
   },
   package: {
     name: "@pgfsm/async-worker-gateway",
