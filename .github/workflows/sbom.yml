@@ -28,15 +28,24 @@ jobs:
       - name: Generate CycloneDX SBOM
         # cdxgen walks all three ecosystems in one pass:
         # Deno (deno.lock), Node (packages/database-src), Rust (fsm_core extension).
-        run: npx @cyclonedx/cdxgen@latest -r . -o bom.json
+        # Pinned so a new cdxgen release can't change the SBOM unreviewed (#598).
+        run: npx --yes @cyclonedx/cdxgen@12.8.7 -r . -o bom.json
         env:
           FETCH_LICENSE: "true"
 
+      # A pinned grype release via a SHA-pinned action, instead of piping
+      # install.sh from grype's main branch into sh (#598).
+      - name: Install grype
+        id: grype
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          grype-version: v0.121.0
+
       - name: Scan SBOM for known CVEs (grype)
         # Fails the build on any High or Critical vulnerability.
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-          grype sbom:bom.json --fail-on high
+        env:
+          GRYPE: ${{ steps.grype.outputs.cmd }}
+        run: '"$GRYPE" sbom:bom.json --fail-on high'
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
