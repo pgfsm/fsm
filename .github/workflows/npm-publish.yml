@@ -8,6 +8,17 @@ name: npm publish
 # @pgfsm/async-worker-gateway isn't here either: gateway-release.yml publishes
 # it together with its container image from the async-worker-gateway-v* tag
 # (#486), so the two can't go out of sync.
+#
+# Before anything is built, a preflight step (#445) stops the release if:
+# - on a tag push, the tag's version isn't the package's deno.json version
+#   (a tag pushed before the bump PR merged would otherwise build the old
+#   version);
+# - the commit isn't on main, so only code that passed main's CI ships
+#   (CI runs the tests; this workflow doesn't repeat them).
+# A version that's already on npm is skipped rather than failed, so re-running
+# a partly failed release (or dispatching `all`) is safe. workflow_dispatch has
+# no tag, so it publishes whatever version deno.json has on the dispatched
+# ref, which must also be on main.
 
 on:
   push:
@@ -34,6 +45,9 @@ on:
           - logging
           - ctl
           - all
+
+permissions:
+  contents: read
 
 jobs:
   publish:
@@ -103,15 +117,18 @@ jobs:
     steps:
       - name: Gate — decide if this package should publish
         id: gate
+        env:
+          TAG_PREFIX: ${{ matrix.tag_prefix }}
+          INPUT: ${{ inputs.package }}
+          ID: ${{ matrix.id }}
         run: |
           SHOULD_RUN=false
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            if [[ "${{ github.ref }}" == refs/tags/${{ matrix.tag_prefix }}* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ "$GITHUB_REF" == "refs/tags/$TAG_PREFIX"* ]]; then
               SHOULD_RUN=true
             fi
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            INPUT="${{ inputs.package }}"
-            if [[ "$INPUT" == "all" || "$INPUT" == "${{ matrix.id }}" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$INPUT" == "all" || "$INPUT" == "$ID" ]]; then
               SHOULD_RUN=true
             fi
           fi
@@ -119,6 +136,8 @@ jobs:
 
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: steps.gate.outputs.should_run == 'true'
+        with:
+          fetch-depth: 0 # the preflight checks the commit is on origin/main
 
       # Installs proto and runs `proto install` against the root .prototools,
       # so the Deno version is sourced from the repo pin, not hardcoded here.
@@ -133,46 +152,77 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
-      # A prerelease version (e.g. 0.1.0-alpha.0) must publish under its own
-      # dist-tag — `npm publish` with no --tag defaults to `latest` no matter
-      # what the version string says, so without this an alpha would silently
-      # become the default `npm install` resolution.
-      - name: Determine npm dist-tag
-        id: dist-tag
+      # See the header: tag matches deno.json, commit is on main, and the
+      # version isn't on npm yet (skip, not fail). Also picks the dist-tag: a
+      # prerelease (e.g. 0.1.0-alpha.0) must publish under its own one, since
+      # `npm publish` with no --tag makes any version `latest`.
+      - name: Preflight — tag, main, already published
+        id: preflight
         if: steps.gate.outputs.should_run == 'true'
         working-directory: ${{ matrix.path }}
+        env:
+          TAG_PREFIX: ${{ matrix.tag_prefix }}
         run: |
-          VERSION=$(node -p "require('./deno.json').version")
-          if [[ "$VERSION" =~ -([a-zA-Z]+)(\.|$) ]]; then
-            TAG="${BASH_REMATCH[1]}"
-          else
-            TAG="latest"
+          set -euo pipefail
+          name=$(jq -r .name deno.json)
+          version=$(jq -r .version deno.json)
+
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            tag_version=${GITHUB_REF_NAME#"$TAG_PREFIX"}
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "::error::tag version $tag_version != deno.json version $version ($GITHUB_REF_NAME at $GITHUB_SHA): tag the commit that bumps deno.json"
+              exit 1
+            fi
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA isn't on main: release only from a commit merged to main"
+            exit 1
+          fi
+
+          dist_tag=latest
+          if [[ "$version" =~ -([a-zA-Z]+)(\.|$) ]]; then dist_tag=${BASH_REMATCH[1]}; fi
+
+          # Output, not exit status: some npm versions print nothing and exit
+          # 0 for a version that doesn't exist.
+          publish=true
+          if [[ -n "$(npm view "$name@$version" version 2>/dev/null)" ]]; then
+            echo "::notice::$name@$version is already on npm; skipping."
+            publish=false
+          fi
+
+          {
+            echo "version=$version"
+            echo "dist_tag=$dist_tag"
+            echo "publish=$publish"
+          } >>"$GITHUB_OUTPUT"
+          echo "$name@$version (dist-tag $dist_tag): publish=$publish" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Pack (library only)
-        if: steps.gate.outputs.should_run == 'true' && matrix.dnt != true
+        if: steps.preflight.outputs.publish == 'true' && matrix.dnt != true
         working-directory: ${{ matrix.path }}
         run: deno pack
 
       - name: Publish (library only)
-        if: steps.gate.outputs.should_run == 'true' && matrix.dnt != true
+        if: steps.preflight.outputs.publish == 'true' && matrix.dnt != true
         working-directory: ${{ matrix.path }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish $(ls *.tgz) --access public --tag "${{ steps.dist-tag.outputs.tag }}"
+          DIST_TAG: ${{ steps.preflight.outputs.dist_tag }}
+        run: npm publish ./*.tgz --access public --tag "$DIST_TAG"
 
       # dnt path (lib + npx-able CLI bin) — see the matrix comment above for why.
       - name: Build (dnt) — lib + CLI bin
-        if: steps.gate.outputs.should_run == 'true' && matrix.dnt == true
+        if: steps.preflight.outputs.publish == 'true' && matrix.dnt == true
         working-directory: ${{ matrix.path }}
-        run: |
-          VERSION=$(node -p "require('./deno.json').version")
-          deno task build:npm "$VERSION" --copy-readme
+        env:
+          VERSION: ${{ steps.preflight.outputs.version }}
+        run: deno task build:npm "$VERSION" --copy-readme
 
       - name: Publish (dnt dist)
-        if: steps.gate.outputs.should_run == 'true' && matrix.dnt == true
+        if: steps.preflight.outputs.publish == 'true' && matrix.dnt == true
         working-directory: ${{ matrix.path }}/dist
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}"
+          DIST_TAG: ${{ steps.preflight.outputs.dist_tag }}
+        run: npm publish --access public --tag "$DIST_TAG"

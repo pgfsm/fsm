@@ -47,7 +47,9 @@ has neither). Library-only build (no bin entries), no Node-specific shim files â
 unlike `fsm-compiler-ts`, this package has no build-time-vs-runtime version
 string to swap and no custom module-resolution hook to install.
 `.github/workflows/npm-publish.yml` builds this package's `logging` matrix entry
-through the dnt path.
+through the dnt path. Its preflight fails before building if the tag's version
+isn't `deno.json`'s or the commit isn't on `main`, and skips a version already
+on npm (#445).
 
 `postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
 passed (`deno task build:npm <version> --copy-readme`, as CI does) â€” a plain

@@ -749,7 +749,9 @@ library-publishing only, so a CLI packed that way would be unreachable from
 `npx`. dnt transpiles + Node-shims the source into `dist/`, registering both the
 library export and the shebanged `fsm-compiler` CLI bin.
 `.github/workflows/npm-publish.yml` builds this package's `compiler` matrix
-entry through the dnt path for that reason.
+entry through the dnt path for that reason. Its preflight fails before building
+if the tag's version isn't `deno.json`'s or the commit isn't on `main`, and
+skips a version already on npm (#445).
 
 `postBuild()` only copies `README.md` into `dist/` when `--copy-readme` is
 passed (`deno task build:npm <version> --copy-readme`, as CI does) — a plain
