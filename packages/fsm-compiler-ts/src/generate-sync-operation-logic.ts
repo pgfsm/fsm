@@ -8,6 +8,7 @@ import {
   eachVersionedFsmFolder,
   formatTsFilesBestEffort,
   fsmIdentityFromVersionFolderPath,
+  operationFileBaseName,
   writeAggregateSyncOperationRegistry,
   writeOperationModule,
   writeSyncOperationRegistry,
@@ -103,6 +104,15 @@ async function scaffoldSyncLogicForVersion(
         fsmVersionSubPath,
         fsmJsonDirAbsPath ? await readInputMappers(fsmJsonDirAbsPath) : {},
       );
+      // A pre-filled stub carries the function's source as the loader printed
+      // it, so it goes through deno fmt with the rest of the run's files (a
+      // kept stub is skipped there).
+      for (const name of new Set(inputs)) {
+        const base = operationFileBaseName(name);
+        tsFiles.push(
+          `${absSyncWorkerRootPath}/${lang}/${fsmVersionSubPath}/inputs/${base}/${base}.ts`,
+        );
+      }
     }
     logger.info("Wrote {lang} action/guard/delay stubs in {path}", {
       lang,

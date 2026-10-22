@@ -326,7 +326,13 @@ export default createMachine({
       assertStringIncludes(registry, `syncOperationType: "input"`);
       assertStringIncludes(registry, `syncOperationName: "bureauActor"`);
 
-      // The pre-filled stub type-checks as written.
+      // The pre-filled stub is formatted, and type-checks as written.
+      const fmt = await new Deno.Command(Deno.execPath(), {
+        args: ["fmt", "--check", `${tsRoot}/inputs/bureauActor/bureauActor.ts`],
+        stdout: "null",
+        stderr: "piped",
+      }).output();
+      assert(fmt.success, new TextDecoder().decode(fmt.stderr));
       const check = await new Deno.Command(Deno.execPath(), {
         args: ["check", `${tsRoot}/inputs/bureauActor/bureauActor.ts`],
         stdout: "null",
