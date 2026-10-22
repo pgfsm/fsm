@@ -664,7 +664,7 @@ Deno.test("writeSyncOperationRegistry - combines actions/guards/delays into one 
         "export type SyncOperationRegistration = {\n" +
         "  fsmName: string;\n" +
         "  fsmVersion: string;\n" +
-        '  syncOperationType: "action" | "guard" | "delay";\n' +
+        '  syncOperationType: "action" | "guard" | "delay" | "input";\n' +
         "  syncOperationName: string;\n" +
         "  syncOperationLanguage: string;\n" +
         "  handler: (...args: unknown[]) => unknown;\n" +

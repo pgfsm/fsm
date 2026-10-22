@@ -739,6 +739,36 @@ Verified on `test-apps/debug-only`: one actor per language set to 5 registers
 with `max_concurrency=5` in the gateway's routing snapshot; kept stubs register
 with 1.
 
+## Invoke input (SPEC-013, #585)
+
+`compileMachineFile`'s step 6, `addInvokeInputs` (`generate-fsm-json.ts`), reads
+`invoke.input` from the machine's raw `config` (`toJSON()` drops functions) and
+walks it alongside the fsm.json tree by state key and invoke position:
+
+- a function becomes `inputName` (rule 1: the invoke's `id`, else
+  `<state path>_<src>`, `_2`… for a repeated `src` in one state; never XState's
+  position-based generated id). Its `toString()` goes into `inputMappers`,
+  written as `input-mappers.json` next to fsm.json (deleted when there are none)
+  — never into fsm.json, which must hold no code;
+- any other value becomes a literal `input` (strict JSON check; an object for a
+  `fsm` invoke);
+- a static root `context` is written with `undefined` properties dropped (XState
+  machines declare `field: undefined`; contexts are stored as JSON).
+
+`generate-sync-logic` adds an `inputs` kind (TypeScript only: the
+`LanguageTemplateSet.stubs.inputs` slot is optional for other languages, and
+`getTemplate` throws if asked for a missing one), registered as
+`syncOperationType: "input"`. `scaffoldSyncLogicForVersion` takes the fsm.json's
+folder to read `input-mappers.json`; `renderOperationModule`/
+`writeOperationModule` pass `mapperSources` to the template as `mapperSource`
+(`inputs.eta`: a pre-filled body, else a TODO returning `null`). The pre-filled
+body annotates the copied function's type so its untyped destructured parameters
+type-check.
+
+Gotcha for tests: Deno caches an imported `machine.ts` by URL, so recompiling a
+changed `machine.ts` at the same path in one process returns the old module. Use
+a fresh folder.
+
 ## npm publish (`deno task build:npm`)
 
 `scripts/build-npm.ts` builds the npm package via `@deno/dnt`, not `deno pack`

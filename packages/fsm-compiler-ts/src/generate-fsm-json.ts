@@ -308,6 +308,195 @@ export function addMissingAsyncOperationTypeToInvokeActors(
   return { fulljson: clone, childActorsInfo };
 }
 
+/** Compile-time only (SPEC-013): input function sources, by input name. */
+export const INPUT_MAPPERS_FILE_NAME = "input-mappers.json";
+
+/** True for a value JSON round-trips unchanged: no undefined, Date, Map, NaN... */
+function isJsonValue(value: unknown): boolean {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto = Object.getPrototypeOf(value);
+      if (proto !== Object.prototype && proto !== null) return false;
+      return Object.values(value as Record<string, unknown>).every(
+        isJsonValue,
+      );
+    }
+    default:
+      return false;
+  }
+}
+
+/**
+ * `value` without its `undefined` object properties (at any depth): a context
+ * is stored as JSON, where an undefined property is simply absent, and XState
+ * machines often declare `field: undefined` in their context.
+ */
+function withoutUndefinedProperties(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutUndefinedProperties);
+  if (!isPlainObject(value)) return value;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, withoutUndefinedProperties(v)]),
+  );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null &&
+    !Array.isArray(value);
+}
+
+/** An identifier from a stub-name candidate: `[A-Za-z0-9_]`, not digit-first. */
+function toInputIdentifier(raw: string): string {
+  const cleaned = raw.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  if (!cleaned) return "input";
+  return /^[0-9]/.test(cleaned) ? `input_${cleaned}` : cleaned;
+}
+
+/**
+ * Pure (SPEC-013, #585): writes each invoke's input into the FSM JSON, read
+ * from the machine's raw config (toJSON() drops functions). Decided per
+ * invoke, by the same test XState uses (`typeof input === "function"`):
+ *
+ * - a function becomes `inputName`, the name of the TypeScript input stub the
+ *   sync worker calls with `(context, event)`; its source is returned in
+ *   `inputMappers` (pre-fill for that stub, never written to fsm.json);
+ * - any other value becomes a literal `input` (a string is a value, not a
+ *   reference). It must be JSON, and an object for an invoked child FSM.
+ *
+ * Stub names (rule 1): the invoke's `id`, else `<state path>_<src>` (the
+ * state's keys under the root, then the invoked src), with `_2`, `_3`... for
+ * the same src invoked again in one state. Never XState's generated
+ * `<position>.<state id>`, which reordering invokes would silently rebind.
+ * Names that collide (ignoring case) throw.
+ *
+ * Also writes a static root `context` object (a context function is left
+ * out, as before), without its `undefined` properties. Throws on a static
+ * context or input that isn't JSON otherwise (a Date, Map, function...).
+ */
+export function addInvokeInputs(
+  fsmJSON: FsmDraftStateNode,
+  machineConfig: unknown,
+): { fulljson: FsmDraftStateNode; inputMappers: Record<string, string> } {
+  const clone: FsmDraftStateNode = JSON.parse(JSON.stringify(fsmJSON));
+  const inputMappers: Record<string, string> = {};
+  const names = new Map<string, string>(); // lower-cased name -> where
+
+  if (!isPlainObject(machineConfig)) {
+    return { fulljson: clone, inputMappers };
+  }
+
+  if (
+    "context" in machineConfig && typeof machineConfig.context !== "function"
+  ) {
+    const context = withoutUndefinedProperties(machineConfig.context);
+    if (context !== undefined) {
+      if (!isPlainObject(context) || !isJsonValue(context)) {
+        throw new Error(
+          "The machine's static context must be a JSON object (SPEC-013): it's stored in fsm.json",
+        );
+      }
+      clone.context = JSON.parse(JSON.stringify(context));
+    }
+  }
+
+  function visit(
+    config: Record<string, unknown>,
+    node: FsmDraftStateNode,
+    path: string[],
+  ) {
+    const configInvokes = config.invoke === undefined
+      ? []
+      : Array.isArray(config.invoke)
+      ? config.invoke
+      : [config.invoke];
+    const srcCounts = new Map<string, number>();
+    configInvokes.forEach((invokeConfig: unknown, i: number) => {
+      const invoke = node.invoke?.[i];
+      if (!invoke || !isPlainObject(invokeConfig)) return;
+      const src = typeof invoke.src === "string" ? invoke.src : "actor";
+      const seen = (srcCounts.get(src) ?? 0) + 1;
+      srcCounts.set(src, seen);
+      if (!("input" in invokeConfig) || invokeConfig.input === undefined) {
+        return;
+      }
+      const where = `invoke of ${src} in ${path.join(".") || "(root)"}`;
+      const input = invokeConfig.input;
+
+      if (typeof input === "function") {
+        const name = typeof invokeConfig.id === "string"
+          ? toInputIdentifier(invokeConfig.id)
+          : toInputIdentifier(
+            [...path, src].join("_") + (seen > 1 ? `_${seen}` : ""),
+          );
+        const other = names.get(name.toLowerCase());
+        if (other !== undefined) {
+          throw new Error(
+            `Input stub name ${name} (${where}) collides with ${other}: give one of the invokes an id (SPEC-013)`,
+          );
+        }
+        names.set(name.toLowerCase(), where);
+        invoke.inputName = name;
+        inputMappers[name] = input.toString();
+        return;
+      }
+
+      if (!isJsonValue(input)) {
+        throw new Error(
+          `The static input of the ${where} isn't JSON (it would change when stored); use JSON values, or an input function (SPEC-013)`,
+        );
+      }
+      if (invoke.asyncOperationType === "fsm" && !isPlainObject(input)) {
+        throw new Error(
+          `The static input of the ${where} must be an object: it's merged into the child FSM's context (SPEC-013)`,
+        );
+      }
+      invoke.input = JSON.parse(JSON.stringify(input));
+    });
+
+    if (isPlainObject(config.states) && node.states) {
+      for (const key of Object.keys(config.states)) {
+        const child = config.states[key];
+        if (isPlainObject(child) && node.states[key]) {
+          visit(child, node.states[key], [...path, key]);
+        }
+      }
+    }
+  }
+
+  visit(machineConfig, clone, []);
+  return { fulljson: clone, inputMappers };
+}
+
+/**
+ * The input function sources a compile wrote next to fsm.json (SPEC-013), or
+ * `{}` when there are none.
+ */
+export async function readInputMappers(
+  fsmJsonDirAbsPath: string,
+): Promise<Record<string, string>> {
+  try {
+    const parsed = JSON.parse(
+      await Deno.readTextFile(
+        `${fsmJsonDirAbsPath}/${INPUT_MAPPERS_FILE_NAME}`,
+      ),
+    );
+    return isPlainObject(parsed) ? parsed as Record<string, string> : {};
+  } catch (err) {
+    if (isNotFoundError(err)) return {};
+    throw err;
+  }
+}
+
 interface CompiledMachine {
   /** Raw `machine.toJSON()` output, written as xstate-fsm.json. */
   xstateFsmJSON: AnyStateNodeDefinition;
@@ -315,6 +504,8 @@ interface CompiledMachine {
   fsmJSON: ReturnType<
     typeof addMissingAsyncOperationTypeToInvokeActors
   >["fulljson"];
+  /** Input function sources by input name (SPEC-013), for input-mappers.json. */
+  inputMappers: Record<string, string>;
 }
 
 /**
@@ -376,12 +567,19 @@ async function compileMachineFile(
   const enrichedJSON = addActionNameFromDelay(normalizedJSON);
 
   // step 5 — addMissingAsyncOperationTypeToInvokeActors (pure): fill in asyncOperationType/asyncOperationVersion on invoke entries
-  const { fulljson: fsmJSON } = addMissingAsyncOperationTypeToInvokeActors(
+  const { fulljson: withDefaults } = addMissingAsyncOperationTypeToInvokeActors(
     enrichedJSON,
     version,
   );
 
-  return { xstateFsmJSON, fsmJSON };
+  // step 6 — addInvokeInputs (pure, SPEC-013): invoke input (literal or
+  // inputName) and a static context, read from the raw machine config.
+  const { fulljson: fsmJSON, inputMappers } = addInvokeInputs(
+    withDefaults,
+    machineConfig.config,
+  );
+
+  return { xstateFsmJSON, fsmJSON, inputMappers };
 }
 
 /**
@@ -394,8 +592,22 @@ async function writeCompiledMachine(
   absOutputFolderPath: string,
   showRecommendation: boolean,
 ): Promise<void> {
-  const { xstateFsmJSON, fsmJSON } = compiled;
+  const { xstateFsmJSON, fsmJSON, inputMappers } = compiled;
   await Deno.mkdir(absOutputFolderPath, { recursive: true });
+  // Compile-time only (SPEC-013): pre-fill for new input stubs. Not part of
+  // the definition, never loaded into the database.
+  const inputMappersPath = `${absOutputFolderPath}/${INPUT_MAPPERS_FILE_NAME}`;
+  if (Object.keys(inputMappers).length > 0) {
+    await writeOwnedFile(
+      inputMappersPath,
+      JSON.stringify(inputMappers, null, 2) + "\n",
+      "generated",
+    );
+  } else {
+    await Deno.remove(inputMappersPath).catch((err) => {
+      if (!isNotFoundError(err)) throw err;
+    });
+  }
   await writeOwnedFile(
     `${absOutputFolderPath}/xstate-fsm.json`,
     JSON.stringify(xstateFsmJSON, null, 2) + "\n",

@@ -17,7 +17,11 @@ export function getTemplate(
   lang: OperationLang,
   kind: OperationKind,
 ): TemplateFn {
-  return TEMPLATE_REGISTRY[lang].stubs[kind];
+  const template = TEMPLATE_REGISTRY[lang].stubs[kind];
+  if (!template) {
+    throw new Error(`No ${lang} template for ${kind} stubs`);
+  }
+  return template;
 }
 
 /** Looks up the file-level preamble for a given language and kind (`""` if none). */
