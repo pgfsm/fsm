@@ -21,6 +21,18 @@ hooks = [
   { id = "gitleaks" },
 ]
 
+# GitHub workflow lint (#611): syntax, expressions, action inputs, and
+# shellcheck on `run:` scripts when shellcheck is on PATH (it is on CI's
+# ubuntu-latest runner, so the prek job always runs it; locally it's optional).
+# language = golang: prek builds actionlint from this pinned commit (v1.7.12),
+# no binary to install. Runs only when a file under .github/workflows/ changes.
+[[repos]]
+repo = "https://github.com/rhysd/actionlint"
+rev = "914e7df21a07ef503a81201c76d2b11c789d3fca" # v1.7.12
+hooks = [
+  { id = "actionlint" },
+]
+
 # Format & lint — Deno's are near-instant. fmt runs workspace-wide (no explicit
 # filenames) so it matches CI's `deno fmt --check` exactly; passing per-file paths
 # bypasses the workspace fmt config and can disagree with CI. cargo fmt only
