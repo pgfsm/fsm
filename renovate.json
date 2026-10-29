@@ -49,8 +49,9 @@
       "groupName": "GitHub Actions (non-major)"
     },
     {
-      "description": "pgrx is exact-pinned and tied to the PostgreSQL major version — flag for careful review",
+      "description": "pgrx is exact-pinned and tied to the PostgreSQL major version — flag for careful review. pgrx and pgrx-tests must stay on the same version, so they update in one PR (#615); bump cargo-pgrx in ci.yml (install step + cache key) by hand in that PR",
       "matchPackageNames": ["pgrx", "pgrx-tests"],
+      "groupName": "pgrx",
       "addLabels": ["pgrx"]
     }
   ]
