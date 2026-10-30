@@ -44,7 +44,17 @@ await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
   // Refuses to start unless the database holds exactly these fsm.json
-  // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).
+  // definitions (load them first with `pgfsmctl fsm load`: npm run db:load),
+  // and every guard, delay and input mapper they call is implemented.
   FSM_DEFINITIONS,
-  { signal: controller.signal },
+  {
+    signal: controller.signal,
+    // A guard, action, delay or input mapper that throws is retried in place,
+    // then the instance is set to status error (SPEC-014). maxAttempts is 3
+    // by default; 1 is XState's behaviour (the first throw is an error).
+    // syncOperationRetry: {
+    //   maxAttempts: 3,
+    //   fsms: { myFsm: { maxAttempts: 5 } }, // per FSM, all its versions
+    // },
+  },
 );

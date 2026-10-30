@@ -941,9 +941,22 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts with dotenv, @pgfsm
       runContent.includes(
         "  SYNC_OPERATION_REGISTRATIONS,\n" +
           "  // Refuses to start unless the database holds exactly these fsm.json\n" +
-          "  // definitions; load them first with `pgfsmctl fsm load` (npm run db:load).\n" +
+          "  // definitions (load them first with `pgfsmctl fsm load`: npm run db:load),\n" +
+          "  // and every guard, delay and input mapper they call is implemented.\n" +
           "  FSM_DEFINITIONS,\n" +
-          "  { signal: controller.signal },\n",
+          "  {\n" +
+          "    signal: controller.signal,\n",
+      ),
+      true,
+    );
+    // SPEC-014 (#619): syncOperationRetry is shown, commented out, with its
+    // default.
+    assertEquals(
+      runContent.includes(
+        "    // syncOperationRetry: {\n" +
+          "    //   maxAttempts: 3,\n" +
+          "    //   fsms: { myFsm: { maxAttempts: 5 } }, // per FSM, all its versions\n" +
+          "    // },\n",
       ),
       true,
     );
@@ -967,7 +980,7 @@ Deno.test("writeSyncWorkerRunner - writes run-sync-worker.ts with dotenv, @pgfsm
     assertEquals(parsed.exports, "./run-sync-worker.ts");
     for (
       const [specifier, prefix] of [
-        ["@pgfsm/sync-worker", "npm:@pgfsm/sync-worker@"],
+        ["@pgfsm/sync-worker", "npm:@pgfsm/sync-worker@^0.7.0"],
         ["@pgfsm/logging", "npm:@pgfsm/logging@"],
         ["@logtape/logtape", "npm:@logtape/logtape@"],
         ["dotenv", "npm:dotenv@"],
