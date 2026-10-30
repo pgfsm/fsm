@@ -162,7 +162,12 @@ export async function startFsmlet(
   // Step 0: every served FSM version must be loaded, once, with the content
   // this worker was compiled from (SPEC-006).
   try {
-    await checkFsmDefinitions(deps, registeredFsmModules, fsmDefinitions);
+    await checkFsmDefinitions(
+      deps,
+      registeredFsmModules,
+      fsmDefinitions,
+      syncOperationRegistrations,
+    );
   } catch (err) {
     await pool.end();
     throw err;

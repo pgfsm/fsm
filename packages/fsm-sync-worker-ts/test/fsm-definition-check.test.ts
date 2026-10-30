@@ -10,6 +10,7 @@ import type { Json } from "@pgfsm/db/database.types";
 import {
   classifyFsmDefinitions,
   FsmDefinitionCheckError,
+  syncOperationsNamedIn,
 } from "../src/fsmlet/fsm-definition-check.ts";
 import { fsmModulesToServe, startFsmlet } from "../src/fsmlet/fsmlet.ts";
 import type { SyncOperationRegistration } from "../src/fsmlet/type.ts";
@@ -69,6 +70,110 @@ Deno.test("classifyFsmDefinitions: drifted, and undigested when no digest is com
     ["other", "drifted"],
     ["unknown", "undigested"],
   ]);
+});
+
+// An fsm.json shaped like the compiler's: a guarded transition, a named and a
+// numeric `after` delay (each a raise plus its cancel), and invokes with and
+// without an inputName.
+const namedOps: Json = {
+  id: "m",
+  states: {
+    Idle: {
+      transitions: [{ eventType: "GO", guard: "isReady", target: ["m.Busy"] }],
+    },
+    Busy: {
+      entry: [
+        {
+          type: "xstate.raise",
+          delayActionName: "delayshortWait",
+          delayActionEventType: "xstate.after.shortWait.m.Busy",
+        },
+        {
+          type: "xstate.raise",
+          delayActionName: "delay1500",
+          delayActionEventType: "xstate.after.1500.m.Busy",
+        },
+        { type: "xstate.invoke", src: "work", inputName: "workInput" },
+        { type: "xstate.invoke", src: "fixed", input: { a: 1 } },
+        { type: "assignResult" },
+      ],
+      exit: [{ type: "xstate.cancel", delayActionName: "delayshortWait" }],
+      transitions: [
+        { eventType: "AGAIN", guard: "isReady", target: ["m.Busy"] },
+      ],
+    },
+  },
+};
+
+const implementation = (
+  fsmName: string,
+  syncOperationType: SyncOperationRegistration["syncOperationType"],
+  syncOperationName: string,
+): SyncOperationRegistration => ({
+  fsmName,
+  fsmVersion: "v1",
+  syncOperationType,
+  syncOperationName,
+  syncOperationLanguage: "typescript",
+  handler: () => undefined,
+});
+
+Deno.test("syncOperationsNamedIn: guards, named delays and inputNames, once each; not actions or numeric delays (#621)", () => {
+  assertEquals(syncOperationsNamedIn(namedOps), [
+    { type: "delay", name: "shortWait" },
+    { type: "guard", name: "isReady" },
+    { type: "input", name: "workInput" },
+  ]);
+  assertEquals(syncOperationsNamedIn({ id: "empty", states: {} }), []);
+});
+
+Deno.test("classifyFsmDefinitions: unimplemented lists what has no registration for that version (#621)", async () => {
+  const all = [
+    implementation("full", "guard", "isReady"),
+    implementation("full", "delay", "shortWait"),
+    implementation("full", "input", "workInput"),
+  ];
+  const problems = await classifyFsmDefinitions(
+    [mod("full"), mod("partial")],
+    [row("full", namedOps), row("partial", namedOps)],
+    [await digest("full", namedOps), await digest("partial", namedOps)],
+    [
+      ...all,
+      // Same names, but registered for another FSM or another version.
+      implementation("partial", "guard", "isReady"),
+      { ...implementation("partial", "delay", "shortWait"), fsmVersion: "v2" },
+      implementation("full", "action", "workInput"),
+    ],
+  );
+  assertEquals(problems, [{
+    fsm_name: "partial",
+    fsm_version: "v1",
+    reason: "unimplemented",
+    detail: "no implementation for delay shortWait, input workInput",
+  }]);
+  assert(
+    new FsmDefinitionCheckError(problems).message.includes(
+      "regenerate the sync worker",
+    ),
+  );
+});
+
+Deno.test("classifyFsmDefinitions: without registrations, or for a drifted definition, nothing is unimplemented", async () => {
+  assertEquals(
+    await classifyFsmDefinitions(
+      [mod("m")],
+      [row("m", namedOps)],
+      [await digest("m", namedOps)],
+    ),
+    [],
+  );
+  const drifted = await classifyFsmDefinitions(
+    [mod("m")],
+    [row("m", namedOps)],
+    [await digest("m", { id: "other" })],
+    [],
+  );
+  assertEquals(drifted.map((p) => p.reason), ["drifted"]);
 });
 
 Deno.test("startFsmlet requires fsmDefinitions before opening a connection", async () => {
@@ -295,5 +400,53 @@ Deno.test(
       ]);
       await pool.end();
     }
+  },
+);
+
+Deno.test(
+  "startFsmlet refuses a definition whose guard has no implementation (#621)",
+  integration,
+  async () => {
+    // A real compiled definition: spec014Error calls two guards. Loading it
+    // again is a no-op when it's already there (identical content).
+    const fsmJson = JSON.parse(
+      await Deno.readTextFile(
+        new URL(
+          "../../../test-apps/debug-only/sync-worker/typescript/spec014Error/v01/fsm.json",
+          import.meta.url,
+        ),
+      ),
+    ) as Json;
+    const pool = new Pool({ connectionString: DATABASE_URL });
+    try {
+      await loadFsmDefinitions({ db: pool, useSupabase: false }, [
+        { fsmName: "spec014Error", fsmVersion: "v01", fsmJson },
+      ]);
+    } finally {
+      await pool.end();
+    }
+    const fsmJsonSha256 = await fsmJsonDigest(fsmJson);
+    await assertRejects(
+      () =>
+        startFsmlet(
+          { connectionString: DATABASE_URL! },
+          // Only one of its two guards.
+          [{
+            fsmName: "spec014Error",
+            fsmVersion: "v01",
+            syncOperationType: "guard",
+            syncOperationName: "spec014AlwaysThrows",
+            syncOperationLanguage: "typescript",
+            handler: () => true,
+          }],
+          [{
+            fsmName: "spec014Error",
+            fsmVersion: "v01",
+            fsmJsonSha256,
+          }],
+        ),
+      FsmDefinitionCheckError,
+      "spec014Error/v01: unimplemented (no implementation for guard spec014FlakyOnce)",
+    );
   },
 );

@@ -277,5 +277,6 @@ off the queue), so no new `@pgfsm/db` function is needed.
   `syncOperationRetry`.
 - #620: (c) end-to-end test.
 
-Follow-ups: #621 (startup check for missing implementations), #622 (recover an
-instance from `error`), #623 (per-instance `maxAttempts`).
+Follow-ups: #621 (startup check for missing implementations: the fsmlet refuses
+to start when a guard, named delay or input mapper has no registration), #622
+(recover an instance from `error`), #623 (per-instance `maxAttempts`).
