@@ -127,7 +127,7 @@ jobs:
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.15"
 
       # The package is managed with uv (pyproject.toml + uv.lock). The tests
       # run ActorWorker end to end against an in-process gRPC gateway on a
@@ -433,7 +433,7 @@ jobs:
       # one: uv, cargo (rust-toolchain.toml) and go must be on PATH.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.15"
       - name: Install uv
         run: pip install uv
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
