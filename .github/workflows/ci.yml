@@ -305,16 +305,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Installs proto and runs `proto install` against the root .prototools.
+      # Installs proto and runs `proto install` against the root .prototools
+      # (Deno and Node).
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
-
-      # moonrepo/setup-toolchain only resolves the root .prototools (Deno).
-      # Node is pinned separately in packages/database-src/.prototools, so run
-      # `proto install` again scoped to this directory to pick that pin up too.
-      - name: Install Node (from packages/database-src/.prototools)
-        run: proto install
 
       - name: npm install
         run: npm install
@@ -383,15 +378,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Installs proto and runs `proto install` against the root .prototools.
+      # Installs proto and runs `proto install` against the root .prototools
+      # (Deno and Node).
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
-
-      # Node is pinned in packages/database-src/.prototools (see the database
-      # job).
-      - name: Install Node (from packages/database-src/.prototools)
-        run: proto install
 
       - name: npm install
         run: npm install

@@ -12,7 +12,8 @@ RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12 && \
 FROM rust:1.99-bookworm AS rust-plugins
 RUN cargo install protoc-gen-prost@0.5.0 protoc-gen-tonic@0.5.0
 
-FROM node:22-bookworm-slim
+# Same Node major as the root .prototools pin.
+FROM node:26-bookworm-slim
 ARG TARGETARCH
 
 # protoc, pinned to the exact release Homebrew's `protobuf` formula installs

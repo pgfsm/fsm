@@ -15,12 +15,12 @@ ecosystems.
 `proto` pins every language runtime to an exact version, ensuring all
 contributors and CI use identical toolchains across the three ecosystems.
 
-| Tool                                                  | Purpose                                        | Pinned in                                                   |
-| ----------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
-| [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions                 | Root `.prototools` (packages inherit; may override)         |
-| **Deno** `2.8.1`                                      | Primary runtime — API server, compiler, worker | Root `.prototools`                                          |
-| **Node** `22.16.0`                                    | Runs Supabase CLI tooling only                 | `packages/database-src/.prototools`                         |
-| **Rust** `1.95.0`                                     | PostgreSQL extension                           | Root `rust-toolchain.toml` (proto delegates Rust to rustup) |
+| Tool                                                  | Purpose                                          | Pinned in                                                   |
+| ----------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
+| [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions                   | Root `.prototools` (packages inherit; may override)         |
+| **Deno** `2.8.1`                                      | Primary runtime — API server, compiler, worker   | Root `.prototools`                                          |
+| **Node** `26.13.0`                                    | Supabase CLI tooling, npm publish, proto-codegen | Root `.prototools`                                          |
+| **Rust** `1.95.0`                                     | PostgreSQL extension                             | Root `rust-toolchain.toml` (proto delegates Rust to rustup) |
 
 > Run `proto use` to install the pinned versions. CI (`prek.yml`, `ci.yml`)
 > installs from the same files via `moonrepo/setup-toolchain` and a bare

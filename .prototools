@@ -1,6 +1,6 @@
 # Single source of truth for pinned toolchain versions. Package directories
 # inherit these via proto's upward file resolution; a package may still pin
-# its own tools (packages/database-src pins node this way).
+# its own tools.
 #
 # Rust is intentionally NOT pinned here: proto delegates Rust to rustup and
 # creates no cargo/rustc shims, so the pin lives in rust-toolchain.toml where
@@ -10,6 +10,12 @@
 # and a bare `rustup toolchain install` — never hardcode versions in workflows.
 proto = "0.63.2"
 deno = "2.9.7"
+# Node runs the Supabase CLI tooling in packages/database-src (ADR-002), the
+# npm publish/verify steps and fsm-proto-codegen's npm tooling. Pinned here,
+# not in packages/database-src, so moonrepo/setup-toolchain (which only reads
+# this root file) installs it for every workflow (#632). Keep the major in
+# step with fsm-proto-codegen's Dockerfile base image.
+node = "26.13.0"
 
 # only-prototools stops proto from detecting tools out of ecosystem files —
 # without it, proto picks up Rust from rust-toolchain.toml and "installs" it

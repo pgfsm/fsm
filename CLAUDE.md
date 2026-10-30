@@ -29,10 +29,9 @@ imported below. For design/architecture sessions, use the `/design-spec` skill.
 ## Language & Runtime Management
 
 This repo uses [proto](https://moonrepo.dev/docs/proto/overview) to pin language
-versions — root `.prototools` (Deno), `packages/database-src/.prototools`
-(Node), root `rust-toolchain.toml` (Rust, via rustup). Those files are the
-source of truth; CI installs from them. Never hardcode toolchain versions here
-or in workflows.
+versions — root `.prototools` (Deno, Node), root `rust-toolchain.toml` (Rust,
+via rustup). Those files are the source of truth; CI installs from them. Never
+hardcode toolchain versions here or in workflows.
 
 **Importing `pg`:** put `// @ts-types="@types/pg"` on the line above every
 `import … from "pg"` and `await import("pg")`. `pg` ships no types, and Deno

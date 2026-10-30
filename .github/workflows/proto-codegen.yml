@@ -38,10 +38,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Same Node major as the Dockerfile's node:22 base image.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # Node from the root .prototools; the Dockerfile's node:26 base image
+      # tracks the same major.
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
-          node-version: "22"
+          auto-install: true
 
       # buf itself comes from package.json's @bufbuild/buf pin.
       - name: npm ci

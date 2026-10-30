@@ -225,14 +225,14 @@ jobs:
           ref: ${{ needs.preflight.outputs.ref }}
 
       # Installs proto and runs `proto install` against the root .prototools,
-      # so the Deno version comes from the repo pin.
+      # so the Deno and Node versions come from the repo pin.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
 
+      # Only writes the npm registry auth (.npmrc); Node is the one above.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Already published?
@@ -319,9 +319,15 @@ jobs:
       contents: read
       packages: read # the package is private until made public
     steps:
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # Only for the root .prototools, so the published package is verified
+      # on the repo's pinned Node.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          node-version: "22"
+          ref: ${{ needs.preflight.outputs.ref }}
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
