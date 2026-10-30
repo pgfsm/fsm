@@ -1,0 +1,262 @@
+{
+  "id": "spec014Error",
+  "key": "spec014Error",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec014Error.Idle"
+    ],
+    "source": "#spec014Error",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Idle": {
+      "id": "spec014Error.Idle",
+      "key": "Idle",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.Idle",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "FLAKY": [
+          {
+            "target": [
+              "#spec014Error.AfterFlaky"
+            ],
+            "guard": "spec014FlakyOnce",
+            "actions": [],
+            "source": "#spec014Error.Idle",
+            "reenter": false,
+            "eventType": "FLAKY"
+          }
+        ],
+        "BROKEN": [
+          {
+            "target": [
+              "#spec014Error.Unreachable"
+            ],
+            "guard": "spec014AlwaysThrows",
+            "actions": [],
+            "source": "#spec014Error.Idle",
+            "reenter": false,
+            "eventType": "BROKEN"
+          }
+        ],
+        "START_CHILD": [
+          {
+            "target": [
+              "#spec014Error.WithChild"
+            ],
+            "actions": [],
+            "source": "#spec014Error.Idle",
+            "reenter": false,
+            "eventType": "START_CHILD"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec014Error.AfterFlaky"
+          ],
+          "guard": "spec014FlakyOnce",
+          "actions": [],
+          "source": "#spec014Error.Idle",
+          "reenter": false,
+          "eventType": "FLAKY"
+        },
+        {
+          "target": [
+            "#spec014Error.Unreachable"
+          ],
+          "guard": "spec014AlwaysThrows",
+          "actions": [],
+          "source": "#spec014Error.Idle",
+          "reenter": false,
+          "eventType": "BROKEN"
+        },
+        {
+          "target": [
+            "#spec014Error.WithChild"
+          ],
+          "actions": [],
+          "source": "#spec014Error.Idle",
+          "reenter": false,
+          "eventType": "START_CHILD"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    },
+    "AfterFlaky": {
+      "id": "spec014Error.AfterFlaky",
+      "key": "AfterFlaky",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.AfterFlaky",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "NEXT": [
+          {
+            "target": [
+              "#spec014Error.Ordered"
+            ],
+            "actions": [],
+            "source": "#spec014Error.AfterFlaky",
+            "reenter": false,
+            "eventType": "NEXT"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec014Error.Ordered"
+          ],
+          "actions": [],
+          "source": "#spec014Error.AfterFlaky",
+          "reenter": false,
+          "eventType": "NEXT"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 2,
+      "invoke": [],
+      "tags": []
+    },
+    "Ordered": {
+      "id": "spec014Error.Ordered",
+      "key": "Ordered",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.Ordered",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 3,
+      "invoke": [],
+      "tags": []
+    },
+    "Unreachable": {
+      "id": "spec014Error.Unreachable",
+      "key": "Unreachable",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.Unreachable",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 4,
+      "invoke": [],
+      "tags": []
+    },
+    "WithChild": {
+      "id": "spec014Error.WithChild",
+      "key": "WithChild",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.WithChild",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {
+        "xstate.error.actor.0.spec014Error.WithChild": [
+          {
+            "target": [
+              "#spec014Error.ChildFailed"
+            ],
+            "actions": [],
+            "source": "#spec014Error.WithChild",
+            "reenter": false,
+            "eventType": "xstate.error.actor.0.spec014Error.WithChild"
+          }
+        ]
+      },
+      "transitions": [
+        {
+          "target": [
+            "#spec014Error.ChildFailed"
+          ],
+          "actions": [],
+          "source": "#spec014Error.WithChild",
+          "reenter": false,
+          "eventType": "xstate.error.actor.0.spec014Error.WithChild"
+        }
+      ],
+      "entry": [],
+      "exit": [],
+      "order": 5,
+      "invoke": [
+        {
+          "asyncOperationType": "fsm",
+          "asyncOperationVersion": "v01",
+          "src": "spec014Child",
+          "type": "xstate.invoke",
+          "id": "0.spec014Error.WithChild",
+          "asyncOperationLanguage": "typescript"
+        }
+      ],
+      "tags": []
+    },
+    "ChildFailed": {
+      "id": "spec014Error.ChildFailed",
+      "key": "ChildFailed",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Error.ChildFailed",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [],
+      "exit": [],
+      "order": 6,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

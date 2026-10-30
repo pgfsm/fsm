@@ -1,0 +1,47 @@
+{
+  "id": "spec014Child",
+  "key": "spec014Child",
+  "type": "compound",
+  "initial": {
+    "target": [
+      "#spec014Child.Working"
+    ],
+    "source": "#spec014Child",
+    "actions": [],
+    "eventType": null
+  },
+  "history": false,
+  "states": {
+    "Working": {
+      "id": "spec014Child.Working",
+      "key": "Working",
+      "type": "atomic",
+      "initial": {
+        "target": [],
+        "source": "#spec014Child.Working",
+        "actions": [],
+        "eventType": null
+      },
+      "history": false,
+      "states": {},
+      "on": {},
+      "transitions": [],
+      "entry": [
+        {
+          "type": "spec014AlwaysThrowsAction"
+        }
+      ],
+      "exit": [],
+      "order": 1,
+      "invoke": [],
+      "tags": []
+    }
+  },
+  "on": {},
+  "transitions": [],
+  "entry": [],
+  "exit": [],
+  "order": -1,
+  "invoke": [],
+  "tags": []
+}

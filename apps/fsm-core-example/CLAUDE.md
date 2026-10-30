@@ -84,3 +84,24 @@ one `cancel_acknowledged` row with reason `STATE_EXITED` and outcome `aborted`,
 no marker file after the 5s, and the instance in `Abandoned` with no actor
 event. `SPEC012_LANGUAGES` narrows the languages. CI runs it last in the
 "SPEC-011 end-to-end" job, which installs uv, Go and Rust for it.
+
+## SPEC-014 end-to-end test (#620)
+
+`spec014Error/` and `spec014Child/` are SPEC-014's test machines. Each scenario
+starts a new `spec014Error` instance in `Idle`:
+
+- `FLAKY`, then `NEXT`: `spec014FlakyOnce` throws on its first attempt for each
+  message (keyed on the worker's `{ queueName, msg }` argument), then passes.
+  The worker retries `FLAKY` in place, so `NEXT` arrives in `AfterFlaky` and the
+  instance ends in `Ordered`;
+- `BROKEN`: `spec014AlwaysThrows` always throws, so after the default 3 attempts
+  the instance is in status `error`, still in `Idle`, with
+  `{ kind, name, message, attempts, eventType }` saved;
+- `START_CHILD`: invokes `spec014Child`, whose entry action always throws. The
+  test's fsmlet runs it with `syncOperationRetry.fsms.spec014Child.maxAttempts`
+  1, so it errors on the first attempt and the parent's `onError` takes it to
+  `ChildFailed`.
+
+`spec014Error/v01/spec014-journey-test.ts` runs the scheduler and an fsmlet from
+source (no gateway: neither machine invokes an actor). CI runs it after
+SPEC-013's journey test, in the same job.
