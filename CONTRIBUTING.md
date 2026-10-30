@@ -29,7 +29,8 @@ automatically.
 Key runtimes:
 
 - **Deno 2.8.1** — API server and compiler
-- **Node 22.16.0** — `packages/database-src` only
+- **Node 26.13.0** — Supabase CLI tooling (`packages/database-src`), npm
+  publishing, and `packages/fsm-proto-codegen`
 - **Rust 1.95.0** — `packages/database-src-extension` only
 
 ### Pre-commit hooks

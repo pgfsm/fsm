@@ -61,14 +61,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Deno from the root .prototools.
+      # Deno and Node from the root .prototools.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
 
+      # Only writes the npm registry auth (.npmrc); Node is the one above.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       # A prerelease (e.g. 0.2.0-alpha.0) publishes under its own dist-tag;

@@ -2,11 +2,11 @@
 
 ## Runtime requirements
 
-Node version is pinned via [proto](https://moonrepo.dev/docs/proto/overview).
-Check `.prototools` at the repo root for the exact version. To install:
+Node version is pinned via [proto](https://moonrepo.dev/docs/proto/overview) in
+the repo root's `.prototools`. To install every pinned tool:
 
 ```bash
-proto install node 22 --pin local
+proto install
 ```
 
 Dependencies are managed with npm:
