@@ -19,6 +19,11 @@ import {
   takeNextEvent,
 } from "./internal-events.ts";
 import type { SyncOperationRegistration } from "./type.ts";
+import {
+  maxAttemptsFor,
+  type SyncOperationRetryOptions,
+} from "./sync-operation-error.ts";
+import { runStepWithRetry } from "./step-retry.ts";
 
 export async function startFSMWorker(
   deps: DBDeps,
@@ -27,8 +32,10 @@ export async function startFSMWorker(
   fsm_version: number | string,
   syncOperationRegistrations: SyncOperationRegistration[],
   signal?: AbortSignal,
+  syncOperationRetry?: SyncOperationRetryOptions,
 ) {
   const visibilityTimeout = 30;
+  const maxAttempts = maxAttemptsFor(syncOperationRetry, fsm_name);
   logger.info(
     "Started FSM worker for queue: {queueName} with fsm_name {fsmName} and fsm_version {fsmVersion}",
     { queueName, fsmName: fsm_name, fsmVersion: fsm_version },
@@ -99,42 +106,123 @@ export async function startFSMWorker(
       });
       logger.info("Initial FSM state from DB: {state}", { state: instance });
 
-      const macrostepV2Result = await macrostepV2(
-        deps,
-        queueName,
-        next.msg,
-        instance.fsm_instance_row,
-        instance.resolved_state_value,
-        fsm_name,
-        fsm_version,
-        syncOperationRegistrations,
+      // SPEC-014: a step whose guard, action, delay or input mapper throws is
+      // retried in place, taking nothing else for this instance, then saved
+      // as status error; platform errors are retried and never count. No
+      // visibility timeout to extend: only this worker, which holds the
+      // instance's lock, reads its queue.
+      const eventType = String(
+        (next.msg.message as { eventData?: { eventType?: unknown } } | null)
+          ?.eventData?.eventType ?? "",
       );
-      logger.info("Macrostep result: {result}", {
-        result: macrostepV2Result,
+      // Each retry reads the instance again, as the loop's next event would:
+      // nothing was saved, so it's still as it was before the step unless
+      // something else changed it (a stop), and a platform error that a stale
+      // read caused clears.
+      let current = instance;
+      let firstAttempt = true;
+      const step = await runStepWithRetry({
+        firstAttempt: next.source === "queue" ? next.msg.read_ct ?? 1 : 1,
+        maxAttempts,
+        eventType,
+        signal,
+        attemptStep: async () => {
+          if (!firstAttempt) {
+            current = (await getFsmDataResolveStateValue(deps, queueName)) ??
+              current;
+          }
+          firstAttempt = false;
+          // A copy per attempt: an action can change the context it's given in
+          // place, and neither a retry nor the error save may see that.
+          const macrostepV2Result = await macrostepV2(
+            deps,
+            queueName,
+            structuredClone(next.msg),
+            structuredClone(current.fsm_instance_row),
+            structuredClone(current.resolved_state_value),
+            fsm_name,
+            fsm_version,
+            syncOperationRegistrations,
+          );
+          logger.info("Macrostep result: {result}", {
+            result: macrostepV2Result,
+          });
+          if (!macrostepV2Result) return null;
+          const archiveResult = await archiveEventFromFsmTypeWorker(
+            deps,
+            macrostepV2Result.remove_from_current_fsm_instance_queue_id,
+            // null for an internal event: it isn't a pgmq message.
+            next.source === "queue" ? next.msg.msg_id : null,
+            macrostepV2Result.to_be_removed_schedule_queue_msg_ids,
+            macrostepV2Result.to_be_removed_async_operation_queue_msg_ids,
+            macrostepV2Result.to_be_added_schedule_queue_data,
+            macrostepV2Result.to_be_added_async_operation_queue_data,
+            macrostepV2Result.input_total_schedule_queue_data,
+            macrostepV2Result.input_total_async_operation_queue_data,
+            macrostepV2Result.fsm_instance_data_save_fsm_status,
+            macrostepV2Result.fsm_instance_data_save_fsm_state,
+            macrostepV2Result.fsm_instance_data_save_fsm_context,
+            macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
+            macrostepV2Result.raised_events,
+            next.source === "internal" ? next.event : null,
+            macrostepV2Result.fsm_instance_data_save_fsm_error,
+          );
+          return {
+            archiveResult,
+            status: macrostepV2Result.fsm_instance_data_save_fsm_status,
+          };
+        },
+        // Nothing from the failed step: the state and context it started
+        // from, no new invokes or timers, and the event consumed. The
+        // archive's terminal path stops the rest and tells a parent FSM
+        // (SPEC-011).
+        saveError: async (error) => {
+          const row = current.fsm_instance_row;
+          return {
+            archiveResult: await archiveEventFromFsmTypeWorker(
+              deps,
+              queueName,
+              next.source === "queue" ? next.msg.msg_id : null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              "error",
+              row.fsm_instance_state,
+              row.fsm_instance_context,
+              row.fsm_instance_xstate_state,
+              [],
+              next.source === "internal" ? next.event : null,
+              error,
+            ),
+            status: "error" as const,
+          };
+        },
+        onSyncOperationError: (error, attempt, delayMs) =>
+          logger.warning(
+            "Attempt {attempt} of {maxAttempts} for {eventType} failed: {error}; retrying in {delayMs} ms",
+            { attempt, maxAttempts, eventType, error, delayMs },
+          ),
+        onPlatformError: (error, delayMs) =>
+          logger.error(
+            "Saving {eventType} failed: {error}; retrying in {delayMs} ms",
+            { eventType, error, delayMs },
+          ),
       });
-      if (!macrostepV2Result) {
+      if (step.outcome === "aborted") return;
+      if (step.outcome === "error_saved") {
+        logger.error(
+          "{eventType} failed {maxAttempts} attempts; FSM instance {queueName} is in error",
+          { eventType, maxAttempts, queueName },
+        );
+      }
+      if (!step.result) {
         logger.warning("No result from macrostepV2, skipping archiving");
         continue;
       }
-      const archiveResult = await archiveEventFromFsmTypeWorker(
-        deps,
-        macrostepV2Result.remove_from_current_fsm_instance_queue_id,
-        // null for an internal event: it isn't a pgmq message.
-        next.source === "queue" ? next.msg.msg_id : null,
-        macrostepV2Result.to_be_removed_schedule_queue_msg_ids,
-        macrostepV2Result.to_be_removed_async_operation_queue_msg_ids,
-        macrostepV2Result.to_be_added_schedule_queue_data,
-        macrostepV2Result.to_be_added_async_operation_queue_data,
-        macrostepV2Result.input_total_schedule_queue_data,
-        macrostepV2Result.input_total_async_operation_queue_data,
-        macrostepV2Result.fsm_instance_data_save_fsm_status,
-        macrostepV2Result.fsm_instance_data_save_fsm_state,
-        macrostepV2Result.fsm_instance_data_save_fsm_context,
-        macrostepV2Result.fsm_instance_data_save_fsm_xstate_state,
-        macrostepV2Result.raised_events,
-        next.source === "internal" ? next.event : null,
-        macrostepV2Result.fsm_instance_data_save_fsm_error,
-      );
+      const { archiveResult } = step.result;
       logger.info("{source} event archived with result: {result}", {
         source: next.source,
         result: archiveResult,
@@ -148,10 +236,7 @@ export async function startFSMWorker(
       // (SPEC-011, #534). Nothing was changed; it is not an error. The loop
       // goes on with the next event, or stops below if the instance isn't
       // active.
-      const outcome = archiveOutcome(
-        archiveResult,
-        macrostepV2Result.fsm_instance_data_save_fsm_status,
-      );
+      const outcome = archiveOutcome(archiveResult, step.result.status);
       if (outcome.discarded) {
         logger.info("{source} event's macrostep was discarded: {reason}", {
           source: next.source,
@@ -198,6 +283,7 @@ export async function startFSMWorkerWithDBLock(
   syncOperationRegistrations: SyncOperationRegistration[],
   signal?: AbortSignal,
   onStop?: () => void,
+  syncOperationRetry?: SyncOperationRetryOptions,
 ): Promise<{ status: "success" | "fail"; message: string }> {
   if (!(await lockFsmInstance(deps, queueName))) {
     return {
@@ -219,6 +305,7 @@ export async function startFSMWorkerWithDBLock(
       fsm_version,
       syncOperationRegistrations,
       signal,
+      syncOperationRetry,
     );
     logger.info("FSM Lock for queue {queueName} released after graceful stop", {
       queueName,

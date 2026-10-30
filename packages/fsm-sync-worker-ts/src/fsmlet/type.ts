@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import type { PoolConfig } from "pg";
 import type { Database, Json } from "@pgfsm/db/database.types";
 import type { FsmModule } from "@pgfsm/db";
+import type { SyncOperationRetryOptions } from "./sync-operation-error.ts";
 
 /**
  * The PG-generated Args shape for `fsm_core.archive_event_from_fsm_type_worker_v2`
@@ -61,6 +62,14 @@ export type FsmletOptions = {
    * scheduler recognises restarts as the same node.
    */
   fsmletId?: string;
+  /**
+   * How many times a step whose guard, action, delay function or input
+   * mapper throws is attempted before the instance is set to status error
+   * (SPEC-014). `maxAttempts` (default 3) applies to every FSM this fsmlet
+   * serves; `fsms` overrides it per FSM name, for all its versions. Each must
+   * be an integer ≥ 1; 1 is XState's behaviour (the first throw is an error).
+   */
+  syncOperationRetry?: SyncOperationRetryOptions;
 };
 
 // Used in: fsmlet.ts, index.ts (direct import)

@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import {
   type InputProblem,
   invokeWithInput,
@@ -74,14 +74,9 @@ Deno.test("invokeWithInput: an async stub is awaited; a string result is a value
   assertEquals(out.input, "EquiGavin");
 });
 
-Deno.test("invokeWithInput: a missing stub, a throw, or a non-JSON result gives null and reports why", async () => {
-  const h = harness({
-    throws: () => {
-      throw new Error("boom");
-    },
-    date: () => ({ at: new Date() }),
-  });
-  for (const name of ["missing", "throws", "date"]) {
+Deno.test("invokeWithInput: a missing stub or a non-JSON result gives null and reports why", async () => {
+  const h = harness({ date: () => ({ at: new Date() }) });
+  for (const name of ["missing", "date"]) {
     const out = await invokeWithInput(
       invoke({ inputName: name }),
       h.evaluate,
@@ -91,9 +86,23 @@ Deno.test("invokeWithInput: a missing stub, a throw, or a non-JSON result gives 
   }
   assertEquals(
     h.problems.map((p) => [p.inputName, p.reason]),
-    [["missing", "missing"], ["throws", "threw"], ["date", "not_json"]],
+    [["missing", "missing"], ["date", "not_json"]],
   );
-  assertEquals((h.problems[1].error as Error).message, "boom");
+});
+
+Deno.test("invokeWithInput: a stub that throws fails the step (SPEC-014)", async () => {
+  const h = harness({
+    throws: () => {
+      throw new Error("boom");
+    },
+  });
+  await assertRejects(
+    () =>
+      invokeWithInput(invoke({ inputName: "throws" }), h.evaluate, h.report),
+    Error,
+    "boom",
+  );
+  assertEquals(h.problems, []);
 });
 
 Deno.test("invokeWithInput: a stub returning nothing gives null without a problem", async () => {

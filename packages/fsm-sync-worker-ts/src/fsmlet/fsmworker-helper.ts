@@ -14,6 +14,7 @@ import { orderEntryActions } from "./entry-actions.ts";
 import { selectTransitions } from "./select-transitions.ts";
 import { delayedEventType, resolveRaiseDelay } from "./delays.ts";
 import { invokeWithInput } from "./invoke-input.ts";
+import { callSyncOperation } from "./sync-operation-error.ts";
 
 import { microstep, selectAllTransitions } from "@pgfsm/db";
 
@@ -105,32 +106,21 @@ export async function runActionImplementation(
     kind: actionKind,
     action,
   });
-  try {
-    const actionName = action.type || action.action_type || action.name;
-    const handler = findSyncOperationHandler(
-      syncOperationRegistrations,
-      "action",
-      actionName,
-    );
-    if (typeof handler === "function") {
-      const result = await handler(
-        current_context,
-        action.params || {},
-        meta,
-      );
-      if (typeof result !== "undefined") {
-        return result;
-      } else {
-        return current_context;
-      }
-    }
-  } catch (err) {
-    actionsLogger.error(
-      "Error executing {kind} action implementation: {error}",
-      { kind: actionKind, error: err },
-    );
-  }
-  return current_context;
+  const actionName = action.type || action.action_type || action.name;
+  const handler = findSyncOperationHandler(
+    syncOperationRegistrations,
+    "action",
+    actionName,
+  );
+  // A missing implementation is skipped, as XState does. One that throws
+  // fails the step (SPEC-014): the worker retries it, then sets status error.
+  if (typeof handler !== "function") return current_context;
+  const result = await callSyncOperation(
+    "action",
+    String(actionName),
+    () => handler(current_context, action.params || {}, meta),
+  );
+  return typeof result !== "undefined" ? result as Json : current_context;
 }
 
 // Main function to process a message for a given queue
@@ -220,14 +210,20 @@ export async function macrostepV2(
           });
           return false;
         }
-        // Generated guard stubs take (context, event).
+        // Generated guard stubs take (context, event). A throw fails the
+        // step (SPEC-014).
         return Boolean(
-          await guardFn(current_context, msgData.eventData, {
-            params: guard.params ?? {},
-            deps,
-            queueName,
-            msg,
-          }),
+          await callSyncOperation(
+            "guard",
+            guard.type,
+            () =>
+              guardFn(current_context, msgData.eventData, {
+                params: guard.params ?? {},
+                deps,
+                queueName,
+                msg,
+              }),
+          ),
         );
       },
     );
@@ -360,8 +356,13 @@ export async function macrostepV2(
           });
           return undefined;
         }
-        // Generated delay stubs take (context, event) and return ms.
-        return await delayFn(current_context, msgData.eventData);
+        // Generated delay stubs take (context, event) and return ms. A throw
+        // fails the step (SPEC-014).
+        return await callSyncOperation(
+          "delay",
+          name,
+          () => delayFn(current_context, msgData.eventData),
+        );
       });
       if (delay === undefined) {
         // XState raises it without a delay when the delay doesn't resolve to
@@ -396,20 +397,24 @@ export async function macrostepV2(
             name,
           );
           if (typeof inputFn !== "function") return { found: false };
-          // Generated input stubs take (context, event).
+          // Generated input stubs take (context, event). A throw fails the
+          // step (SPEC-014).
           return {
             found: true,
-            value: await inputFn(current_context, msgData.eventData),
+            value: await callSyncOperation(
+              "input",
+              name,
+              () => inputFn(current_context, msgData.eventData),
+            ),
           };
         },
         (problem) =>
           logger.error(
-            "Input {inputName} of invoke {invokeId} ({reason}): the actor gets null. {error}",
+            "Input {inputName} of invoke {invokeId} ({reason}): the actor gets null",
             {
               inputName: problem.inputName,
               invokeId: (action as { id?: unknown }).id,
               reason: problem.reason,
-              error: problem.error,
             },
           ),
       );

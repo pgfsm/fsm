@@ -29,9 +29,37 @@ await runFsmlet(
   { connectionString: Deno.env.get("DATABASE_URL") ?? "" },
   SYNC_OPERATION_REGISTRATIONS,
   FSM_DEFINITIONS, // required: see "Startup check" below
-  // optional 4th argument: { signal, maxConcurrency, fsmletId, … }
+  // optional 4th argument: { signal, maxConcurrency, fsmletId,
+  // syncOperationRetry, … }
 );
 ```
+
+### When a guard, action, delay or input mapper throws
+
+The step is retried in place, with the same event and the instance as it was
+before the step, waiting 1 s, then 2 s, doubling (at most 30 s). Nothing else is
+taken for that instance meanwhile, so its events stay in order. After
+`maxAttempts` failed attempts the instance is set to status `error`, with
+`{ kind, name, message, attempts, eventType }` as its error; nothing from the
+failed step is applied, its invokes and timers are stopped, and a parent FSM
+gets `xstate.error.actor.<invoke id>`. `error` is final, as in XState.
+
+```typescript
+await runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, {
+  syncOperationRetry: {
+    maxAttempts: 3, // default; 1 is XState's behaviour
+    fsms: { creditCheck: { maxAttempts: 5 } }, // per FSM, all its versions
+  },
+});
+```
+
+The whole step re-runs, so keep sync operations pure (I/O belongs in actors).
+Database and pgmq failures aren't counted: they're retried until they succeed. A
+missing implementation is unchanged: a guard is false, an action is skipped, a
+delay is sent now, an input is `null`.
+
+Upgrading from 0.5: an action or input mapper that throws used to be logged and
+skipped; it now ends the instance in `error` after `maxAttempts`.
 
 ### Startup check
 

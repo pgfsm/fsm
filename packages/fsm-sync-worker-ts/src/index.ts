@@ -20,6 +20,12 @@ export type {
 } from "./fsmlet/type.ts";
 export { runFsmlet, startFsmlet } from "./fsmlet/fsmlet.ts";
 export {
+  DEFAULT_SYNC_OPERATION_MAX_ATTEMPTS,
+  SyncOperationError,
+  type SyncOperationKind,
+  type SyncOperationRetryOptions,
+} from "./fsmlet/sync-operation-error.ts";
+export {
   checkFsmDefinitions,
   classifyFsmDefinitions,
   FsmDefinitionCheckError,
