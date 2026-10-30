@@ -55,11 +55,15 @@ await runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, {
 
 The whole step re-runs, so keep sync operations pure (I/O belongs in actors).
 Database and pgmq failures aren't counted: they're retried until they succeed. A
-missing implementation is unchanged: a guard is false, an action is skipped, a
-delay is sent now, an input is `null`.
+missing guard, delay or input mapper stops the fsmlet from starting (see
+"Startup check"); a missing action is skipped, as in XState.
 
 Upgrading from 0.5: an action or input mapper that throws used to be logged and
 skipped; it now ends the instance in `error` after `maxAttempts`.
+
+Upgrading from 0.6: the startup check also refuses a definition whose guard,
+named delay or input mapper has no registration. At runtime these used to count
+as false, send the event now, or give `null`.
 
 ### Startup check
 
@@ -72,7 +76,11 @@ FSM version it serves is:
 - **drifted**: loaded with different content than the `fsm.json` this worker was
   generated from. A loaded version can't be changed: give the edited `fsm.json`
   a new version;
-- **undigested**: missing from `fsmDefinitions`; regenerate the sync worker.
+- **undigested**: missing from `fsmDefinitions`; regenerate the sync worker;
+- **unimplemented**: its `fsm.json` calls a guard, a named delay or an input
+  mapper with no entry in `SYNC_OPERATION_REGISTRATIONS` for that version;
+  regenerate the sync worker (your stubs are kept). A missing action is still
+  skipped at runtime, as in XState.
 
 The check is mandatory; there's no option to turn it off.
 

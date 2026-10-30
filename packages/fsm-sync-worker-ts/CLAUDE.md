@@ -185,10 +185,14 @@ Before `registerFsmlet`, `startFsmlet` calls `checkFsmDefinitions`
 classified by `classifyFsmDefinitions` as `missing`, `ambiguous` (several rows
 with different content, from loads that raced before the unique constraint),
 `drifted` (the loaded JSONB's `fsmJsonDigest` differs from the compiled
-`FSM_DEFINITIONS` digest) or `undigested` (no digest given for a served module).
-Any problem throws one `FsmDefinitionCheckError` listing them all, after ending
-the pool, so the fsmlet never registers and the scheduler never routes work to
-it.
+`FSM_DEFINITIONS` digest), `undigested` (no digest given for a served module) or
+`unimplemented` (#621: a definition that matches but calls a guard, named delay
+or input mapper with no registration for that FSM version;
+`syncOperationsNamedIn` lists what an fsm.json calls: transitions' `guard`,
+`xstate.raise` delay keys that aren't numbers, invokes' `inputName`; actions
+aren't checked, since a missing one is skipped, as in XState). Any problem
+throws one `FsmDefinitionCheckError` listing them all, after ending the pool, so
+the fsmlet never registers and the scheduler never routes work to it.
 
 - `fsmDefinitions` is `startFsmlet`/`runFsmlet`'s required third argument
   (#422), after the registrations it's checked against. For JavaScript callers,
@@ -248,7 +252,9 @@ in a step (the database, pgmq, the archive) is a platform error.
 
 Nothing else is read for the instance while a step retries, so its events stay
 in order. There's no visibility timeout to extend: only the worker holding the
-instance's lock (`fsm_instance_lock`) reads its queue. A missing implementation
-is unchanged (guard false, action skipped, delay sent now, input `null`).
+instance's lock (`fsm_instance_lock`) reads its queue. A missing guard, delay or
+input mapper is refused at startup (`unimplemented`, #621); the runtime
+fallbacks (guard false, delay sent now, input `null`) remain for callers that
+don't pass registrations to the check. A missing action is skipped.
 
 Unit tests: `test/step-retry.test.ts`.
