@@ -18,6 +18,7 @@ import {
 } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import { checkFsmDefinitions } from "./fsm-definition-check.ts";
+import { validateSyncOperationRetry } from "./sync-operation-error.ts";
 
 const logger = getLogger(["@pgfsm/fsmlet"]);
 
@@ -134,6 +135,8 @@ export async function startFsmlet(
       "startFsmlet/runFsmlet: the third argument, fsmDefinitions, is required. Import FSM_DEFINITIONS from the generated sync-operation-registry-aggregate.generated.ts and call runFsmlet(dbConfig, SYNC_OPERATION_REGISTRATIONS, FSM_DEFINITIONS, options).",
     );
   }
+  // Also before any connection (SPEC-014).
+  validateSyncOperationRetry(options?.syncOperationRetry);
 
   const activeWorkers = new Map<string, ActiveWorker>();
   logger.info(
@@ -235,6 +238,8 @@ export async function startFsmlet(
       fsmVersion,
       instanceSyncOperationRegistrations,
       controller.signal,
+      undefined,
+      options?.syncOperationRetry,
     )
       .then((result) => {
         if (result.status === "fail") {

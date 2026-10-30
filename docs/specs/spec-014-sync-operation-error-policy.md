@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                       |
 | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                       |
+| Status  | Accepted                                                                                                                    |
 | Date    | 2026-10-29                                                                                                                  |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                    |
 | Issue   | #590                                                                                                                        |
@@ -157,9 +157,10 @@ side effects in actions.
 2. **Retry in place.** On a sync operation error the worker discards the step
    and runs it again from the start, with the same event and the instance as it
    was before the step. It reads no other event for that instance meanwhile.
-   Waits between attempts start at 1 s and double (1 s, 2 s, …). While waiting,
-   it extends the message's visibility timeout (`pgmq.set_vt`) so the message
-   doesn't reappear.
+   Waits between attempts start at 1 s and double (1 s, 2 s, …), capped at 30 s.
+   The message's visibility timeout isn't extended: only the worker holding the
+   instance's lock (`fsm_instance_lock`) reads its queue, so a message that
+   becomes visible again isn't read by anyone else meanwhile.
 3. **The whole step re-runs.** Operations that ran before the one that threw run
    again: a step is computed in memory and saved once, so there's no partial
    step to resume from. This is why actions must be pure or idempotent.
@@ -233,7 +234,7 @@ side effects in actions.
 
 - [ ] A guard, action, delay function or input mapper that throws is retried in
       place with the same event and the instance as it was before the step, up
-      to `maxAttempts`, waiting 1 s, then 2 s, doubling.
+      to `maxAttempts`, waiting 1 s, then 2 s, doubling, capped at 30 s.
 - [ ] While retrying, the worker takes no other event for that instance: a test
       sends two events, makes the first one's guard throw once and then succeed,
       and sees them processed in order.
@@ -266,4 +267,15 @@ side effects in actions.
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Accepted with #617. Two details changed during implementation (#618): waits
+between sync operation retries are capped at 30 s like platform retries, and the
+visibility timeout isn't extended (the instance lock already keeps other workers
+off the queue), so no new `@pgfsm/db` function is needed.
+
+- #618: (a) sync worker: retry in place, then status `error`.
+- #619: (b) compiler: the scaffolded `run-sync-worker.ts` documents
+  `syncOperationRetry`.
+- #620: (c) end-to-end test.
+
+Follow-ups: #621 (startup check for missing implementations), #622 (recover an
+instance from `error`), #623 (per-instance `maxAttempts`).

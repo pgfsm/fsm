@@ -215,8 +215,40 @@ Tests: `test/fsm-definition-check.test.ts` (unit tests for the classifier;
   state. The result is stored as the invoke's `input`, which the archive passes
   on (`start_invoked_async_operation_v2`'s `input`: the actor's payload, or a
   child FSM's context), so redelivery reuses it;
-- a stub that's missing, throws, or returns something that isn't JSON is logged
-  and gives `null` (the actions policy; #590 tracks one policy for all sync
-  operations). `undefined` gives `null` silently.
+- a stub that's missing or returns something that isn't JSON is logged and gives
+  `null`; `undefined` gives `null` silently. A stub that throws fails the step
+  (SPEC-014, below).
 
 Unit tests: `test/invoke-input.test.ts`.
+
+## Sync operation errors (SPEC-014, #618)
+
+`macrostepV2` calls every guard, action, delay function and input mapper through
+`callSyncOperation` (`src/fsmlet/sync-operation-error.ts`), which turns a throw
+into a `SyncOperationError { kind, operation, cause }`. Anything else that fails
+in a step (the database, pgmq, the archive) is a platform error.
+
+`startFSMWorker` runs each event's macrostep and archive through
+`runStepWithRetry` (`src/fsmlet/step-retry.ts`):
+
+- a `SyncOperationError` re-runs the whole step in place, with the same event,
+  after 1 s, 2 s, doubling (capped at 30 s). Each retry reads the instance again
+  (nothing was saved, so it's the row from before the step unless a stop changed
+  it) and works on a `structuredClone` of it, since actions may change their
+  context in place. Attempts are numbered from the message's `read_ct` (internal
+  events from 1), so a restart carries on counting;
+- after `maxAttempts` (`FsmletOptions.syncOperationRetry`, per FSM via `fsms`,
+  default 3, validated before `startFsmlet` connects), `saveError` calls the
+  archive with status `error`, the row's own state, context and snapshot, no new
+  invokes or timers, and the error record. The archive's terminal path
+  (SPEC-011) stops invokes, archives timers and the queue, and notifies a parent
+  FSM; the worker then stops on the error status;
+- a platform error is retried with the same backoff and never counts, including
+  one while saving the error.
+
+Nothing else is read for the instance while a step retries, so its events stay
+in order. There's no visibility timeout to extend: only the worker holding the
+instance's lock (`fsm_instance_lock`) reads its queue. A missing implementation
+is unchanged (guard false, action skipped, delay sent now, input `null`).
+
+Unit tests: `test/step-retry.test.ts`.
