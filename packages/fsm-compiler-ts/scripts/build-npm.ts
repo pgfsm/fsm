@@ -37,11 +37,6 @@ await build({
   entryPoints: [
     "./src/index.ts",
     { kind: "bin", name: "fsm-compiler", path: "./src/cli/index.ts" },
-    // Nothing statically imports this — it's only referenced by the
-    // runtime string module.register() passes in
-    // src/import-resolution.node.ts (see #270) — so it must be listed
-    // explicitly or dnt's graph walker never transpiles/emits it.
-    "./src/cli/loader.node.ts",
   ],
   outDir: "./dist",
   shims: {
@@ -82,13 +77,16 @@ await build({
     // are themselves import specifiers, so without this the type-check
     // pass can't resolve `import ... from "pg"` (deno.json's own
     // "@types/pg" import mapping isn't picked up the same way here).
+    // dnt's own default @types/node (^20.9.0) predates registerHooks();
+    // match the engines floor below (#388).
     devDependencies: {
       "@types/pg": "^8.18.0",
+      "@types/node": "^22.15.0",
     },
-    // src/cli/loader.node.ts registers itself via node:module's register(),
-    // which needs Node 20.6+ (see #270).
+    // src/import-resolution.node.ts registers src/cli/loader.node.ts via
+    // node:module's registerHooks(), which needs Node 22.15+ (#388).
     engines: {
-      node: ">=20.6.0",
+      node: ">=22.15.0",
     },
   },
   compilerOptions: {

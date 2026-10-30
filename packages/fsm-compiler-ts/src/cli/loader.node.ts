@@ -1,16 +1,22 @@
 // Node module-resolution hook (see ../import-resolution.node.ts, #270).
-// Registered via node:module's register() — only ever runs under the
-// npm/npx build, never under Deno. Node executes this in a dedicated
-// loader realm, so it must be fully self-contained (no shared in-memory
-// state with the rest of the CLI process beyond what it computes itself).
+// Registered via node:module's registerHooks() — only ever runs under the
+// npm/npx build, never under Deno. Node runs these hooks synchronously on
+// the main thread (#388; the old register() ran them on a loader thread),
+// so everything here, the on-demand npm install included, is synchronous.
 //
 // Scope, deliberately: only exact-key `imports` entries whose value starts
 // with "npm:" are resolved. Import-map `scopes`/trailing-slash prefix
 // entries and `jsr:`-mapped values are NOT handled — see #270's plan for
 // why. Anything outside that scope, or any failure along the way, rethrows
 // the ORIGINAL Node resolution error unchanged rather than masking it.
-import { spawn } from "node:child_process";
-import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+} from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -75,11 +81,11 @@ function stripJsonComments(text: string): string {
   return result;
 }
 
-async function readDenoConfig(dir: string): Promise<DenoConfig | undefined> {
+function readDenoConfig(dir: string): DenoConfig | undefined {
   for (const name of ["deno.json", "deno.jsonc"]) {
     let text: string;
     try {
-      text = await readFile(join(dir, name), "utf8");
+      text = readFileSync(join(dir, name), "utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
       throw err;
@@ -102,9 +108,9 @@ const importMapCache = new Map<string, Record<string, string>>();
 // walking up for a workspace root's `imports` as a lower-precedence
 // fallback — approximating Deno's own workspace import-map inheritance
 // closely enough for the common case. See #270's plan for exact scope.
-export async function findMergedImportMap(
+export function findMergedImportMap(
   startDir: string,
-): Promise<Record<string, string>> {
+): Record<string, string> {
   const cached = importMapCache.get(startDir);
   if (cached) return cached;
 
@@ -112,7 +118,7 @@ export async function findMergedImportMap(
   let nearest: DenoConfig | undefined;
   let nearestDir: string | undefined;
   for (;;) {
-    const config = await readDenoConfig(dir);
+    const config = readDenoConfig(dir);
     if (config) {
       nearest = config;
       nearestDir = dir;
@@ -133,7 +139,7 @@ export async function findMergedImportMap(
   if (!("workspace" in nearest)) {
     let rootDir = dirname(nearestDir);
     for (;;) {
-      const config = await readDenoConfig(rootDir);
+      const config = readDenoConfig(rootDir);
       if (config && "workspace" in config) {
         merged = { ...(config.imports ?? {}), ...merged };
         break;
@@ -170,87 +176,61 @@ function parsePackageName(pkgSpec: string): string {
   return pkgSpec.slice(0, lastAt);
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
+// Blocks the main thread until npm exits — the import waiting on this
+// resolve can't proceed without the package anyway.
+function runNpmInstall(pkgSpec: string, cwd: string): void {
+  const npmCmd = platform() === "win32" ? "npm.cmd" : "npm";
+  const result = spawnSync(
+    npmCmd,
+    [
+      "install",
+      pkgSpec,
+      "--prefix",
+      cwd,
+      "--no-save",
+      "--no-audit",
+      "--no-fund",
+      "--silent",
+    ],
+    { stdio: "ignore" },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `npm install ${pkgSpec} exited with code ${result.status}`,
+    );
   }
 }
-
-function runNpmInstall(pkgSpec: string, cwd: string): Promise<void> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const npmCmd = platform() === "win32" ? "npm.cmd" : "npm";
-    const child = spawn(
-      npmCmd,
-      [
-        "install",
-        pkgSpec,
-        "--prefix",
-        cwd,
-        "--no-save",
-        "--no-audit",
-        "--no-fund",
-        "--silent",
-      ],
-      { stdio: "ignore" },
-    );
-    child.on("error", rejectPromise);
-    child.on("exit", (code) => {
-      if (code === 0) resolvePromise();
-      else {rejectPromise(
-          new Error(`npm install ${pkgSpec} exited with code ${code}`),
-        );}
-    });
-  });
-}
-
-const installPromises = new Map<string, Promise<string>>();
 
 // Ensures pkgSpec (e.g. "xstate@^5.28.0") is installed under a persistent,
 // per-user cache directory, and returns that install's root (an npm
 // --prefix dir, so real packages live under <dir>/node_modules/). Installs
 // into a temp staging dir and renames into place atomically so a crashed
-// or concurrent install can't leave a half-written cache entry.
-async function ensurePackageInstalled(pkgSpec: string): Promise<string> {
-  const existing = installPromises.get(pkgSpec);
-  if (existing) return existing;
+// or concurrent install (another process) can't leave a half-written cache
+// entry. A failure isn't remembered, so a later resolve() retries.
+function ensurePackageInstalled(pkgSpec: string): string {
+  const cacheRoot = getCacheRoot();
+  const finalDir = join(cacheRoot, sanitizeForDirName(pkgSpec));
+  const pkgName = parsePackageName(pkgSpec);
+  const markerPath = join(finalDir, "node_modules", pkgName, "package.json");
+  if (existsSync(markerPath)) return finalDir;
 
-  const promise = (async () => {
-    const cacheRoot = getCacheRoot();
-    const finalDir = join(cacheRoot, sanitizeForDirName(pkgSpec));
-    const pkgName = parsePackageName(pkgSpec);
-    const markerPath = join(finalDir, "node_modules", pkgName, "package.json");
-    if (await pathExists(markerPath)) return finalDir;
-
-    await mkdir(cacheRoot, { recursive: true });
-    const stagingDir = join(
-      cacheRoot,
-      `.staging-${sanitizeForDirName(pkgSpec)}-${process.pid}-${Date.now()}`,
-    );
-    await mkdir(stagingDir, { recursive: true });
-    await runNpmInstall(pkgSpec, stagingDir);
-    await rm(finalDir, { recursive: true, force: true });
-    await rename(stagingDir, finalDir);
-    return finalDir;
-  })();
-
-  installPromises.set(pkgSpec, promise);
-  try {
-    return await promise;
-  } catch (err) {
-    // Allow a later resolve() call to retry rather than caching a failure
-    // forever for the lifetime of the process.
-    installPromises.delete(pkgSpec);
-    throw err;
-  }
+  mkdirSync(cacheRoot, { recursive: true });
+  const stagingDir = join(
+    cacheRoot,
+    `.staging-${sanitizeForDirName(pkgSpec)}-${process.pid}-${Date.now()}`,
+  );
+  mkdirSync(stagingDir, { recursive: true });
+  runNpmInstall(pkgSpec, stagingDir);
+  rmSync(finalDir, { recursive: true, force: true });
+  renameSync(stagingDir, finalDir);
+  return finalDir;
 }
 
 interface ResolveContext {
   parentURL?: string;
   conditions?: string[];
-  importAttributes?: Record<string, string>;
+  importAttributes?: Record<string, string | undefined>;
 }
 
 interface ResolveResult {
@@ -262,15 +242,15 @@ interface ResolveResult {
 type NextResolve = (
   specifier: string,
   context: ResolveContext,
-) => Promise<ResolveResult>;
+) => ResolveResult;
 
-export async function resolve(
+export function resolve(
   specifier: string,
   context: ResolveContext,
   nextResolve: NextResolve,
-): Promise<ResolveResult> {
+): ResolveResult {
   try {
-    return await nextResolve(specifier, context);
+    return nextResolve(specifier, context);
   } catch (err) {
     if (!context.parentURL) throw err;
 
@@ -281,7 +261,7 @@ export async function resolve(
       throw err;
     }
 
-    const importMap = await findMergedImportMap(dirname(parentPath));
+    const importMap = findMergedImportMap(dirname(parentPath));
     const mapped = importMap[specifier];
     if (!mapped || !mapped.startsWith("npm:")) {
       return resolveFromOwnDependencies(specifier, context, nextResolve, err);
@@ -290,7 +270,7 @@ export async function resolve(
     const pkgSpec = mapped.slice("npm:".length);
     let installDir: string;
     try {
-      installDir = await ensurePackageInstalled(pkgSpec);
+      installDir = ensurePackageInstalled(pkgSpec);
     } catch {
       // The fallback itself failed (offline, no npm on PATH, bad range,
       // …) — surface the ORIGINAL Node resolution error, not the
@@ -312,30 +292,20 @@ export async function resolve(
  * specifiers are never redirected, and a miss here rethrows the ORIGINAL
  * resolution error (see #271).
  */
-/** Where this package's own dependencies resolve from; set by {@linkcode initialize}. */
-let ownResolveBase: string | undefined;
-
-/**
- * Node calls this once when the hook is registered, with the `data`
- * import-resolution.node.ts passes: this module's own URL, which can't be
- * read from import.meta here under the dnt build (see there).
- */
-export function initialize(data?: { ownResolveBase?: string }): void {
-  ownResolveBase = data?.ownResolveBase;
-}
-
-async function resolveFromOwnDependencies(
+function resolveFromOwnDependencies(
   specifier: string,
   context: ResolveContext,
   nextResolve: NextResolve,
   originalError: unknown,
-): Promise<ResolveResult> {
+): ResolveResult {
   const bare = !/^(\.{0,2}\/|[a-zA-Z][a-zA-Z\d+.-]*:)/.test(specifier);
-  if (!bare || !ownResolveBase) throw originalError;
+  if (!bare) throw originalError;
   try {
-    return await nextResolve(specifier, {
+    // import.meta is safe to read here: registerHooks() hooks run on the
+    // main thread, where dnt's import.meta ponyfill exists (#388).
+    return nextResolve(specifier, {
       ...context,
-      parentURL: ownResolveBase,
+      parentURL: import.meta.url,
     });
   } catch {
     throw originalError;
