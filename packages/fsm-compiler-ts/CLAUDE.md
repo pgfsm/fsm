@@ -157,10 +157,11 @@ Gotchas:
   (`loader.node.ts`'s `resolveFromOwnDependencies`, #382): a bare specifier that
   neither Node nor the nearest `deno.json` resolves is retried as if the
   compiler imported it, so a user's machine.ts gets our `xstate` with zero
-  config. The loader's own URL comes in via `register()`'s `data` →
-  `initialize()`, not `import.meta.url`: dnt rewrites `import.meta` into a
-  ponyfill that only exists on the main thread, and hooks run on Node's loader
-  thread (reading it there throws, silently disabling the fallback).
+  config. It re-resolves from the loader's own `import.meta.url`. That's safe
+  only because `registerHooks()` runs hooks on the main thread (#388): dnt
+  rewrites `import.meta` into a ponyfill that exists only there, so under the
+  old `register()` (loader thread) the URL had to come in via `data` →
+  `initialize()`.
 - **Under npx, check missing paths with `isNotFoundError`**, never
   `instanceof Deno.errors.NotFound` — the shim's `realPath` throws Node's raw
   ENOENT too (#386, like #278's `remove`).
@@ -836,7 +837,7 @@ map instead) — so this used to fail outright with `ERR_MODULE_NOT_FOUND`.
 `src/import-resolution.ts` / `import-resolution.node.ts` (swapped via
 `build-npm.ts`'s `mappings`, same pattern as `invocation.ts`/`version.ts`) and
 `src/cli/loader.node.ts` fix this for the npm/npx build only: a Node
-`node:module` `register()` resolve hook that, **only when Node's normal
+`node:module` `registerHooks()` resolve hook that, **only when Node's normal
 resolution has already failed**, reads the failing specifier's nearest
 `deno.json`(`c`) import map (walking up to the workspace root too, if any) and,
 for an exact-key `npm:`-mapped entry, installs that package on demand into a
@@ -847,13 +848,17 @@ given package is needed; cached thereafter. Deliberately scoped: only exact
 `imports` keys (no `scopes`/trailing-slash prefix entries) and only `npm:`
 values (not `jsr:`) — anything outside that, or any failure in the fallback
 itself, rethrows the _original_ Node resolution error unchanged rather than
-masking it. `loader.node.ts` must be listed explicitly in `build-npm.ts`'s
-`entryPoints` — nothing statically imports it (it's only referenced by the
-runtime string `register()` is called with), so dnt's graph walker won't find it
-otherwise. `findMergedImportMap` (the import-map walk/merge algorithm) is plain
-`node:fs`/`node:path` code with no Deno APIs, so it's directly `deno test`-able
-even though the file only ever runs under Node — see
-`test/import-resolution.test.ts`.
+masking it. Since #388 the hook is registered with `registerHooks()` (Node
+22.15+, hence `engines`) instead of the deprecated `register()` (DEP0205), so it
+runs **synchronously on the main thread**: every step, the `npm install`
+included (`spawnSync`), is synchronous, and `import-resolution.node.ts` imports
+`loader.node.ts` statically — it no longer needs its own `entryPoints` entry in
+`build-npm.ts`. `build-npm.ts` also pins `@types/node` `^22.15.0`, since dnt's
+default (`^20.9.0`) has no `registerHooks`. Loading a `.ts` machine needs Node's
+default type stripping (22.18+) regardless. `findMergedImportMap` (the
+import-map walk/merge algorithm) is plain `node:fs`/`node:path` code with no
+Deno APIs, so it's directly `deno test`-able even though the file only ever runs
+under Node — see `test/import-resolution.test.ts`.
 
 `src/types/index.ts`'s cross-package `import type`/`export type` reaching into
 `../../../database-src/generated/` (see above) is type-only, so it never appears

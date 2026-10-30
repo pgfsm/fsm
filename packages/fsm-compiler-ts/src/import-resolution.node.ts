@@ -12,20 +12,20 @@
 // resolving `npm:`-mapped bare specifiers itself, on demand, only when
 // Node's normal resolution has already failed. See loader.node.ts for the
 // actual algorithm and its documented scope limits.
-import { register } from "node:module";
+//
+// registerHooks() (Node 22.15+, #388) replaced the deprecated register()
+// (DEP0205): its hooks run synchronously on the main thread, so the hook
+// module is a plain static import rather than a URL Node loads on a
+// separate loader thread.
+import { registerHooks } from "node:module";
+import { resolve } from "./cli/loader.node.ts";
 
 let registered = false;
 
 export function ensureImportMapResolution(): Promise<void> {
   if (!registered) {
     registered = true;
-    const loaderUrl = new URL("./cli/loader.node.js", import.meta.url).href;
-    // The loader's own URL goes in as `data` rather than being read from
-    // import.meta inside it: dnt rewrites import.meta into a ponyfill that
-    // only exists on the main thread, and hooks run on Node's loader thread.
-    register(loaderUrl, import.meta.url, {
-      data: { ownResolveBase: loaderUrl },
-    });
+    registerHooks({ resolve });
   }
   return Promise.resolve();
 }
