@@ -36,6 +36,14 @@ import {
   SYNC_OPERATION_REGISTRATIONS as spec013input_v01,
 } from "./spec013Input/v01/sync-operation-registry.generated.ts";
 import {
+  FSM_DEFINITION as spec014child_v01_definition,
+  SYNC_OPERATION_REGISTRATIONS as spec014child_v01,
+} from "./spec014Child/v01/sync-operation-registry.generated.ts";
+import {
+  FSM_DEFINITION as spec014error_v01_definition,
+  SYNC_OPERATION_REGISTRATIONS as spec014error_v01,
+} from "./spec014Error/v01/sync-operation-registry.generated.ts";
+import {
   FSM_DEFINITION as taskmachineconfig_v01_definition,
   SYNC_OPERATION_REGISTRATIONS as taskmachineconfig_v01,
 } from "./taskMachineConfig/v01/sync-operation-registry.generated.ts";
@@ -62,6 +70,8 @@ export const SYNC_OPERATION_REGISTRATIONS = [
   ...spec012cancel_v01,
   ...spec013child_v01,
   ...spec013input_v01,
+  ...spec014child_v01,
+  ...spec014error_v01,
   ...taskmachineconfig_v01,
   ...taskmachineconfig_v02,
   ...vitalsworkflow_v01,
@@ -78,6 +88,8 @@ export const FSM_DEFINITIONS = [
   spec012cancel_v01_definition,
   spec013child_v01_definition,
   spec013input_v01_definition,
+  spec014child_v01_definition,
+  spec014error_v01_definition,
   taskmachineconfig_v01_definition,
   taskmachineconfig_v02_definition,
   vitalsworkflow_v01_definition,

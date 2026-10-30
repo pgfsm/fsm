@@ -420,6 +420,14 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all fsm/spec013Input/v01/spec013-journey-test.ts
 
+      # SPEC-014's end-to-end test (#620): a throwing sync operation is retried
+      # in place, then sets status error. Scheduler and fsmlet only (no actors).
+      - name: SPEC-014 journey test
+        working-directory: apps/fsm-core-example
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all fsm/spec014Error/v01/spec014-journey-test.ts
+
       # SPEC-012's end-to-end test (#545) runs test-apps/debug-only's Python,
       # Rust and Go workers as subprocesses, beside the in-process TypeScript
       # one: uv, cargo (rust-toolchain.toml) and go must be on PATH.
