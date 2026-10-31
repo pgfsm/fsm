@@ -436,6 +436,99 @@ Deno.test({
   },
 });
 
+/**
+ * A TCP proxy to `port` that can go silent: while frozen it stops forwarding
+ * in both directions but keeps every connection open, so the worker sees a
+ * half-open connection (no close, no reset), as when a network path drops
+ * packets.
+ */
+function freezableProxy(port: number) {
+  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const conns = new Set<Deno.Conn>();
+  let frozen = false;
+  async function pump(from: Deno.Conn, to: Deno.Conn) {
+    const buf = new Uint8Array(16 * 1024);
+    try {
+      while (true) {
+        const n = await from.read(buf);
+        if (n === null) break;
+        while (frozen) await sleep(10);
+        let written = 0;
+        while (written < n) written += await to.write(buf.subarray(written, n));
+      }
+    } catch {
+      // either side went away
+    }
+    for (const conn of [from, to]) {
+      if (conns.delete(conn)) conn.close();
+    }
+  }
+  (async () => {
+    for await (const client of listener) {
+      const upstream = await Deno.connect({ hostname: "127.0.0.1", port });
+      conns.add(client);
+      conns.add(upstream);
+      pump(client, upstream);
+      pump(upstream, client);
+    }
+  })().catch(() => {});
+  return {
+    port: (listener.addr as Deno.NetAddr).port,
+    freeze: () => frozen = true,
+    thaw: () => frozen = false,
+    close() {
+      listener.close();
+      for (const conn of conns) conn.close();
+      conns.clear();
+    },
+  };
+}
+
+Deno.test({
+  name:
+    "TLS: an unanswered keepalive PING ends the session and the worker reconnects (#656)",
+  ...opts,
+  fn: async () => {
+    let registrations = 0;
+    await withGateway(
+      { token: true, onActorRegistered: () => registrations++ },
+      async ({ gateway, tls, url, tokenFile }) => {
+        const proxy = freezableProxy(Number(new URL(url).port));
+        try {
+          await withWorker(
+            {
+              gatewayAddress: `https://localhost:${proxy.port}`,
+              caFile: tls.caFile,
+              tokenFile,
+              keepaliveIntervalMs: 100,
+              keepaliveTimeoutMs: 100,
+            },
+            [DOUBLE],
+            async (_worker, running) => {
+              let settled = false;
+              running.finally(() => settled = true);
+              await waitFor(() => registrations === 1);
+
+              proxy.freeze();
+              // Several PING timeouts' worth of silence. The worker must
+              // neither crash (an uncaught error fails this test) nor give up.
+              await sleep(1_000);
+              assert(!settled, "the worker stopped while the path was silent");
+              proxy.thaw();
+
+              await waitFor(() => registrations >= 2, 10_000);
+              const result = await gateway.invoke(invokeOf("double", 5), 5_000);
+              assertEquals(result.output, { doubled: 10 });
+            },
+          );
+        } finally {
+          proxy.close();
+        }
+      },
+    );
+  },
+});
+
 Deno.test("parseGatewayAddress accepts unix:, https:// and http://", () => {
   assertEquals(parseGatewayAddress("unix:/tmp/x.sock"), {
     kind: "unix",
