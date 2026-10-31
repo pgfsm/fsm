@@ -189,6 +189,32 @@ function isFatal(error: unknown): boolean {
     (error instanceof ConnectError && FATAL_CODES.has(error.code));
 }
 
+/**
+ * `sessionManager.abort()`, with an "error" listener left on the HTTP/2
+ * session first. When a keepalive PING goes unanswered, connect-node destroys
+ * the session with "PING timed out"; the stream fails at once, and this
+ * session's teardown calls abort(), which removes connect-node's own session
+ * "error" listener. Its abort() adds a swallowing one only if the session
+ * isn't destroyed yet, but here it already is, and Deno emits the destroy
+ * error only later, when the TLS socket closes. With no listener left, that
+ * error crashed the process instead of letting run() reconnect (#656).
+ * connect-node 1.x keeps the ready session in `s.conn`; nothing public
+ * exposes it.
+ */
+function abortSession(sessionManager: Http2SessionManager): void {
+  const conn = (sessionManager as unknown as {
+    s?: { conn?: unknown };
+  }).s?.conn as http2.ClientHttp2Session | undefined;
+  if (typeof conn?.on === "function") {
+    conn.on("error", (error) => {
+      logger.debug("Gateway connection closed: {error}", {
+        error: describe(error),
+      });
+    });
+  }
+  sessionManager.abort();
+}
+
 export interface ActorWorkerOptions {
   workerId: string;
   language: string;
@@ -793,7 +819,7 @@ export class ActorWorker {
       if (this.outbox === outbox) {
         this.outbox = null;
       }
-      sessionManager.abort();
+      abortSession(sessionManager);
     }
   }
 
