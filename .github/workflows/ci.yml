@@ -440,6 +440,16 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all fsm/spec012Cancel/v01/spec012-journey-test.ts
 
+      # SPEC-007's process-level E2E (#458): the gateway CLI from source over
+      # TLS with per-language tokens, test-apps/e2e's four workers as
+      # subprocesses. Core flow, auth and token rotation, bounded connections,
+      # and gateway restarts under load. Same toolchains as SPEC-012's.
+      - name: SPEC-007 process-level E2E
+        working-directory: test-apps/e2e/tools
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: deno test --allow-all spec007-process-e2e-test.ts
+
   # The one check the main ruleset requires from this workflow (#606), so a
   # skipped job can't leave a PR waiting on a check that never reports, and a
   # failure in any job here blocks the merge. Skipped counts as fine; add new
