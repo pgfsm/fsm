@@ -24,8 +24,8 @@ import { parseArgs } from "@std/cli/parse-args";
 // @ts-types="@types/pg"
 import pg from "pg";
 
-const LANGUAGES = ["typescript", "python", "rust", "go"] as const;
-type Language = (typeof LANGUAGES)[number];
+export const LANGUAGES = ["typescript", "python", "rust", "go"] as const;
+export type Language = (typeof LANGUAGES)[number];
 
 const IDENTITY = {
   parentFsmName: "loadTest",
@@ -35,7 +35,7 @@ const IDENTITY = {
   asyncOperationVersion: "v01",
 };
 
-interface LanguageStats {
+export interface LanguageStats {
   language: Language;
   queue: string;
   /** Messages of this run that exist (still queued or archived). */
@@ -58,7 +58,7 @@ interface LanguageStats {
   byWorker: Record<string, number>;
 }
 
-interface InstanceStats {
+export interface InstanceStats {
   /** loadTest instances created for this run. */
   created: number;
   /** Instances whose status is `done` (reached `Finished`). */
@@ -109,15 +109,32 @@ async function pgmqTable(
   return rows[0]?.t ?? null;
 }
 
-async function enqueue(
+export interface Enqueued {
+  runId: string;
+  language: Language;
+  queue: string;
+  count: number;
+  workMs: number;
+  firstMsgId: number;
+  lastMsgId: number;
+}
+
+export async function enqueue(
   db: pg.Pool,
   language: Language,
   count: number,
   workMs: number,
   runId: string,
-): Promise<void> {
+): Promise<Enqueued> {
   const queue = await queueName(db, language);
-  await db.query("SELECT pgmq.create($1)", [queue]);
+  try {
+    await db.query("SELECT pgmq.create($1)", [queue]);
+  } catch (error) {
+    // A gateway with --ensure-queue-on-register creating the same queue at
+    // the same moment: its concurrent DDL fails ours (unique_violation), and
+    // the queue exists.
+    if ((error as { code?: string }).code !== "23505") throw error;
+  }
   const { rows } = await db.query(
     `SELECT min(id) AS first, max(id) AS last FROM (
        SELECT pgmq.send($1, jsonb_build_object(
@@ -129,7 +146,7 @@ async function enqueue(
        FROM generate_series(1, $4::int) n) sent`,
     [queue, runId, workMs, count],
   );
-  console.log(JSON.stringify({
+  return {
     runId,
     language,
     queue,
@@ -137,7 +154,7 @@ async function enqueue(
     workMs,
     firstMsgId: Number(rows[0].first),
     lastMsgId: Number(rows[0].last),
-  }));
+  };
 }
 
 /** The loadTest version `instances` creates and `stats` counts (SPEC-013). */
@@ -190,7 +207,7 @@ async function instanceStats(
   };
 }
 
-async function statsFor(
+export async function statsFor(
   db: pg.Pool,
   language: Language,
   runId: string,
@@ -264,7 +281,7 @@ async function statsFor(
   };
 }
 
-const done = (s: LanguageStats) =>
+export const done = (s: LanguageStats) =>
   s.sent > 0 && s.queued === 0 && s.succeeded + s.failed + s.lost >= s.sent;
 
 async function stats(
@@ -334,13 +351,14 @@ if (import.meta.main) {
     const languages = (args.language as string[]).map(asLanguage);
     if (command === "enqueue") {
       if (languages.length !== 1 || !args.count) usage();
-      await enqueue(
+      const enqueued = await enqueue(
         db,
         languages[0],
         Number(args.count),
         Number(args["work-ms"] ?? 0),
         args["run-id"] ?? crypto.randomUUID(),
       );
+      console.log(JSON.stringify(enqueued));
     } else if (command === "instances") {
       if (!args.count) usage();
       await createInstances(
