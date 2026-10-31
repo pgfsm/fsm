@@ -51,6 +51,7 @@ Flow:
 | [SPEC-012](spec-012-cancel-inflight-actor-invoke.md)       | Cancel an In-Flight Actor Invoke in Its Worker                           | Implemented |
 | [SPEC-013](spec-013-invoke-input.md)                       | Per-Instance Input for Invoked Actors and Child FSMs                     | Implemented |
 | [SPEC-014](spec-014-sync-operation-error-policy.md)        | Error Policy for Sync Operations                                         | Accepted    |
+| [SPEC-015](spec-015-deterministic-simulation-testing.md)   | Deterministic Simulation Testing                                         | Draft       |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
