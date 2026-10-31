@@ -32,6 +32,36 @@ deno run -A tools/load.ts stats --run-id run1 --wait 300 [--json]
 Throughput is bounded by the gateway's poll loop: it claims each actor's free
 slots once per `--poll-interval-ms`, so use a short interval when measuring.
 
+## Process-level E2E
+
+`tools/spec007-process-e2e-test.ts` checks SPEC-007's acceptance criteria that
+need real processes but no cluster. It starts the gateway CLI from repository
+source on TCP with TLS and one token per language (`--auth-token-dir`), and the
+four workers here as subprocesses connecting over `https://`. Then it checks:
+
+- the core flow: every worker registers with its own token, and each language's
+  load is processed exactly once;
+- auth: a wrong or missing token gets `UNAUTHENTICATED` before registration,
+  plaintext to the TLS listener fails, and a token added to or removed from the
+  directory takes effect without a gateway restart;
+- bounded connections: the gateway's Postgres backends stay within its pool at 1
+  and 3 TypeScript workers, and the workers have no database settings at all;
+- gateway restarts under load (SIGTERM, then SIGKILL): workers re-register
+  without restarting, and no message is lost.
+
+CI runs it in the end-to-end job. Locally it needs a migrated database,
+`openssl`, `uv`, `cargo` and `go`; `E2E_LANGUAGES=typescript` skips the other
+three:
+
+```bash
+cd tools
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+  deno test --allow-all spec007-process-e2e-test.ts
+```
+
+The criteria that need a cluster (throughput scaling with replicas, a rolling
+restart of the gateway Deployment, half-open connections) are the kind suite's.
+
 `recordFinished` also let `@pgfsm/sync-worker` 0.4.0 and earlier serve
 `loadTest` at all: they only served FSMs with at least one sync operation. From
 0.4.1 (#497) the sync worker serves every FSM in `FSM_DEFINITIONS`, actor-only
