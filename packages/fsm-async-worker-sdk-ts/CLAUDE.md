@@ -100,6 +100,15 @@ the SDK directly (e.g. the example journey test) imports
   so that late alert used to become an unhandled session error and crash the
   process. Now the call fails and `run()` retries with backoff. Covered by the
   mTLS test in `test/transport_concurrency.test.ts`.
+- **Sessions are aborted through `abortSession()`.** An unanswered keepalive
+  PING makes connect-node destroy the session with "PING timed out"; the stream
+  fails and `runSession`'s teardown aborts the manager, which removes
+  connect-node's session `"error"` listener. Its `abort()` adds a swallowing one
+  only for a session not yet destroyed, while Deno emits the destroy error
+  later, on the TLS socket's close. So `abortSession()` attaches its own
+  listener (reaching connect-node 1.x's internal `s.conn`) before aborting;
+  without it the worker crashed instead of reconnecting (#656). Covered by the
+  frozen-proxy test in `test/transport_concurrency.test.ts`.
 - **Concurrency.** `serveLoop` no longer awaits `handleInvoke`; each actor has a
   `Semaphore` sized by
   `effectiveMaxConcurrency(reg.maxConcurrency,
@@ -164,4 +173,4 @@ process, so the README points at `--env-file` (Deno, uv) or `set -a`.
 
 Over a Unix socket there's no keepalive: a crash there shows up immediately as
 end of stream. Over TCP, HTTP/2 PINGs (`keepaliveIntervalMs`) detect a half-open
-connection and the worker reconnects.
+connection and the worker reconnects (over TLS only since 0.4.1, #656).
