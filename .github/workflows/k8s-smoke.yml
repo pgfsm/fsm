@@ -2,10 +2,14 @@
 # (SPEC-007 step 2a, #457): builds the gateway and one worker image per
 # language, deploys packages/fsm-async-worker-gateway-ts/deploy/k8s into a Pod
 # Security "restricted" namespace, and checks every worker registers over TLS
-# with its own token and serves an invoke. It builds five images and takes
-# several minutes, so it runs only on pull requests that change the manifests,
-# the Dockerfiles or this workflow, and on demand (Actions → k8s-smoke → Run
-# workflow). To run it locally, see deploy/k8s/README.md ("Smoke test on kind").
+# with its own token and serves an invoke. Then, on the same cluster,
+# SPEC-007's acceptance suite (#458, acceptance.sh): throughput scaling with
+# replicas, bounded connections, auth, a gateway rolling restart under load
+# and half-open connections, with test-apps/e2e's load workers. It builds nine
+# images and takes a while, so it runs only on pull requests that change the
+# manifests, the Dockerfiles, test-apps/e2e or this workflow, and on demand
+# (Actions → k8s-smoke → Run workflow). To run it locally, see
+# deploy/k8s/README.md ("Smoke test on kind").
 name: k8s-smoke
 
 on:
@@ -13,6 +17,7 @@ on:
   pull_request:
     paths:
       - "packages/fsm-async-worker-gateway-ts/deploy/**"
+      - "test-apps/e2e/**"
       - ".github/workflows/k8s-smoke.yml"
 
 permissions:
@@ -20,11 +25,20 @@ permissions:
 
 jobs:
   smoke:
-    name: kind smoke test
+    name: kind smoke test + SPEC-007 acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Nine images, the Rust ones with their build layers: make room.
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      # Deno, for acceptance.sh's load tool (test-apps/e2e/tools/load.ts).
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
 
       - name: Create kind cluster
         uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
@@ -36,3 +50,8 @@ jobs:
           SKIP_CLUSTER: "1"
           CLUSTER: pgfsm-smoke
         run: packages/fsm-async-worker-gateway-ts/deploy/k8s/overlays/kind/smoke.sh
+
+      - name: SPEC-007 acceptance suite
+        env:
+          CLUSTER: pgfsm-smoke
+        run: packages/fsm-async-worker-gateway-ts/deploy/k8s/overlays/kind/acceptance.sh
