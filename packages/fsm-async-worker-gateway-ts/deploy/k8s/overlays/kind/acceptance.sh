@@ -66,16 +66,31 @@ fail() {
 }
 # Never `cmd | grep -q` (see smoke.sh, #493).
 
+# The script's own stdout, for the diagnostics: a failure inside a command
+# whose output is redirected runs the EXIT trap with that redirection.
+exec 3>&1
+
+# A worker pod's restarts: why its last container ended, and its output.
+container_history() {
+  kubectl -n "$NS" get pod "$1" -o jsonpath='{.metadata.name}: restarts {.status.containerStatuses[0].restartCount}, last state {.status.containerStatuses[0].lastState}{"\n"}' || true
+  kubectl -n "$NS" logs "$1" --previous --tail=60 2>/dev/null || true
+}
+
 pf_pid=""
 blackholed=""
 cleanup() {
   status=$?
+  exec 1>&3
   if [[ -n "$blackholed" ]]; then unblackhole "$blackholed" || true; fi
   if [[ $status -ne 0 ]]; then
     log "FAILED: diagnostics"
     kubectl -n "$NS" get pods -o wide || true
     kubectl -n "$NS" logs -l app.kubernetes.io/name=activity-gateway --tail=150 --prefix || true
     kubectl -n "$NS" logs -l app.kubernetes.io/component=async-worker --tail=40 --prefix || true
+    for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=async-worker -o name 2>/dev/null); do
+      [[ "$(kubectl -n "$NS" get "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount}')" == 0 ]] ||
+        container_history "${pod#pod/}"
+    done
   fi
   [[ -n "$pf_pid" ]] && kill "$pf_pid" 2>/dev/null || true
   rm -rf "$WORK"
@@ -224,6 +239,15 @@ unblackhole() {
 }
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# Fails if the half-open check's worker pod restarted: it must reconnect in
+# place.
+assert_not_restarted() {
+  if [[ "$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount}')" != "$restarts" ]]; then
+    container_history "$pod" >&2
+    fail "the worker pod $pod restarted ($1)"
+  fi
+}
 
 # Seconds until $2 (a fixed string) appears in the output of command $1...,
 # polled every 2 s, up to $3 seconds; fails otherwise.
@@ -461,14 +485,21 @@ echo "gateway: unregistered $id after ~${gw}s"
 since_blackhole | grep -F "missed a keepalive PING" >/dev/null || fail "the gateway didn't log a missed PING"
 since_blackhole | grep -E "WORKER_DISCONNECTED.*leaving message \"?[0-9]+\"? for redelivery" >/dev/null ||
   fail "the in-flight invoke wasn't failed as retriable"
-wk=$(seconds_until "Gateway session ended" 60 worker_logs)
+assert_not_restarted "while the gateway noticed"
+wk=$(seconds_until "Gateway session ended" 60 worker_logs) || {
+  assert_not_restarted "before it logged the session ending"
+  exit 1
+}
 echo "worker: session ended after ~${wk}s"
+assert_not_restarted "while the worker noticed"
 ((gw <= 50 && wk <= 50)) || fail "detection took longer than ~40 s (gateway ${gw}s, worker ${wk}s)"
 unblackhole "$ip"
-seconds_until "Worker \"$id\" authenticated" 120 since_blackhole >/dev/null
+if ! (seconds_until "Worker \"$id\" authenticated" 120 since_blackhole >/dev/null); then
+  assert_not_restarted "instead of re-registering"
+  exit 1
+fi
 echo "worker: re-registered"
-[[ "$(kubectl -n "$NS" get pod "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount}')" == "$restarts" ]] ||
-  fail "the worker pod restarted"
+assert_not_restarted "after the path came back"
 out=$(drain "$RUN-halfopen" 300 typescript)
 assert_none_lost "$out"
 echo "message redelivered and processed: $(jq -c '.languages[0] | {sent, succeeded, redelivered}' <<<"$out")"
