@@ -62,8 +62,11 @@ Deno version is managed by `.prototools`: `proto install deno --pin local`.
   the kind overlay maps that name back to the locally built `:dev` image, so the
   smoke test still tests the checkout. The Dockerfile fails if the binary's
   `--version` doesn't report its `VERSION` build arg. Worker images aren't
-  published (they're per project). The acceptance E2E suite on top of this is
-  #458.
+  published (they're per project). SPEC-007's acceptance suite on top of this is
+  `overlays/kind/acceptance.sh` (#458), run by the same workflow after the smoke
+  test: it swaps the workers to `test-apps/e2e`'s `loadWork` images (`:e2e`),
+  and cuts a worker's connection for the half-open check with `iptables` in the
+  kind node's raw table (a NetworkPolicy only filters new connections).
 
 ## Releasing (`gateway-release.yml`, #486)
 

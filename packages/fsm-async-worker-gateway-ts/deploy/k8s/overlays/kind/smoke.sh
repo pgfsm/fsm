@@ -86,6 +86,20 @@ for image in pgfsm/async-worker-gateway:dev "${LANGS[@]/#/pgfsm/async-worker-}";
 done
 
 log "Postgres (test-only) + migrations"
+# Pulled here and loaded into kind rather than by the kubelet: public ECR
+# rate-limits anonymous pulls from shared CI addresses (429), and the
+# kubelet's own retries give up within the rollout timeout. Its tag isn't
+# :latest, so the kubelet uses the loaded copy (IfNotPresent).
+pg_image=$(sed -n 's/^ *image: *//p' "$HERE/postgres.yaml" | head -1)
+if ! docker image inspect "$pg_image" >/dev/null 2>&1; then
+  for attempt in 1 2 3 4 5 6; do
+    docker pull -q "$pg_image" && break
+    ((attempt < 6)) || { echo "could not pull $pg_image"; exit 1; }
+    echo "pull of $pg_image failed (attempt $attempt); retrying in $((attempt * 30))s"
+    sleep $((attempt * 30))
+  done
+fi
+$KIND load docker-image --name "$CLUSTER" "$pg_image"
 kubectl apply -f "$HERE/postgres.yaml"
 kubectl -n pgfsm-db rollout status deploy/postgres --timeout=300s
 pg_pod=$(kubectl -n pgfsm-db get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')
