@@ -5,7 +5,7 @@
 -- catches the schema file and the migration drifting apart, and any new
 -- fsm_core function left executable by PUBLIC.
 begin;
-select plan(26);
+select plan(29);
 
 -- Runs q as role r; returns 'ok' or the SQLSTATE it failed with. The owner
 -- (postgres) is a member of every fsm_* role, so it can switch to them.
@@ -53,6 +53,17 @@ select ok(pg_has_role('fsm_admin', 'fsm_operator', 'member'), 'fsm_admin is a me
 select ok(pg_has_role('fsm_authenticator', 'fsm_operator', 'member'), 'fsm_authenticator is a member of fsm_operator');
 select ok(not pg_has_role('fsm_authenticator', 'fsm_admin', 'member'),
   'fsm_authenticator is not a member of fsm_admin (deployments grant that)');
+select has_role('fsm_sim');
+select results_eq(
+  $$ select rolcanlogin from pg_roles where rolname = 'fsm_sim' $$,
+  $$ values (false) $$,
+  'fsm_sim is NOLOGIN'
+);
+select is(
+  (select count(*)::int from pg_auth_members where roleid = 'fsm_sim'::regrole),
+  0,
+  'the migration grants fsm_sim to nobody (only the simulator does, SPEC-015)'
+);
 
 -- ── Function boundary ───────────────────────────────────────────────────────
 select is(

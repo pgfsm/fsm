@@ -1535,11 +1535,13 @@ export type Database = {
           reconstructed: Json;
         }[];
       };
+      tx_now: { Args: never; Returns: string };
       unlock_fsm_instance: {
         Args: { input_fsm_instance_id: string };
         Returns: boolean;
       };
       verify_api_key: { Args: { input_key_hash: string }; Returns: string };
+      wall_now: { Args: never; Returns: string };
     };
     Enums: {
       async_operation_language: "typescript" | "python" | "rust" | "go" | "llm";

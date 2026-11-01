@@ -1,6 +1,7 @@
 -- fsm_core access control (SPEC-009 §1, #469)
 --
--- Four roles, enforced at the function boundary (database ADR-001):
+-- Four roles, enforced at the function boundary (database ADR-001), plus
+-- fsm_sim, which carries no privileges:
 --
 --   fsm_operator       NOLOGIN  instance commands (create/send/stop/resume) and
 --                               instance reads — the /fsm/* API routes and
@@ -17,6 +18,11 @@
 --                               of fsm_operator only: a deployment that runs
 --                               the admin API grants fsm_admin to it (or to a
 --                               separate login), never this migration.
+--   fsm_sim            NOLOGIN  no privileges. Only lets a login's
+--                               fsm_core.sim_now GUC drive fsm_core.tx_now() /
+--                               wall_now() (SPEC-015, #642). Granted only to the
+--                               deterministic simulator's logins, never in
+--                               production.
 --
 -- Deployments create their own logins and grant one of these roles to them,
 -- e.g. CREATE ROLE gateway LOGIN PASSWORD '…' IN ROLE fsm_worker. The schema
@@ -56,6 +62,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fsm_authenticator') THEN
     CREATE ROLE fsm_authenticator LOGIN NOINHERIT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fsm_sim') THEN
+    CREATE ROLE fsm_sim NOLOGIN;
   END IF;
 END;
 $$;
@@ -184,6 +193,9 @@ GRANT EXECUTE ON FUNCTION
   fsm_core.claim_scheduled_for_async_operation_workerlet,
   fsm_core.get_fsm_data_resolve_state_value_v2
 TO fsm_worker;
+-- Clock seams (SPEC-015, #642): @pgfsm/db writes workerlet heartbeats itself,
+-- and the workerlet tables' column defaults call fsm_core.tx_now().
+GRANT EXECUTE ON FUNCTION fsm_core.tx_now(), fsm_core.wall_now() TO fsm_worker;
 GRANT SELECT, INSERT, UPDATE, DELETE
   ON fsm_core.fsm_workerlet, fsm_core.async_operation_workerlet TO fsm_worker;
 GRANT SELECT ON fsm_core.fsm_json TO fsm_worker;

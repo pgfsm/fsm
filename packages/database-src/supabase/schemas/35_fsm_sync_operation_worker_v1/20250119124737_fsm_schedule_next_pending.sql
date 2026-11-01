@@ -45,7 +45,7 @@ BEGIN
   INTO v_chosen_fsmlet_id
   FROM fsm_core.fsm_workerlet
   WHERE
-    last_heartbeat > NOW() - (input_stale_threshold_seconds || ' seconds')::interval
+    last_heartbeat > fsm_core.tx_now() - (input_stale_threshold_seconds || ' seconds')::interval
     AND active_workers < max_concurrency
     AND fsm_modules @> jsonb_build_array(
           jsonb_build_object('fsm_name', v_fsm_name, 'fsm_version', v_fsm_version)
@@ -63,7 +63,7 @@ BEGIN
   SET
     status              = 'scheduled',
     fsm_workerlet_id = v_chosen_fsmlet_id,
-    scheduled_at        = NOW()
+    scheduled_at        = fsm_core.tx_now()
   WHERE fsm_instance_and_fsm_workerlet_id = v_entry_id;
 
   -- Step 4: wake the fsmlet via pg_notify.

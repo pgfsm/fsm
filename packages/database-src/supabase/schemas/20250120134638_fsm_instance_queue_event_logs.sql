@@ -17,10 +17,10 @@ create table fsm_core.fsm_instance_queue_event_logs (
     -- event queue, SPEC-010, #519).
     event_source text NOT NULL DEFAULT 'queue' CHECK (event_source IN ('queue', 'internal')),
 
-    execution_started_at timestamp with time zone default now(),
+    execution_started_at timestamp with time zone default fsm_core.tx_now(),
     execution_duration integer DEFAULT NULL,
     -- event_ended_at timestamp with time zone,
-    execution_finished_at timestamp with time zone DEFAULT now(),
+    execution_finished_at timestamp with time zone DEFAULT fsm_core.tx_now(),
 
     event_status text, -- e.g., 'success', 'failure', 'canceled'.
     event_output jsonb,

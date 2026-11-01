@@ -5,7 +5,7 @@ create table fsm_core.fsm_instance_lock (
     fsm_instance_id uuid PRIMARY KEY references fsm_core.fsm_instance,
     locked boolean,
     locked_by text,
-    locked_at timestamp with time zone default now(),
+    locked_at timestamp with time zone default fsm_core.tx_now(),
     expires_at timestamp with time zone
 );
 
@@ -67,7 +67,7 @@ BEGIN
     SET
         worker_locked          = TRUE,
         worker_locked_by       = input_locked_by,
-        worker_locked_at       = now(),
+        worker_locked_at       = fsm_core.tx_now(),
         worker_lock_expires_at = NULL
     WHERE id = input_fsm_instance_id
       AND (worker_locked = FALSE OR worker_locked IS NULL);

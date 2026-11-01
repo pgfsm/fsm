@@ -85,6 +85,12 @@ jobs:
       - name: pg imports carry @ts-types
         run: deno run --allow-read --allow-run=git scripts/check-pg-types-directive.ts
 
+      # Blocking: fsm_core SQL (schemas and @pgfsm/db's inline SQL) reads the
+      # clock only through fsm_core.tx_now() / wall_now(), or the deterministic
+      # simulator sees real time (SPEC-015, #642).
+      - name: fsm_core SQL reads the clock through the seams
+        run: deno run --allow-read --allow-run=git scripts/check-sql-clock-seams.ts
+
       # Blocking: the API app stopped compiling after #341 and nobody noticed,
       # because no job type-checked it (#472); @pgfsm/db, pgfsmctl and
       # @pgfsm/sync-worker only looked clean because pg was `any` (#479).

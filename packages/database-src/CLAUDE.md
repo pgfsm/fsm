@@ -64,6 +64,17 @@ Gotcha: on Supabase (PG 15.8) `GRANT <role> TO CURRENT_USER` segfaults the
 backend. Grant to the role by name (`format('… TO %I', current_user)` in a `DO`
 block).
 
+## Clock seams (`schemas/10_ext_helper/…_fsm_core_clock.sql`, SPEC-015 §2)
+
+Never call `now()` / `clock_timestamp()` (or `current_timestamp` and friends) in
+`fsm_core` SQL, including the SQL `@pgfsm/db` sends inline. Use
+`fsm_core.tx_now()` (for `now()`) and `fsm_core.wall_now()` (for
+`clock_timestamp()`), so the deterministic simulator can run the real SQL on
+virtual time. They return the `fsm_core.sim_now` GUC only for a login in the
+NOLOGIN role `fsm_sim`, which nothing in production is granted.
+`scripts/check-sql-clock-seams.ts` (prek + CI) enforces it. The vendored pgmq
+source is exempt and stays pristine; the sim database build rewrites it.
+
 ## Two local Supabase projects
 
 - `supabase/` — the main project (`SUPABASE_WORKDIR` unset/`.`), backing the API

@@ -47,7 +47,7 @@ BEGIN
             'cancel_to_ack_ms', input_cancel_to_ack_ms
         ),
         'cancel_acknowledged',
-        now()
+        fsm_core.tx_now()
     ) RETURNING async_operation_queue_event_log_id INTO output_async_operation_queue_event_log_id;
 
     RETURN output_async_operation_queue_event_log_id;

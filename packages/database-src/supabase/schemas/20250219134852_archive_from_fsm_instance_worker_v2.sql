@@ -353,7 +353,7 @@ BEGIN
             'stopped_invokes', stopped_invokes
         ),
         'stopped',
-        now()
+        fsm_core.tx_now()
     ) RETURNING fsm_instance_queue_event_log_id INTO event_log_id;
 
     RETURN jsonb_build_object(
