@@ -24,10 +24,10 @@ create table fsm_core.fsm_async_operation_queue_event_logs (
     send_to_parent_queue_id uuid, -- remove strict foreign key constraint to allow for system queues (e.g., pg_system_queue_uuid() and api_system_queue_uuid())
     send_to_parent_queue_id_event_name text,
 
-    execution_started_at timestamp with time zone default now(),
+    execution_started_at timestamp with time zone default fsm_core.tx_now(),
     execution_duration integer DEFAULT NULL,
     -- event_ended_at timestamp with time zone,
-    execution_finished_at timestamp with time zone DEFAULT now(),
+    execution_finished_at timestamp with time zone DEFAULT fsm_core.tx_now(),
 
     event_status text, -- e.g., 'success', 'failure', 'canceled'.
     event_output jsonb,

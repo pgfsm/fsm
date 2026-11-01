@@ -18,9 +18,9 @@ CREATE OR REPLACE FUNCTION fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
     input_event_status text DEFAULT 'ACTIVE',
     input_event_output jsonb DEFAULT '{}'::jsonb,
     input_error_message text DEFAULT NULL,
-    input_execution_started_at timestamp with time zone DEFAULT now(),
+    input_execution_started_at timestamp with time zone DEFAULT fsm_core.tx_now(),
     input_execution_duration integer DEFAULT NULL,
-    input_execution_finished_at timestamp with time zone DEFAULT now(),
+    input_execution_finished_at timestamp with time zone DEFAULT fsm_core.tx_now(),
     input_event_source jsonb DEFAULT NULL
 )
 RETURNS JSONB
@@ -232,9 +232,9 @@ BEGIN
                     input_event_status := 'fsm_started',
                     input_event_output := '{}'::jsonb,
                     input_error_message := NULL,
-                    input_execution_started_at := now(),
+                    input_execution_started_at := fsm_core.tx_now(),
                     input_execution_duration := NULL,
-                    input_execution_finished_at := now()
+                    input_execution_finished_at := fsm_core.tx_now()
                 );
                 output_extra_message := 'initialTransition_event is also sent to queue.';
             EXCEPTION WHEN OTHERS THEN

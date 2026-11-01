@@ -60,7 +60,7 @@ export async function registerFsmlet(
      ON CONFLICT (fsm_workerlet_id) DO UPDATE SET
        fsm_modules     = EXCLUDED.fsm_modules,
        max_concurrency = EXCLUDED.max_concurrency,
-       last_heartbeat  = NOW()`,
+       last_heartbeat  = fsm_core.tx_now()`,
     [fsmletId, JSON.stringify(fsmModules), maxConcurrency],
   );
   logger.info(
@@ -76,7 +76,7 @@ export async function fsmletHeartbeat(
 ): Promise<void> {
   await deps.db.query(
     `UPDATE ${FSM_WORKERLET_TABLE}
-     SET last_heartbeat = NOW(), active_workers = $2
+     SET last_heartbeat = fsm_core.tx_now(), active_workers = $2
      WHERE fsm_workerlet_id = $1::uuid`,
     [fsmletId, activeWorkers],
   );
@@ -100,7 +100,7 @@ export async function listActiveFsmlets(
   const res = await deps.db.query<FsmletNode>(
     `SELECT fsm_workerlet_id, fsm_modules, max_concurrency, active_workers, last_heartbeat
      FROM ${FSM_WORKERLET_TABLE}
-     WHERE last_heartbeat > NOW() - ($1 || ' seconds')::INTERVAL`,
+     WHERE last_heartbeat > fsm_core.tx_now() - ($1 || ' seconds')::INTERVAL`,
     [staleThresholdSeconds],
   );
   return res.rows;

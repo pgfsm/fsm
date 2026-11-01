@@ -18,7 +18,7 @@ create table if not exists fsm_core.async_operation_instance_and_async_operation
 
   status       text        not null default 'pending', -- 'pending' | 'scheduled'
 
-  created_at   timestamptz not null default now(),
+  created_at   timestamptz not null default fsm_core.tx_now(),
   scheduled_at timestamptz null
 
 );

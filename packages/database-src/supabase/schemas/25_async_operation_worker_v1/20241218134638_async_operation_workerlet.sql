@@ -8,7 +8,7 @@ create table fsm_core.async_operation_workerlet (
   max_pid_number  int         not null,
   active_pid_number   int         not null default 0,
   
-  last_heartbeat   timestamptz not null default now(),
-  registered_at    timestamptz not null default now()
+  last_heartbeat   timestamptz not null default fsm_core.tx_now(),
+  registered_at    timestamptz not null default fsm_core.tx_now()
   
 );

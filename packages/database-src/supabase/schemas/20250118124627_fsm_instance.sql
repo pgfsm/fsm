@@ -29,7 +29,7 @@ create table fsm_core.fsm_instance (
   parent_fsm_instance_id uuid,
   parent_invoke_id text,
   childrens jsonb,    
-  started_at timestamp with time zone default now(),
+  started_at timestamp with time zone default fsm_core.tx_now(),
   ended_at timestamp with time zone,
 
   worker_locked          boolean DEFAULT false,

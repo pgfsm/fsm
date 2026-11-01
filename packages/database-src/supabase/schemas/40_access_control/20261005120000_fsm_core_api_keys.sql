@@ -19,7 +19,7 @@ create table if not exists fsm_core.api_keys (
   role          text        not null check (role in ('fsm_admin', 'fsm_operator')),
   prefix        text        not null, -- e.g. 'pgfsm_admin_3f9a1c2e', shown by list_api_keys()
   key_hash      bytea       not null unique, -- sha256(key)
-  created_at    timestamptz not null default now(),
+  created_at    timestamptz not null default fsm_core.tx_now(),
   last_used_at  timestamptz,
   revoked_at    timestamptz
 );
@@ -87,7 +87,7 @@ DECLARE
   v_count int;
 BEGIN
   UPDATE fsm_core.api_keys
-  SET revoked_at = now()
+  SET revoked_at = fsm_core.tx_now()
   WHERE revoked_at IS NULL
     AND (id::text = input_id_or_name OR name = input_id_or_name);
   GET DIAGNOSTICS v_count = ROW_COUNT;
@@ -142,8 +142,8 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  IF v_last IS NULL OR v_last < now() - interval '1 minute' THEN
-    UPDATE fsm_core.api_keys SET last_used_at = now() WHERE id = v_id;
+  IF v_last IS NULL OR v_last < fsm_core.tx_now() - interval '1 minute' THEN
+    UPDATE fsm_core.api_keys SET last_used_at = fsm_core.tx_now() WHERE id = v_id;
   END IF;
 
   RETURN v_role;

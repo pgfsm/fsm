@@ -17,7 +17,7 @@ create table if not exists fsm_core.fsm_instance_and_fsm_workerlet (
   status              text        not null default 'pending', -- 'pending' | 'scheduled'
   
   
-  created_at          timestamptz not null default now(),
+  created_at          timestamptz not null default fsm_core.tx_now(),
   scheduled_at        timestamptz null
   
 );

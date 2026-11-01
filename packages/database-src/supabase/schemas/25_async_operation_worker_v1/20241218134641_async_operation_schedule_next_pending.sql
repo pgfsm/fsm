@@ -57,7 +57,7 @@ BEGIN
   INTO v_chosen_workerlet_id
   FROM fsm_core.async_operation_workerlet
   WHERE
-    last_heartbeat > NOW() - (input_stale_threshold_seconds || ' seconds')::interval
+    last_heartbeat > fsm_core.tx_now() - (input_stale_threshold_seconds || ' seconds')::interval
     AND active_pid_number < max_pid_number
     AND supported_async_operations @> jsonb_build_array(
           jsonb_build_object(
@@ -80,7 +80,7 @@ BEGIN
   SET
     status                       = 'scheduled',
     async_operation_workerlet_id = v_chosen_workerlet_id,
-    scheduled_at                 = NOW()
+    scheduled_at                 = fsm_core.tx_now()
   WHERE async_operation_instance_and_async_operation_workerlet_id = v_entry_id;
 
   -- Step 4: wake the workerlet via pg_notify.

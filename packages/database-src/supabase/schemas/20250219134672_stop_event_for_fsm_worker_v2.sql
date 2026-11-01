@@ -66,7 +66,7 @@ BEGIN
         'stop_worker',
         'stopped',
         jsonb_build_object('triggered_by', 'stop_event_for_fsm_worker_v1'),
-        now()
+        fsm_core.tx_now()
     ) RETURNING fsm_instance_queue_event_log_id INTO event_log_id;
 
     -- 6. Return
@@ -141,7 +141,7 @@ BEGIN
             'triggered_by',    'stop_event_for_fsm_worker_v2',
             'cancelled_count', cancelled_count
         ),
-        now()
+        fsm_core.tx_now()
     ) RETURNING fsm_instance_queue_event_log_id INTO event_log_id;
 
     -- 5. Return

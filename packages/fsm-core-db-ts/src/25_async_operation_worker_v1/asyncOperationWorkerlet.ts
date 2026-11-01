@@ -50,7 +50,7 @@ export async function registerAsyncOperationWorkerlet(
      ON CONFLICT (async_operation_workerlet_id) DO UPDATE SET
        supported_async_operations = EXCLUDED.supported_async_operations,
        max_pid_number             = EXCLUDED.max_pid_number,
-       last_heartbeat             = NOW()`,
+       last_heartbeat             = fsm_core.tx_now()`,
     [workerletId, JSON.stringify(supportedOps), maxConcurrency],
   );
   logger.info(
@@ -66,7 +66,7 @@ export async function asyncOperationWorkerletHeartbeat(
 ): Promise<void> {
   await deps.db.query(
     `UPDATE ${ASYNC_OP_WORKERLET_TABLE}
-     SET last_heartbeat = NOW(), active_pid_number = $2
+     SET last_heartbeat = fsm_core.tx_now(), active_pid_number = $2
      WHERE async_operation_workerlet_id = $1::uuid`,
     [workerletId, activePidNumber],
   );

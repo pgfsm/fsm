@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                                                                                   |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                                                                                                   |
+| Status  | Accepted                                                                                                                                                                                                                                                                                                |
 | Date    | 2026-10-31                                                                                                                                                                                                                                                                                              |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                                                                                                |
 | Issue   | #639                                                                                                                                                                                                                                                                                                    |
@@ -174,14 +174,24 @@ The design has six parts.
   - `fsm_core.tx_now()` replaces `now()` (stable for the transaction).
   - `fsm_core.wall_now()` replaces `clock_timestamp()` (volatile).
 
-  Each returns the value of the `fsm_core.sim_now` GUC when it is set, and
-  otherwise calls the real function. The simulator sets the GUC on each actor
-  connection before every step.
-- All `now()` call sites in `packages/database-src/supabase/schemas/` (about 40
-  today: lock and lease stamps, heartbeats, queue logs, archive) move to the
-  seams. A prek + CI check rejects raw `now()` / `clock_timestamp()` in
-  `fsm_core` SQL outside the seam functions, in the style of
-  `scripts/check-pg-types-directive.ts`.
+  Each returns the value of the `fsm_core.sim_now` GUC when it is set **and**
+  the login (`session_user`) is a member of the NOLOGIN role `fsm_sim`, and
+  otherwise calls the real function. The simulator grants `fsm_sim` to its own
+  logins and sets the GUC on each actor connection before every step.
+- **Why the role check.** Any session can `SET` a custom GUC, and the seams are
+  read inside `SECURITY DEFINER` functions. Without the check, any client could
+  shift the database's clock in production, for example making every fsmlet's
+  heartbeat look stale to the scheduler. No production login is ever granted
+  `fsm_sim`. With the GUC unset, the role is never looked up, so the production
+  cost is one `current_setting()` call. Membership is checked on `session_user`,
+  because inside a `SECURITY DEFINER` function `current_user` is the owner.
+- All `now()` call sites in `packages/database-src/supabase/schemas/` (34 today:
+  lock and lease stamps, heartbeat staleness checks, queue logs, archive, API
+  keys) and in the SQL `@pgfsm/db` sends inline (6: workerlet heartbeats, the
+  fsmlet staleness query, the async-op finish time) move to the seams. A prek +
+  CI check (`scripts/check-sql-clock-seams.ts`) rejects raw `now()` /
+  `clock_timestamp()` / `current_timestamp` and similar in both places, outside
+  the seam functions.
 - **pgmq stays pristine.** The vendored `00_pre_ext/…_PGMQ_source.sql` (about 40
   `clock_timestamp()` and 11 `now()` uses, including the visibility-timeout
   arithmetic) is **not** edited. The sim DB build mechanically rewrites those
@@ -343,4 +353,12 @@ only) without touching the rest.
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Phase 1: SPEC-015 (a) #642 (clock seams), (b) #643 (sim database build), (c)
+#644 (transaction seam, TS clock/RNG), (d) #645 (fsmlet as steps), (e) #646
+(simulator core), (f) #647 (invariants, faults, minimisation), (g) #648
+(`SimHost`, TS SDK), (h) #649 (CI gate).
+
+Phase 2: (i) #650 (gateway as steps, gateway faults), (j) #651 (Python SDK).
+
+Phase 3: (k) #652 (Rust SDK), (l) #653 (Go SDK), (m) #654 (SPEC-011 to SPEC-014
+examples).
