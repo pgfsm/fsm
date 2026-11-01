@@ -8,8 +8,9 @@
 //
 // Checked: every SQL file under packages/database-src/supabase/schemas/, and
 // the SQL @pgfsm/db sends inline (packages/fsm-core-db-ts/src/). Not checked:
-// the seam definitions themselves, the vendored pgmq source (kept pristine; the
-// sim database build rewrites it, SPEC-015 (b)), and generated migrations.
+// the seam definitions themselves, the vendored pgmq source (commented-out
+// reference; the pgmq that runs is the installed extension, which the sim
+// database build rewrites, SPEC-015 (b)), and generated migrations.
 //
 // Usage: deno run --allow-read --allow-run=git scripts/check-sql-clock-seams.ts [files…]
 // With no files (CI), checks every tracked file in scope; prek passes the staged ones.
