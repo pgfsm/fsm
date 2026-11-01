@@ -87,15 +87,19 @@ done
 
 log "Postgres (test-only) + migrations"
 # Pulled here and loaded into kind rather than by the kubelet: public ECR
-# rate-limits anonymous pulls from shared CI addresses (429), and the
-# kubelet's own retries give up within the rollout timeout. Its tag isn't
-# :latest, so the kubelet uses the loaded copy (IfNotPresent).
+# rate-limits anonymous pulls from shared CI addresses (429, or "Data limit
+# exceeded" once the address's quota is spent), and the kubelet's own retries
+# give up within the rollout timeout. Supabase publishes the same tag on
+# Docker Hub, so that's the fallback, retagged to the name postgres.yaml uses.
+# Its tag isn't :latest, so the kubelet uses the loaded copy (IfNotPresent).
 pg_image=$(sed -n 's/^ *image: *//p' "$HERE/postgres.yaml" | head -1)
+pg_mirror="docker.io/${pg_image#public.ecr.aws/}"
 if ! docker image inspect "$pg_image" >/dev/null 2>&1; then
-  for attempt in 1 2 3 4 5 6; do
+  for attempt in 1 2 3 4; do
     docker pull -q "$pg_image" && break
-    ((attempt < 6)) || { echo "could not pull $pg_image"; exit 1; }
-    echo "pull of $pg_image failed (attempt $attempt); retrying in $((attempt * 30))s"
+    docker pull -q "$pg_mirror" && docker tag "$pg_mirror" "$pg_image" && break
+    ((attempt < 4)) || { echo "could not pull $pg_image or $pg_mirror"; exit 1; }
+    echo "pull of $pg_image and $pg_mirror failed (attempt $attempt); retrying in $((attempt * 30))s"
     sleep $((attempt * 30))
   done
 fi
