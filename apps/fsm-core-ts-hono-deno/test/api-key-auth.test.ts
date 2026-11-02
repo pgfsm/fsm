@@ -297,7 +297,7 @@ function machine(id: string, invokes: string[] = []): Json {
 }
 
 Deno.test(
-  "admin: POST /admin/fsm/load loads (200), rejects a missing child (422)",
+  "admin: POST /admin/definitions loads (200), rejects a missing child (422)",
   integration,
   () =>
     withDb(async ({ pool, prefix, key }) => {
@@ -307,7 +307,7 @@ Deno.test(
         "Content-Type": "application/json",
       };
       const load = (definitions: unknown[]) =>
-        app.request("/admin/fsm/load", {
+        app.request("/admin/definitions", {
           method: "POST",
           headers: h,
           body: JSON.stringify({ definitions }),
@@ -367,7 +367,7 @@ Deno.test(
       try {
         await assertRejects(
           () =>
-            createApp("/fsm", { pool: limited, auth: true, adminApi: true }),
+            createApp("/api/v1", { pool: limited, auth: true, adminApi: true }),
           Error,
           `GRANT fsm_admin TO ${login}`,
         );
@@ -384,7 +384,7 @@ Deno.test(
   () =>
     withDb(async ({ pool, key }) => {
       const createApp = await importCreateApp();
-      const app = await createApp("/fsm", {
+      const app = await createApp("/api/v1", {
         pool,
         auth: true,
         adminApi: true,
@@ -393,10 +393,15 @@ Deno.test(
       const adm = await key("fsm_admin");
       const op = await key("fsm_operator");
 
-      assertEquals((await app.request("/fsm")).status, 401);
+      assertEquals((await app.request("/instances")).status, 401);
+      assertEquals(
+        (await app.request("/instances", { headers: bearer(op) })).status,
+        200,
+      );
+      // The pre-#675 routes are gone.
       assertEquals(
         (await app.request("/fsm", { headers: bearer(op) })).status,
-        200,
+        404,
       );
       assertEquals(
         (await app.request("/admin/keys", { headers: bearer(op) })).status,
@@ -407,7 +412,7 @@ Deno.test(
         200,
       );
 
-      const noAdmin = await createApp("/fsm", {
+      const noAdmin = await createApp("/api/v1", {
         pool,
         auth: true,
         adminApi: false,
@@ -419,19 +424,19 @@ Deno.test(
         "admin routes aren't mounted",
       );
       assertEquals(
-        (await noAdmin.request("/fsm", { headers: bearer(adm) })).status,
+        (await noAdmin.request("/instances", { headers: bearer(adm) })).status,
         200,
       );
     }),
 );
 
 Deno.test(
-  "operator key: create, read and stop an instance through the real routes",
+  "operator key: create, read, send an event to, resume and stop an instance; 404 for an unknown one (#675)",
   integration,
   () =>
     withDb(async ({ pool, prefix, key }) => {
       const createApp = await importCreateApp();
-      const app = await createApp("/fsm", {
+      const app = await createApp("/api/v1", {
         pool,
         auth: true,
         adminApi: true,
@@ -442,7 +447,7 @@ Deno.test(
       const op = { ...bearer(await key("fsm_operator")), ...json };
       const fsmName = `${prefix}light`;
 
-      const loaded = await app.request("/admin/fsm/load", {
+      const loaded = await app.request("/admin/definitions", {
         method: "POST",
         headers: adm,
         body: JSON.stringify({
@@ -457,26 +462,157 @@ Deno.test(
 
       let instanceId: string | undefined;
       try {
-        const created = await app.request("/fsm", {
+        const created = await app.request("/instances", {
           method: "POST",
           headers: op,
-          body: JSON.stringify({ fsm_name: fsmName, fsm_version: "v1" }),
+          body: JSON.stringify({
+            fsm_name: fsmName,
+            fsm_version: "v1",
+            input: { who: "op" },
+          }),
         });
         assertEquals(created.status, 200);
-        instanceId = (await created.json()).data.fsm_instance.fsm_instance_id;
+        const instance = (await created.json()).data;
+        instanceId = instance.fsm_instance_id;
         assert(instanceId);
+        assertEquals(instance.fsm_instance_context, { who: "op" });
 
-        const got = await app.request(`/fsm/${instanceId}`, { headers: op });
+        const got = await app.request(`/instances/${instanceId}`, {
+          headers: op,
+        });
         assertEquals(got.status, 200);
 
-        const stopped = await app.request("/fsm/stop", {
-          method: "POST",
-          headers: op,
-          body: JSON.stringify({ queue: instanceId }),
-        });
-        assertEquals(stopped.status, 200);
+        const post = (path: string, body?: unknown) =>
+          app.request(path, {
+            method: "POST",
+            headers: op,
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          });
+        assertEquals(
+          (await post(`/instances/${instanceId}/events`, {
+            type: "NEXT",
+            reason: "ok",
+          })).status,
+          200,
+        );
+        assertEquals(
+          (await post(`/instances/${instanceId}/resume`)).status,
+          200,
+        );
+        assertEquals((await post(`/instances/${instanceId}/stop`)).status, 200);
+
+        // An unknown instance is 404 on every per-instance route.
+        const unknown = crypto.randomUUID();
+        assertEquals(
+          (await app.request(`/instances/${unknown}`, { headers: op }))
+            .status,
+          404,
+        );
+        for (
+          const [path, body] of [
+            [`/instances/${unknown}/events`, { type: "NEXT" }],
+            [`/instances/${unknown}/resume`, undefined],
+            [`/instances/${unknown}/stop`, undefined],
+          ] as const
+        ) {
+          const res = await post(path, body);
+          assertEquals(res.status, 404, path);
+          await res.body?.cancel();
+        }
       } finally {
         if (instanceId) await dropInstance(pool, instanceId);
+      }
+    }),
+);
+
+Deno.test(
+  "operator key: /definitions reads and GET /instances filters and limit (#661)",
+  integration,
+  () =>
+    withDb(async ({ pool, prefix, key }) => {
+      const createApp = await importCreateApp();
+      const app = await createApp("/api/v1", {
+        pool,
+        auth: true,
+        adminApi: true,
+        authCacheTtlMs: 0,
+      });
+      const json = { "Content-Type": "application/json" };
+      const adm = { ...bearer(await key("fsm_admin")), ...json };
+      const op = { ...bearer(await key("fsm_operator")), ...json };
+      const [a, b] = [`${prefix}a`, `${prefix}b`];
+      const loaded = await app.request("/admin/definitions", {
+        method: "POST",
+        headers: adm,
+        body: JSON.stringify({
+          definitions: [
+            { fsmName: a, fsmVersion: "v1", fsmJson: machine(a) },
+            { fsmName: a, fsmVersion: "v2", fsmJson: machine(a) },
+            { fsmName: b, fsmVersion: "v1", fsmJson: machine(b) },
+          ],
+        }),
+      });
+      assertEquals(loaded.status, 200);
+      const get = async (path: string) => {
+        const res = await app.request(path, { headers: op });
+        return { status: res.status, body: await res.json() };
+      };
+
+      // Definitions, readable with an operator key.
+      const all = await get("/definitions");
+      assertEquals(all.status, 200);
+      const ours = all.body.data
+        .filter((d: { fsm_name: string }) => d.fsm_name.startsWith(prefix))
+        .map((d: { fsm_name: string; fsm_version: string }) =>
+          `${d.fsm_name}/${d.fsm_version}`
+        );
+      assertEquals(ours, [`${a}/v1`, `${a}/v2`, `${b}/v1`]);
+      assertEquals(
+        (await get(`/definitions?fsm_name=${a}&fsm_version=v2`)).body.data
+          .length,
+        1,
+      );
+      const versions = await get(`/definitions/${a}`);
+      assertEquals(versions.status, 200);
+      assertEquals(
+        versions.body.data.map((d: { fsm_version: string }) => d.fsm_version),
+        ["v1", "v2"],
+      );
+      assertEquals((await get(`/definitions/${prefix}none`)).status, 404);
+      const one = await get(`/definitions/${b}/versions/v1`);
+      assertEquals(one.status, 200);
+      assertEquals(one.body.data.fsm_json, machine(b));
+      assertEquals((await get(`/definitions/${b}/versions/v9`)).status, 404);
+
+      // Instances, filtered and limited in the database.
+      const ids: string[] = [];
+      try {
+        for (const [name, version] of [[a, "v1"], [a, "v1"], [b, "v1"]]) {
+          const res = await app.request("/instances", {
+            method: "POST",
+            headers: op,
+            body: JSON.stringify({ fsm_name: name, fsm_version: version }),
+          });
+          ids.push((await res.json()).data.fsm_instance_id);
+        }
+        const listed = await get(`/instances?fsm_name=${a}`);
+        assertEquals(listed.status, 200);
+        assertEquals(
+          new Set(listed.body.data.map((r: { id: string }) => r.id)),
+          new Set(ids.slice(0, 2)),
+        );
+        assertEquals(
+          (await get(`/instances?fsm_name=${a}&limit=1`)).body.data.length,
+          1,
+        );
+        assertEquals(
+          (await get(`/instances?fsm_name=${a}&status=error`)).body.data,
+          [],
+        );
+        assertEquals((await get("/instances?limit=0")).status, 422);
+        assertEquals((await get("/instances?status=sleeping")).status, 422);
+      } finally {
+        for (const id of ids) await dropInstance(pool, id);
       }
     }),
 );

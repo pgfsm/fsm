@@ -70,7 +70,7 @@ export async function finishAsyncOperationEvent(
         input_send_to_parent_queue_id_event_name := $11::text,
         input_execution_started_at := $12::timestamptz,
         input_execution_duration := $13::integer,
-        input_execution_finished_at := COALESCE($14::timestamptz, now()),
+        input_execution_finished_at := COALESCE($14::timestamptz, fsm_core.tx_now()),
         input_event_status := $15::text,
         input_event_output := $16::jsonb,
         input_error_message := $17::text

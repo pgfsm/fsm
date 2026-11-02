@@ -9,6 +9,11 @@
 | Affects | `packages/fsm-ctl-ts`, `apps/fsm-core-ts-hono-deno`, `packages/database-src` (roles, grants, `api_keys`), `packages/fsm-core-db-ts`, `packages/fsm-cli-ts` (generated scripts) |
 | Amends  | SPEC-005 (`pgfsmctl` command surface), SPEC-008 (`actors status` flags and exit codes)                                                                                         |
 
+**Note (#675):** the API's routes were since renamed: `/fsm…` is now
+`/instances…` (`POST /instances`, `/instances/{id}/events|resume|stop`) and
+`POST /admin/fsm/load` is `POST /admin/definitions`, under the default prefix
+`/api/v1`. This spec keeps the old names as written.
+
 ---
 
 ## Problem

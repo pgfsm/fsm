@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS fsm_core.async_operation_meta (
 
   async_operation_language text        NOT NULL,
   
-  updated_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT fsm_core.tx_now(),
   updated_by_pid          text        NOT NULL,
 
   constraint async_operation_meta_unique UNIQUE (async_operation_name, async_operation_version, async_operation_type, parent_fsm_name, parent_fsm_version)
@@ -54,7 +54,7 @@ BEGIN
   )
   ON CONFLICT ON CONSTRAINT async_operation_meta_unique
   DO UPDATE SET
-    updated_at             = now(),
+    updated_at             = fsm_core.tx_now(),
     updated_by_pid         = input_updated_by_pid
   RETURNING jsonb_build_object(
     'async_operation_meta_id',async_operation_meta_id,

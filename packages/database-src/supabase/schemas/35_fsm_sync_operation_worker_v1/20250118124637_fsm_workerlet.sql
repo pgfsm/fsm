@@ -9,6 +9,6 @@ create table if not exists fsm_core.fsm_workerlet (
   fsm_modules      jsonb       not null default '[]', -- [{"fsm_name": "myFSM", "fsm_version": "1.0.0"}, {"fsm_name": "myFSM", "fsm_version": "1.0.1"}] ( matching fsm_core.fsm_json table )
   max_concurrency  int         not null,
   active_workers   int         not null default 0,
-  last_heartbeat   timestamptz not null default now(),
-  registered_at    timestamptz not null default now()
+  last_heartbeat   timestamptz not null default fsm_core.tx_now(),
+  registered_at    timestamptz not null default fsm_core.tx_now()
 );

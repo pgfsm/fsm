@@ -57,7 +57,7 @@ async function pgfsmctl(
   return { code, out: o + e, stdout: o, stderr: e };
 }
 
-const CLOSED = "http://127.0.0.1:1/fsm";
+const CLOSED = "http://127.0.0.1:1/api/v1";
 
 Deno.test("key and db key: argument errors exit 2 before any network", async () => {
   for (
@@ -97,7 +97,7 @@ Deno.test("an unreachable API exits 1 and names the URL; fsm load picks the API 
   assertEquals(list.code, 1);
   assertStringIncludes(
     list.out,
-    "Can't reach the pgfsm API at http://127.0.0.1:1/fsm",
+    "Can't reach the pgfsm API at http://127.0.0.1:1/api/v1",
   );
 
   const dir = `${WORK_DIR}/defs`;
@@ -152,10 +152,10 @@ async function startApi(): Promise<{ url: string; stop: () => Promise<void> }> {
     stdout: "null",
     stderr: "null",
   }).spawn();
-  const url = `http://127.0.0.1:${port}/fsm`;
+  const url = `http://127.0.0.1:${port}/api/v1`;
   for (let i = 0; i < 100; i++) {
     try {
-      const res = await fetch(`${url}/fsm`);
+      const res = await fetch(`${url}/instances`);
       await res.body?.cancel();
       if (res.status === 401) {
         return {
@@ -194,6 +194,37 @@ async function cleanup(prefix: string) {
     await pool.query("DELETE FROM fsm_core.api_keys WHERE name LIKE $1", [
       `${prefix}%`,
     ]);
+    // Instances the instance tests created (#660), with their queues.
+    const { rows } = await pool.query<{ id: string }>(
+      "SELECT id FROM fsm_core.fsm_instance WHERE fsm_name LIKE $1",
+      [`${prefix}%`],
+    );
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      for (
+        const t of [
+          "fsm_instance_queue_event_logs",
+          "fsm_instance_lock",
+          "fsm_instance_transitions_auth",
+          "fsm_instance_and_fsm_workerlet",
+        ]
+      ) {
+        await pool.query(
+          `DELETE FROM fsm_core.${t} WHERE fsm_instance_id = ANY($1::uuid[])`,
+          [ids],
+        );
+      }
+      await pool.query(
+        "DELETE FROM fsm_core.fsm_instance WHERE id = ANY($1::uuid[])",
+        [ids],
+      );
+      for (const id of ids) {
+        await pool.query(
+          "SELECT pgmq.drop_queue($1) FROM pgmq.meta WHERE queue_name = $1",
+          [id],
+        );
+      }
+    }
     for (const t of ["fsm_transitions", "fsm_states", "fsm_json"]) {
       await pool.query(`DELETE FROM fsm_core.${t} WHERE fsm_name LIKE $1`, [
         `${prefix}%`,
@@ -391,6 +422,296 @@ Deno.test({
       });
       assertEquals(badKey.code, 3);
       assert(!badKey.stdout, "nothing on stdout on failure");
+    } finally {
+      await api.stop();
+      await cleanup(prefix);
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "instance create/resume/send/stop over the API with an operator key, same output as DB-direct; 4 for an unknown instance (#660)",
+  ...db,
+  fn: async () => {
+    const prefix = `t660_${crypto.randomUUID().slice(0, 8)}_`;
+    const api = await startApi();
+    try {
+      const mint = async (role: string) =>
+        JSON.parse(
+          (await pgfsmctl([
+            "db",
+            "key",
+            "create",
+            "--name",
+            `${prefix}${role}`,
+            "--role",
+            role,
+            "-d",
+            DATABASE_URL!,
+            "-o",
+            "json",
+          ])).stdout,
+        ).key as string;
+      const admin = await mint("admin");
+      const operator = await mint("operator");
+      const asOperator = { PGFSM_URL: api.url, PGFSM_API_KEY: operator };
+
+      // A definition to create instances of.
+      const fsmName = `${prefix}light`;
+      const dir = `${WORK_DIR}/t660-${prefix}`;
+      await Deno.mkdir(`${dir}/${fsmName}/v01`, { recursive: true });
+      await Deno.writeTextFile(
+        `${dir}/${fsmName}/v01/fsm.json`,
+        machine(fsmName),
+      );
+      const load = await pgfsmctl(["fsm", "load", dir], {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: admin,
+      });
+      assertEquals(load.code, 0, load.out);
+
+      const created = await pgfsmctl([
+        "instance",
+        "create",
+        "-n",
+        fsmName,
+        "-V",
+        "v01",
+        "--input",
+        '{"who":"op"}',
+        "-o",
+        "json",
+      ], asOperator);
+      assertEquals(created.code, 0, created.out);
+      assertStringIncludes(created.stderr, "instance create: via the API");
+      const instance = JSON.parse(created.stdout);
+      assertMatch(instance.fsm_instance_id, /^[0-9a-f-]{36}$/);
+      assertEquals(instance.fsm_instance_context, { who: "op" });
+      const id = instance.fsm_instance_id as string;
+
+      const sent = await pgfsmctl(
+        ["instance", "send", "-q", id, "-e", "NEXT", "-o", "json"],
+        asOperator,
+      );
+      assertEquals(sent.code, 0, sent.out);
+      assertStringIncludes(sent.stderr, "via the API");
+      assertEquals(JSON.parse(sent.stdout), {
+        fsm_instance_id: id,
+        event_type: "NEXT",
+        sent: true,
+      });
+
+      const resumed = await pgfsmctl(
+        ["instance", "resume", "-q", id, "-o", "ids"],
+        asOperator,
+      );
+      assertEquals(resumed.code, 0, resumed.out);
+      assertEquals(resumed.stdout.trim(), id);
+
+      const stopped = await pgfsmctl(
+        ["instance", "stop", "-q", id, "-o", "json"],
+        asOperator,
+      );
+      assertEquals(stopped.code, 0, stopped.out);
+      assertEquals(JSON.parse(stopped.stdout), {
+        fsm_instance_id: id,
+        stop_signal_sent: true,
+      });
+
+      // An unknown instance is exit 4 over the API, for each verb.
+      const unknown = crypto.randomUUID();
+      for (
+        const args of [
+          ["instance", "send", "-q", unknown, "-e", "NEXT"],
+          ["instance", "resume", "-q", unknown],
+          ["instance", "stop", "-q", unknown],
+        ]
+      ) {
+        const run = await pgfsmctl(args, asOperator);
+        assertEquals(run.code, 4, `${args.join(" ")}: ${run.out}`);
+        assertStringIncludes(run.stderr, "via the API");
+      }
+
+      // An admin key works too (fsm_admin is a member of fsm_operator).
+      const asAdmin = await pgfsmctl(
+        ["instance", "send", "-q", id, "-e", "NEXT"],
+        { PGFSM_URL: api.url, PGFSM_API_KEY: admin },
+      );
+      assertEquals(asAdmin.code, 0, asAdmin.out);
+
+      // --db-url forces DB-direct; with only DATABASE_URL it's DB-direct.
+      const forced = await pgfsmctl(
+        ["instance", "send", "-q", id, "-e", "NEXT", "-d", DATABASE_URL!],
+        asOperator,
+      );
+      assertEquals(forced.code, 0, forced.out);
+      assertStringIncludes(forced.stderr, "instance send: DB-direct");
+      const direct = await pgfsmctl(
+        ["instance", "send", "-q", id, "-e", "NEXT"],
+        { DATABASE_URL: DATABASE_URL! },
+      );
+      assertEquals(direct.code, 0, direct.out);
+      assertStringIncludes(direct.stderr, "DB-direct");
+
+      const badKey = await pgfsmctl(
+        ["instance", "send", "-q", id, "-e", "NEXT"],
+        { PGFSM_URL: api.url, PGFSM_API_KEY: "pgfsm_op_nope" },
+      );
+      assertEquals(badKey.code, 3, badKey.out);
+    } finally {
+      await api.stop();
+      await cleanup(prefix);
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "fsm list/get and instance list/get, over the API with an operator key and DB-direct (#661)",
+  ...db,
+  fn: async () => {
+    const prefix = `t661_${crypto.randomUUID().slice(0, 8)}_`;
+    const api = await startApi();
+    try {
+      const mint = async (role: string) =>
+        JSON.parse(
+          (await pgfsmctl([
+            "db",
+            "key",
+            "create",
+            "--name",
+            `${prefix}${role}`,
+            "--role",
+            role,
+            "-d",
+            DATABASE_URL!,
+            "-o",
+            "json",
+          ])).stdout,
+        ).key as string;
+      const admin = await mint("admin");
+      const asOperator = {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: await mint("operator"),
+      };
+      const dbEnv = { DATABASE_URL: DATABASE_URL! };
+
+      const fsmName = `${prefix}light`;
+      const dir = `${WORK_DIR}/t661-${prefix}`;
+      for (const v of ["v01", "v02"]) {
+        await Deno.mkdir(`${dir}/${fsmName}/${v}`, { recursive: true });
+        await Deno.writeTextFile(
+          `${dir}/${fsmName}/${v}/fsm.json`,
+          machine(fsmName),
+        );
+      }
+      const load = await pgfsmctl(["fsm", "load", dir], {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: admin,
+      });
+      assertEquals(load.code, 0, load.out);
+
+      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+        // fsm list / get
+        const listed = await pgfsmctl(
+          ["fsm", "list", "-n", fsmName, "-o", "ids"],
+          env,
+        );
+        assertEquals(listed.code, 0, `${tier}: ${listed.out}`);
+        assertEquals(
+          listed.stdout.trim().split("\n"),
+          [`${fsmName}/v01`, `${fsmName}/v02`],
+        );
+        const table = await pgfsmctl(["fsm", "list", "-n", fsmName], env);
+        assertStringIncludes(table.stdout, "FSM_JSON_SHA256");
+        const got = await pgfsmctl(
+          ["fsm", "get", `${fsmName}/v02`, "-o", "json"],
+          env,
+        );
+        assertEquals(got.code, 0, `${tier}: ${got.out}`);
+        assertEquals(
+          JSON.parse(got.stdout).fsm_json,
+          JSON.parse(machine(fsmName)),
+        );
+        const missing = await pgfsmctl(["fsm", "get", `${fsmName}/v09`], env);
+        assertEquals(missing.code, 4, `${tier}: ${missing.out}`);
+        assertStringIncludes(
+          missing.stderr,
+          tier === "API" ? "via the API" : "DB-direct",
+        );
+      }
+
+      // Instances: two of v01, one of v02.
+      const ids: string[] = [];
+      for (const v of ["v01", "v01", "v02"]) {
+        const created = await pgfsmctl(
+          ["instance", "create", "-n", fsmName, "-V", v, "-o", "ids"],
+          asOperator,
+        );
+        assertEquals(created.code, 0, created.out);
+        ids.push(created.stdout.trim());
+      }
+
+      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+        const all = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "-o", "ids"],
+          env,
+        );
+        assertEquals(all.code, 0, `${tier}: ${all.out}`);
+        assertEquals(new Set(all.stdout.trim().split("\n")), new Set(ids));
+        const v01 = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "-V", "v01", "-o", "json"],
+          env,
+        );
+        assertEquals(JSON.parse(v01.stdout).length, 2, tier);
+        assertEquals(
+          Object.keys(JSON.parse(v01.stdout)[0]),
+          ["id", "fsm_name", "fsm_version", "status", "state", "started_at"],
+        );
+        const one = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "--limit", "1", "-o", "ids"],
+          env,
+        );
+        assertEquals(one.stdout.trim().split("\n").length, 1, tier);
+        const errored = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "--status", "error", "-o", "ids"],
+          env,
+        );
+        assertEquals(errored.code, 0);
+        assertEquals(errored.stdout.trim(), "", tier);
+
+        const got = await pgfsmctl(
+          ["instance", "get", "-q", ids[2], "-o", "json"],
+          env,
+        );
+        assertEquals(got.code, 0, `${tier}: ${got.out}`);
+        const record = JSON.parse(got.stdout);
+        assertEquals(record.fsm_instance_id, ids[2]);
+        assertEquals(record.fsm_instance_row.fsm_version, "v02");
+        const table = await pgfsmctl(["instance", "get", "-q", ids[2]], env);
+        assertStringIncludes(table.stdout, "status:");
+        const unknown = await pgfsmctl(
+          ["instance", "get", "-q", crypto.randomUUID()],
+          env,
+        );
+        assertEquals(unknown.code, 4, `${tier}: ${unknown.out}`);
+      }
+
+      // Bad filters are usage errors, before any request.
+      for (
+        const args of [
+          ["instance", "list", "--status", "sleeping"],
+          ["instance", "list", "--limit", "0"],
+          ["fsm", "get", "no-version"],
+        ]
+      ) {
+        assertEquals(
+          (await pgfsmctl(args, asOperator)).code,
+          2,
+          args.join(" "),
+        );
+      }
     } finally {
       await api.stop();
       await cleanup(prefix);

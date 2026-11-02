@@ -5,7 +5,7 @@
 -- catches the schema file and the migration drifting apart, and any new
 -- fsm_core function left executable by PUBLIC.
 begin;
-select plan(26);
+select plan(34);
 
 -- Runs q as role r; returns 'ok' or the SQLSTATE it failed with. The owner
 -- (postgres) is a member of every fsm_* role, so it can switch to them.
@@ -53,6 +53,17 @@ select ok(pg_has_role('fsm_admin', 'fsm_operator', 'member'), 'fsm_admin is a me
 select ok(pg_has_role('fsm_authenticator', 'fsm_operator', 'member'), 'fsm_authenticator is a member of fsm_operator');
 select ok(not pg_has_role('fsm_authenticator', 'fsm_admin', 'member'),
   'fsm_authenticator is not a member of fsm_admin (deployments grant that)');
+select has_role('fsm_sim');
+select results_eq(
+  $$ select rolcanlogin from pg_roles where rolname = 'fsm_sim' $$,
+  $$ values (false) $$,
+  'fsm_sim is NOLOGIN'
+);
+select is(
+  (select count(*)::int from pg_auth_members where roleid = 'fsm_sim'::regrole),
+  0,
+  'the migration grants fsm_sim to nobody (only the simulator does, SPEC-015)'
+);
 
 -- ── Function boundary ───────────────────────────────────────────────────────
 select is(
@@ -96,6 +107,21 @@ select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.a
   '42501', 'fsm_operator cannot read fsm_core.api_keys');
 select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.fsm_instance $$),
   'ok', 'fsm_operator can list instances');
+select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.fsm_json $$),
+  'ok', 'fsm_operator can read loaded definitions (#661)');
+select is(pg_temp.sqlstate_as('fsm_operator',
+  $$ insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json) values ('x', 'v01', '{}') $$),
+  '42501', 'fsm_operator cannot write fsm_core.fsm_json');
+-- The clock seams, which entry points' parameter defaults call in the
+-- caller's context (#668).
+select is(pg_temp.sqlstate_as('fsm_operator', $$ select fsm_core.tx_now() $$),
+  'ok', 'fsm_operator can call fsm_core.tx_now()');
+select is(pg_temp.sqlstate_as('fsm_operator', $$ select fsm_core.wall_now() $$),
+  'ok', 'fsm_operator can call fsm_core.wall_now()');
+select isnt(pg_temp.sqlstate_as('fsm_operator',
+  $$ select fsm_core.send_event_to_fsm_queue_with_event_logs_v2(
+       gen_random_uuid(), 'x', 'v01', 'NEXT', 'external', '{}'::jsonb, 0) $$),
+  '42501', 'fsm_operator can call send_event_to_fsm_queue_with_event_logs_v2 with its tx_now() defaults');
 
 -- ── fsm_admin and API keys ──────────────────────────────────────────────────
 select is(pg_temp.sqlstate_as('fsm_admin', $$ select count(*) from fsm_core.fsm_instance $$),

@@ -53,7 +53,7 @@ CREATE OR REPLACE FUNCTION fsm_core.finish_async_operation_event_v2(
     input_send_to_parent_queue_id_event_name text DEFAULT NULL,
     input_execution_started_at timestamp with time zone DEFAULT NULL,
     input_execution_duration integer DEFAULT NULL,
-    input_execution_finished_at timestamp with time zone DEFAULT now(),
+    input_execution_finished_at timestamp with time zone DEFAULT fsm_core.tx_now(),
     input_event_status text DEFAULT NULL,
     input_event_output jsonb DEFAULT NULL,
     input_error_message text DEFAULT NULL

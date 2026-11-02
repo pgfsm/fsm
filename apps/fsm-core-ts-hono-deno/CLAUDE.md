@@ -22,7 +22,8 @@ in the Deno job (blocking).
 
 ## Structure
 
-- `app.ts` — mounts `createApp()` under `/fsm`
+- `app.ts` — mounts `createApp()` under `/api/v1` (the CLI's `--url-path-prefix`
+  default too; #675)
 - `deno.ts` — Deno entry point; configures LogTape before `app.ts` loads (must
   happen first — `app.ts` emits logs at module load time)
 - `node.ts` — Node entry point (HTTP/2, separate from the Deno path)
@@ -50,8 +51,19 @@ in the Deno job (blocking).
 - `middlewares/api-key-auth.ts` — `apiKeyAuth()`: bearer key → `hashApiKey` →
   `verify_api_key` (cached ≤ 30 s), then the rest of the request runs inside
   `withRole(key's role)` with `c.get("db")` set to that transaction
-- `routes/fsm/` — core FSM operations: list, create, send (operator key)
-- `routes/admin/` — `POST /admin/fsm/load`, `GET|POST /admin/keys`,
+- `routes/instances/` — FSM instances (operator key; #675): `GET /instances`
+  (`?fsm_name&fsm_version&status&limit`, filtered and limited in the database,
+  default 50, max 1000; #661), `GET /instances/{id}`, `POST /instances`
+  (`{ fsm_name, fsm_version, input }`), `POST /instances/{id}/events`
+  (`{ type, ...payload }`), `/resume`, `/stop`. Every `/instances/{id}…` route
+  answers 404 for an unknown instance (checked with `getFSMData` first:
+  `get_fsm_data_resolve_state_value_v2` raises)
+- `routes/definitions/` — loaded definitions, read-only (operator key; #661):
+  `GET /definitions` (`?fsm_name&fsm_version`, each with its SHA-256 digest),
+  `GET /definitions/{fsmName}` (its versions; 404 if none),
+  `GET /definitions/{fsmName}/versions/{fsmVersion}` (its fsm.json; 404).
+  `fsm_operator` reads `fsm_core.fsm_json` from migration 2.2.2
+- `routes/admin/` — `POST /admin/definitions`, `GET|POST /admin/keys`,
   `DELETE /admin/keys/{idOrName}` (admin key; mounted only with
   `--enable-admin-api`)
 - `test/api-key-auth.test.ts` — auth, roles, rollback, admin routes, `createApp`
@@ -82,7 +94,7 @@ overrides, `OTEL_*`, `CORS_ORIGIN`, etc.).
 
 ## API keys and roles (SPEC-009 §3)
 
-Auth is **on by default**. Every `/fsm*` request needs
+Auth is **on by default**. Every `/instances*` and `/definitions*` request needs
 `Authorization: Bearer <key>`, an operator or admin key, and `/admin/*` needs an
 admin key. A request runs in one transaction under `SET LOCAL ROLE` with the
 key's role, so the database grants (`packages/database-src/CLAUDE.md`, "Access

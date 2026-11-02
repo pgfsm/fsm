@@ -71,8 +71,8 @@ The URL and the key are resolved separately, first match wins:
 4. the current profile's `url` / `api_key`
 
 The URL is the API's base **including its path prefix**, e.g.
-`http://localhost:9999/fsm` for an API started with the default `/fsm`. A URL
-without a key exits `2`. Store a key with
+`http://localhost:9999/api/v1` for an API started with the default `/api/v1`. A
+URL without a key exits `2`. Store a key with
 `echo "$KEY" | pgfsmctl config set <profile> --api-key-stdin`.
 
 ### Output
@@ -98,7 +98,7 @@ Loads every `<folder>/<fsmName>/<version>/fsm.json` (version folders are `v01`,
 
 **Tier.** When an API target resolves (see
 [Which API](#which-api-api-tier-commands)), the batch goes to the API's
-`POST /admin/fsm/load` with an admin key (the API must run with
+`POST /admin/definitions` with an admin key (the API must run with
 `--enable-admin-api`). Otherwise it loads DB-direct, so a project's local `.env`
 with only `DATABASE_URL` keeps working with no API running. `--db-url` always
 forces DB-direct (break-glass). The tier used is logged on stderr.
@@ -132,6 +132,20 @@ database, or differs from the `fsm.json` it was compiled from. It replaces
 | `--profile <name>` |       | Use this profile's `url`/`api_key`, or its `db_url`                                       |
 | `--output <fmt>`   | `-o`  | `table` (FSM, version, status), `json` or `ids`                                           |
 | `--help`           | `-h`  | Print help and exit                                                                       |
+
+### `fsm list` and `fsm get` — loaded definitions (#661)
+
+```bash
+pgfsmctl fsm list                        # every loaded name/version and its digest
+pgfsmctl fsm list -n creditCheck -o ids  # creditCheck/v01, creditCheck/v02, …
+pgfsmctl fsm get creditCheck/v02 -o json # the stored fsm.json
+```
+
+`list` shows each version's SHA-256 digest, the one sync workers' startup check
+compares against the fsm.json they were compiled from (SPEC-006). `get` exits
+**`4`** when that version isn't loaded. Both need only an **operator** key over
+the API (`fsm_operator` can read `fsm_core.fsm_json` from migration 2.2.2;
+loading stays admin-only), or DB-direct as for `fsm load`.
 
 ---
 
@@ -176,7 +190,7 @@ registered, so it doubles as a deploy check.
 pgfsmctl db key create --name ops-admin --role admin -o json
 
 # After that, through the API with an admin key
-export PGFSM_URL=http://localhost:9999/fsm PGFSM_API_KEY=pgfsm_admin_…
+export PGFSM_URL=http://localhost:9999/api/v1 PGFSM_API_KEY=pgfsm_admin_…
 pgfsmctl key create --name ci --role operator
 pgfsmctl key list
 pgfsmctl key revoke ci
@@ -216,35 +230,52 @@ pgfsmctl instance create -n creditCheck -V v01 --input '{"userId":"abc"}'
 pgfsmctl instance resume -q <instance-uuid>
 pgfsmctl instance send   -q <instance-uuid> -e APPROVE --event-data '{"reason":"ok"}'
 pgfsmctl instance stop   -q <instance-uuid>
+pgfsmctl instance list   -n creditCheck --status error     # newest first, at most 50
+pgfsmctl instance get    -q <instance-uuid> -o json
 
 ID=$(pgfsmctl instance create -n creditCheck -V v01 -o ids)
 ```
 
-| Verb     | What it does                                                                                                         |
-| -------- | -------------------------------------------------------------------------------------------------------------------- |
-| `create` | Creates the instance and its pgmq queue, sends the initial transition event, and enqueues it to `fsm_dispatch_queue` |
-| `resume` | Re-enqueues an existing instance to `fsm_dispatch_queue`                                                             |
-| `send`   | Sends an event to the instance's queue, with event logs                                                              |
-| `stop`   | Sends a stop signal to the fsmlet worker running the instance, via `pg_notify`                                       |
+| Verb     | What it does                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `create` | Creates the instance and its pgmq queue, sends the initial transition event, and enqueues it to `fsm_dispatch_queue`  |
+| `resume` | Re-enqueues an existing instance to `fsm_dispatch_queue`                                                              |
+| `send`   | Sends an event to the instance's queue, with event logs                                                               |
+| `stop`   | Sends a stop signal to the fsmlet worker running the instance, via `pg_notify`                                        |
+| `list`   | Instances, newest first, filtered in the database (#661): `id`, FSM, version, status, state, started at               |
+| `get`    | One instance: status, state, context, error (SPEC-014's record), parent, times; `-o json` adds the full row and state |
 
-`resume`, `send` and `stop` exit **`4`** when the instance doesn't exist.
+`resume`, `send`, `stop` and `get` exit **`4`** when the instance doesn't exist.
 
-| Flag            | Alias | Required by              | Description                                                   |
-| --------------- | ----- | ------------------------ | ------------------------------------------------------------- |
-| `--fsm-name`    | `-n`  | `create`                 | FSM definition name                                           |
-| `--fsm-version` | `-V`  | `create`                 | FSM version                                                   |
-| `--input`       |       | optional (`create`)      | Initial FSM context, JSON (xstate's `input`; was `--context`) |
-| `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (a UUID; anything else exits `2`)             |
-| `--event-type`  | `-e`  | `send`                   | Event type to send                                            |
-| `--event-data`  |       | optional (`send`)        | Event payload, JSON                                           |
-| `--db-url`      | `-d`  | optional                 | Postgres URL                                                  |
-| `--profile`     |       | optional                 | Use this profile's `db_url`                                   |
-| `--output`      | `-o`  | optional                 | `table`, `json` or `ids` (the instance UUID)                  |
-| `--help`        | `-h`  |                          | Print help and exit                                           |
+| Flag            | Alias | Required by                     | Description                                                   |
+| --------------- | ----- | ------------------------------- | ------------------------------------------------------------- |
+| `--fsm-name`    | `-n`  | `create`; filter (`list`)       | FSM definition name                                           |
+| `--fsm-version` | `-V`  | `create`; filter (`list`)       | FSM version                                                   |
+| `--status`      |       | filter (`list`)                 | `active`, `done`, `error` or `stopped`                        |
+| `--limit`       |       | optional (`list`)               | At most this many, newest first: 1 to 1000, default 50        |
+| `--input`       |       | optional (`create`)             | Initial FSM context, JSON (xstate's `input`; was `--context`) |
+| `--queue-name`  | `-q`  | `resume`, `send`, `stop`, `get` | FSM instance ID (a UUID; anything else exits `2`)             |
+| `--event-type`  | `-e`  | `send`                          | Event type to send                                            |
+| `--event-data`  |       | optional (`send`)               | Event payload, JSON                                           |
+| `--url`         |       | optional                        | API base URL incl. its path prefix                            |
+| `--api-key`     |       | optional                        | Operator (or admin) key for the API                           |
+| `--db-url`      | `-d`  | optional                        | Postgres URL: forces DB-direct                                |
+| `--profile`     |       | optional                        | Use this profile's `url`/`api_key`, or its `db_url`           |
+| `--output`      | `-o`  | optional                        | `table`, `json` or `ids` (the instance UUID)                  |
+| `--help`        | `-h`  |                                 | Print help and exit                                           |
 
-`instance` talks to the database directly through `@pgfsm/db` for now. SPEC-009
-phase 2 moves it to the REST API with an operator key, keeping `--db-url` as
-break-glass.
+**Tier** (SPEC-009 phase 2, #660), the same rules as `fsm load`:
+
+- **API** when an API target resolves (see
+  [Which API](#which-api-api-tier-commands)), with an **operator** key (an admin
+  key works too): `POST /instances`, or `POST /instances/<id>/resume`, `/events`
+  or `/stop` (#675). The operator needs no Postgres access.
+- Otherwise **DB-direct** through `@pgfsm/db`, so a project's `.env` with only
+  `DATABASE_URL` works with no API running.
+- `--db-url` always means DB-direct (break-glass). The tier used is logged.
+
+Output, `-o` and exit codes are the same on both tiers: `4` for an unknown
+instance, `3` for a rejected key.
 
 ---
 
@@ -321,19 +352,25 @@ Completes nouns, verbs (including `db cron <verb>`) and each noun's flags.
 
 ## HTTP API equivalents
 
-The API server (`apps/fsm-core-ts-hono-deno`) exposes the same dispatch-model
-operations over HTTP. They need an operator or admin key
-(`Authorization: Bearer pgfsm_…`, SPEC-009 §3) unless the server runs with
-`--no-auth`:
+The API server (`apps/fsm-core-ts-hono-deno`) serves these resources under its
+path prefix (`--url-path-prefix`, default `/api/v1`; #675). They need an
+operator or admin key (`Authorization: Bearer pgfsm_…`, SPEC-009 §3), `/admin/*`
+an admin key on an API started with `--enable-admin-api`, unless the server runs
+with `--no-auth`:
 
-| HTTP route                  | `pgfsmctl` equivalent | Body                                                                                            |
-| --------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
-| `POST /fsm`                 | `instance create`     | `{ fsm_name, fsm_version, fsm_context? }` — creates instance + enqueues to `fsm_dispatch_queue` |
-| `POST /fsm/dispatch`        | `instance create`     | `{ fsm_name, fsm_version, fsm_context? }` — same dispatch-model creation, second route path     |
-| `POST /fsm/resume-dispatch` | `instance resume`     | `{ queue }`                                                                                     |
-| `POST /fsm/send`            | `instance send`       | `{ fsm_instance_id, event_data }`                                                               |
-| `POST /fsm/stop`            | `instance stop`       | `{ queue }`                                                                                     |
-| `POST /admin/fsm/load`      | `fsm load`            | `{ definitions: [{ fsmName, fsmVersion, fsmJson }] }` — admin key, `--enable-admin-api`         |
+| HTTP route                                              | `pgfsmctl` equivalent      | Body / response                                                                |
+| ------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `GET /instances?fsm_name=&fsm_version=&status=&limit=`  | `instance list`            | Newest first, filtered in the database; `limit` 1–1000, default 50             |
+| `GET /instances/{id}`                                   | `instance get`             | `{ fsm_instance_row, resolved_state_value }`; 404 if unknown                   |
+| `GET /definitions?fsm_name=&fsm_version=`               | `fsm list`                 | Loaded definitions with their SHA-256 digest (operator key, #661)              |
+| `GET /definitions/{fsmName}`                            |                            | That FSM's loaded versions; 404 if none                                        |
+| `GET /definitions/{fsmName}/versions/{fsmVersion}`      | `fsm get <name>/<version>` | `{ fsm_name, fsm_version, fsm_json }`; 404 if not loaded                       |
+| `POST /instances`                                       | `instance create`          | `{ fsm_name, fsm_version, input? }`: creates it and enqueues it for scheduling |
+| `POST /instances/{id}/events`                           | `instance send`            | `{ type, ...payload }`; 404 if unknown                                         |
+| `POST /instances/{id}/resume`                           | `instance resume`          | none; 404 if unknown                                                           |
+| `POST /instances/{id}/stop`                             | `instance stop`            | none; 404 if unknown                                                           |
+| `POST /admin/definitions`                               | `fsm load`                 | `{ definitions: [{ fsmName, fsmVersion, fsmJson }] }`                          |
+| `GET/POST /admin/keys`, `DELETE /admin/keys/{idOrName}` | `key list\|create\|revoke` | API keys                                                                       |
 
 All of them need a scheduler (the pg_cron job, and optionally `scheduler run`)
 and a running fsmlet to pick the work up.

@@ -37,7 +37,7 @@ const COMMAND_LINES: [string, string, string][] = [
   [
     "instance create | resume | send | stop",
     "instance",
-    "Create an FSM instance, re-enqueue one, send it an event, or stop its\nworker.",
+    "Create an FSM instance, re-enqueue one, send it an event, or stop its\nworker. API (operator key) if one is configured.",
   ],
   [
     "key create | list | revoke",
@@ -82,7 +82,7 @@ TARGETS
   DATABASE_URL (./.env is read), else the current profile (\`config use\`).
   API: --url + --api-key, else the explicit profile's url/api_key, else
   PGFSM_URL + PGFSM_API_KEY, else the current profile's. The URL includes the
-  API's path prefix, e.g. http://localhost:9999/fsm.
+  API's path prefix, e.g. http://localhost:9999/api/v1.
 
 OUTPUT
   -o table (default) | json | ids. Data goes to stdout, logs to stderr.

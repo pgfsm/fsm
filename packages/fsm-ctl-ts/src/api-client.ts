@@ -42,10 +42,14 @@ export async function apiRequest<T>(
   }
   if (res.ok) return json as T;
 
-  const { message, problems } = (json ?? {}) as {
+  const { message: messageField, error, problems } = (json ?? {}) as {
     message?: string;
+    error?: unknown;
     problems?: string[];
   };
+  // Some routes report `{ message }`, others `{ error }`.
+  const message = messageField ??
+    (typeof error === "string" ? error : undefined);
   const detail = [
     `${method} ${path} → ${res.status}${message ? `: ${message}` : ""}`,
     ...(problems ?? []).map((p) => `  - ${p}`),
@@ -58,9 +62,17 @@ export async function apiRequest<T>(
     throw new CtlError(
       ExitCode.NOT_FOUND,
       path.startsWith("/admin/")
-        ? `${detail}\n(/admin/* exists only when the API runs with --enable-admin-api; check the URL includes the API's path prefix, e.g. …/fsm)`
+        ? `${detail}\n(/admin/* exists only when the API runs with --enable-admin-api; check the URL includes the API's path prefix, e.g. …/api/v1)`
         : detail,
     );
   }
   throw new CtlError(ExitCode.GENERAL, detail);
+}
+
+/** `?a=1&b=2` for the parameters that are set, or "". */
+export function query(params: Record<string, string | number | undefined>) {
+  const set = Object.entries(params).filter(([, v]) => v !== undefined);
+  return set.length === 0
+    ? ""
+    : `?${new URLSearchParams(set.map(([k, v]) => [k, String(v)]))}`;
 }

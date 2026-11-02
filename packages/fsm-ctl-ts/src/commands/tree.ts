@@ -24,8 +24,8 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
   },
   fsm: {
     tier: "API or DB-direct",
-    verbs: ["load"],
-    flags: ["--url", "--api-key", ...DB_FLAGS],
+    verbs: ["load", "list", "get"],
+    flags: ["--fsm-name", "--fsm-version", "--url", "--api-key", ...DB_FLAGS],
   },
   key: {
     tier: "API",
@@ -33,8 +33,8 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
     flags: ["--name", "--role", ...API_FLAGS],
   },
   instance: {
-    tier: "DB-direct",
-    verbs: ["create", "resume", "send", "stop"],
+    tier: "API or DB-direct",
+    verbs: ["create", "resume", "send", "stop", "list", "get"],
     flags: [
       "--queue-name",
       "--fsm-name",
@@ -42,6 +42,10 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
       "--input",
       "--event-type",
       "--event-data",
+      "--status",
+      "--limit",
+      "--url",
+      "--api-key",
       ...DB_FLAGS,
     ],
   },

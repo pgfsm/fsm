@@ -64,11 +64,11 @@
   <!-- Client -->
   <rect class="box" x="30" y="64" width="270" height="52" rx="10"/>
   <text class="title" x="165" y="88"  text-anchor="middle">Client</text>
-  <text class="sub s" x="165" y="106" text-anchor="middle">{ fsm_instance_id, event_data }</text>
+  <text class="sub s" x="165" y="106" text-anchor="middle">{ type, ...payload }</text>
 
   <!-- REST API -->
   <rect class="box" x="30" y="152" width="270" height="72" rx="10"/>
-  <text class="title" x="165" y="176" text-anchor="middle">REST API  ·  fsm.handlers.ts</text>
+  <text class="title" x="165" y="176" text-anchor="middle">REST API  ·  /instances</text>
   <text class="sub s" x="165" y="196" text-anchor="middle">calls into PostgreSQL:</text>
   <text class="fn fnt" x="165" y="214" text-anchor="middle">sendEventToFsmQueueWithEventLogs()</text>
 
@@ -113,8 +113,8 @@
   <text class="sub s" x="720" y="422" text-anchor="middle">UPDATE fsm_instance</text>
 
   <!-- ── edge-label chips ────────────────────────────────────────── -->
-  <rect class="chip" x="78" y="123" width="174" height="24" rx="12"/>
-  <text class="m" x="165" y="139" text-anchor="middle"><tspan class="sub">POST </tspan><tspan class="fn">/fsm/fsm/send</tspan></text>
+  <rect class="chip" x="58" y="123" width="214" height="24" rx="12"/>
+  <text class="m" x="165" y="139" text-anchor="middle"><tspan class="sub">POST </tspan><tspan class="fn">/instances/{id}/events</tspan></text>
 
   <rect class="chip" x="360" y="316" width="96" height="22" rx="11"/>
   <text class="s" x="408" y="331" text-anchor="middle"><tspan class="fn">pgmq.send()</tspan></text>

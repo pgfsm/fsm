@@ -13,9 +13,9 @@ CREATE OR REPLACE FUNCTION fsm_core.send_event_to_async_operation_queue_with_eve
     input_event_status text DEFAULT 'ACTIVE',
     input_event_output jsonb DEFAULT '{}'::jsonb,
     input_error_message text DEFAULT NULL,
-    input_execution_started_at timestamp with time zone DEFAULT now(),
+    input_execution_started_at timestamp with time zone DEFAULT fsm_core.tx_now(),
     input_execution_duration integer DEFAULT NULL,
-    input_execution_finished_at timestamp with time zone DEFAULT now()
+    input_execution_finished_at timestamp with time zone DEFAULT fsm_core.tx_now()
 )
 RETURNS JSONB
 AS $$
