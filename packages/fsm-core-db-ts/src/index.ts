@@ -24,6 +24,7 @@ export {
 } from "./35_fsm_sync_operation_worker_v1/fsmctl.ts";
 export type {
   FsmDispatchType,
+  ListFsmInstancesOptions,
   ResumeEventResult,
 } from "./35_fsm_sync_operation_worker_v1/fsmctl.ts";
 
