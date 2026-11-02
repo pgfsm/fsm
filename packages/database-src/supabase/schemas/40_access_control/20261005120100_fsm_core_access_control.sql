@@ -196,6 +196,12 @@ TO fsm_worker;
 -- Clock seams (SPEC-015, #642): @pgfsm/db writes workerlet heartbeats itself,
 -- and the workerlet tables' column defaults call fsm_core.tx_now().
 GRANT EXECUTE ON FUNCTION fsm_core.tx_now(), fsm_core.wall_now() TO fsm_worker;
+-- And to fsm_operator (so fsm_admin, a member): entry-point functions have
+-- parameter defaults that call fsm_core.tx_now(), and Postgres evaluates those
+-- in the caller's context, before SECURITY DEFINER applies (#668). Without
+-- this, an operator or admin API key can't send an event. The seams return the
+-- real clock unless the session user is in fsm_sim.
+GRANT EXECUTE ON FUNCTION fsm_core.tx_now(), fsm_core.wall_now() TO fsm_operator;
 GRANT SELECT, INSERT, UPDATE, DELETE
   ON fsm_core.fsm_workerlet, fsm_core.async_operation_workerlet TO fsm_worker;
 GRANT SELECT ON fsm_core.fsm_json TO fsm_worker;
