@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                                          |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Accepted                                                                                                                                                                                                                                                       |
+| Status  | Implemented                                                                                                                                                                                                                                                    |
 | Date    | 2026-09-27                                                                                                                                                                                                                                                     |
 | Authors | Niraj, Claude                                                                                                                                                                                                                                                  |
 | Issue   | #393                                                                                                                                                                                                                                                           |
@@ -308,65 +308,79 @@ Why the others lose on that driver:
 
 ## Acceptance criteria
 
-- [ ] **Multi-worker routing (#391):** with workers A and B registering the same
+- [x] **Multi-worker routing (#391):** with workers A and B registering the same
       actor on one gateway, invokes go to both. Unregistering A leaves B's route
-      intact. Covered by a gateway unit test.
-- [ ] **Reconnect (#392):** each SDK started before the gateway waits and
+      intact. Covered by a gateway unit test. Where:
+      `sidecar_gateway_routing_test.ts` (#395).
+- [x] **Reconnect (#392):** each SDK started before the gateway waits and
       connects once the gateway comes up. After a gateway restart, each SDK
       reconnects and re-registers without the worker process restarting. Covered
-      by an integration test per language.
-- [ ] **Throughput scales with replicas:** doubling one language's worker
+      by an integration test per language. Where: each SDK's actor-worker tests
+      (#398), and E2E in the process-level suite and kind steps 4–5.
+- [x] **Throughput scales with replicas:** doubling one language's worker
       replicas (same `max_concurrency`) roughly doubles that language's
       processed messages per minute under a saturated queue (≥ 1.8×), with no
       change to other languages' throughput. Verified E2E on a K8s cluster (kind
-      is acceptable).
-- [ ] **Routing snapshot:** a gateway replica reports, for each registered actor
+      is acceptable). Where: kind acceptance step 1 (#655): 2.01×, Go unchanged.
+- [x] **Routing snapshot:** a gateway replica reports, for each registered actor
       key, its live worker count, Σ `max_concurrency` and current in-flight
       invokes, and the values track `Register`/unregister and invoke completion.
-      Covered by a gateway unit test.
-- [ ] **Claim is capacity-bounded:** a gateway never has more in-flight invokes
+      Covered by a gateway unit test. Where: `sidecar_gateway_capacity_test.ts`
+      (#428).
+- [x] **Claim is capacity-bounded:** a gateway never has more in-flight invokes
       for an actor than Σ `max_concurrency` of its connected workers for that
-      actor. Verified by test.
-- [ ] **No premature re-delivery:** for an actor whose invoke takes longer than
+      actor. Verified by test. Where: `poll_loop_capacity_db_test.ts` (#428).
+- [x] **No premature re-delivery:** for an actor whose invoke takes longer than
       30 s but less than its `timeout_ms`, the message is processed exactly once
-      (no duplicate claim).
-- [ ] **Gateway restart survives:** a rolling restart of the gateway Deployment
+      (no duplicate claim). Where: `async_op_poll_loop_test.ts` (visibility
+      timeout = invoke timeout + margin, #428); kind steps 4–5 run with a 50 s
+      invoke timeout, 0 duplicates.
+- [x] **Gateway restart survives:** a rolling restart of the gateway Deployment
       under load loses no messages. Every claimed message is archived or
       re-delivered after `vt`, and workers reconnect and re-register without
-      being restarted. Verified E2E.
-- [ ] **Connections bounded:** Postgres backend connections from the activity
+      being restarted. Verified E2E. Where: kind acceptance step 4 (#655) and
+      the process-level E2E (#637).
+- [x] **Connections bounded:** Postgres backend connections from the activity
       tier equal gateway replicas × pool max (+ any LISTEN connections),
       independent of worker replica count (checked at 1 and N worker replicas
-      via `pg_stat_activity`). Verified E2E.
-- [ ] **Auth:** over TCP, a worker with a missing or wrong token is refused with
+      via `pg_stat_activity`). Verified E2E. Where: kind acceptance step 2
+      (#655): ≤ 10 backends at 1 and 4 replicas, bound 20, all from PgBouncer.
+- [x] **Auth:** over TCP, a worker with a missing or wrong token is refused with
       `UNAUTHENTICATED` before registration. A plaintext connection to a TLS
       listener fails. Rotating the token file is picked up without a gateway
-      restart. Verified E2E.
-- [ ] **Mutual TLS and TLS version:** with `--tls-client-ca`, a worker
+      restart. Verified E2E. Where: kind acceptance step 3 (#655) and the
+      process-level E2E (#637); token directory rotation is #429.
+- [x] **Mutual TLS and TLS version:** with `--tls-client-ca`, a worker
       presenting a client certificate signed by that CA registers, and one
       without fails the TLS handshake. By default, a client limited to TLS 1.2
-      is refused. Verified by test and E2E.
-- [ ] **Half-open connections are detected over TCP:** the gateway and the SDKs
+      is refused. Verified by test and E2E. Where: `sidecar_gateway_tcp_test.ts`
+      and each SDK's transport tests (#430–#434). The E2E suites use TLS +
+      token, not mutual TLS.
+- [x] **Half-open connections are detected over TCP:** the gateway and the SDKs
       enable HTTP/2 keepalive pings on the TCP transport (default 30 s interval,
       10 s timeout, configurable). If the network drops without a clean close,
       both sides notice within about 40 s. The worker reconnects, and the
       gateway unregisters the worker and fails its in-flight invokes as
-      retriable (see #396). Verified E2E.
-- [ ] **Unix mode unchanged:** with no new flags, gateway and SDKs behave
+      retriable (see #396). Verified E2E. Where: kind acceptance step 5 (#655):
+      gateway ~11 s, worker ~25 s, message redelivered. It found #656 (TS SDK
+      crash over TLS), fixed in 0.4.1 (#657).
+- [x] **Unix mode unchanged:** with no new flags, gateway and SDKs behave
       exactly as today (default Unix socket paths, no TLS/token required).
-- [ ] **Flag parity:** all 4 SDKs expose the same `--gateway-address`,
+      Where: the existing Unix-socket tests of the gateway and all four SDKs,
+      unchanged.
+- [x] **Flag parity:** all 4 SDKs expose the same `--gateway-address`,
       `--gateway-ca-file`, `--gateway-token-file`, `--gateway-cert-file` and
       `--gateway-key-file` flags and reconnect behavior, documented in each
-      README.
-- [ ] **Reference manifests** apply cleanly to a kind cluster and pass the E2E
+      README. Where: each SDK's README and CLI tests (#438 for the `PGFSM_*`
+      variables).
+- [x] **Reference manifests** apply cleanly to a kind cluster and pass the E2E
       checks above, and the Pod Security `restricted` profile admits them (no
-      `hostPath`, non-root).
-- [ ] ADR-003 is amended: the "no confirmed container runtime" constraint is
-      revised to reference this spec.
+      `hostPath`, non-root). Where: the kind smoke test (#457) and acceptance
+      suite (#655), under Pod Security `restricted`.
+- [x] ADR-003 is amended: the "no confirmed container runtime" constraint is
+      revised to reference this spec. Where: this PR (#425).
 
 ## Implementation
-
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
 
 Prerequisites:
 
@@ -383,6 +397,16 @@ Implementation, tracked in #425:
   (named without `for_workers`: the full name is over Postgres's 63-character
   identifier limit), the derived visibility timeout, and redelivery of retriable
   failures up to `--max-delivery-attempts`.
-- Migration steps 3–4 (transport, SDKs, manifests) follow in the PR that closes
-  #425.
+- Migration step 3, transport: gateway TCP listener with TLS, mutual TLS, bearer
+  tokens, max connection age and keepalive (#430), several accepted tokens for
+  overlapping rotation (#429), and the four SDKs: TypeScript (#431), Python
+  (#432), Rust (#433), Go (#434).
+- Migration step 4, deployment: container images, reference K8s manifests and
+  the kind smoke test (#457).
+- Acceptance (#458): the load harness (#501 / PR #502), the process-level E2E
+  (#635 / PR #637) and the kind acceptance suite (#641 / PR #655). The suite's
+  half-open check found #656 (the TypeScript SDK crashed on a keepalive PING
+  timeout over TLS), fixed in PR #657 and released as `@pgfsm/async-worker-sdk`
+  0.4.1.
+- ADR-003 amended (#425).
 - #397: `SidecarGateway.stop()` hangs while a worker is connected.

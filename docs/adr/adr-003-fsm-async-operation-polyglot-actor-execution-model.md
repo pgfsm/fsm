@@ -1,13 +1,13 @@
 # ADR-003: Polyglot Actor Execution Model — Activity-Tier Architecture & Compiled-Language IPC
 
-| Field      | Value                                                                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Architecture: Current. Compiled-language IPC decision: **Revised 2026-07-26 — Option B (Activity Gateway), implemented** (issues #55, #61, #84; PR #62) |
-| Date       | 2026-06-13 (architecture), 2026-07-22 (compiled-language IPC decision), 2026-07-26 (revised to Option B), 2026-08-04 (revision formalized here)         |
-| Deciders   | Niraj (architecture); Niraj, Claude (IPC decision); Niraj, Claude (2026-07-26 revision)                                                                 |
-| Affects    | `packages/fsm-async-worker-ts`, `packages/fsm-compiler-ts`, `apps/fsm-core-example`, `packages/fsm-core-async-op-worker`                                |
-| Supersedes | `docs/kb/kb-001-distributed-multilang-fsm.md`, `docs/specs/spec-001-compiled-lang-actor-workers.md`                                                     |
-| Related    | [ADR-002](adr-002-fsm-sync-operation-worker-execution-model.md) — orchestrator tier (this ADR is its activity-tier counterpart); Issues #55, #61, #84   |
+| Field      | Value                                                                                                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status     | Architecture: Current. Compiled-language IPC decision: **Revised 2026-07-26 — Option B (Activity Gateway), implemented** (issues #55, #61, #84; PR #62)                                                                                                      |
+| Date       | 2026-06-13 (architecture), 2026-07-22 (compiled-language IPC decision), 2026-07-26 (revised to Option B), 2026-08-04 (revision formalized here), 2026-11-02 (Kubernetes deploy target, SPEC-007)                                                             |
+| Deciders   | Niraj (architecture); Niraj, Claude (IPC decision); Niraj, Claude (2026-07-26 revision)                                                                                                                                                                      |
+| Affects    | `packages/fsm-async-worker-ts`, `packages/fsm-compiler-ts`, `apps/fsm-core-example`, `packages/fsm-core-async-op-worker`                                                                                                                                     |
+| Supersedes | `docs/kb/kb-001-distributed-multilang-fsm.md`, `docs/specs/spec-001-compiled-lang-actor-workers.md`                                                                                                                                                          |
+| Related    | [ADR-002](adr-002-fsm-sync-operation-worker-execution-model.md) — orchestrator tier (this ADR is its activity-tier counterpart); [SPEC-007](../specs/spec-007-gateway-tcp-independent-scaling.md) — gateway over TCP, Kubernetes; Issues #55, #61, #84, #425 |
 
 ---
 
@@ -17,6 +17,16 @@
 > worker SDK it pairs with is `@pgfsm/async-worker-sdk`
 > (`packages/fsm-async-worker-sdk-ts`, #358). References below keep the names in
 > use when each section was written.
+
+> **Amendment note (2026-11-02, SPEC-007, #425)**: the "No confirmed container
+> runtime" constraint below no longer holds. Kubernetes is a supported
+> production deploy target: the gateway and each language's workers run as
+> separate Deployments, connected over TCP + TLS + bearer token, with published
+> container images and reference manifests. Unix-socket mode stays the default
+> for local and single-host setups, so nothing that runs without containers
+> stops working. See
+> [Amendment: Kubernetes deploy target](#amendment-2026-11-02-kubernetes-deploy-target-spec-007)
+> at the end.
 
 > **Revision note (2026-07-26, formalized 2026-08-04)**: the "Decision" section
 > below (Option C, Unix domain socket IPC) was the original 2026-07-22 decision
@@ -299,6 +309,8 @@ since the go/rust branches were stubbed) before it becomes a blocker.
   model.
 - **No confirmed container runtime** in the deploy target. The design must not
   require Docker/Podman; a plain compiled-binary subprocess is the default.
+  _Amended 2026-11-02 (SPEC-007): Kubernetes is now a supported target; the
+  design still doesn't require containers._
 - **No live Go/Rust actor exists yet** — acceptance is proven with a reference
   fixture, not a production migration.
 - **WASM-in-Deno ruled out explicitly**: compiling actors to WASM and running
@@ -513,7 +525,9 @@ which scoped Rust first and deferred Go.
 - **Explicitly deferred, not solved by this revision**: per-actor dependency
   isolation (e.g. two Rust actors needing incompatible native library versions)
   — out of scope given the "no confirmed container runtime" constraint carried
-  over from the original decision.
+  over from the original decision. _Since SPEC-007 each language's workers run
+  in their own image, which isolates dependencies per language; per actor is
+  still out of scope._
 
 ### Acceptance criteria
 
@@ -548,3 +562,38 @@ which scoped Rust first and deferred Go.
   folder-scan/dynamic-import discovery).
 - PR #62 (Activity Gateway, sidecar protocol, worker SDKs for TS/Python/
   Rust/Go).
+
+## Amendment (2026-11-02): Kubernetes deploy target (SPEC-007)
+
+[SPEC-007](../specs/spec-007-gateway-tcp-independent-scaling.md) (accepted in
+#394, implemented in #425) revises one constraint of this ADR and makes another
+property hold in practice. The Option B decision above is unchanged.
+
+- **"No confirmed container runtime" is revised.** Kubernetes is a supported
+  production target. The gateway listens on TCP with TLS (TLS 1.3 by default,
+  optionally mutual TLS) and bearer tokens, next to its Unix socket, so it and
+  each language's workers run as separate Deployments. The gateway image is
+  published with every release, and
+  `packages/fsm-async-worker-gateway-ts/deploy/` holds the worker Dockerfiles
+  and reference manifests (Pod Security `restricted`). Unix-socket mode stays
+  the default, and containers stay optional.
+- **Separate scaling axes now hold for the activity tier.** Each language's
+  worker Deployment scales on its own, and the gateway claims only what
+  connected workers can take (Σ `max_concurrency` per actor), so worker replicas
+  raise throughput.
+- **Zero DB connections on the polyglot side, still.** Workers have no database
+  settings. The gateway holds the activity tier's only pg Pool, so Postgres
+  connections are gateway replicas × pool size, however many workers run; a
+  pooler sits in front, as above.
+- **What gets harder:** an invoke can cross pod boundaries, so a network
+  partition shows up as an invoke timeout and re-delivery. HTTP/2 keepalive
+  detects half-open connections on both sides, and delivery is at-least-once, so
+  actor handlers must be idempotent.
+- **Rollback:** point a language's workers back at the Unix socket in the
+  single-pod layout. The Unix listener never goes away, and nothing in the
+  database changes.
+
+Verified by the process-level E2E (#637) and the kind acceptance suite (#655):
+throughput doubles with worker replicas, connections stay bounded, auth and
+token rotation hold, a gateway rolling restart loses nothing, and half-open
+connections are detected and recovered.
