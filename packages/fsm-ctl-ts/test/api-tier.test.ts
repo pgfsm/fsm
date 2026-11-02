@@ -57,7 +57,7 @@ async function pgfsmctl(
   return { code, out: o + e, stdout: o, stderr: e };
 }
 
-const CLOSED = "http://127.0.0.1:1/fsm";
+const CLOSED = "http://127.0.0.1:1/api/v1";
 
 Deno.test("key and db key: argument errors exit 2 before any network", async () => {
   for (
@@ -97,7 +97,7 @@ Deno.test("an unreachable API exits 1 and names the URL; fsm load picks the API 
   assertEquals(list.code, 1);
   assertStringIncludes(
     list.out,
-    "Can't reach the pgfsm API at http://127.0.0.1:1/fsm",
+    "Can't reach the pgfsm API at http://127.0.0.1:1/api/v1",
   );
 
   const dir = `${WORK_DIR}/defs`;
@@ -152,10 +152,10 @@ async function startApi(): Promise<{ url: string; stop: () => Promise<void> }> {
     stdout: "null",
     stderr: "null",
   }).spawn();
-  const url = `http://127.0.0.1:${port}/fsm`;
+  const url = `http://127.0.0.1:${port}/api/v1`;
   for (let i = 0; i < 100; i++) {
     try {
-      const res = await fetch(`${url}/fsm`);
+      const res = await fetch(`${url}/instances`);
       await res.body?.cancel();
       if (res.status === 401) {
         return {

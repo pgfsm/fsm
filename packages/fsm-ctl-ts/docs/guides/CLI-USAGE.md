@@ -71,8 +71,8 @@ The URL and the key are resolved separately, first match wins:
 4. the current profile's `url` / `api_key`
 
 The URL is the API's base **including its path prefix**, e.g.
-`http://localhost:9999/fsm` for an API started with the default `/fsm`. A URL
-without a key exits `2`. Store a key with
+`http://localhost:9999/api/v1` for an API started with the default `/api/v1`. A
+URL without a key exits `2`. Store a key with
 `echo "$KEY" | pgfsmctl config set <profile> --api-key-stdin`.
 
 ### Output
@@ -98,7 +98,7 @@ Loads every `<folder>/<fsmName>/<version>/fsm.json` (version folders are `v01`,
 
 **Tier.** When an API target resolves (see
 [Which API](#which-api-api-tier-commands)), the batch goes to the API's
-`POST /admin/fsm/load` with an admin key (the API must run with
+`POST /admin/definitions` with an admin key (the API must run with
 `--enable-admin-api`). Otherwise it loads DB-direct, so a project's local `.env`
 with only `DATABASE_URL` keeps working with no API running. `--db-url` always
 forces DB-direct (break-glass). The tier used is logged on stderr.
@@ -176,7 +176,7 @@ registered, so it doubles as a deploy check.
 pgfsmctl db key create --name ops-admin --role admin -o json
 
 # After that, through the API with an admin key
-export PGFSM_URL=http://localhost:9999/fsm PGFSM_API_KEY=pgfsm_admin_…
+export PGFSM_URL=http://localhost:9999/api/v1 PGFSM_API_KEY=pgfsm_admin_…
 pgfsmctl key create --name ci --role operator
 pgfsmctl key list
 pgfsmctl key revoke ci
@@ -248,8 +248,8 @@ ID=$(pgfsmctl instance create -n creditCheck -V v01 -o ids)
 
 - **API** when an API target resolves (see
   [Which API](#which-api-api-tier-commands)), with an **operator** key (an admin
-  key works too): `POST /fsm`, `/fsm/resume-dispatch`, `/fsm/send`, `/fsm/stop`.
-  The operator needs no Postgres access.
+  key works too): `POST /instances`, or `POST /instances/<id>/resume`, `/events`
+  or `/stop` (#675). The operator needs no Postgres access.
 - Otherwise **DB-direct** through `@pgfsm/db`, so a project's `.env` with only
   `DATABASE_URL` works with no API running.
 - `--db-url` always means DB-direct (break-glass). The tier used is logged.
@@ -332,19 +332,22 @@ Completes nouns, verbs (including `db cron <verb>`) and each noun's flags.
 
 ## HTTP API equivalents
 
-The API server (`apps/fsm-core-ts-hono-deno`) exposes the same dispatch-model
-operations over HTTP. They need an operator or admin key
-(`Authorization: Bearer pgfsm_…`, SPEC-009 §3) unless the server runs with
-`--no-auth`:
+The API server (`apps/fsm-core-ts-hono-deno`) serves these resources under its
+path prefix (`--url-path-prefix`, default `/api/v1`; #675). They need an
+operator or admin key (`Authorization: Bearer pgfsm_…`, SPEC-009 §3), `/admin/*`
+an admin key on an API started with `--enable-admin-api`, unless the server runs
+with `--no-auth`:
 
-| HTTP route                  | `pgfsmctl` equivalent | Body                                                                                            |
-| --------------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
-| `POST /fsm`                 | `instance create`     | `{ fsm_name, fsm_version, fsm_context? }` — creates instance + enqueues to `fsm_dispatch_queue` |
-| `POST /fsm/dispatch`        | `instance create`     | `{ fsm_name, fsm_version, fsm_context? }` — same dispatch-model creation, second route path     |
-| `POST /fsm/resume-dispatch` | `instance resume`     | `{ queue }`                                                                                     |
-| `POST /fsm/send`            | `instance send`       | `{ fsm_instance_id, event_data }`                                                               |
-| `POST /fsm/stop`            | `instance stop`       | `{ queue }`                                                                                     |
-| `POST /admin/fsm/load`      | `fsm load`            | `{ definitions: [{ fsmName, fsmVersion, fsmJson }] }` — admin key, `--enable-admin-api`         |
+| HTTP route                                              | `pgfsmctl` equivalent      | Body / response                                                                |
+| ------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| `GET /instances`                                        |                            | Every instance, newest first                                                   |
+| `GET /instances/{id}`                                   |                            | `{ fsm_instance_row, resolved_state_value }`; 404 if unknown                   |
+| `POST /instances`                                       | `instance create`          | `{ fsm_name, fsm_version, input? }`: creates it and enqueues it for scheduling |
+| `POST /instances/{id}/events`                           | `instance send`            | `{ type, ...payload }`; 404 if unknown                                         |
+| `POST /instances/{id}/resume`                           | `instance resume`          | none; 404 if unknown                                                           |
+| `POST /instances/{id}/stop`                             | `instance stop`            | none; 404 if unknown                                                           |
+| `POST /admin/definitions`                               | `fsm load`                 | `{ definitions: [{ fsmName, fsmVersion, fsmJson }] }`                          |
+| `GET/POST /admin/keys`, `DELETE /admin/keys/{idOrName}` | `key list\|create\|revoke` | API keys                                                                       |
 
 All of them need a scheduler (the pg_cron job, and optionally `scheduler run`)
 and a running fsmlet to pick the work up.

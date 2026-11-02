@@ -82,7 +82,7 @@ TARGETS
   DATABASE_URL (./.env is read), else the current profile (\`config use\`).
   API: --url + --api-key, else the explicit profile's url/api_key, else
   PGFSM_URL + PGFSM_API_KEY, else the current profile's. The URL includes the
-  API's path prefix, e.g. http://localhost:9999/fsm.
+  API's path prefix, e.g. http://localhost:9999/api/v1.
 
 OUTPUT
   -o table (default) | json | ids. Data goes to stdout, logs to stderr.

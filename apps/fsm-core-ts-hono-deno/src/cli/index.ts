@@ -37,7 +37,7 @@ USAGE
 OPTIONS
   -d, --db-url <url>                Database connection URL (overrides DATABASE_URL env var).
                                     With auth on, log in as fsm_authenticator in production.
-  -u, --url-path-prefix <prefix>    URL path prefix for all routes (default: /fsm)
+  -u, --url-path-prefix <prefix>    URL path prefix for all routes (default: /api/v1)
   -p, --port <port>                 Port to listen on (default: 9999)
       --no-auth                     Don't require API keys; every request runs as the
                                     database login. Local development only: refused when
@@ -76,7 +76,7 @@ const dbUrl = args["db-url"] ?? Deno.env.get("DATABASE_URL");
 const port = args["port"]
   ? Number(args["port"])
   : Number(Deno.env.get("PORT") ?? "9999");
-const urlPathPrefix = args["url-path-prefix"] ?? "/fsm";
+const urlPathPrefix = args["url-path-prefix"] ?? "/api/v1";
 
 if (args["db-url"]) Deno.env.set("DATABASE_URL", args["db-url"]);
 if (args["port"]) Deno.env.set("PORT", String(port));

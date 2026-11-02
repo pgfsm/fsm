@@ -62,7 +62,7 @@ export async function apiRequest<T>(
     throw new CtlError(
       ExitCode.NOT_FOUND,
       path.startsWith("/admin/")
-        ? `${detail}\n(/admin/* exists only when the API runs with --enable-admin-api; check the URL includes the API's path prefix, e.g. …/fsm)`
+        ? `${detail}\n(/admin/* exists only when the API runs with --enable-admin-api; check the URL includes the API's path prefix, e.g. …/api/v1)`
         : detail,
     );
   }

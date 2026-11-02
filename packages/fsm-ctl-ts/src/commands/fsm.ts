@@ -31,7 +31,7 @@ VERBS
          definition fails.
 
 OPTIONS
-      --url <url>       API base URL incl. its path prefix, e.g. http://localhost:9999/fsm
+      --url <url>       API base URL incl. its path prefix, e.g. http://localhost:9999/api/v1
       --api-key <key>   Admin key for the API
   -d, --db-url <url>    Postgres URL: forces DB-direct (break-glass)
       --profile <name>  Use this profile's url/api_key, or its db_url
@@ -40,7 +40,7 @@ OPTIONS
 
 TIER
   API when an API target resolves (--url, else the profile's url, else
-  PGFSM_URL, each with its key): POST /admin/fsm/load with an admin key, on an
+  PGFSM_URL, each with its key): POST /admin/definitions with an admin key, on an
   API running with --enable-admin-api. Otherwise DB-direct (PGFSM_DB_URL or
   DATABASE_URL, or the profile's db_url), so a project's local .env with only
   DATABASE_URL works with no API running. --db-url always means DB-direct.
@@ -133,7 +133,7 @@ export async function fsmCommand(argv: string[]): Promise<void> {
     ({ data: results } = await apiRequest<{ data: LoadFsmDefinitionResult[] }>(
       api,
       "POST",
-      "/admin/fsm/load",
+      "/admin/definitions",
       { definitions },
     ));
   } else {
