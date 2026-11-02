@@ -64,8 +64,8 @@ since that database is shared.
   per noun, each exporting `<noun>Command(argv)`, parsing via `src/args.ts`'s
   `parseCommandArgs` (common `-d/--db-url`, `--profile`, `-o`, `-h`; unknown
   options are a usage error) and `verbOf`. `instance.ts` picks its tier like
-  `fsm load` (#660): the API's `/fsm` routes when an API target resolves
-  (`viaApi`, printing the same records as DB-direct), else `@pgfsm/db`;
+  `fsm load` (#660): the API's `/instances` routes (#675) when an API target
+  resolves (`viaApi`, printing the same records as DB-direct), else `@pgfsm/db`;
   `--db-url` forces DB-direct. `instance.ts` is the old `fsmctl.ts`, `db.ts` the
   old `pgcron.ts`, `scheduler.ts` the old `fsmscheduler.ts` CLI (moved with
   `git mv`, so `git log --follow` works). `tree.ts` is the command tree that

@@ -22,7 +22,7 @@ import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
 import index from "../routes/index.route.ts";
-import fsm from "../routes/fsm/fsm.index.ts";
+import instances from "../routes/instances/instances.index.ts";
 import admin from "../routes/admin/admin.index.ts";
 
 export { createRouter };
@@ -99,8 +99,8 @@ export default async function createApp(
       requiredRole: "fsm_operator",
       cacheTtlMs: authCacheTtlMs,
     });
-    app.use("/fsm", operator);
-    app.use("/fsm/*", operator);
+    app.use("/instances", operator);
+    app.use("/instances/*", operator);
     if (adminApi) {
       app.use(
         "/admin/*",
@@ -135,8 +135,8 @@ export default async function createApp(
   app.onError(onError);
 
   const routes = adminApi
-    ? [index, fsm, admin] as const
-    : [index, fsm] as const;
+    ? [index, instances, admin] as const
+    : [index, instances] as const;
   routes.forEach((route) => {
     app.route("/", route);
   });

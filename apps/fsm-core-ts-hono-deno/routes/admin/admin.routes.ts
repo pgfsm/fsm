@@ -18,8 +18,8 @@ const problemsSchema = z.object({
 
 const apiKeyRoleSchema = z.enum(["fsm_admin", "fsm_operator"]);
 
-export const loadFsm = createRoute({
-  path: "/admin/fsm/load",
+export const loadDefinitions = createRoute({
+  path: "/admin/definitions",
   method: "post",
   tags,
   request: {
@@ -130,7 +130,7 @@ export const revokeKey = createRoute({
   },
 });
 
-export type LoadFsmRoute = typeof loadFsm;
+export type LoadDefinitionsRoute = typeof loadDefinitions;
 export type ListKeysRoute = typeof listKeys;
 export type CreateKeyRoute = typeof createKey;
 export type RevokeKeyRoute = typeof revokeKey;

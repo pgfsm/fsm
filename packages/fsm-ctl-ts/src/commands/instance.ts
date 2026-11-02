@@ -38,7 +38,7 @@ OPTIONS
   -e, --event-type <type>        Event type to send (required for send)
       --input <json>             Initial FSM context as JSON (optional, create only; xstate's input)
       --event-data <json>        Event payload as JSON string (optional, send only)
-      --url <url>                API base URL incl. its path prefix, e.g. http://localhost:9999/fsm
+      --url <url>                API base URL incl. its path prefix, e.g. http://localhost:9999/api/v1
       --api-key <key>            Operator (or admin) key for the API
   -d, --db-url <url>             Postgres URL: forces DB-direct (break-glass)
       --profile <name>           Use this profile's url/api_key, or its db_url
@@ -47,8 +47,9 @@ OPTIONS
 
 TIER
   API when an API target resolves (--url, else the profile's url, else
-  PGFSM_URL, each with its key): POST /fsm, /fsm/resume-dispatch, /fsm/send
-  or /fsm/stop with an operator or admin key (SPEC-009 phase 2, #660).
+  PGFSM_URL, each with its key): POST /instances, or POST
+  /instances/<id>/resume, /events or /stop, with an operator or admin key
+  (SPEC-009 phase 2, #660; routes #675).
   Otherwise DB-direct (PGFSM_DB_URL or DATABASE_URL, or the profile's db_url),
   so a project's .env with only DATABASE_URL works with no API running.
   --db-url always means DB-direct. The tier used is logged. Output and exit
@@ -249,32 +250,30 @@ async function viaApi(
   switch (verb) {
     case "create": {
       const { data } = await apiRequest<
-        { data: { fsm_instance: Record<string, string> | null } }
-      >(api, "POST", "/fsm", {
+        {
+          data: (Record<string, unknown> & { fsm_instance_id?: string }) | null;
+        }
+      >(api, "POST", "/instances", {
         fsm_name: a.fsmName,
         fsm_version: a.fsmVersion,
-        fsm_context: a.input,
+        input: a.input,
       });
-      if (!data?.fsm_instance?.fsm_instance_id) {
+      if (!data?.fsm_instance_id) {
         throw new CtlError(ExitCode.GENERAL, "Failed to create FSM instance.");
       }
-      logger.info("Created FSM instance {id}", {
-        id: data.fsm_instance.fsm_instance_id,
-      });
-      return data.fsm_instance as Record<string, string> & {
-        fsm_instance_id: string;
-      };
+      logger.info("Created FSM instance {id}", { id: data.fsm_instance_id });
+      return data as Record<string, unknown> & { fsm_instance_id: string };
     }
     case "resume": {
       const { data } = await apiRequest<
         { data: Record<string, unknown> & { fsm_instance_id: string } }
-      >(api, "POST", "/fsm/resume-dispatch", { queue: a.queueName });
+      >(api, "POST", `${instancePath(a.queueName!)}/resume`);
       return data;
     }
     case "send": {
-      await apiRequest(api, "POST", "/fsm/send", {
-        fsm_instance_id: a.queueName,
-        event_data: { ...a.eventData as object, type: a.eventType },
+      await apiRequest(api, "POST", `${instancePath(a.queueName!)}/events`, {
+        ...a.eventData as object,
+        type: a.eventType,
       });
       return {
         fsm_instance_id: a.queueName!,
@@ -283,7 +282,7 @@ async function viaApi(
       };
     }
     case "stop": {
-      await apiRequest(api, "POST", "/fsm/stop", { queue: a.queueName });
+      await apiRequest(api, "POST", `${instancePath(a.queueName!)}/stop`);
       logger.info("Stop signal sent for worker: {queueName}", {
         queueName: a.queueName,
       });
@@ -291,3 +290,6 @@ async function viaApi(
     }
   }
 }
+
+/** `/instances/<id>`, the id escaped. */
+const instancePath = (id: string) => `/instances/${encodeURIComponent(id)}`;

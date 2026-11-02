@@ -29,7 +29,7 @@ VERBS
 OPTIONS
       --name <name>       Key name (create; unique)
       --role <role>       admin or operator (create)
-      --url <url>         API base URL incl. its path prefix, e.g. http://localhost:9999/fsm
+      --url <url>         API base URL incl. its path prefix, e.g. http://localhost:9999/api/v1
       --api-key <key>     Admin key (else --profile, PGFSM_API_KEY, current profile)
       --profile <name>    Use this profile's url and api_key
   -o, --output <fmt>      table (default), json or ids

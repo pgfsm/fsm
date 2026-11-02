@@ -89,7 +89,7 @@ body:
       label: What happened?
       description: A clear, concise description of the bug — actual behavior vs. expected behavior.
       placeholder: |
-        When I send an event to an FSM instance via POST /fsm/send while a worker holds the advisory lock, the API returns 500 instead of queueing the event...
+        When I send an event to an FSM instance via POST /api/v1/instances/{id}/events while a worker holds the advisory lock, the API returns 500 instead of queueing the event...
     validations:
       required: true
 

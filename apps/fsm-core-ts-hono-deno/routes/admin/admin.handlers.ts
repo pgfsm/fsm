@@ -13,7 +13,7 @@ import type { AppRouteHandler } from "../../lib/types.ts";
 import type {
   CreateKeyRoute,
   ListKeysRoute,
-  LoadFsmRoute,
+  LoadDefinitionsRoute,
   RevokeKeyRoute,
 } from "./admin.routes.ts";
 
@@ -31,7 +31,9 @@ const sqlState = (err: unknown): string | undefined => {
 // Handlers run inside the auth middleware's withRole(fsm_admin) transaction:
 // c.get("db") is that transaction, so Postgres grants are what's enforced.
 
-export const loadFsm: AppRouteHandler<LoadFsmRoute> = async (c) => {
+export const loadDefinitions: AppRouteHandler<LoadDefinitionsRoute> = async (
+  c,
+) => {
   const deps = { db: c.get("db"), useSupabase: false };
   const { definitions } = c.req.valid("json");
   try {

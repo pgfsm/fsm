@@ -22,7 +22,7 @@ export type ApiTarget = { url: string; apiKey: string; source: string };
  * picking a DB-only profile can't be overridden by a stray $PGFSM_URL.
  *
  * `url` is the API's base URL including its path prefix, e.g.
- * http://localhost:9999/fsm. Returns undefined when no URL resolves (so a
+ * http://localhost:9999/api/v1. Returns undefined when no URL resolves (so a
  * command that has a DB-direct fallback can use it); throws when a URL
  * resolves without a key.
  */
