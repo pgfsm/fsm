@@ -86,6 +86,26 @@ for image in pgfsm/async-worker-gateway:dev "${LANGS[@]/#/pgfsm/async-worker-}";
 done
 
 log "Postgres (test-only) + migrations"
+# Pulled into the node here, with retries, rather than by the kubelet: public
+# ECR rate-limits anonymous pulls from shared CI addresses (429, or "Data
+# limit exceeded" once the address's quota is spent), and the kubelet's own
+# retries give up within the rollout timeout. Supabase publishes the same tag
+# on Docker Hub, so that's the fallback, retagged to the name postgres.yaml
+# uses. Not `docker pull` + `kind load`: Docker exports only its own platform
+# of a multi-platform image, and kind's import wants every one ("content
+# digest ... not found"). The tag isn't :latest, so the kubelet uses this copy
+# (IfNotPresent).
+pg_image=$(sed -n 's/^ *image: *//p' "$HERE/postgres.yaml" | head -1)
+pg_mirror="docker.io/${pg_image#public.ecr.aws/}"
+node="$CLUSTER-control-plane"
+for attempt in 1 2 3 4; do
+  docker exec "$node" crictl pull "$pg_image" && break
+  docker exec "$node" crictl pull "$pg_mirror" &&
+    docker exec "$node" ctr -n k8s.io images tag --force "$pg_mirror" "$pg_image" && break
+  ((attempt < 4)) || { echo "could not pull $pg_image or $pg_mirror"; exit 1; }
+  echo "pull of $pg_image and $pg_mirror failed (attempt $attempt); retrying in $((attempt * 30))s"
+  sleep $((attempt * 30))
+done
 kubectl apply -f "$HERE/postgres.yaml"
 kubectl -n pgfsm-db rollout status deploy/postgres --timeout=300s
 pg_pod=$(kubectl -n pgfsm-db get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')

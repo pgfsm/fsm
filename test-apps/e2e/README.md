@@ -60,7 +60,8 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres \
 ```
 
 The criteria that need a cluster (throughput scaling with replicas, a rolling
-restart of the gateway Deployment, half-open connections) are the kind suite's.
+restart of the gateway Deployment, half-open connections) are the kind suite's:
+[`acceptance.sh`](../../packages/fsm-async-worker-gateway-ts/deploy/k8s/README.md#acceptance-suite-on-kind).
 
 `recordFinished` also let `@pgfsm/sync-worker` 0.4.0 and earlier serve
 `loadTest` at all: they only served FSMs with at least one sync operation. From

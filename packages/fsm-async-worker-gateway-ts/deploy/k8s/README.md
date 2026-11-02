@@ -179,5 +179,43 @@ KEEP=1 packages/fsm-async-worker-gateway-ts/deploy/k8s/overlays/kind/smoke.sh
 Free the space again afterwards with
 `docker rmi pgfsm/async-worker-gateway:dev pgfsm/async-worker-{typescript,python,rust,go}:dev`.
 
-The acceptance checks that need a loaded cluster (throughput, rolling restarts,
-connection bounds, half-open connections) are #458.
+## Acceptance suite on kind
+
+`overlays/kind/acceptance.sh` runs SPEC-007's acceptance criteria that need a
+cluster, on the stack the smoke test left running. It swaps each worker
+Deployment to [`test-apps/e2e`](../../../../test-apps/e2e/README.md)'s
+`loadWork` worker (image tag `:e2e`) and sets the gateway's poll interval to 200
+ms. Then it checks:
+
+1. **Throughput scales with replicas:** TypeScript at 2 replicas processes at
+   least 1.8× the messages per minute of 1 replica under a saturated queue,
+   while Go, loaded alongside at 1 replica, stays within ±25 %.
+2. **Connections are bounded:** at 1 and at 4 TypeScript replicas, Postgres
+   client backends number at most gateway replicas × pool max, and all of them
+   come from PgBouncer, none from a worker pod. Workers have no database
+   settings.
+3. **Auth:** a worker with a wrong token, and one with none, is refused before
+   registering. Plaintext to the TLS listener never registers. A token added to
+   the Secret is accepted without restarting the gateway.
+4. **Gateway rolling restart under load:** no message is lost, and every worker
+   re-registers without its pod restarting.
+5. **Half-open connections:** every packet to and from a worker pod is dropped
+   on the kind node with `iptables`, so the open connection goes silent without
+   a close. A NetworkPolicy wouldn't do here: it only filters new connections.
+   Both sides notice within about 40 s, and the in-flight invoke fails as
+   retriable. Once the path is back, the worker reconnects and the message is
+   processed.
+
+**In CI:** the `k8s-smoke` workflow runs it right after the smoke test.
+
+**Locally:** run the smoke test with `KEEP=1`, then this script with the same
+`CLUSTER` and `KIND`. It also needs `deno` and `jq`, and builds four more images
+(about 15 to 20 minutes on a laptop, mostly the Rust build):
+
+```bash
+KEEP=1 packages/fsm-async-worker-gateway-ts/deploy/k8s/overlays/kind/smoke.sh
+packages/fsm-async-worker-gateway-ts/deploy/k8s/overlays/kind/acceptance.sh
+```
+
+Free that space afterwards with
+`docker rmi pgfsm/async-worker-{typescript,python,rust,go}:e2e`.
