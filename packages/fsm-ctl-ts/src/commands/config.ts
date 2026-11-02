@@ -13,6 +13,7 @@ import { notFound, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
 import { CTL_CATEGORY } from "../logger.ts";
 import { printList, printRecord } from "../output.ts";
+import { parseTier, TIERS } from "../tier.ts";
 
 const logger = getLogger([CTL_CATEGORY, "config"]);
 
@@ -22,7 +23,7 @@ const HELP =
   `pgfsmctl config — named targets (profiles), local only (SPEC-009 §5)
 
 USAGE
-  ${CLI_INVOCATION} config set <name> [--db-url <url>] [--url <url>]
+  ${CLI_INVOCATION} config set <name> [--db-url <url>] [--url <url>] [--tier api|auto]
                                  [--db-password-stdin | --api-key-stdin] [--use]
   ${CLI_INVOCATION} config use <name>
   ${CLI_INVOCATION} config list [-o table|json|ids]
@@ -38,6 +39,9 @@ VERBS
 OPTIONS
       --db-url <url>          Postgres URL for DB-direct commands, WITHOUT a password
       --url <url>             pgfsm REST API URL (API-tier commands, #473)
+      --tier <tier>           api: refuse every database connection, --db-url
+                              included (#663); auto (default): the API when one
+                              is configured, else DB-direct
       --db-password-stdin     Read the database password from stdin
       --api-key-stdin         Read the API key from stdin
       --use                   With set: also make it the current profile
@@ -55,11 +59,19 @@ SELECTING A PROFILE
   ./.env); the current profile (\`config use\`) is used only when neither those
   nor --db-url is set.
 
+API-ONLY
+  A profile with tier: api, or \$PGFSM_TIER=api, pins pgfsmctl to the API:
+  any command that would connect to Postgres exits 2 instead, whatever
+  database URL is around (./.env included). An explicitly chosen profile's
+  tier wins, then \$PGFSM_TIER, then the current profile's.
+
 EXAMPLES
   echo "\$PGPASSWORD" | ${CLI_INVOCATION} config set prod \\
       --db-url postgresql://fsm_admin_login@db.internal:5432/postgres --db-password-stdin
   ${CLI_INVOCATION} config use prod
   ${CLI_INVOCATION} db cron status --profile staging
+  echo "\$PGFSM_API_KEY" | ${CLI_INVOCATION} config set ops \\
+      --url https://pgfsm.internal/api/v1 --tier api --api-key-stdin --use
 `;
 
 async function readStdin(what: string): Promise<string> {
@@ -77,7 +89,7 @@ async function readStdin(what: string): Promise<string> {
 
 export async function configCommand(argv: string[]): Promise<void> {
   const args = parseCommandArgs(argv, {
-    string: ["db-url", "url"],
+    string: ["db-url", "url", "tier"],
     boolean: ["db-password-stdin", "api-key-stdin", "use"],
     common: ["output"],
   }, HELP);
@@ -92,6 +104,10 @@ export async function configCommand(argv: string[]): Promise<void> {
       if (!name) throw usageError("config set needs a profile name", HELP);
       const dbUrl = args.flags["db-url"] as string | undefined;
       const url = args.flags.url as string | undefined;
+      const tierFlag = args.flags.tier as string | undefined;
+      const tier = tierFlag === undefined
+        ? undefined
+        : parseTier(tierFlag, "--tier");
       const dbPasswordStdin = args.flags["db-password-stdin"] === true;
       const apiKeyStdin = args.flags["api-key-stdin"] === true;
       if (dbPasswordStdin && apiKeyStdin) {
@@ -100,9 +116,9 @@ export async function configCommand(argv: string[]): Promise<void> {
           HELP,
         );
       }
-      if (!dbUrl && !url && !dbPasswordStdin && !apiKeyStdin) {
+      if (!dbUrl && !url && !tier && !dbPasswordStdin && !apiKeyStdin) {
         throw usageError(
-          "config set needs at least one of --db-url, --url, --db-password-stdin, --api-key-stdin",
+          "config set needs at least one of --db-url, --url, --tier, --db-password-stdin, --api-key-stdin",
           HELP,
         );
       }
@@ -126,6 +142,7 @@ export async function configCommand(argv: string[]): Promise<void> {
         ...config.profiles[name],
         ...(dbUrl !== undefined ? { db_url: dbUrl } : {}),
         ...(url !== undefined ? { url } : {}),
+        ...(tier !== undefined ? { tier } : {}),
       };
       config.profiles[name] = profile;
       if (args.flags.use === true || !config.current) config.current = name;
@@ -169,7 +186,15 @@ export async function configCommand(argv: string[]): Promise<void> {
         Object.keys(config.profiles).sort().map(describe),
       );
       return printList(rows, args.output, {
-        columns: ["current", "name", "db_url", "url", "db_password", "api_key"],
+        columns: [
+          "current",
+          "name",
+          "tier",
+          "db_url",
+          "url",
+          "db_password",
+          "api_key",
+        ],
         id: (r) => r.name,
       });
     }
@@ -199,6 +224,7 @@ async function describe(name: string) {
   return {
     current: config.current === name ? "*" : "",
     name,
+    tier: p.tier ?? TIERS[1],
     db_url: p.db_url ?? "",
     url: p.url ?? "",
     db_password: s.db_password ? "set" : "",

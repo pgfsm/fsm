@@ -75,6 +75,31 @@ The URL is the API's base **including its path prefix**, e.g.
 URL without a key exits `2`. Store a key with
 `echo "$KEY" | pgfsmctl config set <profile> --api-key-stdin`.
 
+### API-only machines (#663)
+
+A machine that should only ever use the API (an operator's laptop, a CI job that
+sends events) can be **pinned**: a profile with `tier: api`, or
+`$PGFSM_TIER=api`. Then every command that would connect to Postgres exits `2`
+instead, `--db-url` included, whatever database URL is around (`./.env`'s
+`DATABASE_URL`, `$PGFSM_DB_URL`, a profile's `db_url`):
+
+- `fsm load|list|get` and `instance …` use the API and never fall back to
+  DB-direct;
+- `db …` and `scheduler run`, DB-direct by design (SPEC-009), are refused: they
+  belong to the deploy job, which isn't pinned.
+
+```bash
+echo "$PGFSM_API_KEY" | pgfsmctl config set ops \
+    --url https://pgfsm-api.internal/api/v1 --tier api --api-key-stdin --use
+```
+
+The tier is resolved like the rest, first one set wins: an explicitly chosen
+profile's `tier`, then `$PGFSM_TIER`, then the current profile's; the default is
+`auto` (the API when an API target resolves, DB-direct otherwise). An explicit
+profile **without** a `tier` falls through to `$PGFSM_TIER`, so choosing a
+profile can't silently unpin a machine. `PGFSM_TIER=auto` overrides a pinned
+current profile for one command.
+
 ### Output
 
 `-o/--output table|json|ids` (default `table`). Data goes to **stdout**, logs to
@@ -313,6 +338,7 @@ in-process (the fleet journey tests do).
 echo "$PGPASSWORD" | pgfsmctl config set prod \
     --db-url postgresql://fsm_admin_login@db.internal:5432/postgres --db-password-stdin
 pgfsmctl config set prod --url https://pgfsm-api.internal   # API URL, for #473
+pgfsmctl config set ops --tier api   # API-only: refuse every DB connection (#663)
 pgfsmctl config use prod
 pgfsmctl config list
 pgfsmctl config show prod -o json
@@ -329,7 +355,8 @@ Files live in `$PGFSM_CONFIG_DIR`, else the OS config directory plus `pgfsm`
 (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support` on
 macOS, `%APPDATA%` on Windows):
 
-- `config.yaml`: profiles (`db_url`, `url`) and `current`. **No secrets.**
+- `config.yaml`: profiles (`db_url`, `url`, `tier`) and `current`. **No
+  secrets.**
 - `credentials.json`: per-profile `db_password` and `api_key`, mode `0600`.
 
 Secrets are read from stdin (`--db-password-stdin`, `--api-key-stdin`), never

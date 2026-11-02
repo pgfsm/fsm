@@ -61,7 +61,9 @@ TIER
   #661; routes #675).
   Otherwise DB-direct (PGFSM_DB_URL or DATABASE_URL, or the profile's db_url),
   so a project's .env with only DATABASE_URL works with no API running.
-  --db-url always means DB-direct. The tier used is logged. Output and exit
+  --db-url always means DB-direct, unless the tier is pinned to the API (a
+  profile's tier: api, or PGFSM_TIER=api): then any DB-direct path exits 2
+  (#663). The tier used is logged. Output and exit
   codes are the same on both tiers.
 
 EXIT CODES

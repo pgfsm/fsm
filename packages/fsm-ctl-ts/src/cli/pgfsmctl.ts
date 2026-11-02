@@ -83,6 +83,8 @@ TARGETS
   API: --url + --api-key, else the explicit profile's url/api_key, else
   PGFSM_URL + PGFSM_API_KEY, else the current profile's. The URL includes the
   API's path prefix, e.g. http://localhost:9999/api/v1.
+  API-only: a profile with tier: api (\`config set <p> --tier api\`) or
+  PGFSM_TIER=api refuses every database connection, --db-url included (exit 2).
 
 OUTPUT
   -o table (default) | json | ids. Data goes to stdout, logs to stderr.

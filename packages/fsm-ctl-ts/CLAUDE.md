@@ -81,7 +81,12 @@ since that database is shared.
   `PGFSM_PROFILE` → `PGFSM_DB_URL` / `DATABASE_URL`, loading `./.env` → current
   profile; an explicit profile beats the env on purpose, see the doc comment)
   and `withPool`, one single-connection Pool per one-shot command (root
-  `CLAUDE.md` #4).
+  `CLAUDE.md` #4). Every DB-direct path goes through `resolveDbUrl`, which first
+  calls `src/tier.ts`'s `refuseDbIfApiOnly` (#663): pinned to the API (an
+  explicit profile's `tier: api`, else `$PGFSM_TIER`, else the current
+  profile's), it throws exit 2, `--db-url` included. An explicit profile with no
+  `tier` falls through to `$PGFSM_TIER` (unlike the URLs) so choosing a profile
+  can't unpin a machine. `test/tier.test.ts` covers it, no DB needed.
 - `src/api-target.ts` — `resolveApiTarget`: URL and key resolved separately
   (`--url`/`--api-key` → explicit profile, which then replaces env and current
   profile → `PGFSM_URL`/`PGFSM_API_KEY` → current profile). Undefined when no
