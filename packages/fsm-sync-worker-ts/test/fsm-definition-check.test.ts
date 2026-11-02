@@ -407,20 +407,29 @@ Deno.test(
   "startFsmlet refuses a definition whose guard has no implementation (#621)",
   integration,
   async () => {
-    // A real compiled definition: spec014Error calls two guards. Loading it
-    // again is a no-op when it's already there (identical content).
-    const fsmJson = JSON.parse(
-      await Deno.readTextFile(
-        new URL(
-          "../../../test-apps/debug-only/sync-worker/typescript/spec014Error/v01/fsm.json",
-          import.meta.url,
+    // A real compiled definition: spec014Error calls two guards. It invokes
+    // spec014Child, so the child is loaded in the same batch (children first),
+    // or the load fails on a database that doesn't have it yet (#678).
+    // Re-loading identical content is a no-op.
+    const read = async (fsmName: string) =>
+      JSON.parse(
+        await Deno.readTextFile(
+          new URL(
+            `../../../test-apps/debug-only/sync-worker/typescript/${fsmName}/v01/fsm.json`,
+            import.meta.url,
+          ),
         ),
-      ),
-    ) as Json;
+      ) as Json;
+    const fsmJson = await read("spec014Error");
     const pool = new Pool({ connectionString: DATABASE_URL });
     try {
       await loadFsmDefinitions({ db: pool, useSupabase: false }, [
         { fsmName: "spec014Error", fsmVersion: "v01", fsmJson },
+        {
+          fsmName: "spec014Child",
+          fsmVersion: "v01",
+          fsmJson: await read("spec014Child"),
+        },
       ]);
     } finally {
       await pool.end();
