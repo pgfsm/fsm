@@ -15,6 +15,8 @@ export type Profile = {
   url?: string;
   /** Postgres URL for DB-direct commands, without its password. */
   db_url?: string;
+  /** `api` refuses every DB connection; `auto` (default) is SPEC-009 §5 (#663). */
+  tier?: string;
 };
 
 export type ConfigFile = {

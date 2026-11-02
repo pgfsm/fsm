@@ -6,6 +6,7 @@ import type { DBDeps } from "@pgfsm/db";
 import { resolveProfile } from "./config.ts";
 import { usageError } from "./exit.ts";
 import { CTL_CATEGORY } from "./logger.ts";
+import { refuseDbIfApiOnly } from "./tier.ts";
 
 const logger = getLogger([CTL_CATEGORY]);
 
@@ -22,10 +23,14 @@ const logger = getLogger([CTL_CATEGORY]);
  * otherwise silently hit the project's local DATABASE_URL.
  *
  * A profile's db_url gets its password from credentials.json.
+ *
+ * Refused outright, `--db-url` included, when the tier is pinned to the API
+ * (#663, see tier.ts). Every DB-direct path comes through here.
  */
 export async function resolveDbUrl(
   flags: { dbUrl?: string; profile?: string },
 ): Promise<string> {
+  await refuseDbIfApiOnly(flags);
   if (flags.dbUrl) return used("--db-url", flags.dbUrl);
 
   dotenv.config({ path: ".env" });

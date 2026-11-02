@@ -66,7 +66,9 @@ TIER
   API running with --enable-admin-api. Otherwise DB-direct (PGFSM_DB_URL or
   DATABASE_URL, or the profile's db_url), so a project's local .env with only
   DATABASE_URL works with no API running. --db-url always means DB-direct.
-  The tier used is logged.
+  The tier used is logged. Pinned to the API (a profile's tier: api, or
+  PGFSM_TIER=api), it never falls back: with no API target, or with --db-url,
+  it exits 2 (#663).
 
 DESCRIPTION
   A deploy step (SPEC-006): run it after applying migrations and before

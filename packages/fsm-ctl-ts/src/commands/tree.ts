@@ -66,6 +66,7 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
     flags: [
       "--db-url",
       "--url",
+      "--tier",
       "--db-password-stdin",
       "--api-key-stdin",
       "--use",

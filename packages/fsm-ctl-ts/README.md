@@ -17,6 +17,11 @@ environment or a `.env` in the current directory. None of them needs a pgfsm
 project — only a database — so the same command works on a laptop, in CI, or as
 a Kubernetes Job.
 
+A machine that should only use the REST API can be pinned to it with a profile's
+`tier: api` (`pgfsmctl config set <name> --tier api`) or `PGFSM_TIER=api`: every
+command that would connect to Postgres then exits `2`, `--db-url` included, so a
+stray `DATABASE_URL` in a `.env` is never used.
+
 `-o table|json|ids` picks the output format; data goes to stdout and logs to
 stderr, so `pgfsmctl … -o json | jq` gets clean JSON. Exit codes: `0` ok, `1`
 error, `2` usage, `3` auth, `4` not found, `5` check failed, `130` interrupted.
