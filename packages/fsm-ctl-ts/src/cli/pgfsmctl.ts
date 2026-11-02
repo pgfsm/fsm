@@ -37,7 +37,7 @@ const COMMAND_LINES: [string, string, string][] = [
   [
     "instance create | resume | send | stop",
     "instance",
-    "Create an FSM instance, re-enqueue one, send it an event, or stop its\nworker.",
+    "Create an FSM instance, re-enqueue one, send it an event, or stop its\nworker. API (operator key) if one is configured.",
   ],
   [
     "key create | list | revoke",

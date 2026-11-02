@@ -43,6 +43,11 @@ creates already pins this package as `npm run db:load` and `npm run db:pgcron`.
 | `config set\|use\|list\|show`                     | Named targets (profiles); passwords and API keys kept in a separate `credentials.json` (mode `0600`)                                                                                                                             |
 | `completion bash\|zsh\|fish`                      | Print a shell completion script                                                                                                                                                                                                  |
 
+`instance …` uses the REST API with an operator key when one is configured
+(`--url` + `--api-key`, `PGFSM_URL` + `PGFSM_API_KEY`, or a profile), so an
+operator needs no database access, and talks to the database directly otherwise;
+`--db-url` always forces DB-direct.
+
 `pgfsmctl --help` and `pgfsmctl <command> --help` list every option;
 `pgfsmctl --version` prints the version. The full reference is
 [docs/guides/CLI-USAGE.md](https://github.com/pgfsm/fsm/blob/main/packages/fsm-ctl-ts/docs/guides/CLI-USAGE.md).

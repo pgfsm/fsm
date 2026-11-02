@@ -117,6 +117,14 @@ export const stop: AppRouteHandler<StopRoute> = async (c) => {
   const deps = { db, useSupabase: false };
 
   try {
+    // An unknown instance is a 404, as pgfsmctl's DB-direct `instance stop`
+    // reports it (#660).
+    if (!(await getFSMData(deps, queue))) {
+      return c.json(
+        { error: "FSM instance not found" },
+        HttpStatusCodes.NOT_FOUND,
+      );
+    }
     await stopEventForFsmWorker(deps, queue);
     return c.json({}, HttpStatusCodes.OK);
   } catch (_err) {

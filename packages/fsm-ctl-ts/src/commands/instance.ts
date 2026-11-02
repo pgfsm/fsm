@@ -7,6 +7,8 @@ import {
   stopEventForFsmWorker,
 } from "@pgfsm/db";
 import type { Json } from "@pgfsm/db";
+import { apiRequest } from "../api-client.ts";
+import { type ApiTarget, resolveApiTarget } from "../api-target.ts";
 import { parseCommandArgs, verbOf } from "../args.ts";
 import { resolveDbUrl, withPool } from "../db-target.ts";
 import { CtlError, ExitCode, notFound, usageError } from "../exit.ts";
@@ -36,13 +38,21 @@ OPTIONS
   -e, --event-type <type>        Event type to send (required for send)
       --input <json>             Initial FSM context as JSON (optional, create only; xstate's input)
       --event-data <json>        Event payload as JSON string (optional, send only)
-  -d, --db-url <url>             Postgres URL (else --profile, PGFSM_DB_URL, DATABASE_URL, current profile)
-      --profile <name>           Use this profile's db_url
+      --url <url>                API base URL incl. its path prefix, e.g. http://localhost:9999/fsm
+      --api-key <key>            Operator (or admin) key for the API
+  -d, --db-url <url>             Postgres URL: forces DB-direct (break-glass)
+      --profile <name>           Use this profile's url/api_key, or its db_url
   -o, --output <fmt>             table (default), json or ids
   -h, --help                     Show this help
 
-  DB-direct for now (@pgfsm/db). SPEC-009 phase 2 moves instance commands to
-  the REST API with an operator key, keeping --db-url as break-glass.
+TIER
+  API when an API target resolves (--url, else the profile's url, else
+  PGFSM_URL, each with its key): POST /fsm, /fsm/resume-dispatch, /fsm/send
+  or /fsm/stop with an operator or admin key (SPEC-009 phase 2, #660).
+  Otherwise DB-direct (PGFSM_DB_URL or DATABASE_URL, or the profile's db_url),
+  so a project's .env with only DATABASE_URL works with no API running.
+  --db-url always means DB-direct. The tier used is logged. Output and exit
+  codes are the same on both tiers.
 
 EXIT CODES
   2 bad or missing flags, 4 unknown instance, 3 permission denied
@@ -81,7 +91,7 @@ export async function instanceCommand(argv: string[]): Promise<void> {
       V: "fsm-version",
       e: "event-type",
     },
-    common: ["db", "output"],
+    common: ["db", "api", "output"],
   }, HELP);
   if (args.help) return console.log(HELP);
 
@@ -118,8 +128,25 @@ export async function instanceCommand(argv: string[]): Promise<void> {
   const eventData = verb === "send"
     ? parseJsonFlag("--event-data", flag("event-data"))
     : {};
-  const dbUrl = await resolveDbUrl(args);
   const id = (r: { fsm_instance_id: string }) => r.fsm_instance_id;
+
+  // --db-url forces DB-direct; otherwise the API wins whenever it resolves.
+  const api = args.dbUrl ? undefined : await resolveApiTarget(args);
+  if (api) {
+    logger.info(`instance ${verb}: via the API at ${api.url} (${api.source})`);
+    const record = await viaApi(api, verb, {
+      queueName,
+      fsmName,
+      fsmVersion,
+      eventType,
+      input,
+      eventData,
+    });
+    return printRecord(record, args.output, { id });
+  }
+
+  const dbUrl = await resolveDbUrl(args);
+  logger.info(`instance ${verb}: DB-direct`);
 
   await withPool(dbUrl, async (deps) => {
     switch (verb) {
@@ -200,4 +227,67 @@ export async function instanceCommand(argv: string[]): Promise<void> {
       }
     }
   });
+}
+
+/**
+ * The API tier (SPEC-009 phase 2, #660): the same verbs over the REST API,
+ * printing the same records as DB-direct. HTTP errors map to exit codes in
+ * apiRequest (401/403 → 3, 404 → 4).
+ */
+async function viaApi(
+  api: ApiTarget,
+  verb: typeof VERBS[number],
+  a: {
+    queueName?: string;
+    fsmName?: string;
+    fsmVersion?: string;
+    eventType?: string;
+    input: Json;
+    eventData: Json;
+  },
+): Promise<Record<string, unknown> & { fsm_instance_id: string }> {
+  switch (verb) {
+    case "create": {
+      const { data } = await apiRequest<
+        { data: { fsm_instance: Record<string, string> | null } }
+      >(api, "POST", "/fsm", {
+        fsm_name: a.fsmName,
+        fsm_version: a.fsmVersion,
+        fsm_context: a.input,
+      });
+      if (!data?.fsm_instance?.fsm_instance_id) {
+        throw new CtlError(ExitCode.GENERAL, "Failed to create FSM instance.");
+      }
+      logger.info("Created FSM instance {id}", {
+        id: data.fsm_instance.fsm_instance_id,
+      });
+      return data.fsm_instance as Record<string, string> & {
+        fsm_instance_id: string;
+      };
+    }
+    case "resume": {
+      const { data } = await apiRequest<
+        { data: Record<string, unknown> & { fsm_instance_id: string } }
+      >(api, "POST", "/fsm/resume-dispatch", { queue: a.queueName });
+      return data;
+    }
+    case "send": {
+      await apiRequest(api, "POST", "/fsm/send", {
+        fsm_instance_id: a.queueName,
+        event_data: { ...a.eventData as object, type: a.eventType },
+      });
+      return {
+        fsm_instance_id: a.queueName!,
+        event_type: a.eventType!,
+        sent: true,
+      };
+    }
+    case "stop": {
+      await apiRequest(api, "POST", "/fsm/stop", { queue: a.queueName });
+      logger.info("Stop signal sent for worker: {queueName}", {
+        queueName: a.queueName,
+      });
+      return { fsm_instance_id: a.queueName!, stop_signal_sent: true };
+    }
+  }
 }
