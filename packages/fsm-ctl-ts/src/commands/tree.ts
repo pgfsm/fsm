@@ -33,7 +33,7 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
     flags: ["--name", "--role", ...API_FLAGS],
   },
   instance: {
-    tier: "DB-direct",
+    tier: "API or DB-direct",
     verbs: ["create", "resume", "send", "stop"],
     flags: [
       "--queue-name",
@@ -42,6 +42,8 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
       "--input",
       "--event-type",
       "--event-data",
+      "--url",
+      "--api-key",
       ...DB_FLAGS,
     ],
   },

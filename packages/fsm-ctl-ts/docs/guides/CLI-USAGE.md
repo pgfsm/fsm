@@ -237,14 +237,25 @@ ID=$(pgfsmctl instance create -n creditCheck -V v01 -o ids)
 | `--queue-name`  | `-q`  | `resume`, `send`, `stop` | FSM instance ID (a UUID; anything else exits `2`)             |
 | `--event-type`  | `-e`  | `send`                   | Event type to send                                            |
 | `--event-data`  |       | optional (`send`)        | Event payload, JSON                                           |
-| `--db-url`      | `-d`  | optional                 | Postgres URL                                                  |
-| `--profile`     |       | optional                 | Use this profile's `db_url`                                   |
+| `--url`         |       | optional                 | API base URL incl. its path prefix                            |
+| `--api-key`     |       | optional                 | Operator (or admin) key for the API                           |
+| `--db-url`      | `-d`  | optional                 | Postgres URL: forces DB-direct                                |
+| `--profile`     |       | optional                 | Use this profile's `url`/`api_key`, or its `db_url`           |
 | `--output`      | `-o`  | optional                 | `table`, `json` or `ids` (the instance UUID)                  |
 | `--help`        | `-h`  |                          | Print help and exit                                           |
 
-`instance` talks to the database directly through `@pgfsm/db` for now. SPEC-009
-phase 2 moves it to the REST API with an operator key, keeping `--db-url` as
-break-glass.
+**Tier** (SPEC-009 phase 2, #660), the same rules as `fsm load`:
+
+- **API** when an API target resolves (see
+  [Which API](#which-api-api-tier-commands)), with an **operator** key (an admin
+  key works too): `POST /fsm`, `/fsm/resume-dispatch`, `/fsm/send`, `/fsm/stop`.
+  The operator needs no Postgres access.
+- Otherwise **DB-direct** through `@pgfsm/db`, so a project's `.env` with only
+  `DATABASE_URL` works with no API running.
+- `--db-url` always means DB-direct (break-glass). The tier used is logged.
+
+Output, `-o` and exit codes are the same on both tiers: `4` for an unknown
+instance, `3` for a rejected key.
 
 ---
 

@@ -42,10 +42,14 @@ export async function apiRequest<T>(
   }
   if (res.ok) return json as T;
 
-  const { message, problems } = (json ?? {}) as {
+  const { message: messageField, error, problems } = (json ?? {}) as {
     message?: string;
+    error?: unknown;
     problems?: string[];
   };
+  // Some routes report `{ message }`, others `{ error }`.
+  const message = messageField ??
+    (typeof error === "string" ? error : undefined);
   const detail = [
     `${method} ${path} → ${res.status}${message ? `: ${message}` : ""}`,
     ...(problems ?? []).map((p) => `  - ${p}`),
