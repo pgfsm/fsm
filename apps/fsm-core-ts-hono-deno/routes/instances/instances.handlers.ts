@@ -35,7 +35,13 @@ const UNEXPECTED = { error: "Unexpected error" };
 // aligned to one registry.
 export const list: AppRouteHandler<ListRoute> = async (c) => {
   const deps = { db: c.get("db"), useSupabase: false };
-  const instances = await listFsmInstances(deps);
+  const q = c.req.valid("query");
+  const instances = await listFsmInstances(deps, {
+    fsmName: q.fsm_name,
+    fsmVersion: q.fsm_version,
+    status: q.status,
+    limit: q.limit,
+  });
   return c.json({ data: instances }, HttpStatusCodes.OK);
 };
 

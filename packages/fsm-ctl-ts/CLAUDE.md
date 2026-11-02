@@ -66,15 +66,17 @@ since that database is shared.
   options are a usage error) and `verbOf`. `instance.ts` picks its tier like
   `fsm load` (#660): the API's `/instances` routes (#675) when an API target
   resolves (`viaApi`, printing the same records as DB-direct), else `@pgfsm/db`;
-  `--db-url` forces DB-direct. `instance.ts` is the old `fsmctl.ts`, `db.ts` the
-  old `pgcron.ts`, `scheduler.ts` the old `fsmscheduler.ts` CLI (moved with
-  `git mv`, so `git log --follow` works). `tree.ts` is the command tree that
-  `--help`'s tiers and `completion` share: add a noun, flag or verb there too.
-  `fsm.ts` (`fsm load`, SPEC-006) walks `<folder>/<fsmName>/<vNN>/fsm.json`
-  itself and hands the parsed batch to `@pgfsm/db`'s `loadFsmDefinitions`; it
-  deliberately copies the compiler's `v\d{2}` version-folder rule instead of
-  importing `@pgfsm/compiler`. Log lines are built as plain strings because
-  LogTape quotes interpolated string values.
+  `--db-url` forces DB-direct. `instance list|get` and `fsm list|get` (#661)
+  read the same way (`readInstances` / `readDefinitions`, an operator key over
+  the API). `instance.ts` is the old `fsmctl.ts`, `db.ts` the old `pgcron.ts`,
+  `scheduler.ts` the old `fsmscheduler.ts` CLI (moved with `git mv`, so
+  `git log --follow` works). `tree.ts` is the command tree that `--help`'s tiers
+  and `completion` share: add a noun, flag or verb there too. `fsm.ts`
+  (`fsm load`, SPEC-006) walks `<folder>/<fsmName>/<vNN>/fsm.json` itself and
+  hands the parsed batch to `@pgfsm/db`'s `loadFsmDefinitions`; it deliberately
+  copies the compiler's `v\d{2}` version-folder rule instead of importing
+  `@pgfsm/compiler`. Log lines are built as plain strings because LogTape quotes
+  interpolated string values.
 - `src/db-target.ts` — `resolveDbUrl` (`--db-url` → explicit `--profile` /
   `PGFSM_PROFILE` → `PGFSM_DB_URL` / `DATABASE_URL`, loading `./.env` → current
   profile; an explicit profile beats the env on purpose, see the doc comment)

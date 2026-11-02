@@ -68,3 +68,11 @@ export async function apiRequest<T>(
   }
   throw new CtlError(ExitCode.GENERAL, detail);
 }
+
+/** `?a=1&b=2` for the parameters that are set, or "". */
+export function query(params: Record<string, string | number | undefined>) {
+  const set = Object.entries(params).filter(([, v]) => v !== undefined);
+  return set.length === 0
+    ? ""
+    : `?${new URLSearchParams(set.map(([k, v]) => [k, String(v)]))}`;
+}

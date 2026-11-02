@@ -565,3 +565,156 @@ Deno.test({
     }
   },
 });
+
+Deno.test({
+  name:
+    "fsm list/get and instance list/get, over the API with an operator key and DB-direct (#661)",
+  ...db,
+  fn: async () => {
+    const prefix = `t661_${crypto.randomUUID().slice(0, 8)}_`;
+    const api = await startApi();
+    try {
+      const mint = async (role: string) =>
+        JSON.parse(
+          (await pgfsmctl([
+            "db",
+            "key",
+            "create",
+            "--name",
+            `${prefix}${role}`,
+            "--role",
+            role,
+            "-d",
+            DATABASE_URL!,
+            "-o",
+            "json",
+          ])).stdout,
+        ).key as string;
+      const admin = await mint("admin");
+      const asOperator = {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: await mint("operator"),
+      };
+      const dbEnv = { DATABASE_URL: DATABASE_URL! };
+
+      const fsmName = `${prefix}light`;
+      const dir = `${WORK_DIR}/t661-${prefix}`;
+      for (const v of ["v01", "v02"]) {
+        await Deno.mkdir(`${dir}/${fsmName}/${v}`, { recursive: true });
+        await Deno.writeTextFile(
+          `${dir}/${fsmName}/${v}/fsm.json`,
+          machine(fsmName),
+        );
+      }
+      const load = await pgfsmctl(["fsm", "load", dir], {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: admin,
+      });
+      assertEquals(load.code, 0, load.out);
+
+      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+        // fsm list / get
+        const listed = await pgfsmctl(
+          ["fsm", "list", "-n", fsmName, "-o", "ids"],
+          env,
+        );
+        assertEquals(listed.code, 0, `${tier}: ${listed.out}`);
+        assertEquals(
+          listed.stdout.trim().split("\n"),
+          [`${fsmName}/v01`, `${fsmName}/v02`],
+        );
+        const table = await pgfsmctl(["fsm", "list", "-n", fsmName], env);
+        assertStringIncludes(table.stdout, "FSM_JSON_SHA256");
+        const got = await pgfsmctl(
+          ["fsm", "get", `${fsmName}/v02`, "-o", "json"],
+          env,
+        );
+        assertEquals(got.code, 0, `${tier}: ${got.out}`);
+        assertEquals(
+          JSON.parse(got.stdout).fsm_json,
+          JSON.parse(machine(fsmName)),
+        );
+        const missing = await pgfsmctl(["fsm", "get", `${fsmName}/v09`], env);
+        assertEquals(missing.code, 4, `${tier}: ${missing.out}`);
+        assertStringIncludes(
+          missing.stderr,
+          tier === "API" ? "via the API" : "DB-direct",
+        );
+      }
+
+      // Instances: two of v01, one of v02.
+      const ids: string[] = [];
+      for (const v of ["v01", "v01", "v02"]) {
+        const created = await pgfsmctl(
+          ["instance", "create", "-n", fsmName, "-V", v, "-o", "ids"],
+          asOperator,
+        );
+        assertEquals(created.code, 0, created.out);
+        ids.push(created.stdout.trim());
+      }
+
+      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+        const all = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "-o", "ids"],
+          env,
+        );
+        assertEquals(all.code, 0, `${tier}: ${all.out}`);
+        assertEquals(new Set(all.stdout.trim().split("\n")), new Set(ids));
+        const v01 = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "-V", "v01", "-o", "json"],
+          env,
+        );
+        assertEquals(JSON.parse(v01.stdout).length, 2, tier);
+        assertEquals(
+          Object.keys(JSON.parse(v01.stdout)[0]),
+          ["id", "fsm_name", "fsm_version", "status", "state", "started_at"],
+        );
+        const one = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "--limit", "1", "-o", "ids"],
+          env,
+        );
+        assertEquals(one.stdout.trim().split("\n").length, 1, tier);
+        const errored = await pgfsmctl(
+          ["instance", "list", "-n", fsmName, "--status", "error", "-o", "ids"],
+          env,
+        );
+        assertEquals(errored.code, 0);
+        assertEquals(errored.stdout.trim(), "", tier);
+
+        const got = await pgfsmctl(
+          ["instance", "get", "-q", ids[2], "-o", "json"],
+          env,
+        );
+        assertEquals(got.code, 0, `${tier}: ${got.out}`);
+        const record = JSON.parse(got.stdout);
+        assertEquals(record.fsm_instance_id, ids[2]);
+        assertEquals(record.fsm_instance_row.fsm_version, "v02");
+        const table = await pgfsmctl(["instance", "get", "-q", ids[2]], env);
+        assertStringIncludes(table.stdout, "status:");
+        const unknown = await pgfsmctl(
+          ["instance", "get", "-q", crypto.randomUUID()],
+          env,
+        );
+        assertEquals(unknown.code, 4, `${tier}: ${unknown.out}`);
+      }
+
+      // Bad filters are usage errors, before any request.
+      for (
+        const args of [
+          ["instance", "list", "--status", "sleeping"],
+          ["instance", "list", "--limit", "0"],
+          ["fsm", "get", "no-version"],
+        ]
+      ) {
+        assertEquals(
+          (await pgfsmctl(args, asOperator)).code,
+          2,
+          args.join(" "),
+        );
+      }
+    } finally {
+      await api.stop();
+      await cleanup(prefix);
+    }
+  },
+});

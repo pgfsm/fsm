@@ -157,6 +157,9 @@ GRANT EXECUTE ON FUNCTION
   fsm_core.get_fsm_data_resolve_state_value_v2
 TO fsm_operator;
 GRANT SELECT ON fsm_core.fsm_instance, fsm_core.async_operation_meta TO fsm_operator;
+-- Loaded definitions, for `pgfsmctl fsm list|get` (#661): an operator who can
+-- create instances of a machine can see what it is. Loading stays admin-only.
+GRANT SELECT ON fsm_core.fsm_json TO fsm_operator;
 
 -- fsm_admin (inherits fsm_operator)
 GRANT EXECUTE ON FUNCTION

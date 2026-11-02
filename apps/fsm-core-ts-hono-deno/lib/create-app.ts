@@ -24,6 +24,7 @@ import env from "../env.ts";
 import index from "../routes/index.route.ts";
 import instances from "../routes/instances/instances.index.ts";
 import admin from "../routes/admin/admin.index.ts";
+import definitions from "../routes/definitions/definitions.index.ts";
 
 export { createRouter };
 
@@ -101,6 +102,8 @@ export default async function createApp(
     });
     app.use("/instances", operator);
     app.use("/instances/*", operator);
+    app.use("/definitions", operator);
+    app.use("/definitions/*", operator);
     if (adminApi) {
       app.use(
         "/admin/*",
@@ -135,8 +138,8 @@ export default async function createApp(
   app.onError(onError);
 
   const routes = adminApi
-    ? [index, instances, admin] as const
-    : [index, instances] as const;
+    ? [index, instances, definitions, admin] as const
+    : [index, instances, definitions] as const;
   routes.forEach((route) => {
     app.route("/", route);
   });

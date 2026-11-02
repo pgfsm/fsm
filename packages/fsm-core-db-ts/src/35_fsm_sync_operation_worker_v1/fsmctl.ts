@@ -60,16 +60,46 @@ export async function _enqueueDispatch(
   });
 }
 
+/** Filters for {@linkcode listFsmInstances}; each one given narrows the list. */
+export type ListFsmInstancesOptions = {
+  fsmName?: string;
+  fsmVersion?: string;
+  /** `active`, `done`, `error` or `stopped` (fsm_instance_status). */
+  status?: string;
+  /** At most this many, newest first. Unlimited when omitted. */
+  limit?: number;
+};
+
+/**
+ * FSM instances, newest first (`started_at`), filtered on the server (#661).
+ * Without options it returns every instance, as before.
+ */
 export async function listFsmInstances(
   deps: DBDeps,
+  options: ListFsmInstancesOptions = {},
 ): Promise<FsmInstanceRow[]> {
+  const { fsmName, fsmVersion, status, limit } = options;
+  if (
+    limit !== undefined && (!Number.isInteger(limit) || limit < 1)
+  ) {
+    throw new RangeError(`limit must be an integer >= 1, got ${limit}`);
+  }
   try {
     const text = `
       SELECT *
       FROM ${FSM_INSTANCE_TABLE}
-      ORDER BY started_at DESC NULLS LAST;
+      WHERE ($1::text IS NULL OR fsm_name = $1)
+        AND ($2::text IS NULL OR fsm_version = $2)
+        AND ($3::text IS NULL OR fsm_instance_status #>> '{}' = $3)
+      ORDER BY started_at DESC NULLS LAST
+      LIMIT $4;
     `;
-    const result = await deps.db.query<FsmInstanceRow>(text);
+    const result = await deps.db.query<FsmInstanceRow>(text, [
+      fsmName ?? null,
+      fsmVersion ?? null,
+      status ?? null,
+      limit ?? null,
+    ]);
     return Array.isArray(result.rows) ? result.rows : [];
   } catch (err) {
     logger.error("Error in listFsmInstances: {error}", { error: err });

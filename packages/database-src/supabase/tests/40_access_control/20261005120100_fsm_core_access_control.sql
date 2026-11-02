@@ -5,7 +5,7 @@
 -- catches the schema file and the migration drifting apart, and any new
 -- fsm_core function left executable by PUBLIC.
 begin;
-select plan(32);
+select plan(34);
 
 -- Runs q as role r; returns 'ok' or the SQLSTATE it failed with. The owner
 -- (postgres) is a member of every fsm_* role, so it can switch to them.
@@ -107,6 +107,11 @@ select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.a
   '42501', 'fsm_operator cannot read fsm_core.api_keys');
 select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.fsm_instance $$),
   'ok', 'fsm_operator can list instances');
+select is(pg_temp.sqlstate_as('fsm_operator', $$ select count(*) from fsm_core.fsm_json $$),
+  'ok', 'fsm_operator can read loaded definitions (#661)');
+select is(pg_temp.sqlstate_as('fsm_operator',
+  $$ insert into fsm_core.fsm_json (fsm_name, fsm_version, fsm_json) values ('x', 'v01', '{}') $$),
+  '42501', 'fsm_operator cannot write fsm_core.fsm_json');
 -- The clock seams, which entry points' parameter defaults call in the
 -- caller's context (#668).
 select is(pg_temp.sqlstate_as('fsm_operator', $$ select fsm_core.tx_now() $$),
