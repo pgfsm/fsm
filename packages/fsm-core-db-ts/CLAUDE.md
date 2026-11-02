@@ -10,8 +10,11 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   `fsmJsonDigest`/`canonicalizeFsmJson` (RFC 8785 + SHA-256, shared by the
   compiler and the fsmlet), `getFsmJsonForFsmModules`,
   `extractFsmDependentChildren`, and `loadFsmDefinitions` (validate, children
-  first, one transaction; behind `pgfsmctl fsm load`). Tests in
-  `test/fsm-definition.test.ts` (`deno task test`; DB tests need `DATABASE_URL`)
+  first, one transaction; behind `pgfsmctl fsm load`). Also `listFsmDefinitions`
+  (name, version, type, digest; optional name/version filters) and
+  `getFsmDefinition`, behind `GET /definitions…` and `pgfsmctl fsm list|get`
+  (#661). Tests in `test/fsm-definition.test.ts` and
+  `test/list-and-read.test.ts` (`deno task test`; DB tests need `DATABASE_URL`)
 - `fsm-instance-lock.ts` — advisory lock concurrency control
 - `queue.ts` — pgmq-based event queue management
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationWorkerlet.ts` —
@@ -19,7 +22,11 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   model)
 - `35_fsm_sync_operation_worker_v1/fsmctl.ts` — FSM instance lifecycle (list,
   create, get, stop), archive/send events, and dispatch enqueue/resume ops
-  (behind `pgfsmctl instance …`, `@pgfsm/ctl`)
+  (behind `pgfsmctl instance …`, `@pgfsm/ctl`).
+  `listFsmInstances(deps,
+  { fsmName, fsmVersion, status, limit })` filters and
+  limits in SQL, newest first; with no options it returns every instance, as
+  before (#661)
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts` —
   dispatch-queue scheduling op (`schedule_next_pending`) and the
   `fsm_schedule_all_pending` pg_cron job's register/unregister/get helpers

@@ -18,6 +18,18 @@ const instanceNotFound = jsonContent(notFoundSchema, "No such FSM instance");
 export const list = createRoute({
   path: "/instances",
   method: "get",
+  request: {
+    // Filtered and limited in the database (#661).
+    query: z.object({
+      fsm_name: z.string().optional().describe("Only this FSM"),
+      fsm_version: z.string().optional().describe("Only this version"),
+      status: z.enum(["active", "done", "error", "stopped"]).optional()
+        .describe("Only instances with this status"),
+      limit: z.coerce.number().int().min(1).max(1000).default(50).describe(
+        "At most this many, newest first (default 50, max 1000)",
+      ),
+    }),
+  },
   tags,
   responses: {
     [HttpStatusCodes.OK]: jsonContent(

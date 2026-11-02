@@ -178,6 +178,58 @@ export async function getFsmJsonForFsmModules(
   return res.rows;
 }
 
+/** A loaded definition as {@linkcode listFsmDefinitions} reports it. */
+export type FsmDefinitionSummary = {
+  fsm_name: string;
+  fsm_version: string;
+  fsm_type: string | null;
+  /** {@linkcode fsmJsonDigest} of the loaded fsm.json: what the sync worker's startup check compares. */
+  fsm_json_sha256: string;
+};
+
+/**
+ * Loaded definitions (`fsm_core.fsm_json`), by name then version, optionally
+ * narrowed to one name and/or version (#661).
+ */
+export async function listFsmDefinitions(
+  deps: DBDeps,
+  options: { fsmName?: string; fsmVersion?: string } = {},
+): Promise<FsmDefinitionSummary[]> {
+  const res = await deps.db.query<
+    {
+      fsm_name: string;
+      fsm_version: string;
+      fsm_type: string | null;
+      fsm_json: Json;
+    }
+  >(
+    `SELECT fsm_name, fsm_version, fsm_type, fsm_json
+       FROM ${FSM_SCHEMA}.fsm_json
+      WHERE ($1::text IS NULL OR fsm_name = $1)
+        AND ($2::text IS NULL OR fsm_version = $2)
+      ORDER BY fsm_name, fsm_version`,
+    [options.fsmName ?? null, options.fsmVersion ?? null],
+  );
+  return await Promise.all(res.rows.map(async (r) => ({
+    fsm_name: r.fsm_name,
+    fsm_version: r.fsm_version,
+    fsm_type: r.fsm_type,
+    fsm_json_sha256: await fsmJsonDigest(r.fsm_json),
+  })));
+}
+
+/** One loaded definition's fsm.json, or undefined when it isn't loaded (#661). */
+export async function getFsmDefinition(
+  deps: DBDeps,
+  fsmName: string,
+  fsmVersion: string,
+): Promise<FsmJsonRow | undefined> {
+  const rows = await getFsmJsonForFsmModules(deps, [
+    { fsm_name: fsmName, fsm_version: fsmVersion },
+  ]);
+  return rows[0];
+}
+
 const key = (name: string, version: string) => `${name}/${version}`;
 
 /**

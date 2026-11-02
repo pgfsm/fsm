@@ -525,6 +525,98 @@ Deno.test(
     }),
 );
 
+Deno.test(
+  "operator key: /definitions reads and GET /instances filters and limit (#661)",
+  integration,
+  () =>
+    withDb(async ({ pool, prefix, key }) => {
+      const createApp = await importCreateApp();
+      const app = await createApp("/api/v1", {
+        pool,
+        auth: true,
+        adminApi: true,
+        authCacheTtlMs: 0,
+      });
+      const json = { "Content-Type": "application/json" };
+      const adm = { ...bearer(await key("fsm_admin")), ...json };
+      const op = { ...bearer(await key("fsm_operator")), ...json };
+      const [a, b] = [`${prefix}a`, `${prefix}b`];
+      const loaded = await app.request("/admin/definitions", {
+        method: "POST",
+        headers: adm,
+        body: JSON.stringify({
+          definitions: [
+            { fsmName: a, fsmVersion: "v1", fsmJson: machine(a) },
+            { fsmName: a, fsmVersion: "v2", fsmJson: machine(a) },
+            { fsmName: b, fsmVersion: "v1", fsmJson: machine(b) },
+          ],
+        }),
+      });
+      assertEquals(loaded.status, 200);
+      const get = async (path: string) => {
+        const res = await app.request(path, { headers: op });
+        return { status: res.status, body: await res.json() };
+      };
+
+      // Definitions, readable with an operator key.
+      const all = await get("/definitions");
+      assertEquals(all.status, 200);
+      const ours = all.body.data
+        .filter((d: { fsm_name: string }) => d.fsm_name.startsWith(prefix))
+        .map((d: { fsm_name: string; fsm_version: string }) =>
+          `${d.fsm_name}/${d.fsm_version}`
+        );
+      assertEquals(ours, [`${a}/v1`, `${a}/v2`, `${b}/v1`]);
+      assertEquals(
+        (await get(`/definitions?fsm_name=${a}&fsm_version=v2`)).body.data
+          .length,
+        1,
+      );
+      const versions = await get(`/definitions/${a}`);
+      assertEquals(versions.status, 200);
+      assertEquals(
+        versions.body.data.map((d: { fsm_version: string }) => d.fsm_version),
+        ["v1", "v2"],
+      );
+      assertEquals((await get(`/definitions/${prefix}none`)).status, 404);
+      const one = await get(`/definitions/${b}/versions/v1`);
+      assertEquals(one.status, 200);
+      assertEquals(one.body.data.fsm_json, machine(b));
+      assertEquals((await get(`/definitions/${b}/versions/v9`)).status, 404);
+
+      // Instances, filtered and limited in the database.
+      const ids: string[] = [];
+      try {
+        for (const [name, version] of [[a, "v1"], [a, "v1"], [b, "v1"]]) {
+          const res = await app.request("/instances", {
+            method: "POST",
+            headers: op,
+            body: JSON.stringify({ fsm_name: name, fsm_version: version }),
+          });
+          ids.push((await res.json()).data.fsm_instance_id);
+        }
+        const listed = await get(`/instances?fsm_name=${a}`);
+        assertEquals(listed.status, 200);
+        assertEquals(
+          new Set(listed.body.data.map((r: { id: string }) => r.id)),
+          new Set(ids.slice(0, 2)),
+        );
+        assertEquals(
+          (await get(`/instances?fsm_name=${a}&limit=1`)).body.data.length,
+          1,
+        );
+        assertEquals(
+          (await get(`/instances?fsm_name=${a}&status=error`)).body.data,
+          [],
+        );
+        assertEquals((await get("/instances?limit=0")).status, 422);
+        assertEquals((await get("/instances?status=sleeping")).status, 422);
+      } finally {
+        for (const id of ids) await dropInstance(pool, id);
+      }
+    }),
+);
+
 /** Removes an instance the operator test created, with its queue and logs. */
 async function dropInstance(pool: Pool, id: string) {
   await pool.query(
