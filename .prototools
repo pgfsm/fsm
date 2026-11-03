@@ -9,7 +9,7 @@
 # CI (prek.yml, ci.yml) installs from these files via moonrepo/setup-toolchain
 # and a bare `rustup toolchain install` — never hardcode versions in workflows.
 proto = "0.63.2"
-deno = "2.9.7"
+deno = "2.9.8"
 # Node runs the Supabase CLI tooling in packages/database-src (ADR-002), the
 # npm publish/verify steps and fsm-proto-codegen's npm tooling. Pinned here,
 # not in packages/database-src, so moonrepo/setup-toolchain (which only reads
