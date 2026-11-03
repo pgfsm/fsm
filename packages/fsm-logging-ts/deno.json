@@ -9,7 +9,7 @@
     "build:npm": "deno run --allow-all scripts/build-npm.ts"
   },
   "imports": {
-    "@deno/dnt": "jsr:@deno/dnt@^0.43.0",
+    "@deno/dnt": "jsr:@deno/dnt@^0.44.0",
     "@logtape/logtape": "npm:@logtape/logtape@^2.2",
     "@logtape/otel": "npm:@logtape/otel@^2.2"
   }
