@@ -75,6 +75,28 @@ Deno.test("--help lists every noun with its tier; no args is a usage error", asy
   assertEquals((await pgfsmctl([])).code, 2);
 });
 
+Deno.test("--help's summary lists every verb of every noun (#684)", async () => {
+  const { COMMAND_TREE } = await import("../src/commands/tree.ts");
+  const lines = (await pgfsmctl(["--help"])).out.split("\n");
+  // The summary line starting with `prefix`, e.g. "  fsm load | list | get".
+  const check = (prefix: string, verbs: string[]) => {
+    const line = lines.find((l) => l.startsWith(`  ${prefix} `));
+    assert(line, `--help has no summary line for ${prefix}`);
+    for (const verb of verbs) {
+      assertStringIncludes(line, verb, `${prefix} ${verb} is missing`);
+    }
+  };
+  for (const [noun, spec] of Object.entries(COMMAND_TREE)) {
+    if (Array.isArray(spec.verbs)) check(noun, spec.verbs);
+    else {
+      // e.g. db: { cron: [...], key: [...] }, one summary line each.
+      for (const [sub, verbs] of Object.entries(spec.verbs)) {
+        check(`${noun} ${sub}`, verbs);
+      }
+    }
+  }
+});
+
 Deno.test("unknown nouns, verbs and options exit 2 (usage)", async () => {
   const noun = await pgfsmctl(["fsmctl"]);
   assertEquals(noun.code, 2);

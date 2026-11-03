@@ -30,14 +30,14 @@ const COMMAND_LINES: [string, string, string][] = [
     "Mint an API key straight in the database: the bootstrap admin key.",
   ],
   [
-    "fsm load <folder>",
+    "fsm load | list | get",
     "fsm",
-    "Load <folder>/<fsmName>/<version>/fsm.json definitions (SPEC-006), a\ndeploy step before starting sync workers. API if one is configured.",
+    "Load <folder>/<fsmName>/<version>/fsm.json definitions (SPEC-006, a\ndeploy step before sync workers start; admin key), or list loaded ones\nand read one (operator key). API if one is configured.",
   ],
   [
-    "instance create | resume | send | stop",
+    "instance create | resume | send | stop | list | get",
     "instance",
-    "Create an FSM instance, re-enqueue one, send it an event, or stop its\nworker. API (operator key) if one is configured.",
+    "Create an FSM instance, re-enqueue one, send it an event, stop its\nworker, list instances or read one. API (operator key) if one is\nconfigured.",
   ],
   [
     "key create | list | revoke",
@@ -62,8 +62,10 @@ const COMMAND_LINES: [string, string, string][] = [
   ["version", "version", "Print @pgfsm/ctl's version."],
 ];
 
+// The usage column fits the longest usage, so every tier label lines up.
+const USAGE_WIDTH = Math.max(...COMMAND_LINES.map(([usage]) => usage.length));
 const COMMANDS_HELP = COMMAND_LINES.map(([usage, noun, text]) =>
-  `  ${usage.padEnd(42)} [${COMMAND_TREE[noun].tier}]\n` +
+  `  ${usage.padEnd(USAGE_WIDTH)} [${COMMAND_TREE[noun].tier}]\n` +
   text.split("\n").map((l) => `      ${l}`).join("\n")
 ).join("\n");
 
