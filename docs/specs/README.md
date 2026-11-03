@@ -52,6 +52,7 @@ Flow:
 | [SPEC-013](spec-013-invoke-input.md)                       | Per-Instance Input for Invoked Actors and Child FSMs                     | Implemented |
 | [SPEC-014](spec-014-sync-operation-error-policy.md)        | Error Policy for Sync Operations                                         | Accepted    |
 | [SPEC-015](spec-015-deterministic-simulation-testing.md)   | Deterministic Simulation Testing                                         | Accepted    |
+| [SPEC-016](spec-016-installation-and-distribution.md)      | Installation and Distribution                                            | Draft       |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
