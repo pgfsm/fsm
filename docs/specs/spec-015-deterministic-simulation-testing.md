@@ -192,11 +192,15 @@ The design has six parts.
   CI check (`scripts/check-sql-clock-seams.ts`) rejects raw `now()` /
   `clock_timestamp()` / `current_timestamp` and similar in both places, outside
   the seam functions.
-- **pgmq stays pristine.** The vendored `00_pre_ext/…_PGMQ_source.sql` (about 40
-  `clock_timestamp()` and 11 `now()` uses, including the visibility-timeout
-  arithmetic) is **not** edited. The sim DB build mechanically rewrites those
-  calls to the seams when it loads the schema. The rewrite is a small, audited
-  script, and pgmq bumps stay clean.
+- **pgmq stays pristine.** pgmq is the installed extension (`00_pre_ext` only
+  runs `CREATE EXTENSION pgmq`; the vendored `…_PGMQ_source.sql` is
+  commented-out reference). Its functions read the clock in 10 places on pgmq
+  1.4.4, including the visibility-timeout arithmetic. Neither the extension nor
+  the repo's copy is edited. The sim DB build (`scripts/sim/build-sim-db.ts`)
+  rewrites the installed functions' bodies and pgmq's column defaults to the
+  seams in the target database, so it follows whatever pgmq version is
+  installed. Its test fails if a pgmq bump reads the clock in a form the rewrite
+  misses.
 - **pg_cron is not run in sim.** The scheduler job is unscheduled in the sim
   database, and the simulator calls the scheduler function as an explicit step,
   so the PRNG decides when it fires, including "it didn't fire for a while".

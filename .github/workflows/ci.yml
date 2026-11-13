@@ -116,10 +116,11 @@ jobs:
 
       # Blocking (#579; it was continue-on-error while failures were left red).
       # DB-free unit suites only: the DB-backed suites run in the Database job.
-      # The fsm-core-db-ts and fsm-sync-worker-ts test/ dirs are included
-      # because their DB tests skip themselves without DATABASE_URL.
+      # The fsm-core-db-ts and fsm-sync-worker-ts test/ dirs and the sim
+      # database build's tests are included because their DB tests skip
+      # themselves without DATABASE_URL.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test apps/fsm-core-ts-hono-deno/stoker-src
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test apps/fsm-core-ts-hono-deno/stoker-src packages/database-src/scripts/sim
 
   python-async-worker-sdk:
     name: Python async worker SDK (test · build)
@@ -352,7 +353,8 @@ jobs:
       # The gateway's two DB-backed files only (its other tests run in the
       # Deno job): the capacity bound and redelivery (#396, #537), and
       # detecting a state exit by LISTEN and the sweep (#538), which also
-      # needs this direct connection to LISTEN on.
+      # needs this direct connection to LISTEN on. The sim database build
+      # (SPEC-015 (b), #643) runs in a transaction it rolls back.
       - name: DB-backed Deno tests (@pgfsm/db, API auth, pgfsmctl incl. API tier, gateway)
         working-directory: .
         env:
@@ -365,6 +367,7 @@ jobs:
           packages/fsm-async-worker-gateway-ts/test/poll_loop_capacity_db_test.ts
           packages/fsm-async-worker-gateway-ts/test/cancel_detection_db_test.ts
           packages/fsm-async-worker-gateway-ts/test/cancel_ack_log_db_test.ts
+          packages/database-src/scripts/sim
 
   # SPEC-011's end-to-end acceptance (#536): a parent FSM's state exits while
   # its invoked child FSM or actor is running, and is re-entered while one is

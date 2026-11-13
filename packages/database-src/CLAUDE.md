@@ -72,8 +72,35 @@ Never call `now()` / `clock_timestamp()` (or `current_timestamp` and friends) in
 `clock_timestamp()`), so the deterministic simulator can run the real SQL on
 virtual time. They return the `fsm_core.sim_now` GUC only for a login in the
 NOLOGIN role `fsm_sim`, which nothing in production is granted.
-`scripts/check-sql-clock-seams.ts` (prek + CI) enforces it. The vendored pgmq
-source is exempt and stays pristine; the sim database build rewrites it.
+`scripts/check-sql-clock-seams.ts` (prek + CI) enforces it. pgmq is exempt and
+stays pristine: see below.
+
+## Sim database build (`scripts/sim/build-sim-db.ts`, SPEC-015 (b))
+
+```bash
+deno task sim:db:build                       # DATABASE_URL from ../../.env
+deno task sim:db:build --db-url=postgresql://…
+npm run supabase:db:reset                    # undo it
+```
+
+Turns a migrated database into one the deterministic simulator can drive, in
+place and in one transaction: it rewrites `now()` / `clock_timestamp()` to the
+seams in the **installed pgmq extension's** functions and in pgmq's column
+defaults, grants the seams to roles that use pgmq, and unschedules the
+scheduler's pg_cron job (the simulator calls `schedule_all_pending()` as a
+step). The vendored `00_pre_ext/…_PGMQ_source.sql` is commented-out reference
+and isn't what runs: `00_pre_ext` only does `CREATE EXTENSION pgmq`. A non-local
+host is refused unless `--allow-remote`, since losing the cron job stops
+scheduling. Don't run it on the shared local database while someone else is
+using it; the tests in `scripts/sim/` apply it inside a transaction they roll
+back.
+
+**On a pgmq bump** (a new Supabase image, or a new extension version), run
+`scripts/sim/build-sim-db_test.ts` with `DATABASE_URL` set: it fails if the
+bumped pgmq reads the clock in a form the rewrite doesn't handle
+(`current_timestamp`, `'now'`, …). `pgmq.read_with_poll()` loops until
+`wall_now()` passes a deadline, so on frozen virtual time it never returns;
+nothing calls it, and the simulator mustn't.
 
 ## Two local Supabase projects
 
