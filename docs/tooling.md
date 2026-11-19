@@ -152,7 +152,7 @@ for supply-chain safety; Renovate keeps the digests updated.
 | `npm-publish.yml`    | tag push (`compiler-v*`/`cli-v*`/`ctl-v*`/`db-v*`/`sync-worker-v*`/`async-worker-sdk-v*`/`logging-v*`), manual | `setup-deno` + `setup-node` + `deno pack` + `npm publish`                        | Publish TS packages to npm                                                      |
 
 > **CI test scope:** `ci.yml` runs only the DB-free unit suites
-> (`packages/fsm-compiler-ts`, `apps/fsm-core-ts-hono-deno/stoker-src`), plus
+> (`packages/fsm-compiler-ts`, `packages/fsm-api-ts/stoker-src`), plus
 > `packages/fsm-async-worker-sdk-python`'s pytest suite via `uv` and
 > `packages/fsm-async-worker-sdk-rust`'s `cargo test`/`clippy` and
 > `packages/fsm-async-worker-sdk-go`'s `go vet`/`go test -race`. The route/db

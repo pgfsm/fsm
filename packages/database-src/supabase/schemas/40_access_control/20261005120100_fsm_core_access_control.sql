@@ -8,7 +8,7 @@
 --                               `pgfsmctl instance …`
 --   fsm_admin          NOLOGIN  fsm_operator + loading FSM definitions + API-key
 --                               management
---   fsm_worker         NOLOGIN  the fsmlet, `pgfsmctl scheduler run` and the
+--   fsm_worker         NOLOGIN  the fsmlet, the journey tests' scheduler loop and the
 --                               Activity Gateway: claim / dispatch / archive /
 --                               heartbeat, and pgmq reads of instance queues
 --   fsm_authenticator  LOGIN, NOINHERIT, no password — the REST API's pool
@@ -119,10 +119,15 @@ ALTER FUNCTION fsm_core.get_fsm_data_resolve_state_value_v2 SECURITY DEFINER SET
 ALTER FUNCTION fsm_core.load_fsm_from_json_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.load_fsm_state_from_json_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 ALTER FUNCTION fsm_core.load_fsm_transition_from_json_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
+-- The pg_cron job (SPEC-016, #688): runs as the owner, so the job always
+-- belongs to it and the API (as fsm_admin) never needs the owner's login.
+ALTER FUNCTION fsm_core.scheduler_job_status_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
+ALTER FUNCTION fsm_core.register_scheduler_job_v2 SECURITY DEFINER SET search_path = fsm_core, pgmq, public, extensions, pg_temp;
 
 -- ── Nothing in fsm_core is executable by PUBLIC ─────────────────────────────
--- Skips functions that belong to an extension (pg_jsonschema installs into
--- fsm_core and is owned by its installer, not us).
+-- Skips functions that belong to another extension (pg_jsonschema installs
+-- into fsm_core and is owned by its installer, not us). Members of fsm_core
+-- itself, in its PGXN form (CREATE EXTENSION fsm_core), are included.
 DO $$
 DECLARE
   fn regprocedure;
@@ -133,8 +138,9 @@ BEGIN
     WHERE p.pronamespace = 'fsm_core'::regnamespace
       AND p.proowner = current_user::regrole
       AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                      JOIN pg_extension e ON e.oid = d.refobjid
                       WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
-                        AND d.deptype = 'e')
+                        AND d.deptype = 'e' AND e.extname <> 'fsm_core')
   LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', fn);
   END LOOP;
@@ -171,6 +177,15 @@ GRANT EXECUTE ON FUNCTION
   fsm_core.list_api_keys
 TO fsm_admin;
 GRANT SELECT ON fsm_core.fsm_json TO fsm_admin;
+GRANT EXECUTE ON FUNCTION
+  fsm_core.scheduler_job_status_v2,
+  fsm_core.register_scheduler_job_v2
+TO fsm_admin;
+
+-- fsm_core.version() (SPEC-016, #688): the API (logged in as fsm_authenticator
+-- or acting as an operator), the fsmlet and the gateway check it at startup.
+-- require_version() stays owner-only: only upgrade scripts call it.
+GRANT EXECUTE ON FUNCTION fsm_core.version() TO fsm_operator, fsm_worker, fsm_authenticator;
 
 -- fsm_worker
 GRANT EXECUTE ON FUNCTION

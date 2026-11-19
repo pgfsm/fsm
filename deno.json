@@ -7,7 +7,7 @@
     "packages/fsm-async-worker-sdk-ts",
     "packages/fsm-sync-worker-ts",
     "packages/fsm-async-worker-ts",
-    "apps/fsm-core-ts-hono-deno",
+    "packages/fsm-api-ts",
     "packages/fsm-compiler-ts",
     "packages/fsm-proto-codegen",
     "packages/fsm-proto-codegen/gen/typescript",

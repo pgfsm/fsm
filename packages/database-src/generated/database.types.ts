@@ -1292,10 +1292,15 @@ export type Database = {
       pg_try_advisory_lock:
         | { Args: { key: number }; Returns: boolean }
         | { Args: { key1: number; key2: number }; Returns: boolean };
+      register_scheduler_job_v2: {
+        Args: { input_schedule?: string };
+        Returns: Json;
+      };
       remove_hashtag_from_text: {
         Args: { input_text: string };
         Returns: string;
       };
+      require_version: { Args: { input_expected: string }; Returns: undefined };
       resolve_state_value_v1: {
         Args: {
           input_fsm_name: string;
@@ -1337,6 +1342,7 @@ export type Database = {
         Args: { input_stale_threshold_seconds?: number };
         Returns: boolean;
       };
+      scheduler_job_status_v2: { Args: never; Returns: Json };
       select_all_transitions_v1: {
         Args: {
           event_name: string;
@@ -1541,6 +1547,7 @@ export type Database = {
         Returns: boolean;
       };
       verify_api_key: { Args: { input_key_hash: string }; Returns: string };
+      version: { Args: never; Returns: string };
       wall_now: { Args: never; Returns: string };
     };
     Enums: {

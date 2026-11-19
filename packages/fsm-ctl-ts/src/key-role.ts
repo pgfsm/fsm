@@ -1,5 +1,7 @@
-import type { ApiKeyRole } from "@pgfsm/db";
 import { usageError } from "./exit.ts";
+
+/** The roles an API key can carry (the API's /admin/keys). */
+export type ApiKeyRole = "fsm_admin" | "fsm_operator";
 
 /** `--role admin|operator` (or the full fsm_admin/fsm_operator) → the role. */
 export function parseKeyRole(value: unknown, help: string): ApiKeyRole {

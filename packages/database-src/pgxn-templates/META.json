@@ -18,7 +18,8 @@
       "requires": {
         "PostgreSQL": "15.0.0",
         "ltree": "1.2.0",
-        "pgmq": "1.4.4"
+        "pgmq": "1.4.4",
+        "pg_cron": "1.5.0"
       }
     }
   },

@@ -8,9 +8,10 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
 The `fsmlet` runtime library: the out-of-band worker that drives FSM instances
 forward (see root `CLAUDE.md` point 3 — the API never owns worker lifecycle).
 Kubernetes-style split: `fsmlet` (kubelet — long-running node agent) is assigned
-dispatch entries by the scheduler — the `pg_cron` job (SPEC-003), with
-`pgfsmctl scheduler run` as a fallback — and instances are driven one-shot by
-`pgfsmctl instance …` or the HTTP API.
+dispatch entries by the scheduler — the `pg_cron` job (SPEC-003), registered by
+installing fsm_core (SPEC-016) — and instances are driven one-shot by
+`pgfsmctl instance …` or the HTTP API. The fsmlet checks `fsm_core.version()` at
+startup (`requireFsmCoreVersion`).
 
 **Library only (SPEC-005).** The `fsmctl`, `pgcron` and `fsmscheduler` bins, the
 `src/fsmscheduler/` loop (`runFsmScheduler` and friends) and

@@ -14,6 +14,12 @@
 `POST /admin/fsm/load` is `POST /admin/definitions`, under the default prefix
 `/api/v1`. This spec keeps the old names as written.
 
+**Superseded in part by SPEC-016 (#690):** `pgfsmctl` is an API client only.
+§4–5's two tiers are gone: no DB-direct commands (`db cron`, `db key create`,
+`scheduler run`), no `--db-url`, profiles hold only the API `url` and key, and
+the first admin key comes from `pgfsm-api key bootstrap`. The API itself moved
+to `packages/fsm-api-ts` (`@pgfsm/api`).
+
 ---
 
 ## Problem

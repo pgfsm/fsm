@@ -25,7 +25,7 @@ body:
       label: Component
       description: Which part of the framework would this change?
       options:
-        - API server (apps/fsm-core-ts-hono-deno)
+        - API server (packages/fsm-api-ts)
         - FSM compiler — TypeScript (packages/fsm-compiler-ts)
         - FSM compiler — Python (packages/fsm-compiler-py)
         - Database migrations / Supabase (packages/database-src)

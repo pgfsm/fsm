@@ -22,9 +22,8 @@ export type ApiTarget = { url: string; apiKey: string; source: string };
  * picking a DB-only profile can't be overridden by a stray $PGFSM_URL.
  *
  * `url` is the API's base URL including its path prefix, e.g.
- * http://localhost:9999/api/v1. Returns undefined when no URL resolves (so a
- * command that has a DB-direct fallback can use it); throws when a URL
- * resolves without a key.
+ * http://localhost:9999/api/v1. Returns undefined when no URL resolves;
+ * throws when a URL resolves without a key. Commands use requireApiTarget.
  */
 export async function resolveApiTarget(
   flags: { url?: string; apiKey?: string; profile?: string },
@@ -71,4 +70,23 @@ export async function resolveApiTarget(
   const source = url[0] === key[0] ? url[0] : `${url[0]} + key from ${key[0]}`;
   logger.debug("API from {source}", { source });
   return { url: url[1].replace(/\/+$/, ""), apiKey: key[1], source };
+}
+
+/**
+ * The API target, or a usage error (exit 2) naming how to configure one.
+ * pgfsmctl talks only to the API (SPEC-016): no command opens a Postgres
+ * connection.
+ */
+export async function requireApiTarget(
+  flags: { url?: string; apiKey?: string; profile?: string },
+  command: string,
+): Promise<ApiTarget> {
+  const api = await resolveApiTarget(flags);
+  if (!api) {
+    throw usageError(
+      `${command}: no API configured. Pass --url and --api-key, set PGFSM_URL and PGFSM_API_KEY (./.env is read), or use a profile (pgfsmctl config set <name> --url <url> --api-key-stdin --use). The URL includes the API's path prefix, e.g. http://localhost:9999/api/v1.`,
+    );
+  }
+  logger.info(`${command}: via the API at ${api.url} (${api.source})`);
+  return api;
 }

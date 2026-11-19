@@ -10,6 +10,14 @@
 
 ---
 
+**Superseded in part by SPEC-016 (#688, #690):** pg_cron is required, and
+installing fsm_core registers the job (`register_scheduler_job_v2()`, from
+migration 2.3.0); the fallback fsmscheduler process (`pgfsmctl scheduler run`)
+is gone, kept only as a test helper
+(`apps/fsm-core-example/test-support/fsm-scheduler.ts`).
+
+---
+
 ## Problem
 
 `packages/fsm-sync-worker-ts/src/fsmscheduler/fsmscheduler.ts` is a standing

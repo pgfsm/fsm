@@ -288,18 +288,14 @@ winner, and notifies it — until the queue is empty or no `fsmlet` has capacity
 The scheduler is a **`pg_cron` job** (`fsm_core.schedule_all_pending()` on a
 timer — see
 [`docs/specs/spec-003-pgcron-fsm-scheduler.md`](docs/specs/spec-003-pgcron-fsm-scheduler.md)).
-Register it once per database, after migrations apply — `supabase db reset`
-doesn't do it for you:
+Migration 2.3.0 registers it (SPEC-016), so `supabase db reset` and the full
+install leave it running. Check or re-register it through the API (admin key,
+`--enable-admin-api`):
 
 ```bash
-deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts db cron register
-  # -d <db-url>    # overrides DATABASE_URL
-  # -s <schedule>  # pg_cron schedule expression (default "5 seconds")
-deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts db cron status
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts scheduler status
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts scheduler register --schedule '10 seconds'
 ```
-
-`register` is idempotent — it calls PostgreSQL's `cron.schedule()` and exits;
-re-run it to change the schedule. `unregister` removes the job.
 
 `fsm-async-worker-gateway-ts` (the current async-operation worker) has **no
 scheduler** — it polls Postgres directly on its own interval instead (see
@@ -308,33 +304,12 @@ the superseded `fsm-async-worker-ts` node-agent/scheduler split; see
 [Appendix: superseded `fsm-async-worker-ts`](#appendix-superseded-fsm-async-worker-ts)
 if you're still running that older worker.
 
-### Fallback: a standing scheduler process
+### The standing scheduler loop (tests only)
 
-The pre-`pg_cron` scheduler process (kube-scheduler equivalent) is kept as a
-fallback safety net until `pg_cron` is trusted as the sole mechanism. Running
-both is safe (`SELECT FOR UPDATE SKIP LOCKED`), just redundant.
-
-| Info                    | Fallback scheduler (`pgfsmctl scheduler run`)                               |
-| ----------------------- | --------------------------------------------------------------------------- |
-| Code                    | `packages/fsm-ctl-ts/src/scheduler/fsmscheduler.ts` (`runFsmScheduler`)     |
-| Routes work for         | `fsmlet` node agents                                                        |
-| Dispatch table          | `fsm_dispatch_queue`                                                        |
-| Scheduling function     | `schedule_next_pending()`                                                   |
-| Notifies the winner via | `fsm_fsmlet_work_<id>` (channel the fsmlet is listening on — see section 3) |
-| `--stale-threshold`     | Seconds before a fsmlet with no heartbeat is treated as dead (default `30`) |
-| `--poll-interval`       | Poll interval in ms (default `30000`)                                       |
-| Deployment              | Control plane, alongside the API server — **not** on worker nodes           |
-
-```bash
-deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts scheduler run
-  # -d <db-url>             # overrides DATABASE_URL
-  # -p <poll-interval-ms>   # poll interval (default 30000)
-  # -s <stale-threshold-s>  # seconds before a fsmlet is considered dead (default 30)
-```
-
-It still LISTENs on `fsm_scheduler_work`, but nothing notifies that channel
-since SPEC-003 removed the `pg_notify` from `enqueue_fsm_dispatch_v2`, so it
-effectively runs on its poll loop.
+The pre-`pg_cron` scheduler loop, `runFsmScheduler`
+(`apps/fsm-core-example/test-support/fsm-scheduler.ts`), is kept for the journey
+tests, which drive scheduling themselves instead of waiting on the job. It's no
+longer a `pgfsmctl` command (SPEC-016: pg_cron is required).
 
 ---
 
@@ -501,7 +476,7 @@ worker's terms are the `fsm-async-worker-gateway-ts` rows further down.
 | load `fsm.json`                                          | `pgfsmctl fsm load` → `@pgfsm/db` `loadFsmDefinitions` → `load_fsm_from_json_v2`; compiler `-c load` deprecated (SPEC-006)                                                                            | ✅ Shipped                                                      |
 | `fsmlet`, `registerFsmlet`, loop                         | `packages/fsm-sync-worker-ts/src/fsmlet/fsmlet.ts`, `packages/fsm-core-db-ts/src/fsm-workerlet.ts` (`fsm_workerlet` table)                                                                            | ✅ Shipped                                                      |
 | heartbeat (5s)                                           | `fsmletHeartbeat` (`HEARTBEAT_INTERVAL_MS = 5_000`); `asyncOperationWorkerletHeartbeat` is the 🗄️ superseded equivalent — `fsm-async-worker-gateway-ts` has no heartbeat yet (see section 3)          | ✅ Shipped (sync) — ⚠️ Not implemented (current async)          |
-| scheduler / dispatch (FSM)                               | `fsm_schedule_all_pending` pg_cron job (`pgfsmctl db cron register`), fallback `fsm-ctl-ts/src/scheduler/fsmscheduler.ts`, `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`   | ✅ Shipped                                                      |
+| scheduler / dispatch (FSM)                               | `fsm_schedule_all_pending` pg_cron job (registered by the install; `pgfsmctl scheduler status\|register`), `schedule_next_pending`, `enqueue_fsm_dispatch_v2`, `fsm_dispatch_queue`                   | ✅ Shipped                                                      |
 | fsmlet ↔ async-actor liveness check                      | `asyncOperationVerificationMode` (`checkRegistryForAsyncActors` / `checkRegistryAndWorkingForAsyncActors`) — library option, not exposed as an `fsmlet` CLI flag                                      | ⚠️ Shipped, not wired to CLI                                    |
 | `fsmctl` (control CLI)                                   | `pgfsmctl instance` — `packages/fsm-ctl-ts/src/commands/instance.ts` — `create` / `resume` / `send` / `stop`                                                                                          | ✅ Shipped                                                      |
 

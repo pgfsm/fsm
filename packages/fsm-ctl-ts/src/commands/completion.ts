@@ -13,7 +13,7 @@ USAGE
   zsh:   source <(pgfsmctl completion zsh)        (e.g. in ~/.zshrc)
   fish:  pgfsmctl completion fish > ~/.config/fish/completions/pgfsmctl.fish
 
-  Completes nouns, verbs (\`db cron <verb>\`) and each noun's flags.
+  Completes nouns, verbs and each noun's flags.
 `;
 
 export function completionCommand(argv: string[]): Promise<void> {
@@ -28,7 +28,7 @@ export function completionCommand(argv: string[]): Promise<void> {
 
 const nouns = () => Object.keys(COMMAND_TREE).join(" ");
 
-/** `case` arms: words to offer after `<noun>` (and after `db cron`). */
+/** `case` arms: words to offer after `<noun>` (and after a sub-noun). */
 function shellCases(indent: string, v: string): string {
   const lines: string[] = [];
   for (const [noun, spec] of Object.entries(COMMAND_TREE)) {

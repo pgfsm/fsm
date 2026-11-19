@@ -27,7 +27,7 @@ body:
       label: Component
       description: Which part of the framework is affected?
       options:
-        - API server (apps/fsm-core-ts-hono-deno)
+        - API server (packages/fsm-api-ts)
         - FSM compiler — TypeScript (packages/fsm-compiler-ts)
         - FSM compiler — Python (packages/fsm-compiler-py)
         - Database migrations / Supabase (packages/database-src)
@@ -100,7 +100,7 @@ body:
       description: Minimal, ordered steps. If the bug involves a specific FSM definition, include the relevant `fsm.json` excerpt below.
       placeholder: |
         1. Start local Supabase: `npm run supabase:start`
-        2. Start the API server: `deno run --allow-all --env-file=.env main.ts`
+        2. Start the API server: `deno task start` (in packages/fsm-api-ts)
         3. Create an FSM instance: `curl -X POST ...`
         4. Send event `...`
         5. Observe `...`

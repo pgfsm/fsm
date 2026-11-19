@@ -30,34 +30,65 @@ exactly one state at a time.
 
 ## Requirements
 
-| Dependency    | Minimum version | Notes                                              |
-| ------------- | --------------- | -------------------------------------------------- |
-| PostgreSQL    | 15              |                                                    |
-| ltree         | 1.2             | bundled with PostgreSQL                            |
-| pgmq          | 1.4.4           | must be installed separately                       |
-| pg_jsonschema | 0.3.3           | installed automatically into the `fsm_core` schema |
+| Dependency    | Version    | Notes                                                                                                                                                 |
+| ------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL    | 15, 16, 17 | managed Postgres works (RDS, Cloud SQL, Azure, Neon, Supabase)                                                                                        |
+| ltree         | 1.2        | contrib, ships with PostgreSQL                                                                                                                        |
+| pg_cron       | 1.5+       | required: runs the scheduler every 5 seconds. Must be in `shared_preload_libraries`, and fsm_core goes in the database `cron.database_name` names     |
+| pgmq          | 1.4.4+     | required: the extension (Supabase, Neon; elsewhere `pgxn install pgmq`, or its SQL-only files from the release in the extension directory)            |
+| pg_jsonschema | optional   | when installed into `fsm_core`, loading an FSM also warns about JSON that fails the schema; the compiler validates it anyway. The pgTAP tests need it |
 
-## Installation
+## Installation (SPEC-016)
+
+Each release (`fsm_core-v<version>` tag) publishes, as GitHub release assets:
+
+- `fsm_core--<version>.sql`: the full install, for a new database;
+- `fsm_core--<from>--<to>.sql`: the upgrade scripts, one per version;
+- `fsm_core-<version>.zip`: the same SQL as a PGXN extension.
+
+### Full install (any Postgres, including managed)
+
+Run it once, in one transaction, as the database owner (on managed Postgres, the
+provider's admin login), connected to pg_cron's database:
+
+```bash
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f fsm_core--2.3.0.sql
+```
+
+It checks the server first (PostgreSQL 15+, ltree, pg_cron and pgmq available,
+fsm_core not installed yet), creates those extensions when they're missing,
+creates the `fsm_*` roles, and registers the `fsm_schedule_all_pending` pg_cron
+job. Creating extensions and roles needs the database owner with `CREATEROLE`,
+not a superuser; on PostgreSQL 15+ only the owner may create in `public`.
+
+To upgrade, apply each upgrade script in order, from the installed version
+(`SELECT fsm_core.version();`). Each one starts with
+`SELECT fsm_core.require_version('<from>');`, so a script applied to the wrong
+version fails before changing anything. Migration tools (Flyway, Sqitch,
+Supabase migrations) can run them as ordinary migrations.
 
 ### Via PGXN
 
 ```bash
+pgxn install pgmq
 pgxn install fsm_core
 ```
 
-Then in your database:
+Then, in pg_cron's database, as a superuser:
 
 ```sql
-CREATE EXTENSION ltree;
-CREATE EXTENSION pgmq;
-CREATE EXTENSION fsm_core;
+CREATE EXTENSION fsm_core CASCADE; -- creates ltree, pgmq and pg_cron too
+ALTER EXTENSION fsm_core UPDATE;   -- later, to upgrade
 ```
 
-### Manual
+### Building and testing the install
 
-Download the PGXN zip (or build it locally with
-`npm run pgxnBuildAndPublish -- --version <x.y.z>`) and apply the SQL files
-inside in version order using `psql` or your migration tool of choice.
+```bash
+npm run generateBothPgextAndFullsqlscript -- patch       # new version: upgrade + full scripts
+npm run buildBothPgextAndFullsqlscript -- --version <v>  # full-release/full-release-<v>/
+deno task check:version             # fsm_core.version() matches the migrations
+deno task compare:pgext <v> --pg 16    # Docker: plain-SQL install = CREATE EXTENSION
+```
 
 ## Reference
 

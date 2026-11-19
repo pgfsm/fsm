@@ -527,7 +527,12 @@ BEGIN
         RAISE EXCEPTION 'Missing fsm_schema in fsm_core.config_store for % version %', input_fsm_name, input_fsm_version;
     END IF;
 
-    schema_errors := fsm_core.jsonschema_validation_errors(schema_json, json_input::JSON);
+    -- pg_jsonschema is optional (SPEC-016): the full install doesn't create
+    -- it, so the check runs only where it's installed. It only warns either
+    -- way; @pgfsm/compiler validates the JSON before it gets here.
+    IF to_regprocedure('fsm_core.jsonschema_validation_errors(json, json)') IS NOT NULL THEN
+        schema_errors := fsm_core.jsonschema_validation_errors(schema_json, json_input::JSON);
+    END IF;
     IF schema_errors IS NOT NULL AND array_length(schema_errors, 1) > 0 THEN
         RAISE NOTICE 'FSM schema validation errors for % version %: %', input_fsm_name, input_fsm_version, schema_errors;
         -- RAISE EXCEPTION 'json_input failed schema validation for % version %: %', input_fsm_name, input_fsm_version, schema_errors;

@@ -45,28 +45,48 @@ For a quick patch bump without manually editing `package.json`:
 npm run supabase:restart:with:diff:withUpgradeScript:temp
 ```
 
+## Releasing fsm_core (SPEC-016)
+
+1. Generate the version locally:
+   `npm run generateBothPgextAndFullsqlscript -- patch` (or minor / major).
+2. Fix up the new upgrade script by hand (roles and grants; the
+   `SELECT fsm_core.require_version('<from>');` first line is added for you; see
+   [CLAUDE.md](../../CLAUDE.md#install-artifacts-and-versions-spec-016)).
+3. Commit the migration and the generated `all-output/fsm_core--<v>.sql` and
+   `all-output-with-prerequisite-check/fsm_core--<v>.sql`; merge.
+4. Push an `fsm_core-v<version>` tag from main once its CI has passed.
+
+`.github/workflows/fsm-core-release.yml` then runs, each job only if the one
+before it passed:
+
+1. **preflight**: the tag is `fsm_core-v<x.y.z>`; older versions can be released
+   too (their GitHub release isn't marked "Latest");
+2. **build**: `build-both-pgext-and-fullsqlscript.ts --version <v>`;
+3. **compare**: `compare-pgext-and-fullsqlscript.ts <v>` on PostgreSQL 15, 16,
+   17 and 18;
+4. **pgxn**: uploads the zip when `PGXN_USERNAME` and `PGXN_PASSWORD` are set
+   (an upload error stops the release; a version PGXN already has counts as
+   done), and skips the upload when they aren't;
+5. **github-release**: the full script (`fsm_core--<v>.sql`, the plain-SQL
+   install), the zip (which also holds every upgrade script) and `SHA256SUMS`.
+
 ## Building the PGXN package
 
 ```bash
-npm run pgxnBuildAndPublish -- --version 2.0.2
+npm run generateBothPgextAndFullsqlscript -- patch          # create the new version (or minor / major)
+npm run buildBothPgextAndFullsqlscript -- --version 2.3.2   # build it
 ```
 
-`--version` (`-v`) is required and selects the release, independent of
-`package.json`'s own version. The script fills `pgxn-templates/` with values
-from `package.json`, stages the full migration chain up to and including that
-version (timestamp prefix stripped) into `pgxn-dist/`, and produces
-`fsm_core-<version>.zip` ready for PGXN upload. It errors if no migration file
-for that exact version exists in `supabase/migrations/`.
-
-If `full-ext/supabase/migrations/` has a migration file for that same version,
-it overrides (replaces) the `supabase/migrations/` copy of that one file — see
-[CLAUDE.md](../../CLAUDE.md) for why the two directories can diverge.
-
-Pass PGXN credentials to upload directly instead of just staging the zip:
-
-```bash
-npm run pgxnBuildAndPublish -- --version 2.0.2 -u USERNAME -p PASSWORD
-```
+Generating runs `supabase-restart-with-diff.ts <bump>` (the upgrade script; it
+restarts the local Supabase) and
+`supabase-dump-for-full-version.ts --version
+<v>` (the full script,
+`all-output/fsm_core--<v>.sql`). Review the new upgrade script, then build: from
+the full script in `all-output/` and an unbroken upgrade chain in
+`supabase/migrations/`, it clears `pgxn-dist/`, stages those files (timestamp
+prefix stripped), the filled `pgxn-templates/` and the README there, and writes
+`fsm_core-<version>.zip`; it stops if a file is missing. It doesn't upload:
+`fsm-core-release.yml` does, from an `fsm_core-v<version>` tag.
 
 ## Migration naming
 
@@ -75,12 +95,14 @@ Migrations follow the PostgreSQL extension upgrade naming convention.
 ### Pre-migration scripts
 
 Must run before any FSM schema is applied. Applied automatically by Supabase in
-timestamp order.
+timestamp order. Not part of the full install or the PGXN bundle: the plain-SQL
+install replaces them with a prerequisites block (PostgreSQL 15+, ltree,
+pg_cron, pgmq), and the PGXN control file `requires` the extensions.
 
-| Migration file                                                       | What it does                                                                                    | Notes                                               |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `20241218134623_pre_migrations_fsm_core_extension_prerequisites.sql` | Installs `ltree` and `pgmq` extensions                                                          | Uses bare `CREATE EXTENSION IF NOT EXISTS`          |
-| `20241218134632_pre_migrations_fsm_core_extension_init.sql`          | Creates `fsm_core` schema, installs `pg_jsonschema` (pinned `0.3.3`), adds `hello()` smoke-test | `hello()` is a no-op to verify the extension loaded |
+| Migration file                                                       | What it does                                                                                    | Notes                                                           |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `20241218134623_pre_migrations_fsm_core_extension_prerequisites.sql` | Installs `ltree` and `pgmq` extensions                                                          | Supabase only; the full install has its own prerequisites block |
+| `20241218134632_pre_migrations_fsm_core_extension_init.sql`          | Creates `fsm_core` schema, installs `pg_jsonschema` (pinned `0.3.3`), adds `hello()` smoke-test | `hello()` is a no-op to verify the extension loaded             |
 
 ### Supabase-only schema files
 

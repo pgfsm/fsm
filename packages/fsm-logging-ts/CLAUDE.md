@@ -27,8 +27,7 @@ LogTape's `configure()` twice throws.
 
 - **Apps/CLIs configure**: each composition root (API `deno.ts`/`logger.ts`,
   each worker CLI, the compiler CLI) resolves levels from its own validated env
-  and calls `configureLogging()` once. See
-  `apps/fsm-core-ts-hono-deno/CLAUDE.md`,
+  and calls `configureLogging()` once. See `packages/fsm-api-ts/CLAUDE.md`,
   `packages/fsm-sync-worker-ts/CLAUDE.md`, and
   `packages/fsm-async-worker-ts/CLAUDE.md` for the entry points that do this.
 - **Libraries never configure**: they only `getLogger([CATEGORY.x, ...])` — e.g.

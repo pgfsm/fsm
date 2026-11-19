@@ -13,5 +13,5 @@ regexes = [
 ]
 paths = [
   "env.example",
-  "packages/database-src/pgxn-build-and-publish.ts",
+  "packages/database-src/build-both-pgext-and-fullsqlscript.ts",
 ]

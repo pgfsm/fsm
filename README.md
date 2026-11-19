@@ -271,36 +271,17 @@ entry, filters/scores active `fsmlet`s, assigns the winner, and notifies it —
 until the queue is empty or no `fsmlet` has capacity.
 
 The scheduler is a **`pg_cron` job** inside PostgreSQL (SPEC-003), so there's no
-process to deploy. Register it once per database, after migrations apply (a
-generated project runs this as `npm run db:pgcron`):
+process to deploy. Installing fsm_core registers it (SPEC-016: pg_cron is
+required). Check or re-register it through the API with an admin key:
 
 ```bash
-npx @pgfsm/ctl db cron register
-  # -d <db-url>    # overrides DATABASE_URL
-  # -s <schedule>  # pg_cron schedule expression (default "5 seconds")
-npx @pgfsm/ctl db cron status    # check it; exits 5 if not registered
+npx @pgfsm/ctl scheduler status                        # exits 5 if not registered
+npx @pgfsm/ctl scheduler register --schedule '10 seconds'  # default "5 seconds"
 ```
-
-`register` is idempotent — re-run it to change the schedule. It calls
-PostgreSQL's `cron.schedule()` and exits. In Kubernetes it's a Job or init
-container.
 
 `@pgfsm/async-worker-gateway` (the async-operation worker) has **no scheduler**
 — it polls Postgres directly on its own interval instead (see
 [section 3](#3-start-the-workers)).
-
-### Fallback: a standing scheduler process
-
-The pre-`pg_cron` scheduler process is still available as a fallback safety net
-(kube-scheduler equivalent, run once per cluster on the control plane, never on
-a worker node). Running it alongside the `pg_cron` job is safe, just redundant:
-
-```bash
-npx @pgfsm/ctl scheduler run
-  # -d <db-url>             # overrides DATABASE_URL
-  # -p <poll-interval-ms>   # poll interval (default 30000)
-  # -s <stale-threshold-s>  # seconds before a fsmlet is considered dead (default 30)
-```
 
 ---
 

@@ -34,7 +34,7 @@ export class FsmDefinitionCheckError extends Error {
         ...problems.map((p) =>
           `  - ${p.fsm_name}/${p.fsm_version}: ${p.reason} (${p.detail})`
         ),
-        "Load missing definitions with `pgfsmctl fsm load <fsm-folder>` against this database.",
+        "Load missing definitions with `pgfsmctl fsm load <fsm-folder>`, through the API in front of this database.",
         "A drifted definition can't be reloaded under the same version: rebuild the worker from the loaded fsm.json, or give the changed fsm.json a new version and load that.",
         ...(problems.some((p) => p.reason === "unimplemented")
           ? [

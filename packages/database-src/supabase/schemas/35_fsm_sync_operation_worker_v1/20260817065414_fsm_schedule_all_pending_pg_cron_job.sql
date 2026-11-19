@@ -1,38 +1,60 @@
--- Enables pg_cron and registers a periodic job that drains the fsm dispatch
--- queue via fsm_core.schedule_all_pending() on a 5s interval, replacing the
--- standing fsmscheduler TS process's near-instant pg_notify dispatch with a
--- short periodic sweep. See spec-003-pgcron-fsm-scheduler.md (Option C) —
--- verified locally against pg_cron 1.6, which supports the sub-minute
--- ('N seconds') schedule syntax used below.
+-- The fsm_schedule_all_pending pg_cron job: drains the fsm dispatch queue via
+-- fsm_core.schedule_all_pending() every 5 seconds (SPEC-003, Option C; pg_cron
+-- 1.5+ supports the sub-minute 'N seconds' syntax).
 --
--- Interval and stale threshold are changeable without a code deploy, e.g.:
---   SELECT cron.alter_job(
---     (SELECT jobid FROM cron.job WHERE jobname = 'fsm_schedule_all_pending'),
---     schedule => '10 seconds'
---   );
+-- pg_cron is required (SPEC-016). The install SQL and the 2.3.0 migration
+-- register the job by calling fsm_core.register_scheduler_job_v2(); an admin
+-- re-registers or checks it through the API (GET/POST /api/v1/admin/scheduler,
+-- `pgfsmctl scheduler status|register`). Both functions are SECURITY DEFINER
+-- (40_access_control), so the job always belongs to the schema owner and the
+-- API never needs the owner's login.
 --
--- Job run history (successes and failures) is queryable via the built-in
--- cron.job_run_details table; wiring that into ops-facing alerting is out of
--- scope for this migration.
---
--- The extension itself is enabled in
--- supabase/schemas/00_pre_ext/20241218134623_supabase_only_pre_migrations_fsm_core_extension_prerequisites.sql
--- (pg_cron is a hard `requires` of the packaged pgxn extension, alongside
--- ltree/pgmq — see pgxn-templates/extension.control).
+-- Interval and stale threshold are changeable without a deploy:
+--   SELECT fsm_core.register_scheduler_job_v2('10 seconds');
+-- Run history: cron.job_run_details.
 
--- cron.schedule() errors on a duplicate jobname (unique per jobname+username),
--- so unschedule any pre-existing job with this name before re-registering —
--- keeps this file safe to apply more than once.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'fsm_schedule_all_pending') THEN
-    PERFORM cron.unschedule('fsm_schedule_all_pending');
-  END IF;
-END;
+create or replace function fsm_core.scheduler_job_status_v2()
+returns jsonb
+language plpgsql
+as $$
+declare
+  job record;
+begin
+  select jobid, schedule, command, active
+    into job
+    from cron.job
+   where jobname = 'fsm_schedule_all_pending';
+  if not found then
+    return jsonb_build_object('jobname', 'fsm_schedule_all_pending', 'registered', false);
+  end if;
+  return jsonb_build_object(
+    'jobname', 'fsm_schedule_all_pending',
+    'registered', true,
+    'jobid', job.jobid,
+    'schedule', job.schedule,
+    'command', job.command,
+    'active', job.active
+  );
+end;
 $$;
 
-SELECT cron.schedule(
-  'fsm_schedule_all_pending',
-  '5 seconds',
-  $$SELECT fsm_core.schedule_all_pending();$$
-);
+-- Idempotent: cron.schedule() errors on a duplicate jobname, so an existing
+-- job is unscheduled first.
+create or replace function fsm_core.register_scheduler_job_v2(
+  input_schedule text default '5 seconds'
+)
+returns jsonb
+language plpgsql
+as $$
+begin
+  if exists (select 1 from cron.job where jobname = 'fsm_schedule_all_pending') then
+    perform cron.unschedule('fsm_schedule_all_pending');
+  end if;
+  perform cron.schedule(
+    'fsm_schedule_all_pending',
+    input_schedule,
+    'SELECT fsm_core.schedule_all_pending();'
+  );
+  return fsm_core.scheduler_job_status_v2();
+end;
+$$;

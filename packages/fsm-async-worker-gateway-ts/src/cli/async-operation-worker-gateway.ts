@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import { Pool } from "pg";
 import { getLogger } from "@logtape/logtape";
 import { CATEGORY, configureLogging, isTerminal } from "@pgfsm/logging";
-import type { DBDeps } from "@pgfsm/db";
+import { type DBDeps, requireFsmCoreVersion } from "@pgfsm/db";
 import { type SidecarListener, startActivityGatewayServer } from "../index.ts";
 import { CLI_INVOCATION } from "./gateway-invocation.ts";
 import { PACKAGE_VERSION } from "./version.ts";
@@ -279,6 +279,14 @@ if (needsDb) {
   }
   dbPool = new Pool({ connectionString: resolvedDbUrl });
   const deps: DBDeps = { db: dbPool, useSupabase: false };
+  // The database's fsm_core must be one this gateway supports (SPEC-016).
+  try {
+    await requireFsmCoreVersion(dbPool, "async-worker-gateway");
+  } catch (err) {
+    logger.error("{error}", { error: (err as Error).message });
+    await dbPool.end();
+    Deno.exit(1);
+  }
 
   if (pollLoopEnabled) {
     const pollIntervalArg = args["poll-interval-ms"];

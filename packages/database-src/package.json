@@ -29,7 +29,8 @@
     "supabase:restart:with:diff:withUpgradeScript:patch": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:patch && npm run supabase:start:env && npm run supabase:gen:types",
     "supabase:restart:with:diff:withUpgradeScript:minor": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:minor && npm run supabase:start:env && npm run supabase:gen:types",
     "supabase:restart:with:diff:withUpgradeScript:major": "npm run supabase:stop && npm run supabase:docker:volume:clean && npm run supabase:db:diff:schemafolder:sql:withUpgradeScript:major && npm run supabase:start:env && npm run supabase:gen:types",
-    "pgxnBuildAndPublish": "tsx pgxn-build-and-publish.ts"
+    "buildBothPgextAndFullsqlscript": "tsx build-both-pgext-and-fullsqlscript.ts",
+    "generateBothPgextAndFullsqlscript": "tsx generate-both-pgext-and-fullsqlscript.ts"
   },
   "author": "Niraj Kashyap",
   "license": "Apache-2.0",

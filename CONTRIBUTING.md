@@ -76,8 +76,8 @@ clean up worktrees manually.
 
 ```bash
 # API server (port 9999)
-cd apps/fsm-core-ts-hono-deno
-deno run --allow-all --env-file=.env --watch main.ts
+cd packages/fsm-api-ts
+deno task start
 
 # Local database
 cd packages/database-src

@@ -1,0 +1,73 @@
+# The pgfsm admin API (SPEC-016, #689): /api/v1/admin/* (FSM definition load,
+# API keys, the scheduler's pg_cron job) needs an admin key, and the database
+# login must be able to act as fsm_admin. Keep its Service internal (no
+# Ingress): `pgfsmctl` reaches it with `kubectl port-forward svc/pgfsm-api-admin`.
+#
+# Secret (create before applying; see ../README.md):
+#   pgfsm-api-admin-db   Opaque   DATABASE_URL, logging in as
+#                                 fsm_authenticator_admin (see ../README.md)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgfsm-api-admin
+  labels: {
+    app.kubernetes.io/name: pgfsm-api-admin,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: pgfsm-api-admin }
+  template:
+    metadata:
+      labels: {
+        app.kubernetes.io/name: pgfsm-api-admin,
+        app.kubernetes.io/part-of: pgfsm,
+      }
+    spec:
+      # SIGTERM: stop accepting, finish in-flight requests, close the pool.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: ghcr.io/pgfsm/api:0.1.0 # published on each release (api-release.yml)
+          args: ["--port=9999", "--enable-admin-api"]
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: pgfsm-api-admin-db, key: DATABASE_URL }
+          ports:
+            - { name: http, containerPort: 9999 }
+          readinessProbe:
+            httpGet: { path: /api/v1/, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /api/v1/, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgfsm-api-admin
+  labels: {
+    app.kubernetes.io/name: pgfsm-api-admin,
+    app.kubernetes.io/part-of: pgfsm,
+  }
+spec:
+  selector: { app.kubernetes.io/name: pgfsm-api-admin }
+  ports:
+    - { name: http, port: 80, targetPort: http }

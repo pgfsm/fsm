@@ -3,20 +3,20 @@ import { CtlError, ExitCode, notFound } from "./exit.ts";
 
 // Named targets (SPEC-009 §5), dbosctl-style:
 //
-//   <config dir>/config.yaml       profiles: url and db_url, never secrets
-//   <config dir>/credentials.json  per-profile api_key / db_password, mode 0600
+//   <config dir>/config.yaml       profiles: the API url, never secrets
+//   <config dir>/credentials.json  per-profile api_key, mode 0600
+//
+// pgfsmctl talks only to the API (SPEC-016, #690). Profiles written before
+// that may still carry db_url, tier and db_password: they're ignored, and
+// dropped the next time the profile is written.
 //
 // The config dir is $PGFSM_CONFIG_DIR, else the OS config directory:
 // $XDG_CONFIG_HOME (or ~/.config) on Linux, ~/Library/Application Support on
 // macOS, %APPDATA% on Windows, each with a `pgfsm` folder.
 
 export type Profile = {
-  /** pgfsm REST API base URL (SPEC-009 API tier; used from #473). */
+  /** pgfsm REST API base URL, including its path prefix. */
   url?: string;
-  /** Postgres URL for DB-direct commands, without its password. */
-  db_url?: string;
-  /** `api` refuses every DB connection; `auto` (default) is SPEC-009 §5 (#663). */
-  tier?: string;
 };
 
 export type ConfigFile = {
@@ -24,7 +24,7 @@ export type ConfigFile = {
   profiles: Record<string, Profile>;
 };
 
-export type ProfileSecrets = { api_key?: string; db_password?: string };
+export type ProfileSecrets = { api_key?: string };
 export type Credentials = { profiles: Record<string, ProfileSecrets> };
 
 export function configDir(): string {

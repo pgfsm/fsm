@@ -482,7 +482,7 @@ cd ..
 deno run --allow-all packages/fsm-compiler-ts/src/cli/index.ts -c validate-sync-operation -f apps/fsm-core-example/fsm
 
 # 4. Load into DB once validation passes
-deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts fsm load apps/fsm-core-example/fsm --db-url postgresql://user:pass@localhost:5432/db
+deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts fsm load apps/fsm-core-example/fsm --url http://localhost:9999/api/v1 --api-key "$PGFSM_ADMIN_KEY"
 ```
 
 ---

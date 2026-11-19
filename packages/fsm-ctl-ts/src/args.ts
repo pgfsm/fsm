@@ -3,7 +3,7 @@ import { usageError } from "./exit.ts";
 import { type OutputFormat, parseOutputFormat } from "./output.ts";
 
 /** Flags most commands share; each command opts into the ones it uses. */
-export type CommonFlag = "db" | "api" | "output";
+export type CommonFlag = "api" | "output";
 
 type Spec = {
   string?: string[];
@@ -18,7 +18,6 @@ export type ParsedArgs = {
   flags: Record<string, string | boolean | undefined>;
   help: boolean;
   output: OutputFormat;
-  dbUrl?: string;
   url?: string;
   apiKey?: string;
   profile?: string;
@@ -26,8 +25,8 @@ export type ParsedArgs = {
 
 /**
  * parseArgs plus what every pgfsmctl command needs: `-h/--help`, the common
- * flags it opts into (`db`: -d/--db-url, --profile; `api`: --url, --api-key,
- * --profile; `output`: -o/--output),
+ * flags it opts into (`api`: --url, --api-key, --profile; `output`:
+ * -o/--output),
  * and unknown options rejected as a usage error (exit 2) instead of
  * silently ignored. `help` is the command's help text, printed with the error.
  */
@@ -39,12 +38,7 @@ export function parseCommandArgs(
   const common = spec.common ?? [];
   const strings = [...(spec.string ?? [])];
   const alias: Record<string, string> = { h: "help", ...(spec.alias ?? {}) };
-  if (common.includes("db")) {
-    strings.push("db-url");
-    alias.d = "db-url";
-  }
-  if (common.includes("api")) strings.push("url", "api-key");
-  if (common.includes("db") || common.includes("api")) strings.push("profile");
+  if (common.includes("api")) strings.push("url", "api-key", "profile");
   if (common.includes("output")) {
     strings.push("output");
     alias.o = "output";
@@ -81,7 +75,6 @@ export function parseCommandArgs(
     output: common.includes("output")
       ? parseOutputFormat(args.output as string | undefined)
       : "table",
-    dbUrl: args["db-url"] as string | undefined,
     url: args.url as string | undefined,
     apiKey: args["api-key"] as string | undefined,
     profile: args.profile as string | undefined,

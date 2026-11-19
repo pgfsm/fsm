@@ -114,19 +114,21 @@ import type {
 
 | Before (`npx -p @pgfsm/sync-worker -- …`) | Now (`npx @pgfsm/ctl …`)                |
 | ----------------------------------------- | --------------------------------------- |
-| `pgcron [-s <cron>]`                      | `db cron register [-s <cron>]`          |
+| `pgcron [-s <cron>]`                      | (installing fsm_core registers the job) |
 | `fsmctl -c create -n <fsm> -V <v>`        | `instance create -n <fsm> -V <v>`       |
 | `fsmctl -c resume\|send\|stop -q <id> …`  | `instance resume\|send\|stop -q <id> …` |
-| `fsmscheduler [-p <ms>] [-s <secs>]`      | `scheduler run [-p <ms>] [-s <secs>]`   |
+| `fsmscheduler [-p <ms>] [-s <secs>]`      | (pg_cron is required, SPEC-016)         |
 
-`runFsmScheduler`, `FsmSchedulerOptions`, `scheduleNextPending` and
-`SCHEDULER_NOTIFY_CHANNEL` moved to `@pgfsm/ctl` too.
+pgfsmctl talks to the pgfsm API (`@pgfsm/api`), not to the database (SPEC-016).
 
 ## Prerequisites
 
-- **A Postgres database** with the pgfsm schema applied, the scheduler job
-  registered once (`npx @pgfsm/ctl db cron register`), and the project's FSM
-  definitions loaded (`npx @pgfsm/ctl fsm load fsm`, on every deploy)
+- **A Postgres database** with fsm_core installed (the `fsm_core--<version>.sql`
+  release asset or the PGXN extension, which also registers the pg_cron
+  scheduler job), and the project's FSM definitions loaded
+  (`npx @pgfsm/ctl fsm load fsm` through the API, on every deploy). The fsmlet
+  refuses to start on an fsm_core it doesn't support, naming the upgrade scripts
+  to apply.
 
 ## License
 

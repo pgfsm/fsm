@@ -4,17 +4,22 @@ import {
   assertMatch,
   assertStringIncludes,
 } from "@std/assert";
+// Test-only: pgfsmctl itself imports neither (SPEC-016, cli.test.ts checks).
+// @ts-types="@types/pg"
+import { Pool } from "pg";
+import { createApiKey } from "@pgfsm/db";
 
-// The API tier (SPEC-009 §4–5, #473): `db key create`, `key …`, and
-// `fsm load`'s choice between the REST API and DB-direct. Argument tests need
-// nothing; the rest start the real API (apps/fsm-core-ts-hono-deno) as a
-// subprocess against DATABASE_URL (the schema owner, e.g. local Supabase) and
-// are skipped without it. Assumes the process cwd is the repo root.
+// pgfsmctl against the real API (SPEC-009 §4–5, SPEC-016): `key …`,
+// `fsm …`, `instance …` and `scheduler …`. Argument tests need nothing; the
+// rest start the API (packages/fsm-api-ts) as a subprocess against
+// DATABASE_URL (the schema owner, e.g. local Supabase) and are skipped without
+// it. Keys are minted straight in the database here, as `pgfsm-api key
+// bootstrap` would. Assumes the process cwd is the repo root.
 const ROOT = Deno.cwd();
 const CLI = `${ROOT}/packages/fsm-ctl-ts/src/cli/pgfsmctl.ts`;
 const CONFIG = `${ROOT}/packages/fsm-ctl-ts/deno.json`;
-const API_CLI = `${ROOT}/apps/fsm-core-ts-hono-deno/src/cli/index.ts`;
-const API_CONFIG = `${ROOT}/apps/fsm-core-ts-hono-deno/deno.json`;
+const API_CLI = `${ROOT}/packages/fsm-api-ts/src/cli/index.ts`;
+const API_CONFIG = `${ROOT}/packages/fsm-api-ts/deno.json`;
 const DATABASE_URL = Deno.env.get("DATABASE_URL");
 
 const WORK_DIR = await Deno.makeTempDir({ prefix: "pgfsmctl-api-" });
@@ -59,15 +64,13 @@ async function pgfsmctl(
 
 const CLOSED = "http://127.0.0.1:1/api/v1";
 
-Deno.test("key and db key: argument errors exit 2 before any network", async () => {
+Deno.test("key: argument errors exit 2 before any network", async () => {
   for (
     const args of [
       ["key", "create", "--role", "admin"], // no --name
       ["key", "create", "--name", "x", "--role", "root"],
       ["key", "revoke"],
-      ["db", "key", "create", "--role", "admin"],
-      ["db", "key", "create", "--name", "x"],
-      ["db", "key", "delete"],
+      ["scheduler", "register", "--schedule", ""],
     ]
   ) {
     const { code, out } = await pgfsmctl(args, {
@@ -78,14 +81,14 @@ Deno.test("key and db key: argument errors exit 2 before any network", async () 
   }
   const noTarget = await pgfsmctl(["key", "list"]);
   assertEquals(noTarget.code, 2);
-  assertStringIncludes(noTarget.out, "No API");
+  assertStringIncludes(noTarget.out, "no API configured");
 
   const noKey = await pgfsmctl(["key", "list"], { PGFSM_URL: CLOSED });
   assertEquals(noKey.code, 2);
   assertStringIncludes(noKey.out, "no API key");
 });
 
-Deno.test("an unreachable API exits 1 and names the URL; fsm load picks the API tier", async () => {
+Deno.test("an unreachable API exits 1 and names the URL; a DATABASE_URL is never used", async () => {
   const list = await pgfsmctl([
     "key",
     "list",
@@ -109,11 +112,8 @@ Deno.test("an unreachable API exits 1 and names the URL; fsm load picks the API 
     DATABASE_URL: "postgresql://u@127.0.0.1:1/db",
   });
   assertEquals(load.code, 1);
-  assertStringIncludes(
-    load.out,
-    "via the API",
-    "the API wins when both resolve",
-  );
+  assertStringIncludes(load.out, "via the API");
+  assertStringIncludes(load.out, "Can't reach the pgfsm API");
 });
 
 // --- Against a real API + database ---
@@ -142,13 +142,7 @@ async function startApi(): Promise<{ url: string; stop: () => Promise<void> }> {
       "--enable-admin-api",
     ],
     cwd: WORK_DIR,
-    env: {
-      SUPABASE_URL: "http://127.0.0.1:54321",
-      SUPABASE_SERVICE_ROLE_KEY: "test",
-      SUPABASE_ANON_KEY: "test",
-      DB_TYPE: "postgres",
-      NO_COLOR: "1",
-    },
+    env: { DB_TYPE: "postgres", NO_COLOR: "1" },
     stdout: "null",
     stderr: "null",
   }).spawn();
@@ -186,9 +180,21 @@ const db = {
   sanitizeOps: false,
 };
 
+/** An API key named `<prefix><role>`, minted in the database. */
+async function mint(prefix: string, role: "admin" | "operator") {
+  const pool = new Pool({ connectionString: DATABASE_URL, max: 1 });
+  try {
+    return (await createApiKey(
+      { db: pool, useSupabase: false },
+      `${prefix}${role}`,
+      role === "admin" ? "fsm_admin" : "fsm_operator",
+    )).key;
+  } finally {
+    await pool.end();
+  }
+}
+
 async function cleanup(prefix: string) {
-  // @ts-types="@types/pg"
-  const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: DATABASE_URL, max: 1 });
   try {
     await pool.query("DELETE FROM fsm_core.api_keys WHERE name LIKE $1", [
@@ -260,37 +266,21 @@ const machine = (id: string) =>
 
 Deno.test({
   name:
-    "db key create mints an admin key; key create/list/revoke use it through the API; bad keys exit 3",
+    "key create/list/revoke through the API with an admin key; bad keys exit 3",
   ...db,
   fn: async () => {
     const prefix = `t473_${crypto.randomUUID().slice(0, 8)}_`;
     const api = await startApi();
     try {
-      const minted = await pgfsmctl([
-        "db",
-        "key",
-        "create",
-        "--name",
-        `${prefix}admin`,
-        "--role",
-        "admin",
-        "-d",
-        DATABASE_URL!,
-        "-o",
-        "json",
-      ]);
-      assertEquals(minted.code, 0, minted.out);
-      const admin = JSON.parse(minted.stdout);
-      assertMatch(admin.key, /^pgfsm_admin_[0-9a-f]{64}$/);
-      assertStringIncludes(minted.stderr, "shown only this once");
-      const asAdmin = { PGFSM_URL: api.url, PGFSM_API_KEY: admin.key };
+      const adminKey = await mint(prefix, "admin");
+      const asAdmin = { PGFSM_URL: api.url, PGFSM_API_KEY: adminKey };
 
       const listed = await pgfsmctl(["key", "list", "-o", "json"], asAdmin);
       assertEquals(listed.code, 0, listed.out);
       const row = JSON.parse(listed.stdout).find((k: { name: string }) =>
         k.name === `${prefix}admin`
       );
-      assertEquals(row.prefix, admin.prefix, "key list shows it by prefix");
+      assert(adminKey.startsWith(row.prefix), "key list shows it by prefix");
 
       const op = await pgfsmctl(
         [
@@ -308,6 +298,7 @@ Deno.test({
       assertEquals(op.code, 0, op.out);
       const opKey = JSON.parse(op.stdout).key;
       assertMatch(opKey, /^pgfsm_op_/);
+      assertStringIncludes(op.stderr, "shown only this once");
 
       const dup = await pgfsmctl(
         ["key", "create", "--name", `${prefix}op`, "--role", "operator"],
@@ -346,77 +337,35 @@ Deno.test({
 
 Deno.test({
   name:
-    "fsm load: API with PGFSM_URL + key, DB-direct with only DATABASE_URL, API when both, DB-direct with --db-url",
+    "fsm load through the API; again is unchanged; a bad key exits 3; a DATABASE_URL changes nothing",
   ...db,
   fn: async () => {
     const prefix = `t473_${crypto.randomUUID().slice(0, 8)}_`;
     const api = await startApi();
     try {
-      const { stdout } = await pgfsmctl([
-        "db",
-        "key",
-        "create",
-        "--name",
-        `${prefix}admin`,
-        "--role",
-        "admin",
-        "-d",
-        DATABASE_URL!,
-        "-o",
-        "json",
-      ]);
-      const key = JSON.parse(stdout).key;
-      const folder = async (name: string) => {
-        const dir = `${WORK_DIR}/${name}`;
-        await Deno.mkdir(`${dir}/${prefix}${name}/v01`, { recursive: true });
-        await Deno.writeTextFile(
-          `${dir}/${prefix}${name}/v01/fsm.json`,
-          machine(`${prefix}${name}`),
-        );
-        return dir;
+      const key = await mint(prefix, "admin");
+      const dir = `${WORK_DIR}/load-${prefix}`;
+      await Deno.mkdir(`${dir}/${prefix}a/v01`, { recursive: true });
+      await Deno.writeTextFile(
+        `${dir}/${prefix}a/v01/fsm.json`,
+        machine(`${prefix}a`),
+      );
+      // A project's DATABASE_URL around (./.env) must not matter.
+      const apiEnv = {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: key,
+        DATABASE_URL: "postgresql://u@127.0.0.1:1/db",
       };
-      const apiEnv = { PGFSM_URL: api.url, PGFSM_API_KEY: key };
-      const dbEnv = { DATABASE_URL: DATABASE_URL! };
 
-      const viaApi = await pgfsmctl([
-        "fsm",
-        "load",
-        await folder("a"),
-        "-o",
-        "ids",
-      ], apiEnv);
-      assertEquals(viaApi.code, 0, viaApi.out);
-      assertStringIncludes(viaApi.stderr, "via the API");
-      assertEquals(viaApi.stdout.trim(), `${prefix}a/v01`);
+      const loaded = await pgfsmctl(["fsm", "load", dir, "-o", "ids"], apiEnv);
+      assertEquals(loaded.code, 0, loaded.out);
+      assertStringIncludes(loaded.stderr, "via the API");
+      assertEquals(loaded.stdout.trim(), `${prefix}a/v01`);
 
-      const direct = await pgfsmctl(["fsm", "load", await folder("b")], dbEnv);
-      assertEquals(direct.code, 0, direct.out);
-      assertStringIncludes(direct.stderr, "DB-direct");
-
-      const both = await pgfsmctl(
-        ["fsm", "load", await folder("c")],
-        { ...apiEnv, ...dbEnv },
-      );
-      assertEquals(both.code, 0, both.out);
-      assertStringIncludes(both.stderr, "via the API");
-
-      const forced = await pgfsmctl(
-        ["fsm", "load", await folder("d"), "-d", DATABASE_URL!],
-        apiEnv,
-      );
-      assertEquals(forced.code, 0, forced.out);
-      assertStringIncludes(forced.stderr, "DB-direct");
-
-      const again = await pgfsmctl([
-        "fsm",
-        "load",
-        `${WORK_DIR}/a`,
-        "-o",
-        "json",
-      ], apiEnv);
+      const again = await pgfsmctl(["fsm", "load", dir, "-o", "json"], apiEnv);
       assertEquals(JSON.parse(again.stdout)[0].status, "unchanged");
 
-      const badKey = await pgfsmctl(["fsm", "load", `${WORK_DIR}/a`], {
+      const badKey = await pgfsmctl(["fsm", "load", dir], {
         PGFSM_URL: api.url,
         PGFSM_API_KEY: "pgfsm_admin_nope",
       });
@@ -431,30 +380,63 @@ Deno.test({
 
 Deno.test({
   name:
-    "instance create/resume/send/stop over the API with an operator key, same output as DB-direct; 4 for an unknown instance (#660)",
+    "scheduler status|register through the API with an admin key; an operator key exits 3",
+  ...db,
+  fn: async () => {
+    const prefix = `t690_${crypto.randomUUID().slice(0, 8)}_`;
+    const api = await startApi();
+    const asAdmin = { PGFSM_URL: api.url, PGFSM_API_KEY: "" };
+    try {
+      asAdmin.PGFSM_API_KEY = await mint(prefix, "admin");
+      const status = await pgfsmctl(
+        ["scheduler", "status", "-o", "json"],
+        asAdmin,
+      );
+      assertEquals(status.code, 0, status.out);
+      const job = JSON.parse(status.stdout);
+      assertEquals(job.jobname, "fsm_schedule_all_pending");
+      assertEquals(job.registered, true);
+
+      const changed = await pgfsmctl(
+        ["scheduler", "register", "--schedule", "9 seconds", "-o", "json"],
+        asAdmin,
+      );
+      assertEquals(changed.code, 0, changed.out);
+      assertEquals(JSON.parse(changed.stdout).schedule, "9 seconds");
+
+      const bad = await pgfsmctl(
+        ["scheduler", "register", "--schedule", "bogus"],
+        asAdmin,
+      );
+      assertEquals(bad.code, 1, bad.out);
+      assertStringIncludes(bad.stderr, "invalid schedule");
+
+      const asOperator = await pgfsmctl(["scheduler", "status"], {
+        PGFSM_URL: api.url,
+        PGFSM_API_KEY: await mint(prefix, "operator"),
+      });
+      assertEquals(asOperator.code, 3, asOperator.out);
+    } finally {
+      // Shared database: put the default schedule back.
+      if (asAdmin.PGFSM_API_KEY) {
+        await pgfsmctl(["scheduler", "register"], asAdmin);
+      }
+      await api.stop();
+      await cleanup(prefix);
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "instance create/resume/send/stop over the API with an operator key; 4 for an unknown instance (#660)",
   ...db,
   fn: async () => {
     const prefix = `t660_${crypto.randomUUID().slice(0, 8)}_`;
     const api = await startApi();
     try {
-      const mint = async (role: string) =>
-        JSON.parse(
-          (await pgfsmctl([
-            "db",
-            "key",
-            "create",
-            "--name",
-            `${prefix}${role}`,
-            "--role",
-            role,
-            "-d",
-            DATABASE_URL!,
-            "-o",
-            "json",
-          ])).stdout,
-        ).key as string;
-      const admin = await mint("admin");
-      const operator = await mint("operator");
+      const admin = await mint(prefix, "admin");
+      const operator = await mint(prefix, "operator");
       const asOperator = { PGFSM_URL: api.url, PGFSM_API_KEY: operator };
 
       // A definition to create instances of.
@@ -540,19 +522,12 @@ Deno.test({
       );
       assertEquals(asAdmin.code, 0, asAdmin.out);
 
-      // --db-url forces DB-direct; with only DATABASE_URL it's DB-direct.
-      const forced = await pgfsmctl(
-        ["instance", "send", "-q", id, "-e", "NEXT", "-d", DATABASE_URL!],
-        asOperator,
-      );
-      assertEquals(forced.code, 0, forced.out);
-      assertStringIncludes(forced.stderr, "instance send: DB-direct");
-      const direct = await pgfsmctl(
+      // With only a DATABASE_URL there's no API: exit 2.
+      const noApi = await pgfsmctl(
         ["instance", "send", "-q", id, "-e", "NEXT"],
         { DATABASE_URL: DATABASE_URL! },
       );
-      assertEquals(direct.code, 0, direct.out);
-      assertStringIncludes(direct.stderr, "DB-direct");
+      assertEquals(noApi.code, 2, noApi.out);
 
       const badKey = await pgfsmctl(
         ["instance", "send", "-q", id, "-e", "NEXT"],
@@ -568,34 +543,17 @@ Deno.test({
 
 Deno.test({
   name:
-    "fsm list/get and instance list/get, over the API with an operator key and DB-direct (#661)",
+    "fsm list/get and instance list/get, over the API with an operator key (#661)",
   ...db,
   fn: async () => {
     const prefix = `t661_${crypto.randomUUID().slice(0, 8)}_`;
     const api = await startApi();
     try {
-      const mint = async (role: string) =>
-        JSON.parse(
-          (await pgfsmctl([
-            "db",
-            "key",
-            "create",
-            "--name",
-            `${prefix}${role}`,
-            "--role",
-            role,
-            "-d",
-            DATABASE_URL!,
-            "-o",
-            "json",
-          ])).stdout,
-        ).key as string;
-      const admin = await mint("admin");
+      const admin = await mint(prefix, "admin");
       const asOperator = {
         PGFSM_URL: api.url,
-        PGFSM_API_KEY: await mint("operator"),
+        PGFSM_API_KEY: await mint(prefix, "operator"),
       };
-      const dbEnv = { DATABASE_URL: DATABASE_URL! };
 
       const fsmName = `${prefix}light`;
       const dir = `${WORK_DIR}/t661-${prefix}`;
@@ -612,7 +570,7 @@ Deno.test({
       });
       assertEquals(load.code, 0, load.out);
 
-      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+      for (const [tier, env] of [["API", asOperator]] as const) {
         // fsm list / get
         const listed = await pgfsmctl(
           ["fsm", "list", "-n", fsmName, "-o", "ids"],
@@ -636,10 +594,7 @@ Deno.test({
         );
         const missing = await pgfsmctl(["fsm", "get", `${fsmName}/v09`], env);
         assertEquals(missing.code, 4, `${tier}: ${missing.out}`);
-        assertStringIncludes(
-          missing.stderr,
-          tier === "API" ? "via the API" : "DB-direct",
-        );
+        assertStringIncludes(missing.stderr, "via the API");
       }
 
       // Instances: two of v01, one of v02.
@@ -653,7 +608,7 @@ Deno.test({
         ids.push(created.stdout.trim());
       }
 
-      for (const [tier, env] of [["API", asOperator], ["DB", dbEnv]] as const) {
+      for (const [tier, env] of [["API", asOperator]] as const) {
         const all = await pgfsmctl(
           ["instance", "list", "-n", fsmName, "-o", "ids"],
           env,

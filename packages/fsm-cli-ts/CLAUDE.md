@@ -55,16 +55,17 @@ it), like `fsm-compiler-ts`'s.
   `--force` skips the "version exists" refusal, whose job is catching a typo'd
   name/version or a clashing design.
 - **Generated `package.json` pins its tools, never depends on them.** `fsm:add`
-  pins this CLI (`toolVersion`); `db:load`/`db:pgcron`/`db:key` pin `@pgfsm/ctl`
-  and `gateway` pins `@pgfsm/async-worker-gateway` (SPEC-005), both to the
-  versions in `src/tool-versions.ts`, i.e. the sibling `deno.json` versions this
-  build was made from. The gateway is config, not a project directory: it has no
-  user code. `test/debug-only.test.ts` fails when `test-apps/debug-only`'s
-  committed `package.json` pins other versions than this checkout's
-  cli/ctl/gateway `deno.json` (#491): after a bump, `create` a scratch
-  `debug-only` with `deno task pgfsm create` and copy its `package.json` over.
-  `create` also writes `.env.example` (SPEC-009 §7: `DATABASE_URL` set for local
-  Supabase, `PGFSM_DB_URL`/`PGFSM_URL`/`PGFSM_API_KEY` commented out); the repo
+  pins this CLI (`toolVersion`); `api`/`api:key` pin `@pgfsm/api` (SPEC-016),
+  `db:load` pins `@pgfsm/ctl` and `gateway` pins `@pgfsm/async-worker-gateway`
+  (SPEC-005), all to the versions in `src/tool-versions.ts`, i.e. the sibling
+  `deno.json` versions this build was made from. The gateway is config, not a
+  project directory: it has no user code. `test/debug-only.test.ts` fails when
+  `test-apps/debug-only`'s committed `package.json` pins other versions than
+  this checkout's cli/api/ctl/gateway `deno.json` (#491): after a bump, `create`
+  a scratch `debug-only` with `deno task pgfsm create` and copy its
+  `package.json` over. `create` also writes `.env.example` (SPEC-009 §7,
+  SPEC-016: `DATABASE_URL` for the API and workers, `PGFSM_URL` for pgfsmctl,
+  `PGFSM_API_KEY` commented out until `npm run api:key` prints one); the repo
   root `.gitignore` excludes `.env*` but re-includes `.env.example`, so
   `test-apps/debug-only`'s copy is committed.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`

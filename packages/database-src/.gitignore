@@ -1,3 +1,4 @@
 *.zip
 pgxn-dist/
 scripts/stress/results/
+full-release/
