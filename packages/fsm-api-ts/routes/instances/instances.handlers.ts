@@ -29,10 +29,11 @@ const UNEXPECTED = { error: "Unexpected error" };
 // Every route runs inside the API key's role (SPEC-009 §3): `db` is that
 // role's transaction, set by the auth middleware.
 
-// @ts-expect-error Hono jsr-vs-npm dual-package + zod-openapi deep response
-// union trips TS2589 on the handler assignment. Suppressed here; the body
-// stays fully typed and this directive self-clears once the Hono packages are
-// aligned to one registry.
+// Some Hono/zod-openapi resolutions (an older deno.lock) hit TS2589 "type
+// instantiation is excessively deep" on this assignment; CI's fresh resolution
+// doesn't. @ts-ignore, not @ts-expect-error: it must pass in both. The body
+// stays fully typed.
+// @ts-ignore TS2589 under some dependency resolutions (see above)
 export const list: AppRouteHandler<ListRoute> = async (c) => {
   const deps = { db: c.get("db"), useSupabase: false };
   const q = c.req.valid("query");
