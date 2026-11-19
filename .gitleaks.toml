@@ -13,5 +13,7 @@ regexes = [
 ]
 paths = [
   "env.example",
+  # Removed since; still in history, which gitleaks scans: its PGXN upload
+  # had a `curl -u "$PGXN_USERNAME:$PGXN_PASSWORD"` line (no secret).
   "packages/database-src/pgxn-build-and-publish.ts",
 ]

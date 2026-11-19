@@ -8,7 +8,7 @@ import {
 } from "../project.ts";
 import type { WriteReport } from "../report.ts";
 import type { ResolvedSource } from "../source.ts";
-import { CTL_VERSION, GATEWAY_VERSION } from "../tool-versions.ts";
+import { API_VERSION, CTL_VERSION, GATEWAY_VERSION } from "../tool-versions.ts";
 import { addFsm } from "./add.ts";
 
 export class CreateError extends Error {}
@@ -75,21 +75,21 @@ async function writeOwnFile(
 function packageJson(name: string, toolVersion: string): string {
   // Scripts only -- no dependencies. Pinning the CLI version in the npx
   // call keeps add on the version that created the project without
-  // installing it (SPEC-004 "Version pinning without a dependency"). The
-  // gateway and pg_cron registration are pinned the same way (SPEC-005):
-  // neither has user code, so they're config here, not project directories.
+  // installing it (SPEC-004 "Version pinning without a dependency"). The API,
+  // pgfsmctl and the gateway are pinned the same way (SPEC-005, SPEC-016):
+  // none has user code, so they're config here, not project directories.
   // The gateway package ships two bins, hence its `-p ... --` form.
   const cli = `npx -y @pgfsm/cli@${toolVersion}`;
+  const api = `npx -y @pgfsm/api@${API_VERSION}`;
   return JSON.stringify(
     {
       name,
       private: true,
       scripts: {
         "fsm:add": `${cli} add`,
+        "api": `${api} --enable-admin-api`,
+        "api:key": `${api} key bootstrap --name local-admin`,
         "db:load": `npx -y @pgfsm/ctl@${CTL_VERSION} fsm load fsm`,
-        "db:pgcron": `npx -y @pgfsm/ctl@${CTL_VERSION} db cron register`,
-        "db:key":
-          `npx -y @pgfsm/ctl@${CTL_VERSION} db key create --name local-admin --role admin`,
         "gateway":
           `npx -y -p @pgfsm/async-worker-gateway@${GATEWAY_VERSION} -- async-operation-worker-gateway --ensure-queue-on-register`,
       },
@@ -120,19 +120,17 @@ function rootDenoJson(): string {
 // .env in the directory they run in; .env itself is gitignored.
 const ENV_EXAMPLE =
   `# Copy to .env (gitignored). Each tool reads .env from the directory it runs
-# in: here for npm run db:* (pgfsmctl) and npm run gateway; the sync worker
+# in: here for npm run api, api:key, db:load and gateway; the sync worker
 # runs in sync-worker/typescript/, so copy it there too (or export the vars).
 
-# Local development needs only the database. pgfsmctl prefers PGFSM_DB_URL
-# over DATABASE_URL; the workers read DATABASE_URL.
+# The database, with fsm_core installed: the API, the gateway and the workers
+# read it. Locally its owner works for all of them.
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
-# PGFSM_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
-# The pgfsm REST API (optional). With both set, \`npm run db:load\` loads through
-# the API (an admin key, on an API started with --enable-admin-api) instead
-# of straight into the database. The URL includes the API's path prefix.
-# \`npm run db:key\` prints an admin key, once.
-# PGFSM_URL=http://localhost:9999/api/v1
+# The pgfsm API (\`npm run api\`), which pgfsmctl (\`npm run db:load\`) talks
+# to; the URL includes its path prefix. \`npm run api:key\` prints the first
+# admin key, once: put it here.
+PGFSM_URL=http://localhost:9999/api/v1
 # PGFSM_API_KEY=pgfsm_admin_...
 `;
 
@@ -179,14 +177,16 @@ holds a different definition than the one it was generated from.
 
 ## Run the stack
 
+The database needs fsm_core installed (the \`fsm_core--<version>.sql\` release
+asset, or the PGXN extension), which also registers its pg_cron scheduler job.
 Copy \`.env.example\` to \`.env\` (it's gitignored), here and in
-\`sync-worker/typescript/\`. Every command below reads \`DATABASE_URL\` from the
-environment or from a \`.env\` in the directory it runs in; locally that's all
-you need. Start them in this order, one terminal each:
+\`sync-worker/typescript/\`. Every command below reads it from the directory
+it runs in. Start them in this order, one terminal each:
 
 \`\`\`bash
-npm run db:load      # every deploy: loads fsm/ into the database (before the sync worker)
-npm run db:pgcron    # once per database: registers the pg_cron scheduler job
+npm run api          # the pgfsm API, with its admin routes (local)
+npm run api:key      # once per database: prints the first admin key; put it in .env as PGFSM_API_KEY
+npm run db:load      # every deploy: loads fsm/ through the API (before the sync worker)
 npm run gateway      # Activity Gateway; async workers connect to it
 cd sync-worker/typescript && deno task dev
 cd async-worker/typescript && deno task start
@@ -195,13 +195,13 @@ cd async-worker/rust && cargo run --release -- start
 cd async-worker/go && go run . start
 \`\`\`
 
-## With the pgfsm REST API
+## API keys
 
-\`npm run db:key\` creates an admin API key straight in the database (once:
-it's printed only then; only its hash is stored). Put it and the API's URL
-in \`.env\` as \`PGFSM_API_KEY\` and \`PGFSM_URL\`: \`npm run db:load\` then loads
-through the API instead of straight into the database. More keys, and
-revoking them, go through the API: \`npx @pgfsm/ctl key create|list|revoke\`.
+\`npm run api:key\` creates the first admin API key, as the database owner
+(once: it's printed only then; only its hash is stored, and it refuses while
+an admin key exists). More keys, and revoking them, go through the API:
+\`npx @pgfsm/ctl key create|list|revoke\`. The scheduler's pg_cron job:
+\`npx @pgfsm/ctl scheduler status\`.
 `;
 }
 

@@ -2,7 +2,6 @@ import { getLogger } from "@logtape/logtape";
 import { parseCommandArgs } from "../args.ts";
 import { completionCommand } from "../commands/completion.ts";
 import { configCommand } from "../commands/config.ts";
-import { dbCommand } from "../commands/db.ts";
 import { fsmCommand } from "../commands/fsm.ts";
 import { instanceCommand } from "../commands/instance.ts";
 import { keyCommand } from "../commands/key.ts";
@@ -20,39 +19,29 @@ const logger = getLogger([CTL_CATEGORY]);
 // [usage, noun (for its tier), description]
 const COMMAND_LINES: [string, string, string][] = [
   [
-    "db cron register | unregister | status",
-    "db",
-    "The fsm_schedule_all_pending pg_cron job (SPEC-003), the primary\ndispatch scheduler. A deploy step: run `register` after migrations.",
-  ],
-  [
-    "db key create --name <n> --role <r>",
-    "db",
-    "Mint an API key straight in the database: the bootstrap admin key.",
-  ],
-  [
     "fsm load | list | get",
     "fsm",
-    "Load <folder>/<fsmName>/<version>/fsm.json definitions (SPEC-006, a\ndeploy step before sync workers start; admin key), or list loaded ones\nand read one (operator key). API if one is configured.",
+    "Load <folder>/<fsmName>/<version>/fsm.json definitions (SPEC-006, a\ndeploy step before sync workers start; admin key), or list loaded ones\nand read one (operator key).",
   ],
   [
     "instance create | resume | send | stop | list | get",
     "instance",
-    "Create an FSM instance, re-enqueue one, send it an event, stop its\nworker, list instances or read one. API (operator key) if one is\nconfigured.",
+    "Create an FSM instance, re-enqueue one, send it an event, stop its\nworker, list instances or read one (operator key).",
   ],
   [
     "key create | list | revoke",
     "key",
-    "API keys, through the API (admin key, --enable-admin-api).",
+    "API keys (admin key). The first admin key comes from\n`npx @pgfsm/api key bootstrap`.",
   ],
   [
-    "scheduler run",
+    "scheduler status | register",
     "scheduler",
-    "The standing fsmscheduler process: a fallback only; pg_cron is the\nprimary scheduler.",
+    "The scheduler's pg_cron job, which installing fsm_core registers:\ncheck it, or re-register it (admin key).",
   ],
   [
     "config set | use | list | show",
     "config",
-    "Named targets (profiles): database and API URLs, secrets kept apart.",
+    "Named targets (profiles): API URLs, with keys kept apart.",
   ],
   [
     "completion bash | zsh | fish",
@@ -79,14 +68,12 @@ ${COMMANDS_HELP}
 
   Run \`${CLI_INVOCATION} <noun> --help\` for a command's options.
 
-TARGETS
-  Database: --db-url, else --profile / PGFSM_PROFILE, else PGFSM_DB_URL or
-  DATABASE_URL (./.env is read), else the current profile (\`config use\`).
-  API: --url + --api-key, else the explicit profile's url/api_key, else
-  PGFSM_URL + PGFSM_API_KEY, else the current profile's. The URL includes the
-  API's path prefix, e.g. http://localhost:9999/api/v1.
-  API-only: a profile with tier: api (\`config set <p> --tier api\`) or
-  PGFSM_TIER=api refuses every database connection, --db-url included (exit 2).
+TARGET
+  pgfsmctl talks only to the pgfsm API (@pgfsm/api), never to Postgres
+  (SPEC-016). --url + --api-key, else the explicit profile's url and key
+  (--profile / PGFSM_PROFILE), else PGFSM_URL + PGFSM_API_KEY (./.env is
+  read), else the current profile's (\`config use\`). The URL includes the
+  API's path prefix, e.g. http://localhost:9999/api/v1. With none, exit 2.
 
 OUTPUT
   -o table (default) | json | ids. Data goes to stdout, logs to stderr.
@@ -118,7 +105,6 @@ function versionCommand(argv: string[]): Promise<void> {
 }
 
 const COMMANDS: Record<string, (argv: string[]) => Promise<void>> = {
-  db: dbCommand,
   fsm: fsmCommand,
   instance: instanceCommand,
   key: keyCommand,
@@ -141,10 +127,7 @@ if (noun === "-h" || noun === "--help") {
   Deno.exit(ExitCode.OK);
 }
 
-// `scheduler run` handles Ctrl-C itself (graceful stop, then force-exit 130).
-if (noun !== "scheduler") {
-  Deno.addSignalListener("SIGINT", () => Deno.exit(ExitCode.INTERRUPTED));
-}
+Deno.addSignalListener("SIGINT", () => Deno.exit(ExitCode.INTERRUPTED));
 
 try {
   if (noun === undefined) throw usageError("Missing command.", HELP);

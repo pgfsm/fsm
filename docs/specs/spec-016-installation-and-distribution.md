@@ -2,7 +2,7 @@
 
 | Field      | Value                                                                                                                                                                                                                              |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status     | Draft                                                                                                                                                                                                                              |
+| Status     | Accepted                                                                                                                                                                                                                           |
 | Date       | 2026-11-03                                                                                                                                                                                                                         |
 | Authors    | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                           |
 | Issue      | #686                                                                                                                                                                                                                               |
@@ -62,23 +62,29 @@ built directly on the same install.
    `fsm_core--a--b.sql`, with roles and grants added by hand
    (`database-src/CLAUDE.md`).
 7. **Supabase-specific pieces exist:** `supabase_only_*` files in `00_pre_ext/`
-   and `05_ext_module_init/`; pgmq is created as an extension where available,
-   otherwise installed from the vendored SQL source.
+   and `05_ext_module_init/`; the migrations create pgmq as an extension.
+   _(Corrected in implementation: the "vendored SQL source",
+   `00_pre_ext/…_PGMQ_source.sql`, is entirely commented out. pgmq is a required
+   extension, like pg_cron: pgfsm doesn't ship pgmq's code.)_
 8. **Supported Postgres: 15 and later** (15, 16, 17), tested in CI on each.
    Decided in this design; the repo has only run 15 so far.
 9. **The installer is the provider's admin login, never a true superuser:**
    `rds_superuser`, `cloudsqlsuperuser`, Supabase's `postgres`, or a self-hosted
    login with `CREATEROLE`. Installing needs `CREATE ROLE` (the roles are
-   cluster-wide), `CREATE EXTENSION ltree` (trusted since PG 13) and pg_cron.
+   cluster-wide), `CREATE EXTENSION ltree` (trusted since PG 13), pg_cron and
+   pgmq. _(Found in implementation: in practice the installer must **own the
+   database**, since PostgreSQL 15+ grants `CREATE` on `public` only to its
+   owner, and must install into pg_cron's `cron.database_name` database, the
+   only one where pg_cron can be created.)_
 
 **What pgfsm needs from Postgres:**
 
-| Dependency    | Use                                                                                                                                   | Managed availability                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| pgmq          | **Vendored as SQL** (`00_pre_ext/…_PGMQ_source.sql`)                                                                                  | No extension needed                                               |
-| ltree         | State paths in the macrostep functions                                                                                                | Standard contrib: everywhere                                      |
-| pg_cron       | The scheduler (SPEC-003)                                                                                                              | RDS, Cloud SQL, Azure, Supabase, Neon; `shared_preload_libraries` |
-| pg_jsonschema | Created at install, but **used only by pgTAP tests**; no runtime function calls it (definitions are validated with AJV in TypeScript) | Supabase-specific; most providers don't have it                   |
+| Dependency    | Use                                                                                                                                                                                                                       | Managed availability                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| pgmq          | **Required extension** (1.4.4+), checked and created by the install _(changed in implementation from "vendored SQL")_                                                                                                     | Supabase, Neon; elsewhere `pgxn install pgmq` or its SQL-only release files |
+| ltree         | State paths in the macrostep functions                                                                                                                                                                                    | Standard contrib: everywhere                                                |
+| pg_cron       | The scheduler (SPEC-003)                                                                                                                                                                                                  | RDS, Cloud SQL, Azure, Supabase, Neon; `shared_preload_libraries`           |
+| pg_jsonschema | Created at install by Supabase's pre-migration. _(Corrected in implementation: `load_fsm_from_json_v2` called it for a warning-only check; from 2.3.0 it runs only where the extension exists. The pgTAP tests need it.)_ | Supabase-specific; most providers don't have it                             |
 
 ## Options considered
 
@@ -205,7 +211,10 @@ Removed: `db cron …`, `db key create`, `scheduler run`, `--db-url`, profiles'
   - `pgfsmctl` needs a running API; with it down, the fallback is `psql`;
   - deployers must have pg_cron (`shared_preload_libraries` when self-hosting);
   - **the main engineering risk:** the full install and the upgrade chain must
-    stay identical, enforced by a CI check that diffs the two schemas;
+    stay identical, enforced by a CI check that diffs the two schemas _(amended
+    in implementation: the release workflow compares the plain-SQL install with
+    `CREATE EXTENSION` on every release, not CI on every PR; see
+    Implementation)_;
   - the Supabase-specific pgmq handling must work on both kinds of database.
 - **Rollout order:**
   1. The SQL artifact (version function, guards, pg_cron registration,
@@ -229,25 +238,31 @@ Removed: `db cron …`, `db key create`, `scheduler run`, `--db-url`, profiles'
 ### The database (A1 + A2)
 
 - [ ] `fsm_core--<v>.sql` installs on clean Postgres **15, 16 and 17** with only
-      `ltree` and pg_cron available, as a **non-superuser** login with
-      `CREATEROLE` that can create extensions; CI covers all three.
+      `ltree`, pg_cron and pgmq available, as a **non-superuser** login with
+      `CREATEROLE` that can create extensions; CI covers all three. _(Amended in
+      implementation: the release workflow covers 15, 16, 17 and 18.)_
 - [ ] Applying every `fsm_core--a--b.sql` in order from the first released
-      version reaches the same version as the full install.
+      version reaches the same version as the full install. _(Amended in
+      implementation: not tested automatically yet.)_
 - [ ] CI dumps the schema (functions, tables, roles, grants, the cron job) from
-      both routes and **fails on any difference**.
+      both routes and **fails on any difference**. _(Amended in implementation:
+      the release workflow does, comparing the plain-SQL install with
+      `CREATE EXTENSION`, and releases nothing on a difference.)_
 - [ ] `fsm_core.version()` returns the installed version; `CREATE EXTENSION`
       records it too.
 - [ ] Each upgrade script checks the previous version and fails with
       `fsm_core <x> required, found <y>` when out of order.
 - [ ] Without pg_cron the install fails clearly; with it the install registers
       `fsm_schedule_all_pending`, and re-running doesn't duplicate it.
-- [ ] pgmq: an existing extension (Supabase) is used; otherwise the vendored SQL
-      is installed. Both are tested.
+- [ ] pgmq is a required extension: without it the install fails clearly, naming
+      it; with it the install creates it. _(Amended in implementation: no
+      vendored pgmq SQL.)_
 - [ ] `pg_jsonschema` is required only by the pgTAP tests.
 - [ ] The PGXN bundle installs with `CREATE EXTENSION fsm_core` and upgrades
       with `ALTER EXTENSION fsm_core UPDATE`, giving the same database as A1.
 - [ ] A release workflow publishes the full install, the upgrade scripts and the
-      PGXN bundle from a `fsm_core-v<version>` tag.
+      PGXN bundle from a `fsm_core-v<version>` tag. _(Amended in implementation:
+      the upgrade scripts ship inside the PGXN zip, not as separate assets.)_
 - [ ] The API, fsmlet and gateway check `fsm_core.version()` at startup and fail
       naming the found version, the required one and the script to apply.
 
@@ -296,4 +311,77 @@ Removed: `db cron …`, `db key create`, `scheduler run`, `--db-url`, profiles'
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Implementation issues: #688 (the SQL artifact), #689 (`@pgfsm/api`), #690
+(`pgfsmctl` pure API), in one PR; #691 (the local compose file) follows.
+
+**#688, the SQL artifact.**
+
+- `fsm_core` 2.3.0 (migration `fsm_core--2.2.2--2.3.0.sql`):
+  `fsm_core.version()` and `require_version()`; `scheduler_job_status_v2()` and
+  `register_scheduler_job_v2()` (SECURITY DEFINER, for `fsm_admin`), and the
+  migration registers the pg_cron job; `load_fsm_from_json_v2` calls
+  pg_jsonschema only where it's installed; the PUBLIC-revoke loop no longer
+  skips `fsm_core`'s own extension members.
+- **Generating a version** (locally, against the repo's Supabase):
+  `generate-both-pgext-and-fullsqlscript.ts <patch|minor|major>` runs
+  `supabase-restart-with-diff.ts` (sets `version()`, writes the upgrade script
+  with `supabase db diff`, restarts Postgres only unless
+  `--enable_all_supabase_service`) and then
+  `supabase-dump-for-full-version.ts --version <v>`. The dump script writes the
+  version's **full script** `all-output/fsm_core--<v>.sql` from two
+  `supabase db dump`s (`--schema fsm_core`, then `--role-only`, keeping only the
+  `fsm_*` roles), completed with the pgmq grants, the pg_cron registration and a
+  version check; and next to it the **plain-SQL install**
+  `all-output-with-prerequisite-check/fsm_core--<v>.sql`: a prerequisites block
+  (PostgreSQL 15+, fsm_core absent, ltree, pg_cron and pgmq available, naming
+  any that's missing, then created; `scripts/prerequisites-sql.ts`) followed by
+  the full script. Both are committed. This replaced the first implementation's
+  `build-install-sql.ts`, which assembled the install from the migration chain.
+- **Building** (`build-both-pgext-and-fullsqlscript.ts --version <v>`, formerly
+  `pgxn-build-and-publish.ts`; a pure build): the PGXN bundle (the full script,
+  every upgrade script, `requires = 'ltree, pgmq, pg_cron'`, `META.json`),
+  zipped as `fsm_core-<v>.zip`; it stops if the full script or the plain-SQL
+  install is missing or the upgrade chain has a gap, and collects the zip and
+  the plain-SQL install in `full-release/full-release-<v>/` (gitignored).
+- **Comparing** (`compare-pgext-and-fullsqlscript.ts <v> [--pg <n>]`): in Docker
+  (`install-test/Dockerfile`: `postgres:<major>` + PGDG pg_cron + pgmq 1.4.4's
+  extension files from its source release), the plain-SQL install as a
+  non-superuser that owns the database and `CREATE EXTENSION` from the zip must
+  be at `<v>` and give the same catalog (`scripts/compare-fsm-core-catalog.ts`:
+  functions, columns, relations, constraints, indexes, types, grants, roles, the
+  cron job). The first implementation's `test-install.ts` (also the upgrade path
+  and the refusal on stock Postgres) and CI's `install` job were removed; the
+  upgrade path isn't tested automatically yet.
+- `scripts/check-fsm-core-version.ts` (`deno task check:version`; its prek hook
+  is disabled for now): `version()` is the newest migration's target, and every
+  upgrade after 2.3.0 starts with `require_version('<from>')`, which
+  `supabase-restart-with-diff.ts` adds after diffing.
+- `@pgfsm/db`'s `requireFsmCoreVersion`, called at startup by the API, the
+  fsmlet and the gateway.
+- `fsm-core-release.yml`, from an `fsm_core-v<version>` tag, each job only if
+  the one before passed: preflight (the tag is `fsm_core-v<x.y.z>`; older
+  versions can be released) → build (`build-both-pgext-and-fullsqlscript.ts`
+  from the committed files) → compare on PostgreSQL 15, 16, 17 and 18 → PGXN
+  upload when its secrets are set (a failed upload stops the release; a version
+  PGXN already has counts as done) → the GitHub release: the plain-SQL install
+  as `fsm_core--<v>.sql`, the zip (with every upgrade script) and `SHA256SUMS`,
+  marked "Latest" only for the highest `fsm_core-v*` tag. A failed compare
+  deletes the untested build artifact (kept a day otherwise).
+
+**#689, `@pgfsm/api`.** `apps/fsm-core-ts-hono-deno` moved to
+`packages/fsm-api-ts` as `@pgfsm/api` 0.1.0, bin `pgfsm-api` (`[serve]` and
+`key bootstrap`), `GET/POST /admin/scheduler`, `SUPABASE_*` env only for
+`DB_TYPE=supabase*`, a Node serve path (`@hono/node-server`) for the npm bin,
+`deploy/docker/api.Dockerfile`, `deploy/k8s` (`pgfsm-api` and the internal
+`pgfsm-api-admin`, pinned by a test) and `api-release.yml`.
+
+**#690, `pgfsmctl` pure API.** Removed `db cron`, `db key create`,
+`scheduler run`, `--db-url`, profiles' `db_url`/`db_password`/`tier`,
+`PGFSM_DB_URL`/`PGFSM_TIER`, `tier.ts`/`db-target.ts`, and the `pg`/`@pgfsm/db`
+dependencies; added `scheduler status|register`. `runFsmScheduler` moved to
+`apps/fsm-core-example/test-support/` (only the journey tests use it). Generated
+projects get `api` and `api:key` scripts instead of `db:pgcron` and `db:key`.
+
+Release order: `@pgfsm/db` first (the gateway, sync worker and API use
+`requireFsmCoreVersion`), then fsm_core 2.3.0, `@pgfsm/api`, the gateway and
+sync worker, `@pgfsm/ctl` and `@pgfsm/cli`.

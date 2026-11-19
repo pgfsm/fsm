@@ -1,29 +1,18 @@
 import { getLogger } from "@logtape/logtape";
-import {
-  type FsmDefinition,
-  FsmDefinitionLoadError,
-  type FsmDefinitionSummary,
-  type FsmJsonRow,
-  getFsmDefinition,
-  listFsmDefinitions,
-  type LoadFsmDefinitionResult,
-  loadFsmDefinitions,
-} from "@pgfsm/db";
-import type { Json } from "@pgfsm/db/database.types";
 import { apiRequest, query } from "../api-client.ts";
-import { type ApiTarget, resolveApiTarget } from "../api-target.ts";
+import { type ApiTarget, requireApiTarget } from "../api-target.ts";
 import { parseCommandArgs, verbOf } from "../args.ts";
-import { resolveDbUrl, withPool } from "../db-target.ts";
-import {
-  CtlError,
-  ExitCode,
-  exitCodeFor,
-  notFound,
-  usageError,
-} from "../exit.ts";
+import { CtlError, ExitCode, notFound, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
 import { CTL_CATEGORY } from "../logger.ts";
 import { type OutputFormat, printList, printRecord } from "../output.ts";
+import type {
+  FsmDefinition,
+  FsmDefinitionSummary,
+  FsmJsonRow,
+  Json,
+  LoadFsmDefinitionResult,
+} from "../types.ts";
 
 const logger = getLogger([CTL_CATEGORY, "fsm"]);
 
@@ -49,29 +38,21 @@ VERBS
 OPTIONS
   -n, --fsm-name <name>   list: only this FSM
   -V, --fsm-version <v>   list: only this version
-      --url <url>       API base URL incl. its path prefix, e.g. http://localhost:9999/api/v1
-      --api-key <key>   Admin key (load) or operator key (list, get)
-  -d, --db-url <url>    Postgres URL: forces DB-direct (break-glass)
-      --profile <name>  Use this profile's url/api_key, or its db_url
-  -o, --output <fmt>    table (default), json or ids (<fsmName>/<version>)
+      --url <url>         API base URL incl. its path prefix, e.g. http://localhost:9999/api/v1
+      --api-key <key>     Admin key (load) or operator key (list, get)
+      --profile <name>    Use this profile's url and api_key
+  -o, --output <fmt>      table (default), json or ids (<fsmName>/<version>)
+  -h, --help              Show this help
 
-  list and get: API when one resolves (GET /definitions, GET
-  /definitions/<name>/versions/<version>, operator key), else DB-direct, as
-  below.
-  -h, --help            Show this help
-
-TIER
-  API when an API target resolves (--url, else the profile's url, else
-  PGFSM_URL, each with its key): POST /admin/definitions with an admin key, on an
-  API running with --enable-admin-api. Otherwise DB-direct (PGFSM_DB_URL or
-  DATABASE_URL, or the profile's db_url), so a project's local .env with only
-  DATABASE_URL works with no API running. --db-url always means DB-direct.
-  The tier used is logged. Pinned to the API (a profile's tier: api, or
-  PGFSM_TIER=api), it never falls back: with no API target, or with --db-url,
-  it exits 2 (#663).
+API
+  load: POST /admin/definitions with an admin key, on an API running with
+  --enable-admin-api. list and get: GET /definitions and GET
+  /definitions/<name>/versions/<version> with an operator key. The API comes
+  from --url (else the profile's url, else PGFSM_URL), each with its key;
+  with none configured, exit 2.
 
 DESCRIPTION
-  A deploy step (SPEC-006): run it after applying migrations and before
+  A deploy step (SPEC-006): run it after installing fsm_core and before
   starting sync workers, which refuse to start while a definition they serve
   is missing or differs from the one they were compiled from. In a pgfsm
   project: \`npm run db:load\` (loads ./fsm).
@@ -126,7 +107,7 @@ export async function fsmCommand(argv: string[]): Promise<void> {
     {
       string: ["fsm-name", "fsm-version"],
       alias: { n: "fsm-name", V: "fsm-version" },
-      common: ["db", "api", "output"],
+      common: ["api", "output"],
     },
     HELP,
   );
@@ -156,20 +137,10 @@ export async function fsmCommand(argv: string[]): Promise<void> {
     );
   }
 
-  // --db-url forces DB-direct; otherwise the API wins whenever it resolves.
-  const api = args.dbUrl ? undefined : await resolveApiTarget(args);
-  let results: LoadFsmDefinitionResult[];
-  if (api) {
-    logger.info(`fsm load: via the API at ${api.url} (${api.source})`);
-    ({ data: results } = await apiRequest<{ data: LoadFsmDefinitionResult[] }>(
-      api,
-      "POST",
-      "/admin/definitions",
-      { definitions },
-    ));
-  } else {
-    results = await loadDbDirect(args, definitions);
-  }
+  const api = await requireApiTarget(args, "fsm load");
+  const { data: results } = await apiRequest<
+    { data: LoadFsmDefinitionResult[] }
+  >(api, "POST", "/admin/definitions", { definitions });
 
   const loaded = results.filter((r) => r.status === "loaded").length;
   logger.info("fsm load: {loaded} loaded, {unchanged} unchanged.", {
@@ -190,43 +161,16 @@ export async function fsmCommand(argv: string[]): Promise<void> {
   );
 }
 
-async function loadDbDirect(
-  args: { dbUrl?: string; profile?: string },
-  definitions: FsmDefinition[],
-): Promise<LoadFsmDefinitionResult[]> {
-  const dbUrl = await resolveDbUrl(args);
-  logger.info("fsm load: DB-direct");
-  try {
-    return await withPool(
-      dbUrl,
-      (deps) => loadFsmDefinitions(deps, definitions),
-    );
-  } catch (err) {
-    if (!(err instanceof FsmDefinitionLoadError)) throw err;
-    throw new CtlError(
-      exitCodeFor(err) === ExitCode.AUTH ? ExitCode.AUTH : ExitCode.GENERAL,
-      ["fsm load: nothing loaded.", ...err.problems.map((p) => `  - ${p}`)]
-        .join("\n"),
-      undefined,
-      { cause: err },
-    );
-  }
-}
-
 const definitionId = (r: { fsm_name: string; fsm_version: string }) =>
   `${r.fsm_name}/${r.fsm_version}`;
 
-/**
- * `fsm list` / `fsm get` (#661): API when an API target resolves (operator
- * key), else DB-direct; --db-url forces DB-direct.
- */
+/** `fsm list` / `fsm get` (#661), with an operator key. */
 async function readDefinitions(
   verb: "list" | "get",
   args: {
     positionals: string[];
     flags: Record<string, unknown>;
     output: OutputFormat;
-    dbUrl?: string;
     url?: string;
     apiKey?: string;
     profile?: string;
@@ -247,22 +191,14 @@ async function readDefinitions(
     target = { fsmName: m[1], fsmVersion: m[2] };
   }
 
-  const api = args.dbUrl ? undefined : await resolveApiTarget(args);
-  if (api) {
-    logger.info(`fsm ${verb}: via the API at ${api.url} (${api.source})`);
-  } else logger.info(`fsm ${verb}: DB-direct`);
+  const api = await requireApiTarget(args, `fsm ${verb}`);
 
   if (verb === "list") {
-    const rows = api
-      ? (await apiRequest<{ data: FsmDefinitionSummary[] }>(
-        api,
-        "GET",
-        `/definitions${query({ fsm_name: fsmName, fsm_version: fsmVersion })}`,
-      )).data
-      : await withPool(
-        await resolveDbUrl(args),
-        (deps) => listFsmDefinitions(deps, { fsmName, fsmVersion }),
-      );
+    const rows = (await apiRequest<{ data: FsmDefinitionSummary[] }>(
+      api,
+      "GET",
+      `/definitions${query({ fsm_name: fsmName, fsm_version: fsmVersion })}`,
+    )).data;
     return printList(rows, args.output, {
       columns: ["fsm_name", "fsm_version", "fsm_type", "fsm_json_sha256"],
       id: definitionId,
@@ -270,10 +206,7 @@ async function readDefinitions(
   }
 
   const { fsmName: n, fsmVersion: v } = target!;
-  const row = api ? await getViaApi(api, n, v) : await withPool(
-    await resolveDbUrl(args),
-    (deps) => getFsmDefinition(deps, n, v),
-  );
+  const row = await getViaApi(api, n, v);
   if (!row) throw notFound(`FSM ${n}/${v} isn't loaded`);
   printRecord(
     {

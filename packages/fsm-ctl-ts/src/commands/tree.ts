@@ -1,31 +1,22 @@
 // The command tree, shared by `--help` (tiers) and `completion`. Keep in step
 // with the command modules: cli.test.ts checks every noun here has --help.
 
-export type Tier = "API" | "API or DB-direct" | "DB-direct" | "local";
+export type Tier = "API" | "local";
 
 export type NounSpec = {
   tier: Tier;
-  /** Verbs, or sub-nouns mapping to their verbs (`db cron register`). */
+  /** Verbs, or sub-nouns mapping to their verbs. */
   verbs: string[] | Record<string, string[]>;
   flags: string[];
 };
 
-const DB_FLAGS = ["--db-url", "--profile", "--output", "--help"];
 const API_FLAGS = ["--url", "--api-key", "--profile", "--output", "--help"];
 
 export const COMMAND_TREE: Record<string, NounSpec> = {
-  db: {
-    tier: "DB-direct",
-    verbs: {
-      cron: ["register", "unregister", "status"],
-      key: ["create"],
-    },
-    flags: ["--schedule", "--name", "--role", ...DB_FLAGS],
-  },
   fsm: {
-    tier: "API or DB-direct",
+    tier: "API",
     verbs: ["load", "list", "get"],
-    flags: ["--fsm-name", "--fsm-version", "--url", "--api-key", ...DB_FLAGS],
+    flags: ["--fsm-name", "--fsm-version", ...API_FLAGS],
   },
   key: {
     tier: "API",
@@ -33,7 +24,7 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
     flags: ["--name", "--role", ...API_FLAGS],
   },
   instance: {
-    tier: "API or DB-direct",
+    tier: "API",
     verbs: ["create", "resume", "send", "stop", "list", "get"],
     flags: [
       "--queue-name",
@@ -44,30 +35,19 @@ export const COMMAND_TREE: Record<string, NounSpec> = {
       "--event-data",
       "--status",
       "--limit",
-      "--url",
-      "--api-key",
-      ...DB_FLAGS,
+      ...API_FLAGS,
     ],
   },
   scheduler: {
-    tier: "DB-direct",
-    verbs: ["run"],
-    flags: [
-      "--poll-interval",
-      "--stale-threshold",
-      "--db-url",
-      "--profile",
-      "--help",
-    ],
+    tier: "API",
+    verbs: ["status", "register"],
+    flags: ["--schedule", ...API_FLAGS],
   },
   config: {
     tier: "local",
     verbs: ["set", "use", "list", "show"],
     flags: [
-      "--db-url",
       "--url",
-      "--tier",
-      "--db-password-stdin",
       "--api-key-stdin",
       "--use",
       "--output",

@@ -8,12 +8,10 @@ import {
   writeConfig,
   writeCredentials,
 } from "../config.ts";
-import { urlPassword } from "../db-target.ts";
 import { notFound, usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
 import { CTL_CATEGORY } from "../logger.ts";
 import { printList, printRecord } from "../output.ts";
-import { parseTier, TIERS } from "../tier.ts";
 
 const logger = getLogger([CTL_CATEGORY, "config"]);
 
@@ -23,8 +21,7 @@ const HELP =
   `pgfsmctl config — named targets (profiles), local only (SPEC-009 §5)
 
 USAGE
-  ${CLI_INVOCATION} config set <name> [--db-url <url>] [--url <url>] [--tier api|auto]
-                                 [--db-password-stdin | --api-key-stdin] [--use]
+  ${CLI_INVOCATION} config set <name> [--url <url>] [--api-key-stdin] [--use]
   ${CLI_INVOCATION} config use <name>
   ${CLI_INVOCATION} config list [-o table|json|ids]
   ${CLI_INVOCATION} config show [<name>] [-o table|json|ids]
@@ -33,45 +30,32 @@ VERBS
   set    Create or update a profile. Only the given fields change.
   use    Make a profile the current one.
   list   Every profile; * marks the current one.
-  show   One profile (default: the current one). Secrets are never shown,
-         only whether they're set.
+  show   One profile (default: the current one). The API key is never shown,
+         only whether it's set.
 
 OPTIONS
-      --db-url <url>          Postgres URL for DB-direct commands, WITHOUT a password
-      --url <url>             pgfsm REST API URL (API-tier commands, #473)
-      --tier <tier>           api: refuse every database connection, --db-url
-                              included (#663); auto (default): the API when one
-                              is configured, else DB-direct
-      --db-password-stdin     Read the database password from stdin
+      --url <url>             pgfsm API base URL incl. its path prefix, e.g.
+                              http://localhost:9999/api/v1
       --api-key-stdin         Read the API key from stdin
       --use                   With set: also make it the current profile
   -o, --output <fmt>          table (default), json or ids
   -h, --help                  Show this help
 
 FILES
-  config.yaml       profiles (url, db_url) and the current one; no secrets
-  credentials.json  passwords and API keys, mode 0600
+  config.yaml       profiles (url) and the current one; no secrets
+  credentials.json  API keys, mode 0600
   In \$PGFSM_CONFIG_DIR, else the OS config dir + /pgfsm (currently:
   ${configPath().replace(/\/config\.yaml$/, "")}).
 
 SELECTING A PROFILE
-  --profile <name> or \$PGFSM_PROFILE beat \$PGFSM_DB_URL/\$DATABASE_URL (and
-  ./.env); the current profile (\`config use\`) is used only when neither those
-  nor --db-url is set.
-
-API-ONLY
-  A profile with tier: api, or \$PGFSM_TIER=api, pins pgfsmctl to the API:
-  any command that would connect to Postgres exits 2 instead, whatever
-  database URL is around (./.env included). An explicitly chosen profile's
-  tier wins, then \$PGFSM_TIER, then the current profile's.
+  --profile <name> or \$PGFSM_PROFILE beat \$PGFSM_URL/\$PGFSM_API_KEY (and
+  ./.env); the current profile (\`config use\`) is used only when neither
+  those nor --url is set.
 
 EXAMPLES
-  echo "\$PGPASSWORD" | ${CLI_INVOCATION} config set prod \\
-      --db-url postgresql://fsm_admin_login@db.internal:5432/postgres --db-password-stdin
-  ${CLI_INVOCATION} config use prod
-  ${CLI_INVOCATION} db cron status --profile staging
-  echo "\$PGFSM_API_KEY" | ${CLI_INVOCATION} config set ops \\
-      --url https://pgfsm.internal/api/v1 --tier api --api-key-stdin --use
+  echo "\$PGFSM_API_KEY" | ${CLI_INVOCATION} config set prod \\
+      --url https://pgfsm.internal/api/v1 --api-key-stdin --use
+  ${CLI_INVOCATION} instance list --profile staging
 `;
 
 async function readStdin(what: string): Promise<string> {
@@ -89,8 +73,8 @@ async function readStdin(what: string): Promise<string> {
 
 export async function configCommand(argv: string[]): Promise<void> {
   const args = parseCommandArgs(argv, {
-    string: ["db-url", "url", "tier"],
-    boolean: ["db-password-stdin", "api-key-stdin", "use"],
+    string: ["url"],
+    boolean: ["api-key-stdin", "use"],
     common: ["output"],
   }, HELP);
   if (args.help) return console.log(HELP);
@@ -102,61 +86,37 @@ export async function configCommand(argv: string[]): Promise<void> {
   switch (verb) {
     case "set": {
       if (!name) throw usageError("config set needs a profile name", HELP);
-      const dbUrl = args.flags["db-url"] as string | undefined;
       const url = args.flags.url as string | undefined;
-      const tierFlag = args.flags.tier as string | undefined;
-      const tier = tierFlag === undefined
-        ? undefined
-        : parseTier(tierFlag, "--tier");
-      const dbPasswordStdin = args.flags["db-password-stdin"] === true;
       const apiKeyStdin = args.flags["api-key-stdin"] === true;
-      if (dbPasswordStdin && apiKeyStdin) {
+      if (!url && !apiKeyStdin) {
         throw usageError(
-          "--db-password-stdin and --api-key-stdin both read stdin; set them in two calls",
+          "config set needs --url, --api-key-stdin, or both",
           HELP,
         );
       }
-      if (!dbUrl && !url && !tier && !dbPasswordStdin && !apiKeyStdin) {
-        throw usageError(
-          "config set needs at least one of --db-url, --url, --tier, --db-password-stdin, --api-key-stdin",
-          HELP,
-        );
-      }
-      if (dbUrl !== undefined) {
+      if (url !== undefined) {
         try {
-          new URL(dbUrl);
+          new URL(url);
         } catch {
-          throw usageError(`--db-url is not a URL: ${dbUrl}`, HELP);
-        }
-        if (urlPassword(dbUrl)) {
-          // A password on the command line lands in shell history, and the
-          // profile file must never hold one.
-          throw usageError(
-            "--db-url must not contain a password: pass it with --db-password-stdin",
-            HELP,
-          );
+          throw usageError(`--url is not a URL: ${url}`, HELP);
         }
       }
 
+      // Only the fields pgfsmctl still uses: db_url and tier from before
+      // SPEC-016 are dropped here.
+      const old = config.profiles[name] ?? {};
       const profile: Profile = {
-        ...config.profiles[name],
-        ...(dbUrl !== undefined ? { db_url: dbUrl } : {}),
+        ...(old.url !== undefined ? { url: old.url } : {}),
         ...(url !== undefined ? { url } : {}),
-        ...(tier !== undefined ? { tier } : {}),
       };
       config.profiles[name] = profile;
       if (args.flags.use === true || !config.current) config.current = name;
       await writeConfig(config);
 
-      if (dbPasswordStdin || apiKeyStdin) {
-        const secret = await readStdin(
-          dbPasswordStdin ? "--db-password-stdin" : "--api-key-stdin",
-        );
+      if (apiKeyStdin) {
+        const secret = await readStdin("--api-key-stdin");
         const creds = await readCredentials();
-        creds.profiles[name] = {
-          ...creds.profiles[name],
-          ...(dbPasswordStdin ? { db_password: secret } : { api_key: secret }),
-        };
+        creds.profiles[name] = { api_key: secret };
         await writeCredentials(creds);
       }
       logger.info("Profile {name} saved to {path}", {
@@ -186,15 +146,7 @@ export async function configCommand(argv: string[]): Promise<void> {
         Object.keys(config.profiles).sort().map(describe),
       );
       return printList(rows, args.output, {
-        columns: [
-          "current",
-          "name",
-          "tier",
-          "db_url",
-          "url",
-          "db_password",
-          "api_key",
-        ],
+        columns: ["current", "name", "url", "api_key"],
         id: (r) => r.name,
       });
     }
@@ -224,10 +176,7 @@ async function describe(name: string) {
   return {
     current: config.current === name ? "*" : "",
     name,
-    tier: p.tier ?? TIERS[1],
-    db_url: p.db_url ?? "",
     url: p.url ?? "",
-    db_password: s.db_password ? "set" : "",
     api_key: s.api_key ? "set" : "",
   };
 }

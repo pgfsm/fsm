@@ -101,7 +101,7 @@ jobs:
       - name: Type-check (API and every published Deno package)
         run: >-
           deno check
-          apps/fsm-core-ts-hono-deno/deno.ts apps/fsm-core-ts-hono-deno/src/cli/index.ts apps/fsm-core-ts-hono-deno/test
+          packages/fsm-api-ts/deno.ts packages/fsm-api-ts/mod.ts packages/fsm-api-ts/src/cli/index.ts packages/fsm-api-ts/test
           packages/fsm-core-db-ts/src/index.ts packages/fsm-core-db-ts/test
           packages/fsm-ctl-ts/src/index.ts packages/fsm-ctl-ts/src/cli/pgfsmctl.ts packages/fsm-ctl-ts/test
           packages/fsm-sync-worker-ts/src/index.ts packages/fsm-sync-worker-ts/test
@@ -119,7 +119,7 @@ jobs:
       # The fsm-core-db-ts and fsm-sync-worker-ts test/ dirs are included
       # because their DB tests skip themselves without DATABASE_URL.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test apps/fsm-core-ts-hono-deno/stoker-src
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test packages/fsm-api-ts/stoker-src packages/fsm-api-ts/test
 
   python-async-worker-sdk:
     name: Python async worker SDK (test · build)
@@ -332,13 +332,9 @@ jobs:
       - name: Apply schema (db reset)
         run: npm run supabase:db:reset
 
-      # cron.schedule() is a data-level call, so `supabase db diff` never puts
-      # it in migrations/ and `db reset` doesn't register the job. Run the real
-      # deploy step (SPEC-005), so the pg_cron pgTAP test checks what a deploy
-      # actually does (#468).
-      - name: Register pg_cron job (pgfsmctl)
-        working-directory: packages/fsm-ctl-ts
-        run: deno task pgfsmctl db cron register --db-url postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      # The pg_cron job needs no separate step: the 2.3.0 migration registers
+      # it (SPEC-016, #688), so the pg_cron pgTAP test checks what db reset,
+      # the full install and the PGXN form all leave behind.
 
       # Runs the pgTAP suite in supabase/tests/ (see docs/guides/development.md).
       - name: Run pgTAP tests
@@ -360,7 +356,7 @@ jobs:
         run: >-
           deno test --allow-all
           packages/fsm-core-db-ts/test
-          apps/fsm-core-ts-hono-deno/test
+          packages/fsm-api-ts/test
           packages/fsm-ctl-ts/test
           packages/fsm-async-worker-gateway-ts/test/poll_loop_capacity_db_test.ts
           packages/fsm-async-worker-gateway-ts/test/cancel_detection_db_test.ts

@@ -1,0 +1,9 @@
+# Reference manifests for the pgfsm API (SPEC-016). `kubectl apply -k` this
+# directory after creating the Secrets described in ../README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pgfsm
+resources:
+  - namespace.yaml
+  - api.yaml
+  - api-admin.yaml

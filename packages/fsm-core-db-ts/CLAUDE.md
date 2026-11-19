@@ -16,6 +16,12 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   (#661). Tests in `test/fsm-definition.test.ts` and
   `test/list-and-read.test.ts` (`deno task test`; DB tests need `DATABASE_URL`)
 - `fsm-instance-lock.ts` — advisory lock concurrency control
+- `fsm-core-version.ts` — `getFsmCoreVersion` and `requireFsmCoreVersion`
+  (SPEC-016, #688): the startup check the API, fsmlet and gateway run. Accepts
+  fsm_core `>= FSM_CORE_MIN_VERSION` of the same major; otherwise throws
+  `FsmCoreVersionError` naming both versions and the upgrade scripts to apply.
+  Raise `FSM_CORE_MIN_VERSION` when this package starts calling SQL a newer
+  fsm_core adds. Tests in `test/fsm-core-version.test.ts`
 - `queue.ts` — pgmq-based event queue management
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationWorkerlet.ts` —
   `fsm_workerlet` table ops for the fsmlet node-agent (dispatch-queue worker
@@ -29,8 +35,11 @@ protocol live in the root `CLAUDE.md` / `AGENTS.md`.
   before (#661)
 - `35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts` —
   dispatch-queue scheduling op (`schedule_next_pending`) and the
-  `fsm_schedule_all_pending` pg_cron job's register/unregister/get helpers
-  (behind `pgfsmctl db cron …`)
+  `fsm_schedule_all_pending` pg_cron job's `schedulerJobStatus` /
+  `registerSchedulerJob` (`scheduler_job_status_v2` /
+  `register_scheduler_job_v2`, SECURITY DEFINER for `fsm_admin`; behind
+  `GET/POST /admin/scheduler` and `pgfsmctl scheduler status|register`,
+  SPEC-016)
 - `25_async_operation_worker_v1/asyncOperationWorkerCtl.ts` — async-operation
   dispatch-table ops (promise/callback workflows)
 - `25_async_operation_worker_v1/asyncOperationMeta.ts` — `async_operation_meta`

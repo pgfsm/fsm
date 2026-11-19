@@ -14,23 +14,9 @@ await Deno.writeTextFile(
   };\n`,
 );
 
-// @pgfsm/db and @pgfsm/logging are published independently: map them to
-// real npm dependencies instead of letting dnt inline their source, with
-// ranges read from each package's own deno.json so they can't drift (same
-// pattern as @pgfsm/cli). @pgfsm/db is this package's compatibility axis
-// (SPEC-005): pgfsmctl works against the fsm_core functions that db version
-// expects.
-//
-// To build against @pgfsm/db changes that aren't published yet, build db
-// first (`deno task build:npm <version>` in ../fsm-core-db-ts) and set
-// PGFSM_LOCAL_DB=1: the dependency then points at that local build (same
-// escape hatch as @pgfsm/cli's PGFSM_LOCAL_COMPILER).
-const dbDenoJson = JSON.parse(
-  await Deno.readTextFile("../fsm-core-db-ts/deno.json"),
-);
-const dbVersionRange = Deno.env.get("PGFSM_LOCAL_DB")
-  ? `file:${new URL("../../fsm-core-db-ts/dist", import.meta.url).pathname}`
-  : `^${dbDenoJson.version}`;
+// @pgfsm/logging is published on its own: depend on it rather than inline it.
+// pgfsmctl talks only to the API (SPEC-016), so it depends on neither
+// @pgfsm/db nor pg (test/no-db-imports.test.ts).
 const loggingDenoJson = JSON.parse(
   await Deno.readTextFile("../fsm-logging-ts/deno.json"),
 );
@@ -45,7 +31,6 @@ await build({
   mappings: {
     "./src/version.ts": "./src/version.node.ts",
     "./src/invocation.ts": "./src/invocation.node.ts",
-    "@pgfsm/db": { name: "@pgfsm/db", version: dbVersionRange },
     "@pgfsm/logging": {
       name: "@pgfsm/logging",
       version: `^${loggingDenoJson.version}`,
@@ -57,18 +42,12 @@ await build({
     name: "@pgfsm/ctl",
     version: packageVersion,
     description:
-      "pgfsmctl: operate a pgfsm database — pg_cron scheduler registration, FSM instance create/resume/send/stop — npx @pgfsm/ctl",
+      "pgfsmctl: operate a pgfsm deployment through its API — load FSM definitions, FSM instances, API keys, the scheduler — npx @pgfsm/ctl",
     license: "Apache-2.0",
     repository: {
       type: "git",
       url: "git+https://github.com/pgfsm/fsm.git",
       directory: "packages/fsm-ctl-ts",
-    },
-    // pg ships no types of its own; dnt only auto-installs packages that
-    // are themselves import specifiers (see @pgfsm/sync-worker's
-    // build-npm.ts).
-    devDependencies: {
-      "@types/pg": "^8.18.0",
     },
   },
   compilerOptions: {

@@ -15,6 +15,7 @@ import {
   fsmletHeartbeat,
   fsmletNotifyChannel,
   registerFsmlet,
+  requireFsmCoreVersion,
 } from "@pgfsm/db";
 import { startFSMWorkerWithDBLock } from "./fsmworker.ts";
 import { checkFsmDefinitions } from "./fsm-definition-check.ts";
@@ -159,9 +160,11 @@ export async function startFsmlet(
   client.release();
   const deps = { db: pool, useSupabase: false };
 
-  // Step 0: every served FSM version must be loaded, once, with the content
-  // this worker was compiled from (SPEC-006).
+  // Step 0: the database's fsm_core is one this worker supports (SPEC-016),
+  // and every served FSM version is loaded, once, with the content this
+  // worker was compiled from (SPEC-006).
   try {
+    await requireFsmCoreVersion(pool, "fsmlet");
     await checkFsmDefinitions(
       deps,
       registeredFsmModules,

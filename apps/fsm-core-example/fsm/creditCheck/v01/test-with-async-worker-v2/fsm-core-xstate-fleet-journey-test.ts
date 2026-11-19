@@ -5,7 +5,7 @@ import { assertEquals } from "@std/assert";
 import { Pool } from "pg";
 
 import { machineWithProvider } from "../machine-with-provider.ts";
-import { runFsmScheduler } from "@pgfsm/ctl";
+import { runFsmScheduler } from "../../../../test-support/fsm-scheduler.ts";
 import { startFsmlet } from "@pgfsm/sync-worker";
 import type { FsmletHandle } from "@pgfsm/sync-worker";
 import {

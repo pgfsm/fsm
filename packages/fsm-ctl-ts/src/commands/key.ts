@@ -1,6 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { apiRequest } from "../api-client.ts";
-import { resolveApiTarget } from "../api-target.ts";
+import { requireApiTarget } from "../api-target.ts";
 import { parseCommandArgs, verbOf } from "../args.ts";
 import { usageError } from "../exit.ts";
 import { CLI_INVOCATION } from "../invocation.ts";
@@ -18,8 +18,8 @@ USAGE
   ${CLI_INVOCATION} key revoke <id-or-name> [options]
 
   Needs an admin key and an API running with --enable-admin-api. The very
-  first admin key can't come from here: mint it DB-direct with
-  \`${CLI_INVOCATION} db key create\`.
+  first admin key can't come from here: create it once, as the database
+  owner, with \`npx @pgfsm/api key bootstrap --db-url <url>\` (SPEC-016).
 
 VERBS
   create   Create a key and print it once (only its hash is stored)
@@ -78,13 +78,7 @@ export async function keyCommand(argv: string[]): Promise<void> {
     throw usageError("key revoke needs a key id or name", HELP);
   }
 
-  const target = await resolveApiTarget(args);
-  if (!target) {
-    throw usageError(
-      "No API: pass --url, set PGFSM_URL, or select a profile with a url (pgfsmctl config set <name> --url <url>).",
-      HELP,
-    );
-  }
+  const target = await requireApiTarget(args, `key ${verb}`);
 
   switch (verb) {
     case "create": {

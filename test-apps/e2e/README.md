@@ -15,9 +15,10 @@ returns which worker processed it (`worker` is the pod name in Kubernetes).
   message leaves a row in `fsm_core.fsm_async_operation_queue_event_logs`.
 - **Full cycle (`instances`)**: creates `loadTest` instances, through the sync
   worker, all four actors, back to each instance and its sync action. Needs the
-  FSM loaded (`npm run db:load`), the pg_cron scheduler (`npm run db:pgcron`)
-  and the sync worker running. Instances pass no per-instance input to their
-  actors (`fsm.json` keeps no invoke `input` function), so they do no work.
+  FSM loaded (`npm run db:load`), the pg_cron scheduler (registered when
+  fsm_core is installed) and the sync worker running. Instances pass no
+  per-instance input to their actors (`fsm.json` keeps no invoke `input`
+  function), so they do no work.
 
 ```bash
 export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -115,14 +116,16 @@ a different definition than the one it was generated from.
 
 ## Run the stack
 
+The database needs fsm_core installed (the `fsm_core--<version>.sql` release
+asset, or the PGXN extension), which also registers its pg_cron scheduler job.
 Copy `.env.example` to `.env` (it's gitignored), here and in
-`sync-worker/typescript/`. Every command below reads `DATABASE_URL` from the
-environment or from a `.env` in the directory it runs in; locally that's all you
-need. Start them in this order, one terminal each:
+`sync-worker/typescript/`. Every command below reads it from the directory it
+runs in. Start them in this order, one terminal each:
 
 ```bash
-npm run db:load      # every deploy: loads fsm/ into the database (before the sync worker)
-npm run db:pgcron    # once per database: registers the pg_cron scheduler job
+npm run api          # the pgfsm API, with its admin routes (local)
+npm run api:key      # once per database: prints the first admin key; put it in .env as PGFSM_API_KEY
+npm run db:load      # every deploy: loads fsm/ through the API (before the sync worker)
 npm run gateway      # Activity Gateway; async workers connect to it
 cd sync-worker/typescript && deno task dev
 cd async-worker/typescript && deno task start
@@ -131,10 +134,10 @@ cd async-worker/rust && cargo run --release -- start
 cd async-worker/go && go run . start
 ```
 
-## With the pgfsm REST API
+## API keys
 
-`npm run db:key` creates an admin API key straight in the database (once: it's
-printed only then; only its hash is stored). Put it and the API's URL in `.env`
-as `PGFSM_API_KEY` and `PGFSM_URL`: `npm run db:load` then loads through the API
-instead of straight into the database. More keys, and revoking them, go through
-the API: `npx @pgfsm/ctl key create|list|revoke`.
+`npm run api:key` creates the first admin API key, as the database owner (once:
+it's printed only then; only its hash is stored, and it refuses while an admin
+key exists). More keys, and revoking them, go through the API:
+`npx @pgfsm/ctl key create|list|revoke`. The scheduler's pg_cron job:
+`npx @pgfsm/ctl scheduler status`.

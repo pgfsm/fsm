@@ -34,23 +34,6 @@ npm run supabase:db:migrate
 npm run supabase:gen:types
 ```
 
-### Targeting the pgrx extension's stack instead
-
-`full-ext/supabase/` holds a second, parallel Supabase project used to drive the
-`database-src-extension` (pgrx) build against a full local stack. All the
-`supabase:*` npm scripts read `--workdir` from the `SUPABASE_WORKDIR` env var
-(defaulting to `.`, i.e. the main `supabase/` project), so the same scripts work
-against either project — set the var to switch:
-
-```bash
-SUPABASE_WORKDIR=full-ext npm run supabase:start:env
-SUPABASE_WORKDIR=full-ext npm run supabase:stop
-```
-
-The two projects share the same `project_id` and ports (see
-`full-ext/supabase/config.toml`), so they're mutually exclusive, not concurrent
-— `stop` one before `start`ing the other.
-
 ### Test data
 
 ```bash

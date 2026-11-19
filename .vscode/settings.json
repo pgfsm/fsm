@@ -4,7 +4,7 @@
   "deno.enable": true,
   "deno.test": true,
   "deno.lint": true,
-  // "deno.enablePaths":["packages/fsm-core-db-ts", "apps/fsm-core-example", "apps/fsm-core-ts-hono-deno", "packages/fsm-sync-worker-ts", "packages/fsm-async-worker-ts", "packages/fsm-compiler-ts"],
+  // "deno.enablePaths":["packages/fsm-core-db-ts", "apps/fsm-core-example", "packages/fsm-api-ts", "packages/fsm-sync-worker-ts", "packages/fsm-async-worker-ts", "packages/fsm-compiler-ts"],
   // "deno.enablePaths":["apps/**", "packages/fsm-compiler-ts"],
   "deno.codeLens.test": true,
   "deno.codeLens.testArgs": [

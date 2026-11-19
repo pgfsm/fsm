@@ -117,9 +117,9 @@ Deno.test("create lays out the project with all four async-worker languages and 
   assertStringIncludes(pkg.scripts["fsm:add"], "npx -y @pgfsm/cli@");
   assertEquals(Object.keys(pkg.scripts), [
     "fsm:add",
+    "api",
+    "api:key",
     "db:load",
-    "db:pgcron",
-    "db:key",
     "gateway",
   ]);
   // Sibling tools are pinned to the versions this CLI was built with.
@@ -129,23 +129,19 @@ Deno.test("create lays out the project with all four async-worker languages and 
     pkg.scripts["db:load"],
     `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} fsm load fsm`,
   );
+  const api = `npx -y @pgfsm/api@${await versionOf("fsm-api-ts")}`;
+  assertEquals(pkg.scripts.api, `${api} --enable-admin-api`);
   assertEquals(
-    pkg.scripts["db:pgcron"],
-    `npx -y @pgfsm/ctl@${await versionOf("fsm-ctl-ts")} db cron register`,
+    pkg.scripts["api:key"],
+    `${api} key bootstrap --name local-admin`,
   );
-  assertEquals(
-    pkg.scripts["db:key"],
-    `npx -y @pgfsm/ctl@${await versionOf(
-      "fsm-ctl-ts",
-    )} db key create --name local-admin --role admin`,
-  );
-  // .env.example (SPEC-009 §7): local dev needs only the database URL; the
-  // API variables are listed but commented out.
+  // .env.example (SPEC-009 §7, SPEC-016): the database for the API and the
+  // workers, the API's URL for pgfsmctl; the key is filled in once minted.
   const envExample = await Deno.readTextFile(join(APP, ".env.example"));
   assert(/^DATABASE_URL=postgresql:/m.test(envExample), envExample);
-  for (const name of ["PGFSM_DB_URL", "PGFSM_URL", "PGFSM_API_KEY"]) {
-    assert(new RegExp(`^# ${name}=`, "m").test(envExample), name);
-  }
+  assert(/^PGFSM_URL=http:/m.test(envExample), envExample);
+  assert(/^# PGFSM_API_KEY=/m.test(envExample), envExample);
+  assert(!envExample.includes("PGFSM_DB_URL"), "pgfsmctl has no DB URL");
   assertStringIncludes(
     pkg.scripts.gateway,
     `npx -y -p @pgfsm/async-worker-gateway@${await versionOf(
@@ -154,13 +150,21 @@ Deno.test("create lays out the project with all four async-worker languages and 
   );
   const readme = await Deno.readTextFile(join(APP, "README.md"));
   const runStack = readme.slice(readme.indexOf("## Run the stack"));
+  const at = (cmd: string) => {
+    const i = runStack.indexOf(cmd);
+    assert(i >= 0, `README's Run the stack has no ${cmd}`);
+    return i;
+  };
   assert(
-    runStack.indexOf("npm run db:load") <
-        runStack.indexOf("npm run db:pgcron") &&
-      runStack.indexOf("npm run db:pgcron") <
-        runStack.indexOf("npm run gateway") &&
-      runStack.indexOf("npm run gateway") < runStack.indexOf("deno task dev"),
-    "README loads FSMs, registers pgcron, then starts the gateway and workers",
+    at("npm run api ") < at("npm run api:key") &&
+      at("npm run api:key") < at("npm run db:load") &&
+      at("npm run db:load") < at("npm run gateway") &&
+      at("npm run gateway") < at("deno task dev"),
+    "README starts the API, mints a key, loads FSMs, then starts the gateway and workers",
+  );
+  assert(
+    !readme.includes("db:pgcron"),
+    "installing fsm_core registers pg_cron",
   );
 
   // Just a marker: nothing records FSM sources without sync (#390).

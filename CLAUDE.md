@@ -46,18 +46,18 @@ stops working.
 
 ```
 apps/
-  fsm-core-ts-hono-deno/   # Main REST API (Hono + Deno) — see CLAUDE.md
   fsm-core-example/        # Example FSM definitions (sources for test-apps/debug-only) — see CLAUDE.md
 test-apps/
   debug-only/              # @pgfsm/cli-generated worker project (sync + TS/Python/Rust/Go async), for debugging — see README.md
   e2e/                     # @pgfsm/cli-generated load project + tools/load.ts for SPEC-007's acceptance suite (#458) — see README.md
 packages/
+  fsm-api-ts/             # REST API (Hono + Deno), @pgfsm/api, bin pgfsm-api, GHCR image + k8s manifests (SPEC-016) — see CLAUDE.md
   database-src/           # PostgreSQL migrations + Supabase config — see CLAUDE.md
   database-src-extension/ # Rust PostgreSQL extension (pgrx) using ltree + pgmq
   fsm-compiler-ts/        # JSON → database object compiler (TypeScript) — see CLAUDE.md
   fsm-core-db-ts/         # Raw pg client helpers (TypeScript) — see CLAUDE.md
   fsm-sync-worker-ts/     # fsmlet worker runtime library (no bins), @pgfsm/sync-worker — see CLAUDE.md
-  fsm-ctl-ts/             # pgfsmctl ops CLI: db cron, fsm load, instance create/resume/send/stop, config profiles, scheduler fallback (SPEC-005, SPEC-009), @pgfsm/ctl — see CLAUDE.md
+  fsm-ctl-ts/             # pgfsmctl ops CLI, an API client only (SPEC-016): fsm load|list|get, instance …, key …, scheduler status|register, config profiles (SPEC-005, SPEC-009), @pgfsm/ctl — see CLAUDE.md
   fsm-async-worker-gateway-ts/ # Activity Gateway: async-op worker-registration/dispatch CLIs (@pgfsm/async-worker-gateway) — see CLAUDE.md
   fsm-async-worker-sdk-ts/ # Async actor worker SDK (TypeScript) — connects to the Activity Gateway, @pgfsm/async-worker-sdk; not the deprecated fsm-async-worker-ts — see CLAUDE.md
   fsm-async-worker-sdk-python/ # Async actor worker SDK (Python, uv) — PyPI pgfsm-async-worker-sdk, imports pgfsm.async_worker_sdk — see CLAUDE.md

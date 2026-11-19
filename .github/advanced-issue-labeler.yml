@@ -17,7 +17,7 @@ policy:
         block-list: []
         label:
           - name: "area: api-server"
-            keys: ["API server (apps/fsm-core-ts-hono-deno)"]
+            keys: ["API server (packages/fsm-api-ts)"]
           - name: "area: compiler-ts"
             keys: ["FSM compiler — TypeScript (packages/fsm-compiler-ts)"]
           - name: "area: compiler-py"

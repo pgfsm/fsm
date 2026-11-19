@@ -1,13 +1,14 @@
 import { getLogger } from "@logtape/logtape";
 import type { DBDeps } from "../custom.types.ts";
-import { FSM_SCHEMA } from "../const.ts";
+import { FSM_SCHEMA, FSM_SCHEMA_FN_VERSION } from "../const.ts";
 
 const logger = getLogger(["@pgfsm/db", "fsm-sync-operation-scheduler"]);
 
 const SCHEDULE_NEXT_PENDING_FN = `${FSM_SCHEMA}.schedule_next_pending`;
-const SCHEDULE_ALL_PENDING_FN = `${FSM_SCHEMA}.schedule_all_pending`;
-const CRON_JOB_NAME = "fsm_schedule_all_pending";
-const DEFAULT_CRON_SCHEDULE = "5 seconds";
+const SCHEDULER_JOB_STATUS_FN =
+  `${FSM_SCHEMA}.scheduler_job_status_${FSM_SCHEMA_FN_VERSION}`;
+const REGISTER_SCHEDULER_JOB_FN =
+  `${FSM_SCHEMA}.register_scheduler_job_${FSM_SCHEMA_FN_VERSION}`;
 
 /**
  * Thin wrapper around fsm_core.schedule_next_pending().
@@ -32,89 +33,59 @@ export async function scheduleNextPending(
 }
 
 /**
- * Idempotently (re)registers the fsm_schedule_all_pending pg_cron job, which
- * calls fsm_core.schedule_all_pending() on a periodic schedule — replaces
- * fsmscheduler's standing LISTEN/poll loop with an in-database timer (see
- * spec-003-pgcron-fsm-scheduler.md).
- *
- * migra's structural diff (used to generate the versioned pgxn migration
- * scripts under supabase/migrations/) only picks up DDL — cron.schedule()
- * is a data-level side effect (a row insert into cron.job), so it can't be
- * captured there. This is the deploy-time step that performs it instead: run
- * once via `pgfsmctl db cron register` (@pgfsm/ctl) after applying
- * migrations, or whenever the schedule needs to change.
- *
- * Unschedules any pre-existing job with the same name first (cron.schedule()
- * errors on a duplicate jobname, unique per jobname+username), so this is
- * safe to re-run.
+ * The fsm_schedule_all_pending pg_cron job, as fsm_core.scheduler_job_status_v2()
+ * reports it (SPEC-016): `registered: false` when there's none.
  */
-export async function registerScheduleAllPendingCronJob(
+export type SchedulerJobStatus =
+  | { jobname: string; registered: false }
+  | {
+    jobname: string;
+    registered: true;
+    jobid: number;
+    schedule: string;
+    command: string;
+    active: boolean;
+  };
+
+/**
+ * The fsm_schedule_all_pending pg_cron job's status
+ * (fsm_core.scheduler_job_status_v2(); `GET /admin/scheduler`). SECURITY
+ * DEFINER, granted to fsm_admin.
+ */
+export async function schedulerJobStatus(
   deps: DBDeps,
-  cronSchedule = DEFAULT_CRON_SCHEDULE,
-): Promise<void> {
-  await deps.db.query(
-    `DO $do$
-     BEGIN
-       IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = '${CRON_JOB_NAME}') THEN
-         PERFORM cron.unschedule('${CRON_JOB_NAME}');
-       END IF;
-     END;
-     $do$;`,
+): Promise<SchedulerJobStatus> {
+  const res = await deps.db.query<{ status: SchedulerJobStatus }>(
+    `SELECT ${SCHEDULER_JOB_STATUS_FN}() AS status`,
   );
-  await deps.db.query(
-    `SELECT cron.schedule($1, $2, $3)`,
-    [CRON_JOB_NAME, cronSchedule, `SELECT ${SCHEDULE_ALL_PENDING_FN}();`],
-  );
-  logger.info(
-    "registerScheduleAllPendingCronJob: registered {jobName} ({schedule})",
-    {
-      jobName: CRON_JOB_NAME,
-      schedule: cronSchedule,
-    },
-  );
+  return res.rows[0].status;
 }
 
 /**
- * Removes the fsm_schedule_all_pending pg_cron job if it exists
- * (`pgfsmctl db cron unregister`). Returns whether a job was removed, so
- * callers can tell "removed" from "wasn't registered" -- both succeed.
+ * Idempotently (re)registers the fsm_schedule_all_pending pg_cron job
+ * (fsm_core.register_scheduler_job_v2(); `POST /admin/scheduler`) and returns
+ * its status. The install and the 2.3.0 migration already register it; this
+ * re-registers it (e.g. after `cron.unschedule`) or changes its schedule
+ * (pg_cron's syntax, e.g. '10 seconds'; default '5 seconds'). SECURITY
+ * DEFINER, granted to fsm_admin, so the job always belongs to the schema
+ * owner.
  */
-export async function unregisterScheduleAllPendingCronJob(
+export async function registerSchedulerJob(
   deps: DBDeps,
-): Promise<boolean> {
-  const res = await deps.db.query<{ removed: boolean }>(
-    `SELECT cron.unschedule(jobname) AS removed
-       FROM cron.job WHERE jobname = $1`,
-    [CRON_JOB_NAME],
-  );
-  const removed = res.rows.some((r: { removed: boolean }) => r.removed);
-  logger.info("unregisterScheduleAllPendingCronJob: {jobName} {outcome}", {
-    jobName: CRON_JOB_NAME,
-    outcome: removed ? "removed" : "was not registered",
+  inputSchedule?: string,
+): Promise<SchedulerJobStatus> {
+  const res = inputSchedule === undefined
+    ? await deps.db.query<{ status: SchedulerJobStatus }>(
+      `SELECT ${REGISTER_SCHEDULER_JOB_FN}() AS status`,
+    )
+    : await deps.db.query<{ status: SchedulerJobStatus }>(
+      `SELECT ${REGISTER_SCHEDULER_JOB_FN}(input_schedule => $1) AS status`,
+      [inputSchedule],
+    );
+  const status = res.rows[0].status;
+  logger.info("Registered the {jobname} pg_cron job: {schedule}", {
+    jobname: status.jobname,
+    schedule: status.registered ? status.schedule : "(not registered)",
   });
-  return removed;
-}
-
-/** A row of pg_cron's `cron.job` table, as far as pgfsm reports it. */
-export interface ScheduleAllPendingCronJob {
-  jobid: number;
-  jobname: string;
-  schedule: string;
-  command: string;
-  active: boolean;
-}
-
-/**
- * The registered fsm_schedule_all_pending pg_cron job, or null when none is
- * registered (`pgfsmctl db cron status`).
- */
-export async function getScheduleAllPendingCronJob(
-  deps: DBDeps,
-): Promise<ScheduleAllPendingCronJob | null> {
-  const res = await deps.db.query<ScheduleAllPendingCronJob>(
-    `SELECT jobid::int AS jobid, jobname, schedule, command, active
-       FROM cron.job WHERE jobname = $1`,
-    [CRON_JOB_NAME],
-  );
-  return res.rows[0] ?? null;
+  return status;
 }

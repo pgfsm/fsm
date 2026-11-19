@@ -8,6 +8,7 @@ export * from "./queue.ts";
 export * from "./fsm-helper.ts";
 export * from "./fsm-definition.ts";
 export * from "./fsm-instance-lock.ts";
+export * from "./fsm-core-version.ts";
 
 export type { Json } from "./database.types.ts";
 export {
@@ -43,12 +44,11 @@ export type {
 } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationWorkerlet.ts";
 
 export {
-  getScheduleAllPendingCronJob,
-  registerScheduleAllPendingCronJob,
+  registerSchedulerJob,
   scheduleNextPending,
-  unregisterScheduleAllPendingCronJob,
+  schedulerJobStatus,
 } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts";
-export type { ScheduleAllPendingCronJob } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts";
+export type { SchedulerJobStatus } from "./35_fsm_sync_operation_worker_v1/fsmSyncOperationScheduler.ts";
 
 export {
   createAsyncOperationInstanceAndNotifyAsyncOperationSchedulerWork,

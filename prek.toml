@@ -65,5 +65,9 @@ hooks = [
   { id = "branch-name", name = "branch naming convention", entry = "deno run --allow-run=git scripts/git-hooks/check-branch-name.ts", language = "system", pass_filenames = false, always_run = true },
   { id = "pg-ts-types", name = "pg imports carry @ts-types (#479)", entry = "deno run --allow-read --allow-run=git scripts/check-pg-types-directive.ts", language = "system", pass_filenames = true, types = ["ts"] },
   { id = "sql-clock-seams", name = "fsm_core SQL reads the clock through the seams (#642)", entry = "deno run --allow-read --allow-run=git scripts/check-sql-clock-seams.ts", language = "system", pass_filenames = true, files = "^packages/(database-src/supabase/schemas/.*\\.sql|fsm-core-db-ts/src/.*\\.ts)$" },
+  # Disabled for now: supabase-restart-with-diff.ts writes the require_version
+  # line itself. TODO: add scripts/check-fsm-core-version.ts to CI as well if
+  # needed (prek can be skipped with --no-verify; CI can't).
+  # { id = "fsm-core-version", name = "fsm_core.version() matches the migration chain (#688)", entry = "deno run --allow-read packages/database-src/scripts/check-fsm-core-version.ts", language = "system", pass_filenames = false, files = "^packages/database-src/supabase/(migrations/.*|schemas/10_ext_helper/.*_fsm_core_version)\\.sql$" },
   { id = "commit-msg-issue-ref", name = "commit references issue", entry = "deno run --allow-read --allow-run=git scripts/git-hooks/check-commit-msg.ts", language = "system", stages = ["commit-msg"] },
 ]

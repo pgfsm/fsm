@@ -19,7 +19,7 @@ import { assert, assertEquals } from "@std/assert";
 // @ts-types="@types/pg"
 import { Pool } from "pg";
 
-import { runFsmScheduler } from "@pgfsm/ctl";
+import { runFsmScheduler } from "../../../test-support/fsm-scheduler.ts";
 import { type FsmletHandle, startFsmlet } from "@pgfsm/sync-worker";
 import {
   createFsmInstanceFromName,

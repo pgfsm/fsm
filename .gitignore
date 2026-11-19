@@ -27,6 +27,7 @@ packages/fsm-cli-ts/.test-fixtures/
 packages/fsm-compiler-ts/src/cli/version.node.ts
 packages/fsm-async-worker-gateway-ts/src/cli/version.node.ts
 packages/fsm-ctl-ts/src/version.node.ts
+packages/fsm-api-ts/src/cli/version.node.ts
 packages/fsm-cli-ts/src/tool-versions.node.ts
 
 # --- Python ---
