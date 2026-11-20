@@ -68,6 +68,20 @@ it), like `fsm-compiler-ts`'s.
   `PGFSM_API_KEY` commented out until `npm run api:key` prints one); the repo
   root `.gitignore` excludes `.env*` but re-includes `.env.example`, so
   `test-apps/debug-only`'s copy is committed.
+- **The local stack (SPEC-016, #691).** `create` writes `docker-compose.yml`:
+  `db` built from the project's `db/` (`postgres:16` + PGDG pg_cron + pgmq
+  1.4.4, and `db/10-fsm-core.sh` installing fsm_core in one transaction at
+  initdb), `api` and `gateway` from `ghcr.io/pgfsm/{api,async-worker-gateway}`
+  at `API_VERSION`/`GATEWAY_VERSION`; ports on 127.0.0.1 (54322, 9999, 7443; the
+  gateway plaintext, `PGFSM_GATEWAY_ADDRESS` in `.env.example`). `db/Dockerfile`
+  takes `db/fsm_core--<FSM_CORE_VERSION>.sql` when present, else downloads it
+  from the `fsm_core-v<v>` release and checks `SHA256SUMS`. `FSM_CORE_VERSION`
+  is the newest migration in this checkout (`src/tool-versions.ts`; the npm
+  build bakes it in). `scripts/compose-e2e.ts` tests the whole flow from source
+  (images built here, `--install-sql` for the SQL): create, `up --wait`, key
+  bootstrap, `pgfsmctl config set`, `fsm load`, `instance create`,
+  `scheduler status`. CI's `compose-e2e` job runs it with SQL dumped from the
+  migrations.
 - **Dry run = sandbox.** The compiler has no plan-only mode, so `--dry-run`
   copies the project (minus `.git`, `node_modules`, `target`, `.venv`, `dist`)
   into a temp dir named like the real root (the Go module root is derived from

@@ -21,3 +21,31 @@ export const API_VERSION: string = await siblingVersion("fsm-api-ts");
 export const GATEWAY_VERSION: string = await siblingVersion(
   "fsm-async-worker-gateway-ts",
 );
+
+/**
+ * fsm_core, for the generated db/Dockerfile (SPEC-016): the newest
+ * `fsm_core--<from>--<to>.sql` migration in this checkout, i.e. the schema
+ * this @pgfsm/cli was built against.
+ */
+async function newestFsmCoreVersion(): Promise<string> {
+  const dir = new URL(
+    "../../database-src/supabase/migrations/",
+    import.meta.url,
+  );
+  let newest: number[] | null = null;
+  for await (const e of Deno.readDir(dir)) {
+    const m = e.name.match(/_fsm_core--(?:[\d.]+--)?(\d+)\.(\d+)\.(\d+)\.sql$/);
+    if (!m) continue;
+    const v = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (
+      newest === null ||
+      v[0] > newest[0] || (v[0] === newest[0] && v[1] > newest[1]) ||
+      (v[0] === newest[0] && v[1] === newest[1] && v[2] > newest[2])
+    ) newest = v;
+  }
+  if (newest === null) throw new Error(`no fsm_core migration in ${dir}`);
+  return newest.join(".");
+}
+
+/** fsm_core, for db/Dockerfile's FSM_CORE_VERSION (SPEC-016). */
+export const FSM_CORE_VERSION: string = await newestFsmCoreVersion();

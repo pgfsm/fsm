@@ -1,4 +1,5 @@
 import { build, emptyDir } from "@deno/dnt";
+import { FSM_CORE_VERSION } from "../src/tool-versions.ts";
 
 await emptyDir("./dist");
 
@@ -29,6 +30,8 @@ await Deno.writeTextFile(
     JSON.stringify(await siblingVersion("fsm-api-ts"))
   };\nexport const GATEWAY_VERSION: string = ${
     JSON.stringify(await siblingVersion("fsm-async-worker-gateway-ts"))
+  };\nexport const FSM_CORE_VERSION: string = ${
+    JSON.stringify(FSM_CORE_VERSION)
   };\n`,
 );
 

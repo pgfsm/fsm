@@ -452,6 +452,53 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: deno test --allow-all spec007-process-e2e-test.ts
 
+  # SPEC-016's local stack (#691): a project from `pgfsm create`, its generated
+  # docker-compose.yml brought up, then key bootstrap, pgfsmctl config set,
+  # fsm load and instance create. From source: the API and gateway images are
+  # built here, and fsm_core's install SQL is dumped from the migrations, so
+  # it runs before any of them is released (a released-artifacts variant
+  # follows the releases).
+  compose-e2e:
+    name: Compose stack end-to-end
+    needs: changes
+    if: needs.changes.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+        with:
+          auto-install: true
+
+      - name: npm install
+        working-directory: packages/database-src
+        run: npm install
+
+      # Postgres only, as in the database job (#612); `start` applies every
+      # migration.
+      - name: Start local Supabase (Postgres only)
+        working-directory: packages/database-src
+        run: npm run supabase:start -- -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      # The plain-SQL install of the newest version, as a release builds it.
+      - name: Dump fsm_core's install SQL
+        id: sql
+        working-directory: packages/database-src
+        run: |
+          set -euo pipefail
+          version=$(npx tsx get-existing-highest-pkg-version.ts fsm_core)
+          deno run --allow-all supabase-dump-for-full-version.ts --version "$version"
+          echo "file=$PWD/all-output-with-prerequisite-check/fsm_core--$version.sql" >>"$GITHUB_OUTPUT"
+
+      # Frees port 54322 for the compose stack's database.
+      - name: Stop local Supabase
+        working-directory: packages/database-src
+        run: npm run supabase:stop
+
+      - name: pgfsm create + docker compose up + key, load, create
+        run: deno run --allow-all packages/fsm-cli-ts/scripts/compose-e2e.ts --install-sql "${{ steps.sql.outputs.file }}"
+
   # The one check the main ruleset requires from this workflow (#606), so a
   # skipped job can't leave a PR waiting on a check that never reports, and a
   # failure in any job here blocks the merge. Skipped counts as fine; add new
@@ -469,6 +516,7 @@ jobs:
       - rust-clippy
       - database
       - spec011-e2e
+      - compose-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
