@@ -221,11 +221,11 @@ pgfsmctl scheduler register --schedule '10 seconds'
 
 The `fsm_schedule_all_pending` pg_cron job calls
 `fsm_core.schedule_all_pending()` to drain `fsm_dispatch_queue` (SPEC-003).
-Installing fsm_core (the full install, a migration chain from 2.3.0, or
-`CREATE EXTENSION`) registers it, so a working deployment needs no step here.
-`status` prints the job (registered, schedule, active, command) and exits
-**`5`** when it isn't registered, so it doubles as a deploy check. `register`
-idempotently (re)registers it, replacing any existing job: after a
+Installing fsm_core (the full install, the migration chain from the 1.2.0
+baseline, or `CREATE EXTENSION`) registers it, so a working deployment needs no
+step here. `status` prints the job (registered, schedule, active, command) and
+exits **`5`** when it isn't registered, so it doubles as a deploy check.
+`register` idempotently (re)registers it, replacing any existing job: after a
 `cron.unschedule`, or to change the schedule.
 
 Both call `GET/POST /admin/scheduler` with an admin key. The API runs them

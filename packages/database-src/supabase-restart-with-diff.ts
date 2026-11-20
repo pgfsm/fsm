@@ -23,13 +23,13 @@ import { getExistingHighestPkgVersion } from "./get-existing-highest-pkg-version
 // In order, against the main project (packages/database-src/supabase/):
 //   1. checks the Supabase CLI runs, before changing any file;
 //   2. takes the next version: the highest in supabase/migrations/ plus
-//      incrementType (2.3.0 + patch = 2.3.1);
+//      incrementType (1.2.0 + patch = 1.2.1);
 //   3. writes fsm_core.version() returning it into the schemas, so the diff
 //      redefines it;
 //   4. supabase stop, then removes the project's Docker volume;
-//   5. supabase db diff -f fsm_core--2.3.0--2.3.1, which writes
-//      supabase/migrations/<timestamp>_fsm_core--2.3.0--2.3.1.sql, then puts
-//      SELECT fsm_core.require_version('2.3.0'); at its top (the diff never
+//   5. supabase db diff -f fsm_core--1.2.0--1.2.1, which writes
+//      supabase/migrations/<timestamp>_fsm_core--1.2.0--1.2.1.sql, then puts
+//      SELECT fsm_core.require_version('1.2.0'); at its top (the diff never
 //      writes it);
 //   6. supabase start, which applies every migration including the new one;
 //   7. supabase gen types into generated/database.types.ts.

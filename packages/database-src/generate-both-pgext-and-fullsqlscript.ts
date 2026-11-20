@@ -13,14 +13,14 @@
 // In order:
 //
 // 1. the new version: the highest in supabase/migrations/ plus the bump
-//    (2.3.1 + patch = 2.3.2), computed once;
+//    (1.2.0 + patch = 1.2.1), computed once;
 // 2. deno run supabase-restart-with-diff.ts <bump>: the upgrade script
-//    supabase/migrations/<ts>_fsm_core--2.3.1--2.3.2.sql, and the local
+//    supabase/migrations/<ts>_fsm_core--1.2.0--1.2.1.sql, and the local
 //    Supabase restarted with every migration applied (so at 2.3.2); then a
 //    check that the 2.3.2 migration exists;
 // 3. deno run supabase-dump-for-full-version.ts --version 2.3.2: the full
-//    script all-output/fsm_core--2.3.2.sql and its plain-SQL install
-//    all-output-with-prerequisite-check/fsm_core--2.3.2.sql.
+//    script all-output/fsm_core--1.2.1.sql and its plain-SQL install
+//    all-output-with-prerequisite-check/fsm_core--1.2.1.sql.
 //
 // The version is passed to the dump rather than the bump: after step 2 the
 // highest migration is already 2.3.2, so the same bump there would give 2.3.3.

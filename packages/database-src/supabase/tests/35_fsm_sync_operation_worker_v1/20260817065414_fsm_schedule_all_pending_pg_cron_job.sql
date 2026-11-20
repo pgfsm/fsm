@@ -1,5 +1,5 @@
--- The fsm_schedule_all_pending pg_cron job (SPEC-016, #688): the 2.3.0
--- migration registers it, so `supabase db reset` (like the full install and
+-- The fsm_schedule_all_pending pg_cron job (SPEC-016, #688): the 1.2.0
+-- baseline migration registers it, so `supabase db reset` (like the full install and
 -- the PGXN form) leaves it registered with no deploy step. An admin checks
 -- and re-registers it through scheduler_job_status_v2() and
 -- register_scheduler_job_v2(), which the API calls as fsm_admin.

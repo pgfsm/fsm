@@ -8,5 +8,5 @@ returns text
 language sql
 immutable
 as $$
-  select '2.3.1'::text
+  select '1.2.0'::text
 $$;

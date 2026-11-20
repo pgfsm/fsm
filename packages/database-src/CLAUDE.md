@@ -80,7 +80,7 @@ grants (the same class of gap that kept the pg_cron job out of migrations,
 #468). So after a diff that touches this area, copy those blocks from
 `20261005120100_fsm_core_access_control.sql` into the new migration by hand: the
 roles block at the **top** (the diffed table grants need the roles), the rest at
-the end. `fsm_core--2.0.9--2.1.0.sql` shows the shape.
+the end.
 
 **Adding a function that TypeScript calls:** add it to the right
 `ALTER FUNCTION … SECURITY DEFINER` and `GRANT EXECUTE` lists in that file, and
@@ -108,6 +108,11 @@ missing. `fsm-core-release.yml` releases from an `fsm_core-v<version>` tag (see
 `docs/guides/release.md`): tag check, build, compare on PostgreSQL 15 to 18,
 PGXN upload (when its secrets are set), then the GitHub release.
 
+The chain starts at the 1.2.0 baseline, `fsm_core--1.2.0.sql` (#697): the
+unreleased 1.0.0 → 2.3.1 chain squashed into a copy of
+`all-output/fsm_core--1.2.0.sql`. A local database still at 2.x has no upgrade
+path to it: `npm run supabase:db:reset`.
+
 **Every new version's migration must:**
 
 - start with `SELECT fsm_core.require_version('<from>');` (the diff doesn't
@@ -129,7 +134,7 @@ Things the install relies on:
   from pgmq's source release (1.4.4, the version Supabase runs). pgfsm doesn't
   ship pgmq's code. `schemas/00_pre_ext/20241218134622_PGMQ_source.sql` is only
   an old commented-out reference copy.
-- **pg_cron** is required: the 2.3.0 migration registers the
+- **pg_cron** is required: the 1.2.0 baseline migration registers the
   `fsm_schedule_all_pending` job through `register_scheduler_job_v2()`, so
   `supabase db reset` leaves it registered too. pg_cron can only be created in
   the `cron.database_name` database.
@@ -138,8 +143,8 @@ Things the install relies on:
   doesn't). The pgTAP tests need it.
 - In the PGXN form every fsm_core function is a member of the `fsm_core`
   extension, so a check that skips "extension members" must skip only _other_
-  extensions' members (the PUBLIC-revoke loop in `40_access_control` did not,
-  until 2.3.0).
+  extensions' members (the PUBLIC-revoke loop in `40_access_control` once did
+  not).
 
 ## Clock seams (`schemas/10_ext_helper/…_fsm_core_clock.sql`, SPEC-015 §2)
 
@@ -161,8 +166,8 @@ source is exempt and stays pristine; the sim database build rewrites it.
 
 ```bash
 npm run generateBothPgextAndFullsqlscript -- patch   # 1. create the version (or minor / major)
-npm run buildBothPgextAndFullsqlscript -- --version 2.3.2   # 2. build it
-deno run --allow-all compare-pgext-and-fullsqlscript.ts 2.3.2 [--pg 16] [--keep]   # 3. compare
+npm run buildBothPgextAndFullsqlscript -- --version 1.2.1   # 2. build it
+deno run --allow-all compare-pgext-and-fullsqlscript.ts 1.2.1 [--pg 16] [--keep]   # 3. compare
 ```
 
 **Comparing** (`compare-pgext-and-fullsqlscript.ts <v>`) checks the two forms in

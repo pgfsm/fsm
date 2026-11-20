@@ -2,9 +2,9 @@
 //
 // - the version in supabase/schemas/10_ext_helper/…_fsm_core_version.sql
 //   isn't the newest migration's target version;
-// - an upgrade script from 2.3.0 on doesn't redefine fsm_core.version() to
-//   return its target version;
-// - an upgrade script after 2.3.0 doesn't start with
+// - an upgrade script after the 1.2.0 baseline doesn't redefine
+//   fsm_core.version() to return its target version;
+// - an upgrade script after the 1.2.0 baseline doesn't start with
 //   SELECT fsm_core.require_version('<the version it upgrades from>'); before
 //   any other statement, so applying it to the wrong version changes nothing.
 //
@@ -20,8 +20,11 @@ const versionFile = new URL(
   "supabase/schemas/10_ext_helper/20261103120000_fsm_core_version.sql",
   root,
 );
-/** The version that introduced fsm_core.version() and require_version(). */
-const FIRST = "2.3.0";
+/**
+ * The baseline (#697): the first version in the chain, which has
+ * fsm_core.version() and require_version() from the start.
+ */
+const FIRST = "1.2.0";
 
 function semverAtLeast(a: string, b: string): boolean {
   const pa = a.split(".").map(Number);

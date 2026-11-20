@@ -332,7 +332,7 @@ jobs:
       - name: Apply schema (db reset)
         run: npm run supabase:db:reset
 
-      # The pg_cron job needs no separate step: the 2.3.0 migration registers
+      # The pg_cron job needs no separate step: the 1.2.0 baseline migration registers
       # it (SPEC-016, #688), so the pg_cron pgTAP test checks what db reset,
       # the full install and the PGXN form all leave behind.
 

@@ -42,7 +42,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to (re)run, e.g. fsm_core-v2.3.2
+        description: Release tag to (re)run, e.g. fsm_core-v1.2.0
         required: true
         type: string
 

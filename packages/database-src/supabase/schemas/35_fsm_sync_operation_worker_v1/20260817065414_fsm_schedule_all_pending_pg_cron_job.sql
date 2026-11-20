@@ -2,8 +2,8 @@
 -- fsm_core.schedule_all_pending() every 5 seconds (SPEC-003, Option C; pg_cron
 -- 1.5+ supports the sub-minute 'N seconds' syntax).
 --
--- pg_cron is required (SPEC-016). The install SQL and the 2.3.0 migration
--- register the job by calling fsm_core.register_scheduler_job_v2(); an admin
+-- pg_cron is required (SPEC-016). The install SQL and the 1.2.0 baseline
+-- migration register the job by calling fsm_core.register_scheduler_job_v2(); an admin
 -- re-registers or checks it through the API (GET/POST /api/v1/admin/scheduler,
 -- `pgfsmctl scheduler status|register`). Both functions are SECURITY DEFINER
 -- (40_access_control), so the job always belongs to the schema owner and the

@@ -288,9 +288,9 @@ winner, and notifies it — until the queue is empty or no `fsmlet` has capacity
 The scheduler is a **`pg_cron` job** (`fsm_core.schedule_all_pending()` on a
 timer — see
 [`docs/specs/spec-003-pgcron-fsm-scheduler.md`](docs/specs/spec-003-pgcron-fsm-scheduler.md)).
-Migration 2.3.0 registers it (SPEC-016), so `supabase db reset` and the full
-install leave it running. Check or re-register it through the API (admin key,
-`--enable-admin-api`):
+The fsm_core 1.2.0 baseline migration registers it (SPEC-016), so
+`supabase db reset` and the full install leave it running. Check or re-register
+it through the API (admin key, `--enable-admin-api`):
 
 ```bash
 deno run --allow-all packages/fsm-ctl-ts/src/cli/pgfsmctl.ts scheduler status

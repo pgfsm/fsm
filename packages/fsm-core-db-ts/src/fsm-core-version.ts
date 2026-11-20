@@ -8,7 +8,7 @@
  * starts calling SQL that a newer fsm_core adds; fsm_core of a later major
  * version is refused too (a major bump means a breaking SQL change).
  */
-export const FSM_CORE_MIN_VERSION = "2.3.0";
+export const FSM_CORE_MIN_VERSION = "1.2.0";
 
 /** A pg Pool or PoolClient: anything that runs a parameterless query. */
 export interface FsmCoreQueryable {
@@ -30,8 +30,8 @@ function compare(a: string, b: string): number {
 }
 
 /**
- * fsm_core.version(), or null for an fsm_core older than 2.3.0 (which had no
- * version()). Throws when fsm_core isn't installed at all.
+ * fsm_core.version(), or null for a pre-baseline fsm_core (the 2.x chain
+ * before 2.3.0 had no version()). Throws when fsm_core isn't installed at all.
  */
 export async function getFsmCoreVersion(
   db: FsmCoreQueryable,
@@ -78,7 +78,7 @@ export async function requireFsmCoreVersion(
   const range = `>= ${min} and < ${major + 1}.0.0`;
   if (found === null) {
     throw new FsmCoreVersionError(
-      `${component} needs fsm_core ${range}, found a version before 2.3.0 (no fsm_core.version()): apply the upgrade scripts fsm_core--<installed>--<next>.sql in order, up to ${min}`,
+      `${component} needs fsm_core ${range}, found an fsm_core from before the 1.2.0 baseline (no fsm_core.version()): no upgrade path leads from it, reinstall with the full install, fsm_core--<version>.sql`,
       null,
     );
   }

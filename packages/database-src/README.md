@@ -52,7 +52,7 @@ Run it once, in one transaction, as the database owner (on managed Postgres, the
 provider's admin login), connected to pg_cron's database:
 
 ```bash
-psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f fsm_core--2.3.0.sql
+psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f fsm_core--1.2.0.sql
 ```
 
 It checks the server first (PostgreSQL 15+, ltree, pg_cron and pgmq available,
