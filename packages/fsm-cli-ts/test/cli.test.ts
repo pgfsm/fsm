@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { copy } from "@std/fs/copy";
 import { join } from "@std/path";
+import { FSM_CORE_VERSION } from "../src/tool-versions.ts";
 
 // Drives the real CLI as a subprocess, SPEC-004's acceptance criteria as the
 // checklist. Fixtures live inside this package, not the OS temp dir: a copied
@@ -97,6 +98,9 @@ Deno.test("create lays out the project with all four async-worker languages and 
       "package.json",
       "deno.json",
       "README.md",
+      "docker-compose.yml",
+      "db/Dockerfile",
+      "db/10-fsm-core.sh",
       "fsm/creditCheck/v01/fsm.json",
       "sync-worker/typescript/run-sync-worker.ts",
       "sync-worker/typescript/creditCheck/v01/actions/assignSSN/assignSSN.ts",
@@ -142,6 +146,30 @@ Deno.test("create lays out the project with all four async-worker languages and 
   assert(/^PGFSM_URL=http:/m.test(envExample), envExample);
   assert(/^# PGFSM_API_KEY=/m.test(envExample), envExample);
   assert(!envExample.includes("PGFSM_DB_URL"), "pgfsmctl has no DB URL");
+  assert(/^PGFSM_GATEWAY_ADDRESS=http:/m.test(envExample), envExample);
+  // The local stack (SPEC-016, #691): Postgres built from db/, the released
+  // API and gateway images, pinned like the npm scripts.
+  const compose = await Deno.readTextFile(join(APP, "docker-compose.yml"));
+  assertStringIncludes(
+    compose,
+    `image: ghcr.io/pgfsm/api:${await versionOf("fsm-api-ts")}`,
+  );
+  assertStringIncludes(
+    compose,
+    `image: ghcr.io/pgfsm/async-worker-gateway:${await versionOf(
+      "fsm-async-worker-gateway-ts",
+    )}`,
+  );
+  assertStringIncludes(
+    compose,
+    `FSM_CORE_VERSION: "${FSM_CORE_VERSION}"`,
+  );
+  assertStringIncludes(compose, "shared_preload_libraries=pg_cron");
+  assertStringIncludes(compose, "name: my-app\n");
+  assertStringIncludes(
+    await Deno.readTextFile(join(APP, "db/Dockerfile")),
+    "fsm_core-v${FSM_CORE_VERSION}",
+  );
   assertStringIncludes(
     pkg.scripts.gateway,
     `npx -y -p @pgfsm/async-worker-gateway@${await versionOf(
@@ -156,11 +184,10 @@ Deno.test("create lays out the project with all four async-worker languages and 
     return i;
   };
   assert(
-    at("npm run api ") < at("npm run api:key") &&
+    at("docker compose up") < at("npm run api:key") &&
       at("npm run api:key") < at("npm run db:load") &&
-      at("npm run db:load") < at("npm run gateway") &&
-      at("npm run gateway") < at("deno task dev"),
-    "README starts the API, mints a key, loads FSMs, then starts the gateway and workers",
+      at("npm run db:load") < at("deno task dev"),
+    "README starts the stack, mints a key, loads FSMs, then starts the workers",
   );
   assert(
     !readme.includes("db:pgcron"),

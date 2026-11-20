@@ -21,6 +21,8 @@ my-app/
 ├── pgfsm.config.json       # project marker: { name, toolVersion }
 ├── package.json            # scripts only, pinned via npx: fsm:add, api, api:key, db:load, gateway
 ├── .env.example            # DATABASE_URL for local dev; PGFSM_URL/PGFSM_API_KEY to load via the API
+├── docker-compose.yml      # local stack: Postgres + fsm_core, the pgfsm API, the Activity Gateway
+├── db/                     # its Postgres image: postgres:16 + pg_cron + pgmq + fsm_core's install SQL
 ├── deno.json               # maps xstate, so machine.ts files compile
 ├── fsm/<name>/<vNN>/       # compiled fsm.json (+ xstate-fsm.json)
 ├── sync-worker/typescript/ # actions, guards, delays — a runnable Deno project
@@ -72,6 +74,10 @@ and pass it as `runFsmlet`'s third argument, after
   Deno: `deno run -A npm:@pgfsm/cli ...`.
 - The worker toolchains you want to run: Deno, uv, cargo, go. If `go` is
   installed, `go mod tidy` runs for you so the Go worker builds straight away.
+- Docker with Compose, for the local stack
+  (`docker compose up -d --build
+  --wait`; the project's README has the steps).
+  No Supabase.
 
 `machine.ts` is compiled where it lives and never copied into the project. Under
 Node, its `xstate` import resolves on its own; for other packages it imports,

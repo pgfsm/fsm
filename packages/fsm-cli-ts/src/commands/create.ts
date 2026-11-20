@@ -8,7 +8,12 @@ import {
 } from "../project.ts";
 import type { WriteReport } from "../report.ts";
 import type { ResolvedSource } from "../source.ts";
-import { API_VERSION, CTL_VERSION, GATEWAY_VERSION } from "../tool-versions.ts";
+import {
+  API_VERSION,
+  CTL_VERSION,
+  FSM_CORE_VERSION,
+  GATEWAY_VERSION,
+} from "../tool-versions.ts";
 import { addFsm } from "./add.ts";
 
 export class CreateError extends Error {}
@@ -127,11 +132,162 @@ const ENV_EXAMPLE =
 # read it. Locally its owner works for all of them.
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
-# The pgfsm API (\`npm run api\`), which pgfsmctl (\`npm run db:load\`) talks
-# to; the URL includes its path prefix. \`npm run api:key\` prints the first
-# admin key, once: put it here.
+# The pgfsm API (docker compose's api service, or \`npm run api\`), which
+# pgfsmctl (\`npm run db:load\`) talks to; the URL includes its path prefix.
+# \`npm run api:key\` prints the first admin key, once: put it here.
 PGFSM_URL=http://localhost:9999/api/v1
 # PGFSM_API_KEY=pgfsm_admin_...
+
+# The Activity Gateway (docker compose's gateway service), which the async
+# workers connect to: plaintext TCP, for local use only.
+PGFSM_GATEWAY_ADDRESS=http://127.0.0.1:7443
+`;
+
+/** A Compose project name: lowercase letters, digits, - and _ only. */
+function composeProjectName(name: string): string {
+  return name.replace(/[^a-z0-9_-]/g, "-");
+}
+
+// SPEC-016: the local stack. Postgres is built here (db/Dockerfile), not
+// pulled; the API and the gateway are released images, pinned like the npm
+// scripts. Workers run on the host and reach these through the published
+// ports, which listen on 127.0.0.1 only.
+function dockerCompose(name: string): string {
+  return `# The local pgfsm stack (SPEC-016), created by @pgfsm/cli: Postgres with
+# fsm_core installed, the pgfsm API and the Activity Gateway. Your sync and
+# async workers run on the host (README.md, "Run the stack").
+#
+#   docker compose up -d --build --wait
+#
+# The database lives in the db-data volume: \`docker compose down -v\` deletes
+# it, and the next \`up\` installs fsm_core afresh. Ports listen on 127.0.0.1.
+name: ${composeProjectName(name)}
+
+services:
+  db:
+    build:
+      context: ./db
+      args:
+        FSM_CORE_VERSION: "${FSM_CORE_VERSION}"
+    # pg_cron runs fsm_core's scheduler job (fsm_schedule_all_pending).
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_cron
+      - -c
+      - cron.database_name=postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:54322:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # Healthy once the server accepts TCP (initdb's temporary server doesn't)
+    # and fsm_core is installed.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - psql -h 127.0.0.1 -U postgres -tAc 'select fsm_core.version()'
+      interval: 2s
+      timeout: 5s
+      retries: 90
+
+  api:
+    image: ghcr.io/pgfsm/api:${API_VERSION}
+    # The admin routes (FSM load, API keys, the scheduler): local use.
+    command: ["--port=9999", "--enable-admin-api"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+    ports:
+      - "127.0.0.1:9999:9999"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  gateway:
+    image: ghcr.io/pgfsm/async-worker-gateway:${GATEWAY_VERSION}
+    # Plaintext TCP without a token: local use only (PGFSM_GATEWAY_ADDRESS).
+    command:
+      - --sidecar-listen=tcp://0.0.0.0:7443
+      - --insecure-plaintext
+      - --ensure-queue-on-register
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+    ports:
+      - "127.0.0.1:7443:7443"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+`;
+}
+
+function dbDockerfile(): string {
+  return `# Postgres for the local pgfsm stack (SPEC-016), created by @pgfsm/cli:
+# postgres:16, PGDG's pg_cron, pgmq (SQL-only, from its source release) and
+# fsm_core's install SQL, which 10-fsm-core.sh runs once, when the db-data
+# volume is empty.
+#
+# The install SQL is db/fsm_core--<FSM_CORE_VERSION>.sql when that file is
+# here (offline, or a build of your own); otherwise it's downloaded from the
+# fsm_core-v<FSM_CORE_VERSION> GitHub release and checked against the
+# release's SHA256SUMS.
+ARG PG_MAJOR=16
+
+FROM postgres:\${PG_MAJOR} AS pgmq
+ARG PGMQ_VERSION=1.4.4
+ADD https://github.com/pgmq/pgmq/archive/refs/tags/v\${PGMQ_VERSION}.tar.gz /tmp/pgmq.tar.gz
+RUN set -eux; \\
+  src="/tmp/pgmq-\${PGMQ_VERSION}/pgmq-extension"; \\
+  tar xzf /tmp/pgmq.tar.gz -C /tmp; \\
+  mkdir -p /out; \\
+  cp "\$src/pgmq.control" "\$src"/sql/*--*.sql /out/; \\
+  cp "\$src/sql/pgmq.sql" "/out/pgmq--\${PGMQ_VERSION}.sql"
+
+FROM postgres:\${PG_MAJOR} AS fsm-core
+ARG FSM_CORE_VERSION
+COPY . /tmp/db/
+RUN set -eux; \\
+  f="fsm_core--\${FSM_CORE_VERSION}.sql"; \\
+  mkdir -p /out; \\
+  if [ -f "/tmp/db/\$f" ]; then \\
+    cp "/tmp/db/\$f" /out/fsm_core.sql; \\
+  else \\
+    apt-get update; \\
+    apt-get install -y --no-install-recommends ca-certificates curl; \\
+    base="https://github.com/pgfsm/fsm/releases/download/fsm_core-v\${FSM_CORE_VERSION}"; \\
+    cd /tmp; \\
+    hint="is fsm_core \${FSM_CORE_VERSION} released? To build without the download, put \$f in db/ (README.md, Run the stack)"; \\
+    curl -fsSL -o "\$f" "\$base/\$f" \\
+      || { echo "Can't download \$f from \$base: \$hint" >&2; exit 1; }; \\
+    curl -fsSL -o SHA256SUMS "\$base/SHA256SUMS" \\
+      || { echo "Can't download SHA256SUMS from \$base: \$hint" >&2; exit 1; }; \\
+    awk -v f="\$f" '\$2 == f' SHA256SUMS | sha256sum -c -; \\
+    cp "\$f" /out/fsm_core.sql; \\
+  fi
+
+FROM postgres:\${PG_MAJOR}
+ARG PG_MAJOR
+RUN apt-get update \\
+  && apt-get install -y --no-install-recommends postgresql-\${PG_MAJOR}-cron \\
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=pgmq /out/ /usr/share/postgresql/\${PG_MAJOR}/extension/
+COPY --from=fsm-core /out/fsm_core.sql /opt/fsm_core/fsm_core.sql
+COPY 10-fsm-core.sh /docker-entrypoint-initdb.d/
+`;
+}
+
+// Run by the postgres image's entrypoint on first start only (an empty data
+// volume), as the superuser, in the database POSTGRES_DB names.
+const DB_INIT_SCRIPT = `#!/bin/sh
+# Installs fsm_core (SPEC-016) when initdb creates the database, in one
+# transaction: an error leaves nothing half-installed, and the container stops.
+set -e
+psql -v ON_ERROR_STOP=1 -1 --no-psqlrc \\
+  --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \\
+  -f /opt/fsm_core/fsm_core.sql
 `;
 
 const GITIGNORE = `node_modules/
@@ -177,23 +333,32 @@ holds a different definition than the one it was generated from.
 
 ## Run the stack
 
-The database needs fsm_core installed (the \`fsm_core--<version>.sql\` release
-asset, or the PGXN extension), which also registers its pg_cron scheduler job.
-Copy \`.env.example\` to \`.env\` (it's gitignored), here and in
-\`sync-worker/typescript/\`. Every command below reads it from the directory
-it runs in. Start them in this order, one terminal each:
+\`docker-compose.yml\` runs Postgres with fsm_core installed (and its pg_cron
+scheduler job), the pgfsm API and the Activity Gateway; your workers run on the
+host. You need Docker, not Supabase. Copy \`.env.example\` to \`.env\` (it's
+gitignored), here and in \`sync-worker/typescript/\`: every command below reads
+it from the directory it runs in.
 
 \`\`\`bash
-npm run api          # the pgfsm API, with its admin routes (local)
+docker compose up -d --build --wait   # first time: builds the Postgres image (db/)
 npm run api:key      # once per database: prints the first admin key; put it in .env as PGFSM_API_KEY
 npm run db:load      # every deploy: loads fsm/ through the API (before the sync worker)
-npm run gateway      # Activity Gateway; async workers connect to it
 cd sync-worker/typescript && deno task dev
 cd async-worker/typescript && deno task start
 cd async-worker/python && uv run run_async_worker.py start
 cd async-worker/rust && cargo run --release -- start
 cd async-worker/go && go run . start
 \`\`\`
+
+The async workers reach the gateway through \`PGFSM_GATEWAY_ADDRESS\`.
+\`docker compose down\` stops the stack; \`down -v\` also deletes the database.
+\`db/Dockerfile\` downloads fsm_core's install SQL from its GitHub release; to
+build offline, put \`fsm_core--<version>.sql\` in \`db/\` first.
+
+Without Docker, use any Postgres 15+ with ltree, pg_cron and pgmq: install
+fsm_core there (the \`fsm_core--<version>.sql\` release asset, or the PGXN
+extension), point \`DATABASE_URL\` at it, and run \`npm run api\` and
+\`npm run gateway\` instead of the compose services.
 
 ## API keys
 
@@ -244,6 +409,14 @@ export async function createProject(
   if (!(await fileExists(join(dir, ".env.example")))) {
     await writeOwnFile(join(dir, ".env.example"), ENV_EXAMPLE, report);
   }
+  await writeOwnFile(
+    join(dir, "docker-compose.yml"),
+    dockerCompose(name),
+    report,
+  );
+  await Deno.mkdir(join(dir, "db"), { recursive: true });
+  await writeOwnFile(join(dir, "db", "Dockerfile"), dbDockerfile(), report);
+  await writeOwnFile(join(dir, "db", "10-fsm-core.sh"), DB_INIT_SCRIPT, report);
   if (!(await fileExists(join(dir, "README.md")))) {
     await writeOwnFile(join(dir, "README.md"), readme(name), report);
   }
