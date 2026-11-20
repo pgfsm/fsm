@@ -137,7 +137,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fsm-core-release
-          path: ${{ env.DB_DIR }}
+          # The artifact holds the folder's contents, not the folder (#701).
+          path: ${{ env.DB_DIR }}/full-release/full-release-${{ needs.preflight.outputs.version }}
 
       - name: compare-pgext-and-fullsqlscript.ts
         run: deno run --allow-all compare-pgext-and-fullsqlscript.ts "${{ needs.preflight.outputs.version }}" --pg ${{ matrix.pg }}
@@ -156,7 +157,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fsm-core-release
-          path: ${{ env.DB_DIR }}
+          # The artifact holds the folder's contents, not the folder (#701).
+          path: ${{ env.DB_DIR }}/full-release/full-release-${{ needs.preflight.outputs.version }}
 
       - name: Upload to PGXN
         id: upload
@@ -205,7 +207,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: fsm-core-release
-          path: ${{ env.DB_DIR }}
+          # The artifact holds the folder's contents, not the folder (#701).
+          path: ${{ env.DB_DIR }}/full-release/full-release-${{ needs.preflight.outputs.version }}
 
       - name: Collect the assets
         run: |
