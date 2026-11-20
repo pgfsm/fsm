@@ -74,7 +74,7 @@ before it passed:
 
 ```bash
 npm run generateBothPgextAndFullsqlscript -- patch          # create the new version (or minor / major)
-npm run buildBothPgextAndFullsqlscript -- --version 2.3.2   # build it
+npm run buildBothPgextAndFullsqlscript -- --version 1.2.1   # build it
 ```
 
 Generating runs `supabase-restart-with-diff.ts <bump>` (the upgrade script; it
@@ -119,7 +119,14 @@ no-op or break on plain PostgreSQL.
 
 ### Versioned release migrations
 
-| Pattern                           | Example                                     | Meaning                         |
-| --------------------------------- | ------------------------------------------- | ------------------------------- |
-| `{ts}_fsm_core--{version}.sql`    | `20260602112452_fsm_core--1.0.0.sql`        | Initial release snapshot        |
-| `{ts}_fsm_core--{old}--{new}.sql` | `20260607154229_fsm_core--1.0.0--1.1.0.sql` | Upgrade diff from `old` → `new` |
+| Pattern                           | Example                              | Meaning                         |
+| --------------------------------- | ------------------------------------ | ------------------------------- |
+| `{ts}_fsm_core--{version}.sql`    | `20261120120000_fsm_core--1.2.0.sql` | Baseline (full schema)          |
+| `{ts}_fsm_core--{old}--{new}.sql` | `<ts>_fsm_core--1.2.0--1.2.1.sql`    | Upgrade diff from `old` → `new` |
+
+The chain starts at the **1.2.0 baseline** (#697): the unreleased 1.0.0 → 2.3.1
+chain was squashed into one full-schema migration, a copy of
+`all-output/fsm_core--1.2.0.sql` dumped from a database built by the old chain.
+The version went down, so there is no upgrade path from a 2.x database: reset it
+(`npm run supabase:db:reset`) or reinstall. The old files are in git history
+before #697.

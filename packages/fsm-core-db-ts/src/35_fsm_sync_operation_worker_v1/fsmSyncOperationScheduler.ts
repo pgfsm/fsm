@@ -64,7 +64,7 @@ export async function schedulerJobStatus(
 /**
  * Idempotently (re)registers the fsm_schedule_all_pending pg_cron job
  * (fsm_core.register_scheduler_job_v2(); `POST /admin/scheduler`) and returns
- * its status. The install and the 2.3.0 migration already register it; this
+ * its status. The install and the 1.2.0 baseline migration already register it; this
  * re-registers it (e.g. after `cron.unschedule`) or changes its schedule
  * (pg_cron's syntax, e.g. '10 seconds'; default '5 seconds'). SECURITY
  * DEFINER, granted to fsm_admin, so the job always belongs to the schema

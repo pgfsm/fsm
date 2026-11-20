@@ -16,8 +16,8 @@ import { withPrerequisites } from "./scripts/prerequisites-sql.ts";
 //   deno run --allow-all supabase-dump-for-full-version.ts --version <x.y.z> [--db-url <url>]
 //
 // 1. The new version: the highest version in supabase/migrations/ plus the
-//    bump (default patch), as in supabase-restart-with-diff.ts: 2.3.1 + patch
-//    = 2.3.2. --version names it instead: build-both-pgext-and-fullsqlscript.ts passes the
+//    bump (default patch), as in supabase-restart-with-diff.ts: 1.2.0 + patch
+//    = 1.2.1. --version names it instead: build-both-pgext-and-fullsqlscript.ts passes the
 //    version the restart script just created, which is then the highest.
 // 2. Two dumps of the local Supabase (or --db-url), in this order: first the
 //    schema (`supabase db dump --schema fsm_core --keep-comments`), then the
@@ -220,7 +220,7 @@ export function newVersion(pkgName: string, bump: ReleaseType): string {
 }
 
 /**
- * fsm_core.version() in the database at `url` (null before 2.3.0), and the
+ * fsm_core.version() in the database at `url` (null for a pre-baseline fsm_core), and the
  * fsm_* roles its login (the owner the dump comes from) is a member of.
  */
 async function databaseInfo(

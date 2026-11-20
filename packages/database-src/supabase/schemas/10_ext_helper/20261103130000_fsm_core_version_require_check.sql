@@ -2,7 +2,7 @@
 -- 20261103120000_fsm_core_version.sql, which supabase-restart-with-diff.ts
 -- rewrites for every new version.
 --
--- Every upgrade script from 2.3.0 on starts with
+-- Every upgrade script after the 1.2.0 baseline starts with
 --   SELECT fsm_core.require_version('<the version it upgrades from>');
 -- so applying one out of order (or twice) fails before changing anything.
 -- scripts/check-fsm-core-version.ts enforces it. The API, fsmlet and gateway
