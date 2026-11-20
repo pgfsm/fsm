@@ -18,13 +18,15 @@ jobs:
   # Decides whether the two Supabase jobs (database, spec011-e2e: ~4 min each,
   # mostly image pulls) can be affected by this PR (#606). They're skipped
   # only when every changed file is on the can't-matter list below, so a new
-  # path runs them by default. Pushes to main always run everything.
+  # path runs them by default. It also gates the two Rust jobs on the pgrx
+  # extension (#699). Pushes to main always run everything.
   changes:
     name: Changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       db: ${{ steps.filter.outputs.db }}
+      ext: ${{ steps.ext.outputs.ext }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: github.event_name == 'pull_request'
@@ -54,6 +56,28 @@ jobs:
             fi
           done < <(git diff --name-only HEAD^1 HEAD)
           echo "db=$db" | tee -a "$GITHUB_OUTPUT"
+
+      # The pgrx crate is unused (see its README), so its fmt/clippy jobs run
+      # only when the crate, the toolchain pin, or this workflow changes (#699).
+      - name: Can this change affect the pgrx extension?
+        id: ext
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            echo "ext=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ext=false
+          while IFS= read -r f; do
+            if [[ "$f" == packages/database-src-extension/fsm_core/* ]] ||
+              [[ "$f" == rust-toolchain.toml ]] ||
+              [[ "$f" == .github/workflows/ci.yml ]]; then
+              echo "affects the pgrx extension: $f"
+              ext=true
+              break
+            fi
+          done < <(git diff --name-only HEAD^1 HEAD)
+          echo "ext=$ext" | tee -a "$GITHUB_OUTPUT"
 
   deno:
     name: Deno (fmt · lint · test)
@@ -217,6 +241,8 @@ jobs:
 
   rust-fmt:
     name: Rust (fmt)
+    needs: changes
+    if: needs.changes.outputs.ext == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -238,6 +264,8 @@ jobs:
   # below (PG 15 headers, cargo-pgrx, pgrx init) — fmt fails fast in parallel.
   rust-clippy:
     name: Rust (clippy)
+    needs: changes
+    if: needs.changes.outputs.ext == 'true'
     runs-on: ubuntu-latest
     # Cold cache: cargo-pgrx compiles for ~5 min before clippy even starts.
     timeout-minutes: 30
