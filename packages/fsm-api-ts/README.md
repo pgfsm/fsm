@@ -56,4 +56,10 @@ Configuration comes from flags or the environment (`DATABASE_URL`, `PORT`,
 
 ## License
 
-Apache-2.0
+[AGPL-3.0-only](./LICENSE). This package is part of the pgfsm engine (SPEC-017).
+Running it unmodified needs nothing beyond the AGPL. If you modify it and offer
+it to users over a network, you must offer them your modified source (AGPL-3.0
+§13). Set `PGFSM_SOURCE_URL` to that source's URL: the API reports it in `GET /`
+and its OpenAPI document. The engine is also available under a
+[commercial licence](../../COMMERCIAL.md); the client SDKs and libraries are
+Apache-2.0 (see the [root LICENSE](../../LICENSE)).

@@ -28,5 +28,8 @@ covers fsm_core's public contract inside packages/database-src/:
 REUSE.toml is the authoritative, machine-readable form of this mapping, and
 each package directory carries the LICENSE file for its licence.
 
-Versions released before this licensing took effect, including fsm_core 1.2.0,
-remain available under the licence they were released under.
+Versions released before this licensing took effect remain available under the
+licence they were released under.
+
+The engine is also available under a commercial licence (COMMERCIAL.md). The
+names "pgfsm" and "fsm_core" aren't licensed by either licence (TRADEMARKS.md).

@@ -7,3 +7,7 @@ The engine (packages/database-src, packages/database-src-extension,
 packages/fsm-api-ts, packages/fsm-async-worker-gateway-ts) is licensed under
 AGPL-3.0-only; everything else under Apache-2.0. See LICENSE and REUSE.toml for
 the exact mapping, and LICENSES/ for the licence texts.
+
+The engine is also available under a commercial licence for organisations that
+can't accept the AGPL; see COMMERCIAL.md. "pgfsm" and "fsm_core" are trademarks
+of the project and aren't licensed by either licence; see TRADEMARKS.md.
