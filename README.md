@@ -343,3 +343,27 @@ See [the ctl package's README](./packages/fsm-ctl-ts/README.md) (`pgfsmctl`) and
   [`adr-003-fsm-async-operation-polyglot-actor-execution-model.md`](./docs/adr/adr-003-fsm-async-operation-polyglot-actor-execution-model.md)
 - Developing or debugging this framework itself, in this repo —
   [`DEVELOPER.md`](./DEVELOPER.md)
+
+---
+
+## License
+
+pgfsm is licensed per component (SPEC-017):
+
+| Component                                                                                    | Licence                                       |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| The engine: fsm_core, `@pgfsm/api`, the Activity Gateway                                     | [AGPL-3.0-only](./LICENSES/AGPL-3.0-only.txt) |
+| Everything else: worker SDKs, `@pgfsm/sync-worker`, `@pgfsm/db`, CLIs, proto stubs, examples | [Apache-2.0](./LICENSES/Apache-2.0.txt)       |
+
+fsm_core's contract files (the FSM JSON schemas and `generated/`) are
+Apache-2.0, so code built on them stays Apache-2.0. Running the unmodified
+engine, including as a hosted service, needs nothing beyond the AGPL; if you
+modify the engine and offer it over a network, you must offer your users its
+source. [LICENSE](./LICENSE) and `REUSE.toml` give the exact mapping.
+
+- **Commercial licence** for the engine, for organisations that can't accept the
+  AGPL: [COMMERCIAL.md](./COMMERCIAL.md)
+- **Trademarks** ("pgfsm", "fsm_core"): [TRADEMARKS.md](./TRADEMARKS.md)
+- **Contributing:** contributions are licensed under the licence of the path
+  they change, under the [CLA](./CLA.md); see
+  [CONTRIBUTING.md](./CONTRIBUTING.md)
