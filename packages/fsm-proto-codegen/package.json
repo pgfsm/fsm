@@ -10,7 +10,7 @@
     "generate:local:docker": "docker build -t fsm-proto-codegen-local . && docker run --rm -v \"$PWD:/workspace\" fsm-proto-codegen-local"
   },
   "devDependencies": {
-    "@bufbuild/buf": "1.72.0",
+    "@bufbuild/buf": "1.75.0",
     "@bufbuild/protoc-gen-es": "1.10.1",
     "@connectrpc/protoc-gen-connect-es": "1.7.0"
   }
