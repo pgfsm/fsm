@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                                                                  |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                                                                  |
+| Status  | Accepted (legal review pending, #707)                                                                                                                                                                                                                                  |
 | Date    | 2026-11-21                                                                                                                                                                                                                                                             |
 | Authors | Niraj, Claude (Opus 5.5)                                                                                                                                                                                                                                               |
 | Issue   | #703                                                                                                                                                                                                                                                                   |
@@ -13,7 +13,7 @@ ship), `CLA.md`.
 
 > This spec records a licensing decision; it is not legal advice. A lawyer
 > reviews the final texts (`COMMERCIAL.md`, `TRADEMARKS.md`, the per-path split)
-> before this spec is Accepted.
+> before #707 merges; the spec was accepted with that review pending.
 
 ---
 
@@ -274,7 +274,7 @@ Apache-2.0.
       minor bumps, and their release notes state the change and that earlier
       versions remain Apache-2.0.
 - [ ] A lawyer has reviewed `COMMERCIAL.md`, `TRADEMARKS.md` and the per-path
-      split before this spec moves to Accepted.
+      split before #707 merges (accepted with this review pending).
 
 ### Open questions
 
@@ -285,4 +285,15 @@ Apache-2.0.
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Accepted on 2026-11-21 (#704) with the legal review still open: the lawyer's
+review of `COMMERCIAL.md`, `TRADEMARKS.md` and the per-path split is tracked in
+#707, and #707 doesn't merge until it's done.
+
+| Issue | Scope                                                                                                                 |
+| ----- | --------------------------------------------------------------------------------------------------------------------- |
+| #705  | `LICENSES/AGPL-3.0-only.txt`, per-path `REUSE.toml` annotations, per-package `LICENSE` files, root `LICENSE`/`NOTICE` |
+| #706  | Licence fields in manifests and `build-npm.ts` (MIT → Apache-2.0 fix), OCI image labels, PGXN `agpl_3`                |
+| #707  | `COMMERCIAL.md`, `TRADEMARKS.md`, README and `CONTRIBUTING.md` licence docs; the legal review                         |
+| #708  | AGPL notices: SPDX header in the fsm_core SQL, licence and source URL in the API and the Gateway                      |
+| #709  | CI check: declared licences match REUSE; shipped Apache-2.0 code imports no AGPL file                                 |
+| #710  | First AGPL engine releases (minor bumps) and the `@pgfsm/db`/`@pgfsm/logging` licence-fix releases                    |
