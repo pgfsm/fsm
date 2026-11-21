@@ -53,6 +53,10 @@ SERVE OPTIONS
                                     able to act as fsm_admin. (env: PGFSM_ENABLE_ADMIN_API=true)
       --env-file <path>             Path to .env file (default: ./.env)
 
+  GET / and the OpenAPI document report the API's licence (AGPL-3.0-only) and
+  where its source is: https://github.com/pgfsm/fsm, or PGFSM_SOURCE_URL when
+  you run a modified API (AGPL-3.0 section 13).
+
 KEY BOOTSTRAP OPTIONS
   -d, --db-url <url>                The database owner's URL (the login that installed
                                     fsm_core), not the API's fsm_authenticator login.

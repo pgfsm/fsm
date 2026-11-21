@@ -52,7 +52,7 @@ await build({
     version: packageVersion,
     description:
       "pgfsm REST API (pgfsm-api): FSM instances, definitions, API keys and the scheduler over HTTP, in front of fsm_core",
-    license: "Apache-2.0",
+    license: "AGPL-3.0-only",
     repository: {
       type: "git",
       url: "git+https://github.com/pgfsm/fsm.git",
@@ -70,6 +70,7 @@ await build({
   postBuild() {
     if (Deno.args.includes("--copy-readme")) {
       Deno.copyFileSync("README.md", "dist/README.md");
+      Deno.copyFileSync("LICENSE", "dist/LICENSE");
     }
   },
 });

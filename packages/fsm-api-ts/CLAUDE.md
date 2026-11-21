@@ -52,7 +52,13 @@ release tags, so release those first.
 - `lib/create-router.ts` — `createRouter()`, kept apart from `create-app.ts`
   (which reads `env.ts` at import) so route modules import and test without the
   API's environment
-- `lib/configure-open-api.ts` — OpenAPI/Scalar docs setup (available at `/docs`)
+- `lib/configure-open-api.ts` — OpenAPI/Scalar docs setup (available at
+  `/docs`); `info.license` and `externalDocs` carry the licence and source URL
+- `lib/license.ts` — the licence notice (SPEC-017): `AGPL-3.0-only` and the
+  source URL (`PGFSM_SOURCE_URL`, default `https://github.com/pgfsm/fsm`),
+  reported by `GET /` (`routes/index.route.ts`'s `createIndexRouter`), the
+  OpenAPI document and the "API ready" log line, for AGPL-3.0 §13. A modified
+  API sets `PGFSM_SOURCE_URL` to its own source
 - `lib/constants.ts`, `lib/types.ts` — shared app-level constants/types
 - `middlewares/logtape-logger.ts` — HTTP access logging via `@logtape/hono`
 - `middlewares/otel-trace.ts` — OpenTelemetry span per request (enabled via

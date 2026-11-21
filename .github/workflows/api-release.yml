@@ -290,7 +290,7 @@ jobs:
           docker buildx imagetools create "${tag_args[@]}" \
             --annotation "index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --annotation "index:org.opencontainers.image.description=pgfsm REST API (pgfsm-api)" \
-            --annotation "index:org.opencontainers.image.licenses=Apache-2.0" \
+            --annotation "index:org.opencontainers.image.licenses=AGPL-3.0-only" \
             --annotation "index:org.opencontainers.image.version=$VERSION" \
             "${sources[@]}"
           docker buildx imagetools inspect "$IMAGE:$VERSION"

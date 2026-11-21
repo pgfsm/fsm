@@ -6,7 +6,7 @@
   "maintainer": [
     "Niraj Kashyap <niraj38re@gmail.com>"
   ],
-  "license": "postgresql",
+  "license": "agpl_3",
   "provides": {
     "fsm_core": {
       "abstract": "A finite state machine implementation for PostgreSQL",

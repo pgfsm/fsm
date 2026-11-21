@@ -218,6 +218,7 @@ for (const u of upgrades) {
 
 // 5. Fill the templates and copy the README.
 const SPDX_TO_PGXN: Record<string, string> = {
+  "agpl-3.0-only": "agpl_3",
   "apache-2.0": "apache_2_0",
   "mit": "mit",
   "postgresql": "postgresql",

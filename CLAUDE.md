@@ -73,6 +73,18 @@ Each linked subdirectory has its own `CLAUDE.md` with commands, file structure,
 dependencies, and naming conventions scoped to that area — consult it when
 working there instead of duplicating detail here.
 
+## Licensing (SPEC-017)
+
+The engine (`packages/database-src`, `packages/database-src-extension`,
+`packages/fsm-api-ts`, `packages/fsm-async-worker-gateway-ts`) is AGPL-3.0-only;
+everything else is Apache-2.0, including fsm_core's contract files
+(`database-src/fsm.machine.schema.*.json`, `xstate.machine.schema.json`,
+`generated/`). `REUSE.toml` is the source of truth. `scripts/check-licenses.ts`
+(CI + prek) fails when a manifest, `build-npm.ts` or `LICENSE` file disagrees
+with it, or when shipped Apache-2.0 code (`src/`, `gen/`) imports AGPL-3.0-only
+code. A new package needs a `LICENSE` file and a matching `license` field;
+Apache-2.0 code must never depend on the engine.
+
 ## Schema Change Propagation
 
 `packages/database-src/` is the source of truth for both the FSM JSON schema and

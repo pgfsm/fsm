@@ -55,8 +55,10 @@ database's owner has. It drops `OWNER TO`, `CREATE EXTENSION`,
 Next to it, it writes `all-output-with-prerequisite-check/fsm_core--<v>.sql`:
 the prerequisites block (`scripts/prerequisites-sql.ts`, shared with the full
 install) followed by the full script, a plain-SQL install (`psql -1 -f`). Both
-give the same fsm_core as the migration chain. The CLI's pg_dump is 15.x, so it
-can only dump Postgres 15.
+give the same fsm_core as the migration chain. Both start with
+`SQL_LICENSE_HEADER` (`scripts/prerequisites-sql.ts`, AGPL-3.0-only per
+SPEC-017); the 1.2.0 files predate it and stay as released. The CLI's pg_dump is
+15.x, so it can only dump Postgres 15.
 
 > There's no bare `supabase:restart:with:diff` script — always specify `patch` /
 > `minor` / `major` (see `package.json` for the full script list, including

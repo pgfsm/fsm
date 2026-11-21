@@ -11,6 +11,7 @@ import {
 } from "stoker/middlewares/index.ts";
 
 import configureOpenAPI from "./configure-open-api.ts";
+import { licenseNotice } from "./license.ts";
 import { createRouter } from "./create-router.ts";
 
 // import { pinoLogger } from "./../middlewares/pino-logger.ts";
@@ -21,7 +22,7 @@ import { apiKeyAuth } from "../middlewares/api-key-auth.ts";
 import { supabaseMiddleware } from "../middlewares/supabase.ts";
 import env from "../env.ts";
 
-import index from "../routes/index.route.ts";
+import { createIndexRouter } from "../routes/index.route.ts";
 import instances from "../routes/instances/instances.index.ts";
 import admin from "../routes/admin/admin.index.ts";
 import definitions from "../routes/definitions/definitions.index.ts";
@@ -137,6 +138,8 @@ export default async function createApp(
   app.notFound(notFound);
   app.onError(onError);
 
+  const notice = licenseNotice(env.PGFSM_SOURCE_URL);
+  const index = createIndexRouter(notice);
   const routes = adminApi
     ? [index, instances, definitions, admin] as const
     : [index, instances, definitions] as const;
@@ -144,11 +147,16 @@ export default async function createApp(
     app.route("/", route);
   });
 
-  configureOpenAPI(app, basePath);
+  configureOpenAPI(app, basePath, notice);
 
   logger.info(
-    "API ready: auth {auth}, admin API {admin}",
-    { auth: auth ? "on" : "OFF", admin: adminApi ? "on" : "off" },
+    "API ready: auth {auth}, admin API {admin}; licence {license}, source {source}",
+    {
+      auth: auth ? "on" : "OFF",
+      admin: adminApi ? "on" : "off",
+      license: notice.license,
+      source: notice.source,
+    },
   );
   return app;
 }

@@ -65,6 +65,7 @@ await build({
   postBuild() {
     if (Deno.args.includes("--copy-readme")) {
       Deno.copyFileSync("README.md", "dist/README.md");
+      Deno.copyFileSync("LICENSE", "dist/LICENSE");
     }
   },
 });

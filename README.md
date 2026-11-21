@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only%20engine%20%7C%20Apache--2.0-blue.svg" alt="License: AGPL-3.0-only engine, Apache-2.0 SDKs"></a>
 </p>
 
 > This is the **quick-start guide for using the published `@pgfsm/*` packages**

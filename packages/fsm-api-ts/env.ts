@@ -35,6 +35,9 @@ const EnvSchema = z.object({
   OTEL_DENO: z.string().optional().default("false"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().default("pgfsm-api"),
+  // Where the running API's source is (SPEC-017, AGPL-3.0 §13): GET / and the
+  // OpenAPI document report it. A modified API points it at its own source.
+  PGFSM_SOURCE_URL: z.string().url().default("https://github.com/pgfsm/fsm"),
   // SPEC-009 §3. Auth is on unless PGFSM_NO_AUTH=true (refused in production).
   PGFSM_NO_AUTH: z.enum(["true", "false"]).default("false").transform((v) =>
     v === "true"

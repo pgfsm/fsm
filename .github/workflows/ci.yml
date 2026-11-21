@@ -115,6 +115,12 @@ jobs:
       - name: fsm_core SQL reads the clock through the seams
         run: deno run --allow-read --allow-run=git scripts/check-sql-clock-seams.ts
 
+      # Blocking: every package's declared licence (manifest, build-npm.ts,
+      # LICENSE file) matches REUSE.toml, and no shipped Apache-2.0 code
+      # imports AGPL-3.0-only code (SPEC-017, #709).
+      - name: Licences match REUSE.toml
+        run: deno run --allow-read scripts/check-licenses.ts
+
       # Blocking: the API app stopped compiling after #341 and nobody noticed,
       # because no job type-checked it (#472); @pgfsm/db, pgfsmctl and
       # @pgfsm/sync-worker only looked clean because pg was `any` (#479).
@@ -143,7 +149,7 @@ jobs:
       # The fsm-core-db-ts and fsm-sync-worker-ts test/ dirs are included
       # because their DB tests skip themselves without DATABASE_URL.
       - name: Test (unit)
-        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test packages/fsm-api-ts/stoker-src packages/fsm-api-ts/test
+        run: deno test --allow-all packages/fsm-compiler-ts packages/fsm-cli-ts packages/fsm-ctl-ts packages/fsm-core-db-ts/test packages/fsm-sync-worker-ts/test packages/fsm-async-worker-gateway-ts/test packages/fsm-async-worker-sdk-ts/test packages/fsm-api-ts/stoker-src packages/fsm-api-ts/test scripts/check-licenses.test.ts packages/database-src/scripts/prerequisites-sql.test.ts
 
   python-async-worker-sdk:
     name: Python async worker SDK (test · build)
