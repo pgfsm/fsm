@@ -134,8 +134,7 @@ Things the install relies on:
   server has it and refuses otherwise. Supabase and Neon have it; PGDG doesn't
   package it, so `install-test/Dockerfile` copies its SQL-only extension files
   from pgmq's source release (1.4.4, the version Supabase runs). pgfsm doesn't
-  ship pgmq's code. `schemas/00_pre_ext/20241218134622_PGMQ_source.sql` is only
-  an old commented-out reference copy.
+  ship or vendor pgmq's code.
 - **pg_cron** is required: the 1.2.0 baseline migration registers the
   `fsm_schedule_all_pending` job through `register_scheduler_job_v2()`, so
   `supabase db reset` leaves it registered too. pg_cron can only be created in

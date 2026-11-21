@@ -18,7 +18,6 @@ const SCHEMAS = "packages/database-src/supabase/schemas/";
 const DB_CLIENT = "packages/fsm-core-db-ts/src/";
 const EXEMPT = new Set([
   "packages/database-src/supabase/schemas/10_ext_helper/20261031120000_fsm_core_clock.sql",
-  "packages/database-src/supabase/schemas/00_pre_ext/20241218134622_PGMQ_source.sql",
 ]);
 
 // Function-call forms. The lookbehind skips Date.now() / performance.now() and

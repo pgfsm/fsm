@@ -7,7 +7,3 @@ The engine (packages/database-src, packages/database-src-extension,
 packages/fsm-api-ts, packages/fsm-async-worker-gateway-ts) is licensed under
 AGPL-3.0-only; everything else under Apache-2.0. See LICENSE and REUSE.toml for
 the exact mapping, and LICENSES/ for the licence texts.
-
-This product includes a reference copy of pgmq's source
-(packages/database-src/supabase/schemas/00_pre_ext/20241218134622_PGMQ_source.sql),
-Copyright (c) 2023 Tembo, licensed under the PostgreSQL License.

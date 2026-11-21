@@ -50,11 +50,3 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Niraj Kashyap <niraj.38.re@gmail.com>"
 SPDX-License-Identifier = "Apache-2.0"
-
-# Third-party: a commented-out reference copy of pgmq's source (Tembo,
-# PostgreSQL License). pgfsm doesn't ship pgmq's code.
-[[annotations]]
-path = "packages/database-src/supabase/schemas/00_pre_ext/20241218134622_PGMQ_source.sql"
-precedence = "override"
-SPDX-FileCopyrightText = "2023 Tembo"
-SPDX-License-Identifier = "PostgreSQL"

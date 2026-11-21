@@ -25,13 +25,6 @@ covers fsm_core's public contract inside packages/database-src/:
   packages/database-src/xstate.machine.schema.json
   packages/database-src/generated/
 
-Third-party code keeps its own licence:
-
-  packages/database-src/supabase/schemas/00_pre_ext/20241218134622_PGMQ_source.sql
-                                    a reference copy of pgmq's source,
-                                    Copyright (c) 2023 Tembo, PostgreSQL
-                                    License (LICENSES/PostgreSQL.txt)
-
 REUSE.toml is the authoritative, machine-readable form of this mapping, and
 each package directory carries the LICENSE file for its licence.
 
