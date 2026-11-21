@@ -97,7 +97,7 @@ await build({
     version: packageVersion,
     description:
       "Activity Gateway (async-operation-worker-gateway/-ctl) for async-operation-type FSM operations across polyglot actors",
-    license: "Apache-2.0",
+    license: "AGPL-3.0-only",
     // pg ships no types of its own; dnt only auto-installs packages that
     // are themselves import specifiers, so without this the type-check
     // pass can't resolve `import ... from "pg"` (deno.json's own
@@ -113,6 +113,7 @@ await build({
   postBuild() {
     if (Deno.args.includes("--copy-readme")) {
       Deno.copyFileSync("README.md", "dist/README.md");
+      Deno.copyFileSync("LICENSE", "dist/LICENSE");
     }
   },
 });

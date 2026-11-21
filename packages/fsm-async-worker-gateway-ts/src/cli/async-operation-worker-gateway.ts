@@ -8,6 +8,7 @@ import { type DBDeps, requireFsmCoreVersion } from "@pgfsm/db";
 import { type SidecarListener, startActivityGatewayServer } from "../index.ts";
 import { CLI_INVOCATION } from "./gateway-invocation.ts";
 import { PACKAGE_VERSION } from "./version.ts";
+import { licenseNotice } from "../license.ts";
 
 dotenv.config({ path: ".env" });
 
@@ -134,6 +135,11 @@ DESCRIPTION
   still exceed it (more likely on the non-"internalAsyncOperation" path) and will fail
   this step (registration itself still succeeds; only the queue-ensure call
   fails, logged as an error).
+
+LICENCE
+  The Activity Gateway is AGPL-3.0-only. It logs its licence and where its
+  source is at startup: https://github.com/pgfsm/fsm, or PGFSM_SOURCE_URL when
+  you run a modified gateway (AGPL-3.0 section 13).
 `);
 }
 
@@ -337,6 +343,16 @@ const onSignal = () => {
 
 Deno.addSignalListener("SIGINT", onSignal);
 Deno.addSignalListener("SIGTERM", onSignal);
+
+const notice = licenseNotice(Deno.env.get("PGFSM_SOURCE_URL"));
+logger.info(
+  "@pgfsm/async-worker-gateway {version}: licence {license}, source {source}",
+  {
+    version: PACKAGE_VERSION,
+    license: notice.license,
+    source: notice.source,
+  },
+);
 
 try {
   logger.info(

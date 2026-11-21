@@ -10,10 +10,12 @@ queue names when creating the backing table, consuming part of that budget:
 | Standard    | `pgmq_q_`             | 8 chars       | 55 chars              |
 | Partitioned | `template_pgmq_q_`    | 16 chars      | **47 chars**          |
 
-pgmq validates against the partitioned limit (the tighter one):
+pgmq validates against the partitioned limit (the tighter one), in
+`validate_queue_name()`
+([`pgmq-extension/sql/pgmq.sql`](https://github.com/pgmq/pgmq/blob/v1.4.4/pgmq-extension/sql/pgmq.sql),
+pgmq 1.4.4):
 
 ```sql
--- packages/database-src/supabase/schemas/20241218134622_PGMQ_source.sql
 IF length(queue_name) > 47 THEN
   RAISE EXCEPTION 'queue name is too long, maximum length is 47 characters';
 END IF;

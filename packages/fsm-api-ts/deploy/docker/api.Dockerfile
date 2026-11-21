@@ -46,7 +46,7 @@ ARG VERSION=dev
 LABEL org.opencontainers.image.title="pgfsm API" \
       org.opencontainers.image.description="pgfsm REST API (pgfsm-api)" \
       org.opencontainers.image.source="https://github.com/pgfsm/fsm" \
-      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 COPY --from=build /out/ /usr/local/bin/
 USER nonroot

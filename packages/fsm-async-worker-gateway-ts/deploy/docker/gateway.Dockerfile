@@ -55,7 +55,7 @@ ARG VERSION=dev
 LABEL org.opencontainers.image.title="pgfsm Activity Gateway" \
       org.opencontainers.image.description="pgfsm Activity Gateway (async-operation worker gateway)" \
       org.opencontainers.image.source="https://github.com/pgfsm/fsm" \
-      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 COPY --from=build /out/ /usr/local/bin/
 USER nonroot

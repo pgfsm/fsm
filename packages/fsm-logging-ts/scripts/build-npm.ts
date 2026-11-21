@@ -19,7 +19,7 @@ await build({
     version: packageVersion,
     description:
       "Shared LogTape logging configuration (composition-root configurator, category vocabulary, table-rendering console sink) for FSM services",
-    license: "MIT",
+    license: "Apache-2.0",
   },
   compilerOptions: {
     lib: ["ES2022", "DOM"],
@@ -28,6 +28,7 @@ await build({
   postBuild() {
     if (Deno.args.includes("--copy-readme")) {
       Deno.copyFileSync("README.md", "dist/README.md");
+      Deno.copyFileSync("LICENSE", "dist/LICENSE");
     }
   },
 });

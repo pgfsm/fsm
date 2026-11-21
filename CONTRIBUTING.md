@@ -183,4 +183,9 @@ block a merge.
 ## License
 
 By contributing, you agree that your contributions will be licensed under the
-[Apache License 2.0](LICENSE) and the terms of the [CLA](CLA.md).
+licence of the path they change, and under the terms of the [CLA](CLA.md). The
+engine (`packages/database-src`, `packages/database-src-extension`,
+`packages/fsm-api-ts`, `packages/fsm-async-worker-gateway-ts`) is
+[AGPL-3.0-only](LICENSES/AGPL-3.0-only.txt); everything else is
+[Apache-2.0](LICENSES/Apache-2.0.txt). [LICENSE](LICENSE) and `REUSE.toml` give
+the exact mapping (SPEC-017).

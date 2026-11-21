@@ -262,8 +262,14 @@ Apache-2.0.
       and `@pgfsm/compiler` imports of the contract files.
 - [ ] The API and Gateway GHCR images carry
       `org.opencontainers.image.licenses=AGPL-3.0-only`.
+
+<!-- REUSE-IgnoreStart -->
+
 - [ ] The fsm_core PGXN `META.json` declares `agpl_3`, and the fsm_core install
       SQL starts with an `SPDX-License-Identifier: AGPL-3.0-only` header.
+
+<!-- REUSE-IgnoreEnd -->
+
 - [ ] The API reports its licence and a source URL (version endpoint or OpenAPI
       `info`), and the Gateway logs them at startup.
 - [ ] `COMMERCIAL.md` and `TRADEMARKS.md` exist and are linked from `README.md`

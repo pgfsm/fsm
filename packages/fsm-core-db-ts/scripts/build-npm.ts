@@ -27,7 +27,7 @@ await build({
     name: "@pgfsm/db",
     version: packageVersion,
     description: "Raw pg client helpers for PostgreSQL-backed FSM instances",
-    license: "MIT",
+    license: "Apache-2.0",
     // @pgfsm/db's own public types (DBDeps.db: Pool) reference pg's Pool
     // type, but pg ships no types of its own — @types/pg supplies them.
     // dnt only auto-detects dependencies from the value-level import graph,
@@ -48,6 +48,7 @@ await build({
   postBuild() {
     if (Deno.args.includes("--copy-readme")) {
       Deno.copyFileSync("README.md", "dist/README.md");
+      Deno.copyFileSync("LICENSE", "dist/LICENSE");
     }
   },
 });

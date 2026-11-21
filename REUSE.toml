@@ -4,11 +4,49 @@ SPDX-PackageName = "FSM Framework"
 SPDX-PackageSupplier = "Niraj Kashyap <niraj.38.re@gmail.com>"
 SPDX-PackageDownloadLocation = "https://github.com/pgfsm/fsm"
 
-# Catch-all: the entire repository is Niraj Kashyap's original work under
-# Apache-2.0 (see NOTICE and LICENSE). "aggregate" precedence means any
-# per-file SPDX header added later takes priority over this bulk annotation.
+# Licensing per SPEC-017 (docs/specs/spec-017-licensing-agpl-core-apache-sdks.md):
+# the engine, reached only over a protocol (Postgres, HTTP, TCP), is
+# AGPL-3.0-only; everything users' code runs in, links or copies is Apache-2.0.
+#
+# When several annotations match a file, the LAST one wins, so the order here
+# matters: the Apache-2.0 catch-all, then the AGPL-3.0-only engine paths, then
+# the Apache-2.0 contract files inside the engine. "aggregate" precedence
+# combines an annotation with any SPDX header in the file itself.
+#
+# scripts/check-licenses.ts (CI + prek) keeps every package's manifest,
+# build-npm.ts and LICENSE file in line with these annotations.
+
+# Everything not matched below: SDKs, @pgfsm/sync-worker, @pgfsm/db,
+# @pgfsm/logging, @pgfsm/compiler, @pgfsm/cli, @pgfsm/ctl, proto contracts and
+# stubs, examples, test apps, docs and repo tooling.
 [[annotations]]
 path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Niraj Kashyap <niraj.38.re@gmail.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# The engine: fsm_core (SQL, its pgrx extension form), @pgfsm/api and the
+# Activity Gateway.
+[[annotations]]
+path = [
+  "packages/database-src/**",
+  "packages/database-src-extension/**",
+  "packages/fsm-api-ts/**",
+  "packages/fsm-async-worker-gateway-ts/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Niraj Kashyap <niraj.38.re@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# fsm_core's public contract, which @pgfsm/db and @pgfsm/compiler import and
+# ship: the FSM JSON schemas users write fsm.json against, and the type
+# descriptions generated from the schema.
+[[annotations]]
+path = [
+  "packages/database-src/fsm.machine.schema.*.json",
+  "packages/database-src/xstate.machine.schema.json",
+  "packages/database-src/generated/**",
+]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Niraj Kashyap <niraj.38.re@gmail.com>"
 SPDX-License-Identifier = "Apache-2.0"

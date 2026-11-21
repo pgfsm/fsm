@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@std/assert": "jsr:@std/assert@1",
     "@std/cli": "jsr:@std/cli@1",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.97.0",
     "@types/pg": "npm:@types/pg@^8.18.0",

@@ -2,3 +2,8 @@ FSM Framework
 Copyright 2025 Niraj Kashyap
 
 This product includes software developed by Niraj Kashyap.
+
+The engine (packages/database-src, packages/database-src-extension,
+packages/fsm-api-ts, packages/fsm-async-worker-gateway-ts) is licensed under
+AGPL-3.0-only; everything else under Apache-2.0. See LICENSE and REUSE.toml for
+the exact mapping, and LICENSES/ for the licence texts.

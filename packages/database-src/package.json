@@ -33,7 +33,7 @@
     "generateBothPgextAndFullsqlscript": "tsx generate-both-pgext-and-fullsqlscript.ts"
   },
   "author": "Niraj Kashyap",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "dotenv": "^16.5.0",

@@ -112,7 +112,6 @@ no-op or break on plain PostgreSQL.
 
 | Schema file                                                | What it does                                                                                   | Notes                                                               |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `20241218134622_PGMQ_source.sql`                           | Full pgmq extension DDL                                                                        | Reference copy only — not applied directly                          |
 | `20241218134624_supabase_only_pgmq_to_public_schema.sql`   | Public-schema `SECURITY DEFINER` wrappers for pgmq functions                                   | Entirely commented out — kept as reference                          |
 | `20241218134634_supabase_only_pgmq_to_fsm_core_schema.sql` | `fsm_core`-schema wrappers for the same pgmq functions                                         | Entirely commented out — `fsm_core` calls pgmq directly             |
 | `20250319134653_fsm_core_supabase_access_update.sql`       | Grants `USAGE` + `ALL` on tables/routines/sequences to `anon`, `authenticated`, `service_role` | Required for Supabase RLS and PostgREST; no effect outside Supabase |

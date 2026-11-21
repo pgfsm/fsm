@@ -161,6 +161,9 @@ Install section, which documents this. Same issue applies to
 - `cli/` — two CLI entry points (`async-operation-worker-gateway.ts`,
   `async-operation-worker-gateway-ctl.ts`)
 - `gatewayServer.ts` — sidecar + gRPC/Connect server, wired together
+- `license.ts` — the licence notice (SPEC-017): the CLI logs `AGPL-3.0-only` and
+  the source URL (`PGFSM_SOURCE_URL`, default `https://github.com/pgfsm/fsm`) at
+  startup, for AGPL-3.0 §13
 - `gatewayClient.ts` — client for the gRPC/Connect API (`ActivityGatewayClient`)
 - `sidecar/` — worker registration + dispatch (`SidecarGateway`), on one or more
   listeners: Unix socket(s) and/or TCP (SPEC-007)

@@ -1,8 +1,13 @@
 import { apiReference } from "@scalar/hono-api-reference";
 
+import { LICENSE_URL, type LicenseNotice, licenseNotice } from "./license.ts";
 import type { AppOpenAPI } from "./types.ts";
 
-export default function configureOpenAPI(app: AppOpenAPI, basePath = "") {
+export default function configureOpenAPI(
+  app: AppOpenAPI,
+  basePath = "",
+  notice: LicenseNotice = licenseNotice(),
+) {
   const prefixed = basePath || "";
   const specUrl = `${prefixed}/openapi`;
 
@@ -11,7 +16,10 @@ export default function configureOpenAPI(app: AppOpenAPI, basePath = "") {
     info: {
       version: "1.0.0",
       title: "FSM API",
+      // SPEC-017: the API's licence and, for AGPL-3.0 §13, its source.
+      license: { name: notice.license, url: LICENSE_URL },
     },
+    externalDocs: { description: "Source code", url: notice.source },
     servers: [{ url: prefixed || "/" }],
   });
 
