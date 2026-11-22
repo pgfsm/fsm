@@ -284,8 +284,8 @@ Apache-2.0.
 
 ### Open questions
 
-- The contact address `COMMERCIAL.md` gives (personal email or a dedicated
-  alias).
+- ~~The contact address `COMMERCIAL.md` gives (personal email or a dedicated
+  alias).~~ Resolved in #707: the dedicated alias `licensing@pgfsm.dev`.
 - Whether `test-apps/` should carry an explicit "examples, copy freely" note in
   addition to Apache-2.0.
 

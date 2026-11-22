@@ -31,9 +31,8 @@ the engine without publishing their changes.
 The engine is available under a commercial licence as an alternative to the
 AGPL. Terms and pricing aren't published. Contact us to discuss them:
 
-<!-- TODO(#707): replace with the commercial contact address before merge. -->
-
-**Contact:** _to be announced_
+**Contact:** [licensing@pgfsm.dev](mailto:licensing@pgfsm.dev). Tell us your
+organisation, which engine components you use and how you deploy them.
 
 The [Contributor License Agreement](CLA.md) is what makes this dual licensing
 possible: it lets the project offer contributed code under both licences.
