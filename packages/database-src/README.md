@@ -96,3 +96,14 @@ deno task compare:pgext <v> --pg 16    # Docker: plain-SQL install = CREATE EXTE
 - [Release workflow & migration naming](./docs/guides/release.md)
 - [Development setup](./docs/guides/development.md)
 - [Extension creation ADR](../database-src-extension/docs/adr/extension-creation-approach-qa.md)
+
+## License
+
+[AGPL-3.0-only](./LICENSE). fsm_core is part of the pgfsm engine (SPEC-017),
+except its contract files (`fsm.machine.schema.*.json`,
+`xstate.machine.schema.json`, `generated/`), which are Apache-2.0. Running it
+unmodified needs nothing beyond the AGPL. If you modify it and offer it to users
+over a network, you must offer them your modified source (AGPL-3.0 §13). The
+generated install SQL starts with an SPDX header saying so. The engine is also
+available under a [commercial licence](../../COMMERCIAL.md); the client SDKs and
+libraries are Apache-2.0 (see the [root LICENSE](../../LICENSE)).

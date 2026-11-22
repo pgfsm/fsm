@@ -187,5 +187,11 @@ licence of the path they change, and under the terms of the [CLA](CLA.md). The
 engine (`packages/database-src`, `packages/database-src-extension`,
 `packages/fsm-api-ts`, `packages/fsm-async-worker-gateway-ts`) is
 [AGPL-3.0-only](LICENSES/AGPL-3.0-only.txt); everything else is
-[Apache-2.0](LICENSES/Apache-2.0.txt). [LICENSE](LICENSE) and `REUSE.toml` give
-the exact mapping (SPEC-017).
+[Apache-2.0](LICENSES/Apache-2.0.txt), including fsm_core's contract files
+(`fsm.machine.schema.*.json`, `xstate.machine.schema.json`, `generated/`) inside
+`packages/database-src`. [LICENSE](LICENSE) and `REUSE.toml` give the exact
+mapping (SPEC-017).
+
+The CLA is what lets the project also offer the engine under a
+[commercial licence](COMMERCIAL.md). Contributing doesn't give you rights to the
+project's names; see [TRADEMARKS.md](TRADEMARKS.md).
