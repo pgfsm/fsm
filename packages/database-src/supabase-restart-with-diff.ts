@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import semver, { type ReleaseType } from "semver";
 import { getExistingHighestPkgVersion } from "./get-existing-highest-pkg-version.ts";
+import { SQL_LICENSE_HEADER } from "./scripts/prerequisites-sql.ts";
 
 // Creates the upgrade script for the next fsm_core version, the Deno
 // equivalent of the npm script chain
@@ -162,7 +163,9 @@ async function stopSupabase(): Promise<void> {
 /**
  * Puts SELECT fsm_core.require_version('<from>'); at the top of the upgrade
  * script `db diff` just wrote, so applying it to any other version stops
- * before changing anything (scripts/check-fsm-core-version.ts checks it).
+ * before changing anything (scripts/check-fsm-core-version.ts checks it),
+ * under SQL_LICENSE_HEADER, which every fsm_core SQL artifact starts with
+ * (SPEC-017). Safe to re-run: adds whichever of the two is missing.
  */
 export async function addRequireVersion(
   pkgName: string,
@@ -180,18 +183,37 @@ export async function addRequireVersion(
     );
   }
   const file = join(MIGRATIONS_DIR, files[0]);
-  const sql = await Deno.readTextFile(file);
+  const original = await Deno.readTextFile(file);
+  const sql = withUpgradeScriptPreamble(original, pkgName, {
+    from: v.from,
+    to: v.to,
+  });
+  if (sql === original) return;
+  await Deno.writeTextFile(file, sql);
+  console.log(`Added the licence header and require_version to ${files[0]}`);
+}
+
+/**
+ * An upgrade script's text with SQL_LICENSE_HEADER first, then
+ * SELECT fsm_core.require_version('<from>');, each added only if missing.
+ */
+export function withUpgradeScriptPreamble(
+  sql: string,
+  pkgName: string,
+  v: { from: string; to: string },
+): string {
   const line = `SELECT fsm_core.require_version('${v.from}');`;
-  if (sql.includes(line)) return;
-  await Deno.writeTextFile(
-    file,
-    `-- ${pkgName} ${v.from} -> ${v.to}. Applied to any other version, it stops
+  let out = sql;
+  if (!out.includes(line)) {
+    out =
+      `-- ${pkgName} ${v.from} -> ${v.to}. Applied to any other version, it stops
 -- here and changes nothing.
 ${line}
 
-${sql}`,
-  );
-  console.log(`Added ${line} to ${files[0]}`);
+${out}`;
+  }
+  if (!out.startsWith(SQL_LICENSE_HEADER)) out = SQL_LICENSE_HEADER + out;
+  return out;
 }
 
 // npm run supabase:docker:volume:clean
