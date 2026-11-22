@@ -57,8 +57,9 @@ the prerequisites block (`scripts/prerequisites-sql.ts`, shared with the full
 install) followed by the full script, a plain-SQL install (`psql -1 -f`). Both
 give the same fsm_core as the migration chain. Both start with
 `SQL_LICENSE_HEADER` (`scripts/prerequisites-sql.ts`, AGPL-3.0-only per
-SPEC-017); the 1.2.0 files predate it and stay as released. The CLI's pg_dump is
-15.x, so it can only dump Postgres 15.
+SPEC-017), including 1.2.0's: it was never released before SPEC-017, so 1.2.0 is
+fsm_core's first AGPL release. The CLI's pg_dump is 15.x, so it can only dump
+Postgres 15.
 
 > There's no bare `supabase:restart:with:diff` script — always specify `patch` /
 > `minor` / `major` (see `package.json` for the full script list, including
@@ -117,8 +118,10 @@ path to it: `npm run supabase:db:reset`.
 
 **Every new version's migration must:**
 
-- start with `SELECT fsm_core.require_version('<from>');` (the diff doesn't
-  generate it; `supabase-restart-with-diff.ts` adds it after diffing);
+- start with `SQL_LICENSE_HEADER`, then
+  `SELECT fsm_core.require_version('<from>');` (the diff generates neither;
+  `supabase-restart-with-diff.ts` adds both after diffing, via
+  `withUpgradeScriptPreamble()`);
 - redefine `fsm_core.version()` to return the new version: the same script bumps
   the literal in `schemas/10_ext_helper/20261103120000_fsm_core_version.sql`
   before diffing, and the diff carries it.

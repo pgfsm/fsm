@@ -58,7 +58,7 @@ CREATE SCHEMA IF NOT EXISTS fsm_core;
  */
 /**
  * The licence header every generated fsm_core SQL artifact starts with
- * (SPEC-017): fsm_core is AGPL-3.0-only from the first release after 1.2.0.
+ * (SPEC-017): fsm_core is AGPL-3.0-only from 1.2.0, its first release (#710).
  */
 export const SQL_LICENSE_HEADER =
   `-- SPDX-FileCopyrightText: 2025 Niraj Kashyap <niraj.38.re@gmail.com>

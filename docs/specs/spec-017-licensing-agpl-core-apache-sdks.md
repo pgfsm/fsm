@@ -186,7 +186,11 @@ checks only shipped code: each package's `src/` and whatever its
   `@pgfsm/db`'s startup check refuse it (same-major rule) for no benefit. Each
   release note states "licence: AGPL-3.0-only from this version; earlier
   versions remain Apache-2.0". No empty releases are needed: the licence change
-  rides along with the next real release of each component.
+  rides along with the next real release of each component. **Amended in #710:**
+  fsm_core 1.2.0's release never completed, so no fsm_core was ever published
+  under Apache-2.0. 1.2.0, the baseline everything on `main` already requires
+  (`FSM_CORE_MIN_VERSION`), is fsm_core's first release and is AGPL-3.0-only;
+  its release note says so without the "earlier versions" line.
 - **Commercial licence (reserved):** a short `COMMERCIAL.md` says that the
   engine is available under a commercial licence for organisations that can't
   accept the AGPL, and gives a contact. It doesn't include terms or pricing.
