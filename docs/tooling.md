@@ -18,9 +18,10 @@ contributors and CI use identical toolchains across the three ecosystems.
 | Tool                                                  | Purpose                                          | Pinned in                                                   |
 | ----------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |
 | [**proto**](https://moonrepo.dev/docs/proto/overview) | Pins language/runtime versions                   | Root `.prototools` (packages inherit; may override)         |
-| **Deno** `2.8.1`                                      | Primary runtime — API server, compiler, worker   | Root `.prototools`                                          |
-| **Node** `26.13.0`                                    | Supabase CLI tooling, npm publish, proto-codegen | Root `.prototools`                                          |
-| **Rust** `1.95.0`                                     | PostgreSQL extension                             | Root `rust-toolchain.toml` (proto delegates Rust to rustup) |
+| **Deno** `2.9.7`                                      | Primary runtime — API server, compiler, worker   | Root `.prototools`                                          |
+| **Node** `26.13.1`                                    | Supabase CLI tooling, npm publish, proto-codegen | Root `.prototools`                                          |
+| **npm** `11.21.3`                                     | npm staged publishing via OIDC (needs ≥ 11.21)   | Root `.prototools` (not Node's bundled npm)                 |
+| **Rust** `1.99.1`                                     | PostgreSQL extension                             | Root `rust-toolchain.toml` (proto delegates Rust to rustup) |
 
 > Run `proto use` to install the pinned versions. CI (`prek.yml`, `ci.yml`)
 > installs from the same files via `moonrepo/setup-toolchain` and a bare
@@ -149,7 +150,7 @@ for supply-chain safety; Renovate keeps the digests updated.
 | `pypi-publish.yml`   | tag push (`async-worker-sdk-py-v*`)                                                                            | `setup-python` + `uv build` + `pypa/gh-action-pypi-publish`                      | Publish `pgfsm-async-worker-sdk` to PyPI                                        |
 | `crates-publish.yml` | tag push (`async-worker-sdk-rs-v*`)                                                                            | `cargo test` + `cargo publish`                                                   | Publish the `pgfsm-async-worker-sdk` crate to crates.io                         |
 | `go-publish.yml`     | tag push (`async-worker-sdk-go-v*`)                                                                            | `go test` + `git tag` + Go module proxy                                          | Release the `fsm-async-worker-sdk-go` Go module                                 |
-| `npm-publish.yml`    | tag push (`compiler-v*`/`cli-v*`/`ctl-v*`/`db-v*`/`sync-worker-v*`/`async-worker-sdk-v*`/`logging-v*`), manual | `setup-deno` + `setup-node` + `deno pack` + `npm publish`                        | Publish TS packages to npm                                                      |
+| `npm-publish.yml`    | tag push (`compiler-v*`/`cli-v*`/`ctl-v*`/`db-v*`/`sync-worker-v*`/`async-worker-sdk-v*`/`logging-v*`), manual | `setup-toolchain` + dnt / `deno pack` + `npm stage publish` (OIDC)               | Stage TS packages on npm; a maintainer approves (see below)                     |
 
 > **CI test scope:** `ci.yml` runs only the DB-free unit suites
 > (`packages/fsm-compiler-ts`, `packages/fsm-api-ts/stoker-src`), plus
@@ -169,13 +170,61 @@ them to npm, and attach the CycloneDX SBOM to GitHub Releases.
 | Tool                              | Purpose                                           | Where             |
 | --------------------------------- | ------------------------------------------------- | ----------------- |
 | **`deno pack`**                   | Packs a Deno workspace member into an npm tarball | `npm-publish.yml` |
-| **`npm publish`**                 | Publishes the packed tarball to the npm registry  | `npm-publish.yml` |
+| **`npm stage publish`**           | Stages the package on npm for approval (#719)     | `npm-publish.yml` |
 | **`softprops/action-gh-release`** | Attaches the CycloneDX SBOM to GitHub Releases    | `sbom.yml`        |
 
 > Releases are tag-driven (`compiler-v*`, `cli-v*`, `ctl-v*`, `db-v*`,
 > `sync-worker-v*`, `async-worker-gateway-v*`, `async-worker-sdk-v*`). Package
 > versions for `packages/database-src` are computed by `tsx` scripts
 > (`get-next-pkg-version.ts`).
+
+### npm releases: trusted publishing + staged approval (#719)
+
+No workflow holds an npm token. Each npm job authenticates with npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers/) (GitHub OIDC,
+`permissions: id-token: write`) and runs `scripts/npm-stage-publish.sh`, which
+runs `npm stage publish` (npm >= 11.21, pinned in `.prototools`). A staged
+version is **not installable** until a maintainer approves it with 2FA:
+
+```bash
+npm stage list @pgfsm/<pkg>          # find the stage id
+npm stage approve <stage-id>         # prompts for 2FA; the version goes live
+```
+
+or approve on the package's page on npmjs.com (several at once, one 2FA prompt).
+Approve a dependency before its dependents: `@pgfsm/compiler` before
+`@pgfsm/cli`, `@pgfsm/proto-codegen` before `@pgfsm/async-worker-sdk`,
+`@pgfsm/db`/`@pgfsm/logging` before `@pgfsm/api`/`@pgfsm/async-worker-gateway`.
+`api-release.yml` and `gateway-release.yml` wait up to 30 minutes for the
+approval before tagging the image; after that, approve and re-run the failed
+jobs. The OIDC identity can't list staged versions, so re-running a release
+whose version is staged but unapproved fails at the stage step: approve (or
+`npm stage reject`) the staged one instead.
+
+**One-time setup per package** (npmjs.com → package → Settings → Trusted
+publishing → GitHub Actions): organization `pgfsm`, repository `fsm`, the
+workflow filename below, no environment. Under _Allowed actions_ leave
+`npm publish` **off** (stage-only), so CI can never release without an approval.
+A new trusted publisher must publish within 2 days of being created, and it
+can't be edited (delete and recreate it instead). The built `package.json` must
+have `repository.url` = this repo; every `build-npm.ts` and the `deno pack` jobs
+set it.
+
+| Workflow file         | Packages                                                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `npm-publish.yml`     | `@pgfsm/compiler`, `@pgfsm/cli`, `@pgfsm/ctl`, `@pgfsm/db`, `@pgfsm/sync-worker`, `@pgfsm/async-worker-sdk`, `@pgfsm/logging` |
+| `proto-publish.yml`   | `@pgfsm/proto-codegen`                                                                                                        |
+| `gateway-release.yml` | `@pgfsm/async-worker-gateway`                                                                                                 |
+| `api-release.yml`     | `@pgfsm/api`                                                                                                                  |
+
+A package that isn't on npm yet (`@pgfsm/cli`, `@pgfsm/ctl` and `@pgfsm/api` as
+of #719) may have no settings page to add the trusted publisher to. If so, stage
+its first version by hand: `npm login`,
+`deno task build:npm <version>
+--copy-readme` in the package, then
+`npm stage publish --access public` from its `dist/`. That creates the package
+(npm shows a public `0.0.0-stage` placeholder until approval). Then add the
+trusted publisher and approve.
 
 ---
 

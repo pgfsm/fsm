@@ -98,6 +98,13 @@ await build({
     description:
       "Activity Gateway (async-operation-worker-gateway/-ctl) for async-operation-type FSM operations across polyglot actors",
     license: "AGPL-3.0-only",
+    // Must name this repo: npm trusted publishing (OIDC) rejects a
+    // package whose repository.url doesn't match the publishing workflow's (#719).
+    repository: {
+      type: "git",
+      url: "git+https://github.com/pgfsm/fsm.git",
+      directory: "packages/fsm-async-worker-gateway-ts",
+    },
     // pg ships no types of its own; dnt only auto-installs packages that
     // are themselves import specifiers, so without this the type-check
     // pass can't resolve `import ... from "pg"` (deno.json's own

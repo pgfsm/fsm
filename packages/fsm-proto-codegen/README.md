@@ -329,7 +329,7 @@ check, so one registry can't be released without the others:
 
 | Language   | Registry  | Package                                                  | Job                                                         |
 | ---------- | --------- | -------------------------------------------------------- | ----------------------------------------------------------- |
-| TypeScript | npm       | `@pgfsm/proto-codegen`                                   | `npm`: `deno pack`, then `npm publish` (`NPM_TOKEN`)        |
+| TypeScript | npm       | `@pgfsm/proto-codegen`                                   | `npm`: `deno pack`, then `npm stage publish` (OIDC)         |
 | Python     | PyPI      | `pgfsm-proto-codegen`                                    | `pypi`: trusted publishing                                  |
 | Rust       | crates.io | `pgfsm-proto-codegen`                                    | `crates`: `cargo publish` (`CARGO_REGISTRY_TOKEN`)          |
 | Go         | git tag   | `github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go` | `go`: pushes tag `packages/fsm-proto-codegen/gen/go/vX.Y.Z` |
@@ -471,8 +471,11 @@ Done before `0.1.0`, and kept here in case it needs redoing (for example a
 rotated token, or a renamed workflow file or environment, which PyPI's trusted
 publisher must match exactly):
 
-- **npm**: nothing new. `@pgfsm/proto-codegen` publishes under the existing
-  `@pgfsm` scope with the same `NPM_TOKEN` secret as the other packages.
+- **npm**: a trusted publisher on `@pgfsm/proto-codegen` (owner `pgfsm`,
+  repository `fsm`, workflow `proto-publish.yml`, stage-only). The job stages
+  the version; a maintainer approves it with 2FA before it's installable. See
+  [npm releases](../../docs/tooling.md#npm-releases-trusted-publishing--staged-approval-719)
+  (#719).
 - **PyPI**: add a
   [pending trusted publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
   for project `pgfsm-proto-codegen`: owner `pgfsm`, repository `fsm`, workflow

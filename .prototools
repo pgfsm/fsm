@@ -15,7 +15,13 @@ deno = "2.9.7"
 # not in packages/database-src, so moonrepo/setup-toolchain (which only reads
 # this root file) installs it for every workflow (#632). Keep the major in
 # step with fsm-proto-codegen's Dockerfile base image.
-node = "26.13.0"
+node = "26.13.1"
+# npm is pinned on its own rather than taken from the Node pin's bundled copy
+# (26.13.1 bundles 11.20.0): the npm publish jobs stage through npm trusted
+# publishing (#719), and `npm stage publish` needs >= 11.15.0 while npm's
+# OIDC dist-tag handling needs >= 11.21.0. scripts/npm-stage-publish.sh fails
+# the release if the npm on PATH is older than 11.21.0.
+npm = "11.21.3"
 
 # only-prototools stops proto from detecting tools out of ecosystem files —
 # without it, proto picks up Rust from rust-toolchain.toml and "installs" it

@@ -51,25 +51,28 @@ jobs:
   # JavaScript-entrypoint warning deno pack prints (a JSR slow-types note) is
   # expected. Switch to a scripts/build-npm.ts (@deno/dnt) build if the package
   # ever needs a package.json field deno pack can't infer.
+  # Staged through npm trusted publishing (#719): see npm-publish.yml's
+  # header. @pgfsm/proto-codegen's trusted publisher on npmjs.com names this
+  # file, proto-publish.yml, and the staged version needs a maintainer's
+  # approval before @pgfsm/async-worker-sdk can release against it.
   npm:
     name: Publish to npm
     needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) + provenance
     defaults:
       run:
         working-directory: packages/fsm-proto-codegen/gen/typescript
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # Deno and Node from the root .prototools.
+      # Deno and Node (hence npm) from the root .prototools. No setup-node:
+      # npm authenticates through OIDC, so there's no token for an .npmrc.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
-
-      # Only writes the npm registry auth (.npmrc); Node is the one above.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          registry-url: "https://registry.npmjs.org"
 
       # A prerelease (e.g. 0.2.0-alpha.0) publishes under its own dist-tag;
       # `npm publish` with no --tag would make it `latest`.
@@ -89,20 +92,29 @@ jobs:
         run: deno pack
 
       # npm rejects re-publishing a version, so skip (rather than fail) when
-      # a re-run of this release finds it already there.
-      - name: Publish
+      # a re-run of this release finds it already there. Otherwise unpack
+      # the tarball (`npm stage publish` packs the current directory), add
+      # the `repository` deno pack can't infer (trusted publishing requires
+      # it), and stage. Same steps as npm-publish.yml's library-only path.
+      - name: Stage
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ needs.verify.outputs.version }}
           DIST_TAG: ${{ steps.dist-tag.outputs.tag }}
         run: |
+          set -euo pipefail
           # Output, not exit status: some npm versions print nothing and exit
           # 0 for a version that doesn't exist.
           if [[ -n "$(npm view "@pgfsm/proto-codegen@$VERSION" version 2>/dev/null)" ]]; then
             echo "@pgfsm/proto-codegen@$VERSION is already on npm; skipping."
             exit 0
           fi
-          npm publish ./*.tgz --access public --tag "$DIST_TAG"
+          tar -xzf ./*.tgz
+          jq --arg url "git+https://github.com/$GITHUB_REPOSITORY.git" \
+            '.repository = {type: "git", url: $url, directory: "packages/fsm-proto-codegen/gen/typescript"}' \
+            package/package.json >package/package.json.tmp
+          mv package/package.json.tmp package/package.json
+          cd package
+          "$GITHUB_WORKSPACE/scripts/npm-stage-publish.sh" "$DIST_TAG"
 
   pypi:
     name: Publish to PyPI

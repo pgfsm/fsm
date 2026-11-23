@@ -20,6 +20,13 @@ await build({
     description:
       "Shared LogTape logging configuration (composition-root configurator, category vocabulary, table-rendering console sink) for FSM services",
     license: "Apache-2.0",
+    // Must name this repo: npm trusted publishing (OIDC) rejects a
+    // package whose repository.url doesn't match the publishing workflow's (#719).
+    repository: {
+      type: "git",
+      url: "git+https://github.com/pgfsm/fsm.git",
+      directory: "packages/fsm-logging-ts",
+    },
   },
   compilerOptions: {
     lib: ["ES2022", "DOM"],
