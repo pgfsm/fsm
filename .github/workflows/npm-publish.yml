@@ -19,6 +19,16 @@ name: npm publish
 # a partly failed release (or dispatching `all`) is safe. workflow_dispatch has
 # no tag, so it publishes whatever version deno.json has on the dispatched
 # ref, which must also be on main.
+#
+# Publishing is staged (#719): each job runs scripts/npm-stage-publish.sh,
+# which authenticates with npm trusted publishing (GitHub OIDC, no NPM_TOKEN)
+# and runs `npm stage publish`. The run goes green once the version is
+# *staged*; it isn't installable until a maintainer approves it with 2FA
+# (`npm stage approve`, or on npmjs.com). Each package's trusted publisher on
+# npmjs.com names this file, npm-publish.yml. Approve a dependency before its
+# dependents (compiler before cli). The OIDC identity can't list staged
+# versions, so re-running for a version that's staged but not yet approved
+# fails at the stage step: approve or reject the staged one instead.
 
 on:
   push:
@@ -53,6 +63,9 @@ jobs:
   publish:
     name: publish ${{ matrix.id }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) + provenance
     strategy:
       fail-fast: false
       matrix:
@@ -140,18 +153,13 @@ jobs:
           fetch-depth: 0 # the preflight checks the commit is on origin/main
 
       # Installs proto and runs `proto install` against the root .prototools,
-      # so the Deno version is sourced from the repo pin, not hardcoded here.
+      # so the Deno and Node (hence npm) versions come from the repo pin. No
+      # setup-node: there's no token to write into an .npmrc, since npm
+      # authenticates through OIDC.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         if: steps.gate.outputs.should_run == 'true'
         with:
           auto-install: true
-
-      # Only writes the npm registry auth (.npmrc). No node-version: it uses
-      # the Node setup-toolchain just installed from the root .prototools.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: steps.gate.outputs.should_run == 'true'
-        with:
-          registry-url: "https://registry.npmjs.org"
 
       # See the header: tag matches deno.json, commit is on main, and the
       # version isn't on npm yet (skip, not fail). Also picks the dist-tag: a
@@ -204,13 +212,25 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: deno pack
 
-      - name: Publish (library only)
+      # `npm stage publish` packs the current directory, so unpack the
+      # tarball and stage from there. deno pack infers package.json with no
+      # way to add fields, so `repository` (trusted publishing requires it)
+      # is set here. Same steps as proto-publish.yml's npm job.
+      - name: Stage (library only)
         if: steps.preflight.outputs.publish == 'true' && matrix.dnt != true
         working-directory: ${{ matrix.path }}
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DIST_TAG: ${{ steps.preflight.outputs.dist_tag }}
-        run: npm publish ./*.tgz --access public --tag "$DIST_TAG"
+          PKG_DIR: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          tar -xzf ./*.tgz
+          jq --arg url "git+https://github.com/$GITHUB_REPOSITORY.git" --arg dir "$PKG_DIR" \
+            '.repository = {type: "git", url: $url, directory: $dir}' \
+            package/package.json >package/package.json.tmp
+          mv package/package.json.tmp package/package.json
+          cd package
+          "$GITHUB_WORKSPACE/scripts/npm-stage-publish.sh" "$DIST_TAG"
 
       # dnt path (lib + npx-able CLI bin) — see the matrix comment above for why.
       - name: Build (dnt) — lib + CLI bin
@@ -220,10 +240,9 @@ jobs:
           VERSION: ${{ steps.preflight.outputs.version }}
         run: deno task build:npm "$VERSION" --copy-readme
 
-      - name: Publish (dnt dist)
+      - name: Stage (dnt dist)
         if: steps.preflight.outputs.publish == 'true' && matrix.dnt == true
         working-directory: ${{ matrix.path }}/dist
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DIST_TAG: ${{ steps.preflight.outputs.dist_tag }}
-        run: npm publish --access public --tag "$DIST_TAG"
+        run: '"$GITHUB_WORKSPACE/scripts/npm-stage-publish.sh" "$DIST_TAG"'

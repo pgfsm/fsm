@@ -3,8 +3,14 @@
 # ghcr.io/<owner>/async-worker-gateway, at one version, in a fixed order so
 # they can't go out of sync:
 #
-#   preflight → build image (pushed by digest, untagged) → npm publish
+#   preflight → build image (pushed by digest, untagged) → npm stage
+#             → (a maintainer approves the staged npm version with 2FA)
 #             → tag image + attest → verify
+#
+# npm releases are staged (#719): the npm job stages the version through npm
+# trusted publishing, and npm-approved waits up to 30 minutes for a maintainer
+# to approve it (`npm stage approve`, or on npmjs.com) before the image is
+# tagged. If nobody approves in time, approve later and re-run the failed jobs.
 #
 # - preflight fails before anything is published if the tag doesn't match
 #   deno.json, if a version of @pgfsm/db / @pgfsm/logging this release would
@@ -215,25 +221,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7 # long enough to re-run a failed npm/tag job
 
+  # Staged through npm trusted publishing (#719): see npm-publish.yml's
+  # header. The package's trusted publisher on npmjs.com names this file,
+  # gateway-release.yml.
   npm:
-    name: publish to npm
+    name: stage on npm
     needs: [preflight, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) + provenance
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.preflight.outputs.ref }}
 
       # Installs proto and runs `proto install` against the root .prototools,
-      # so the Deno and Node versions come from the repo pin.
+      # so the Deno, Node and npm versions come from the repo pin. No
+      # setup-node: npm authenticates through OIDC, so there's no token for
+      # an .npmrc.
       - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
-
-      # Only writes the npm registry auth (.npmrc); Node is the one above.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          registry-url: "https://registry.npmjs.org"
 
       - name: Already published?
         id: published
@@ -250,16 +259,47 @@ jobs:
         working-directory: ${{ env.PACKAGE_DIR }}
         run: deno task build:npm "${{ needs.preflight.outputs.version }}" --copy-readme
 
-      - name: Publish
+      - name: Stage
         if: steps.published.outputs.skip != 'true'
         working-directory: ${{ env.PACKAGE_DIR }}/dist
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --tag "${{ needs.preflight.outputs.dist_tag }}"
+          DIST_TAG: ${{ needs.preflight.outputs.dist_tag }}
+        run: '"$GITHUB_WORKSPACE/scripts/npm-stage-publish.sh" "$DIST_TAG"'
+
+  # A staged version isn't on npm until a maintainer approves it with 2FA, and
+  # the image must not be tagged before its npm package exists. Wait up to 30
+  # minutes for the approval. If it doesn't come, this job fails: approve the
+  # staged version, then re-run the failed jobs (`npm` skips, since the version
+  # is on npm by then), and the release finishes.
+  npm-approved:
+    name: wait for npm approval
+    needs: [preflight, npm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Wait until the version is on npm
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            # Output, not exit status: some npm versions print nothing and
+            # exit 0 for a version that doesn't exist.
+            if [[ -n "$(npm view "$PACKAGE@$VERSION" version 2>/dev/null)" ]]; then
+              echo "$PACKAGE@$VERSION is on npm"
+              exit 0
+            fi
+            if ((attempt == 1)); then
+              echo "::notice::waiting for a maintainer to approve the staged $PACKAGE@$VERSION (npm stage list $PACKAGE, then npm stage approve <stage-id>, or on npmjs.com)"
+            fi
+            sleep 30
+          done
+          echo "::error::$PACKAGE@$VERSION wasn't approved within 30 minutes: approve the staged version, then re-run the failed jobs"
+          exit 1
 
   image:
     name: tag and attest image
-    needs: [preflight, build, npm]
+    needs: [preflight, build, npm, npm-approved]
     runs-on: ubuntu-latest
     permissions:
       contents: read

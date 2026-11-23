@@ -28,6 +28,13 @@ await build({
     version: packageVersion,
     description: "Raw pg client helpers for PostgreSQL-backed FSM instances",
     license: "Apache-2.0",
+    // Must name this repo: npm trusted publishing (OIDC) rejects a
+    // package whose repository.url doesn't match the publishing workflow's (#719).
+    repository: {
+      type: "git",
+      url: "git+https://github.com/pgfsm/fsm.git",
+      directory: "packages/fsm-core-db-ts",
+    },
     // @pgfsm/db's own public types (DBDeps.db: Pool) reference pg's Pool
     // type, but pg ships no types of its own — @types/pg supplies them.
     // dnt only auto-detects dependencies from the value-level import graph,

@@ -50,6 +50,13 @@ await build({
     description:
       "fsmlet worker runtime library driving FSM instances for PostgreSQL-backed state machines (ops CLIs live in @pgfsm/ctl)",
     license: "Apache-2.0",
+    // Must name this repo: npm trusted publishing (OIDC) rejects a
+    // package whose repository.url doesn't match the publishing workflow's (#719).
+    repository: {
+      type: "git",
+      url: "git+https://github.com/pgfsm/fsm.git",
+      directory: "packages/fsm-sync-worker-ts",
+    },
     // pg ships no types of its own; dnt only auto-installs packages that
     // are themselves import specifiers, so without this the type-check
     // pass can't resolve `import ... from "pg"` (deno.json's own

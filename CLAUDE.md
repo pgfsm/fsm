@@ -99,7 +99,11 @@ whenever a session touches `fsm.machine.schema.v3.json` or a SQL file under
 
 ## Releasing
 
-Each package's README has its own release steps (bump → PR → tag). When
-releasing several packages together, push **at most three tags per `git push`**:
-GitHub skips `push` events entirely when more than three tags arrive at once, so
-the publish workflows silently never run (#400).
+Each package's README has its own release steps (bump → PR → tag). npm releases
+are **staged** (#719): CI authenticates through npm trusted publishing (no
+`NPM_TOKEN`) and runs `npm stage publish`, and a maintainer approves each staged
+version with 2FA before it's installable — see
+[`docs/tooling.md`](docs/tooling.md#npm-releases-trusted-publishing--staged-approval-719).
+When releasing several packages together, push **at most three tags per
+`git push`**: GitHub skips `push` events entirely when more than three tags
+arrive at once, so the publish workflows silently never run (#400).
