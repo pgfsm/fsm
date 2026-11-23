@@ -236,6 +236,10 @@ jobs:
             gh release create "$TAG" --verify-tag --latest="$latest" --title "fsm_core $VERSION" --notes "$(cat <<EOF
           fsm_core $VERSION (SPEC-016). Requires PostgreSQL 15+ with the ltree, pg_cron and pgmq extensions; tested on 15, 16, 17 and 18.
 
+          **Licence:** AGPL-3.0-only (SPEC-017). A commercial licence is also available: see [COMMERCIAL.md](https://github.com/pgfsm/fsm/blob/main/COMMERCIAL.md).
+
+          **Source:** ${{ github.server_url }}/${{ github.repository }}/tree/$TAG
+
           - New database: run \`fsm_core--$VERSION.sql\` once, as the database owner, in pg_cron's database:
             \`psql "\$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f fsm_core--$VERSION.sql\`
           - Upgrade: apply each \`fsm_core--<from>--<to>.sql\` in order, from \`SELECT fsm_core.version();\`. The upgrade scripts are in \`fsm_core-$VERSION.zip\` (folder \`fsm_core-$VERSION/\`).
