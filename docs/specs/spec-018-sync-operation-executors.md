@@ -1,12 +1,12 @@
 # SPEC-018: Sync Operations Run in Separate Per-Language Executors
 
-| Field   | Value                                                                                                                                                                                                                     |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                     |
-| Date    | 2026-11-24                                                                                                                                                                                                                |
-| Authors | Niraj, Claude                                                                                                                                                                                                             |
-| Issue   | #734                                                                                                                                                                                                                      |
-| Affects | `packages/fsm-sync-worker-ts`, `packages/fsm-proto-codegen`, `packages/fsm-compiler-ts`, `packages/fsm-cli-ts`, `packages/fsm-async-worker-sdk-ts`, `packages/fsm-async-worker-sdk-python` (Rust, Go SDKs in milestone 2) |
+| Field   | Value                                                                                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status  | Draft                                                                                                                                                                                                                           |
+| Date    | 2026-11-24                                                                                                                                                                                                                      |
+| Authors | Niraj, Claude                                                                                                                                                                                                                   |
+| Issue   | #734                                                                                                                                                                                                                            |
+| Affects | `packages/fsm-sync-worker-ts`, `packages/fsm-proto-codegen`, `packages/fsm-compiler-ts`, `packages/fsm-cli-ts`, new `packages/fsm-sync-worker-sdk-ts` and `packages/fsm-sync-worker-sdk-python` (`-rust`, `-go` in milestone 2) |
 
 ---
 
@@ -58,7 +58,7 @@ Sync operations are the last part of an FSM that is tied to one language.
 - **SPEC-002:** proto contracts live in `fsm-proto-codegen` and stubs are
   generated for every language with Buf.
 - **SPEC-017:** SDKs are Apache-2.0 and must not import engine code. The
-  executors live in the SDKs.
+  executors live in new per-language sync-worker SDKs.
 - **One sync language per FSM version:** all sync operations of one `fsm.json`
   version are in the same language. Different FSMs, and different versions of
   one FSM, may use different languages.
@@ -120,8 +120,8 @@ The fsmlet stays a single TypeScript implementation.
   Gateway.
 - Pro: user code is isolated from the engine. A hung or crashing handler can't
   block the engine's event loop.
-- Pro: it reuses SPEC-002's proto pipeline and the SDKs' socket, session and
-  reconnect code.
+- Pro: it reuses SPEC-002's proto pipeline and follows the async SDKs' proven
+  socket, session and reconnect design.
 - Con: a Unix-socket round trip (about 50 to 100 µs) per operation call, for TS
   too: about 1 ms for a macrostep that calls 10 operations.
 - Con: two processes per pod (the engine plus one executor per sync language it
@@ -164,8 +164,8 @@ Decision drivers:
 - **The hop is local and bounded.** The engine and executor are co-located, so
   the extra cost is microseconds per call. The instance lock is never held
   across a network round trip, which rules out Option B.
-- **Reuse.** Proto contracts, Buf generation for four languages and SDK session
-  code already exist.
+- **Reuse.** Proto contracts, Buf generation for four languages and a proven SDK
+  session design already exist.
 
 ### 1. Topology: the executor dials the engine
 
@@ -301,10 +301,41 @@ keys back, not `google.protobuf.Struct`'s doubles.
 - **Engine:** `fsm-sync-worker-ts`. The executor client, the call dispatcher,
   the registration gate and the transport-failure handling replace the
   in-process handler lookup in `fsmworker-helper.ts`.
-- **Executors:** in the existing per-language SDKs, as a separate `sync` entry
-  point next to the async-worker one, sharing their socket and session code.
-  Whether to rename the SDK packages (they're named `async-worker-sdk`) is a
-  follow-up, not part of this spec.
+- **Executors:** in a new **sync-worker SDK** per language, separate from the
+  async-worker SDKs. Each engine gets a matching SDK:
+
+  | Engine                        | SDK                                                                       |
+  | ----------------------------- | ------------------------------------------------------------------------- |
+  | `@pgfsm/sync-worker` (fsmlet) | `@pgfsm/sync-worker-sdk` and its Python, Rust and Go counterparts (below) |
+  | `@pgfsm/async-worker-gateway` | `@pgfsm/async-worker-sdk` and its Python, Rust and Go counterparts        |
+
+  | Language   | Package directory                     | Published as                                                                                         |
+  | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+  | TypeScript | `packages/fsm-sync-worker-sdk-ts`     | npm `@pgfsm/sync-worker-sdk`                                                                         |
+  | Python     | `packages/fsm-sync-worker-sdk-python` | PyPI `pgfsm-sync-worker-sdk`, imports `pgfsm.sync_worker_sdk`                                        |
+  | Rust       | `packages/fsm-sync-worker-sdk-rust`   | crates.io `pgfsm-sync-worker-sdk`, `use pgfsm_sync_worker_sdk` (milestone 2)                         |
+  | Go         | `packages/fsm-sync-worker-sdk-go`     | module `github.com/pgfsm/fsm/packages/fsm-sync-worker-sdk-go`, package `syncworkersdk` (milestone 2) |
+
+  Why separate packages, not a `sync` entry point in the async SDKs:
+
+  - **Every project needs a sync executor** after the clean break, including
+    TS-only projects with no async actors. They shouldn't install an
+    async-worker SDK and its actor-session code to run `assign` actions.
+  - **Different servers, different compatibility.** The sync SDK speaks
+    `syncexecutor/v1` to the fsmlet engine; the async SDK speaks
+    `sidecargateway/v1` to the Activity Gateway. Each SDK versions and declares
+    compatibility against its own server, so a protocol change in one doesn't
+    force a release of the other.
+  - **Different runtime models.** Sync executors serve many short concurrent
+    calls with deadlines and no cancellation; async workers serve long invokes
+    with cancellation (SPEC-012). Separate packages keep each API small.
+
+  The transport code (socket dialing, the reconnect loop, logging setup) is
+  small and is **copied** from the async SDKs rather than extracted into a
+  shared `*-sdk-core` package in four languages. Extract it only if the copies
+  start to drift. Each new package is Apache-2.0 (SPEC-017) with its own
+  `LICENSE`, `CLAUDE.md`, README and release workflow (npm through trusted
+  publishing and staged approval, #719).
 
 ### Rollout
 
@@ -336,6 +367,9 @@ What gets harder:
 - **TS capabilities:** TS sync operations lose `meta.deps`. A handler that read
   or wrote Postgres must move that I/O into an invoked actor, or into an action
   that only sets context for a later actor.
+- **Four more packages to release:** the sync-worker SDKs add an npm, a PyPI, a
+  crates.io and a Go module release line (two in milestone 1), each with its own
+  workflow and trusted-publishing setup.
 - **Concurrency inside executors:** Python handlers run concurrently up to
   `maxConcurrency` (asyncio, with blocking handlers sent to a thread pool), so
   user code must be safe to run concurrently.
@@ -346,8 +380,9 @@ Migration (clean break, one release):
    regenerate. TS handlers keep their names and folders. Only the `meta`
    argument changes. A handler that uses `meta.deps` fails type-check, which
    shows exactly where I/O must move.
-2. Run the generated TS executor next to the fsmlet (sidecar or second process)
-   and set `syncExecutors`.
+2. Add `@pgfsm/sync-worker-sdk` to the project (the regenerated TS executor
+   entry point imports it), run that executor next to the fsmlet (sidecar or
+   second process) and set `syncExecutors`.
 3. During a rolling deploy, an old fsmlet and a new one serve the same FSMs.
    Both write through the same archive functions, and no SQL changes, so mixed
    fleets are safe.
@@ -388,8 +423,12 @@ connections).
       isn't counted, the message is redelivered, and the fsmlet deregisters,
       then re-registers once the executor reconnects. The instance then finishes
       with the same result as an uninterrupted run.
-- [ ] No executor opens a pg connection: the executor packages don't depend on
+- [ ] No executor opens a pg connection: the sync-worker SDKs don't depend on
       `pg`, `@pgfsm/db` or a Python/Rust/Go Postgres driver.
+- [ ] `fsm-sync-worker-sdk-ts` and `fsm-sync-worker-sdk-python` exist as their
+      own packages (Apache-2.0, `LICENSE`, `CLAUDE.md`, release workflow), and
+      `scripts/check-licenses.ts` passes. No sync-worker SDK depends on an
+      async-worker SDK, and no async-worker SDK depends on a sync-worker SDK.
 - [ ] TS sync handlers receive `meta` without `deps`, `queueName` or `msg`, and
       generated TS stubs type-check against the new signature.
 - [ ] The compiler refuses to generate sync logic for one FSM version in two
