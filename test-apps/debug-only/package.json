@@ -6,6 +6,6 @@
     "api": "npx -y @pgfsm/api@0.1.0 --enable-admin-api",
     "api:key": "npx -y @pgfsm/api@0.1.0 key bootstrap --name local-admin",
     "db:load": "npx -y @pgfsm/ctl@0.1.0 fsm load fsm",
-    "gateway": "npx -y -p @pgfsm/async-worker-gateway@0.5.0 -- async-operation-worker-gateway --ensure-queue-on-register"
+    "gateway": "npx -y -p @pgfsm/async-worker-gateway@0.6.0 -- async-operation-worker-gateway --ensure-queue-on-register"
   }
 }
