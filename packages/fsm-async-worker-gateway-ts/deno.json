@@ -1,6 +1,6 @@
 {
   "name": "@pgfsm/async-worker-gateway",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "license": "AGPL-3.0-only",
   "exports": {
     ".": "./src/index.ts"
