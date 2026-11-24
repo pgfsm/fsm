@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                                                                                                                           |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Draft                                                                                                                                                                                                                           |
+| Status  | Accepted                                                                                                                                                                                                                        |
 | Date    | 2026-11-24                                                                                                                                                                                                                      |
 | Authors | Niraj, Claude                                                                                                                                                                                                                   |
 | Issue   | #734                                                                                                                                                                                                                            |
@@ -439,4 +439,18 @@ connections).
 
 ## Implementation
 
-<!-- Filled in after acceptance: links to implementation issues and PRs. -->
+Accepted in #735. Milestone 1 (TypeScript and Python):
+
+| Issue | Scope                                                                     | Depends on             |
+| ----- | ------------------------------------------------------------------------- | ---------------------- |
+| #736  | `syncexecutor/v1` proto and generated stubs                               | —                      |
+| #742  | fsmlet: executor socket server, registration gate, SPEC-006 check         | #736                   |
+| #743  | fsmlet: every sync operation through the executor, failure classification | #742                   |
+| #737  | `@pgfsm/sync-worker-sdk` (TypeScript executor)                            | #736                   |
+| #738  | `pgfsm-sync-worker-sdk` (Python executor)                                 | #736                   |
+| #739  | compiler: per-language registries and executor entry points               | #737, #738             |
+| #740  | CLI scaffolding and regenerated `test-apps`                               | #739, #743             |
+| #744  | cross-language conformance suite                                          | #743, #737, #738, #739 |
+| #741  | ADR-002 Stage 4, ADR-003 connection accounting, package and root docs     | #743                   |
+
+Milestone 2 (Rust and Go executors) is cut once milestone 1 lands.
