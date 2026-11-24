@@ -21,7 +21,7 @@
     "drizzle-kit": "npm:drizzle-kit@^0.31.9",
     "drizzle-orm": "npm:drizzle-orm@^0.45.1",
     "drizzle-zod": "npm:drizzle-zod@^0.8.3",
-    "hono": "npm:hono",
+    "hono": "npm:hono@^4.13.20",
     "@logtape/hono": "jsr:@logtape/hono@^2.2",
     "@logtape/logtape": "jsr:@logtape/logtape@^2.2",
     "@logtape/otel": "jsr:@logtape/otel@^2.2",
