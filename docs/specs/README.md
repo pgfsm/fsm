@@ -54,6 +54,7 @@ Flow:
 | [SPEC-015](spec-015-deterministic-simulation-testing.md)   | Deterministic Simulation Testing                                         | Accepted    |
 | [SPEC-016](spec-016-installation-and-distribution.md)      | Installation and Distribution                                            | Accepted    |
 | [SPEC-017](spec-017-licensing-agpl-core-apache-sdks.md)    | Licensing — AGPL-3.0-only Engine, Apache-2.0 SDKs                        | Accepted    |
+| [SPEC-018](spec-018-sync-operation-executors.md)           | Sync Operations Run in Separate Per-Language Executors                   | Draft       |
 
 SPEC-001 (Polyglot Actor Workers for Compiled Languages via Local IPC) graduated
 directly to
