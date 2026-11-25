@@ -23,27 +23,45 @@ codegen pipeline works and produces correct, runnable output.
 ## Layout
 
 - `proto/<service>/` — one directory per service that defines `.proto`
-  contracts, e.g. `proto/fsm-async-worker-gateway-ts/` for the Activity Gateway
-  and Sidecar Gateway contracts. Each is its own independent Buf module: its own
-  `buf.yaml` (lint/breaking-change policy), scoped to that service alone.
-  Centralizing here is about _location_, not _governance_ — one service's lint
-  exceptions or breaking-change policy never leak onto another's. See
+  contracts: `proto/fsm-async-worker-gateway-ts/` for the Activity Gateway and
+  Sidecar Gateway contracts, and `proto/fsm-sync-worker-ts/` for the Sync
+  Executor contract between the fsmlet engine and its sync-operation executors
+  (SPEC-018). Each is its own independent Buf module: its own `buf.yaml`
+  (lint/breaking-change policy), scoped to that service alone. Centralizing here
+  is about _location_, not _governance_ — one service's lint exceptions or
+  breaking-change policy never leak onto another's. See
   [SPEC-002](../../docs/specs/spec-002-proto-contracts-in-codegen-package.md)
   for the full rationale and the "one shared module" alternative it rejects.
 - `local.buf.gen.yaml` / `remote.buf.gen.yaml` / `hybrid.buf.gen.yaml` (this
   package) — three codegen _plugin_ configs, same `inputs:`/output layout,
   different plugin sources: see [Regenerating](#regenerating) for which to use.
-  `inputs:` lists one entry per service directory above.
-- `gen/{typescript,python,rust,go}/` — generated output, committed (same
-  convention as this monorepo's own `test-apps/debug-only/async-worker/`) so
-  consumers don't need Buf installed just to build against it. Each carries its
-  own hand-written package manifest giving the generated stubs a real package
-  identity for that language's toolchain — `gen/typescript/deno.json` (`exports`
-  map + the `imports` map generated code needs to resolve `@bufbuild/protobuf`
-  at runtime), `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`,
-  `gen/go/go.mod` — same convention across all four, see #106. Each also has a
-  hand-written `README.md` used as its registry page; all four are published,
-  see [Publishing](#publishing).
+  Their `inputs:` list the async contracts' service directory and write to
+  `gen/`. Each has a `*.sync.buf.gen.yaml` twin with the same plugins and pins
+  that reads `proto/fsm-sync-worker-ts/` and writes to `gen-sync/` (only
+  `inputs:`, `out:` and the Go `module=` prefix differ — keep the pairs in
+  step). Every `npm run generate:*` script runs both templates of its pair.
+- **Two package sets, released separately (#736).** `gen/` holds the async
+  contracts (Activity Gateway, Sidecar Gateway) and publishes as
+  `@pgfsm/proto-codegen` / `pgfsm-proto-codegen` /
+  `.../fsm-proto-codegen/gen/go`. `gen-sync/` holds the Sync Executor contract
+  and publishes as `@pgfsm/proto-codegen-sync` / `pgfsm-proto-codegen-sync` /
+  `.../fsm-proto-codegen/gen-sync/go`. Each set has its own version and tag, so
+  a change to one contract never forces the other set's SDKs to widen a
+  dependency range and re-release (pre-1.0, every minor is breaking for range
+  pins, and pip can't install two versions of one package in one environment).
+  Both Python packages install into the shared `pgfsm` namespace package side by
+  side.
+- `gen/{typescript,python,rust,go}/` and `gen-sync/{typescript,python,rust,go}/`
+  — generated output, committed (same convention as this monorepo's own
+  `test-apps/debug-only/async-worker/`) so consumers don't need Buf installed
+  just to build against it. Each carries its own hand-written package manifest
+  giving the generated stubs a real package identity for that language's
+  toolchain — `gen/typescript/deno.json` (`exports` map + the `imports` map
+  generated code needs to resolve `@bufbuild/protobuf` at runtime),
+  `gen/rust/Cargo.toml`, `gen/python/pyproject.toml`, `gen/go/go.mod` (and the
+  same four under `gen-sync/`) — same convention across all four, see #106. Each
+  also has a hand-written `README.md` used as its registry page; all are
+  published, see [Publishing](#publishing).
 - `package.json` / `node_modules/` (package root) — **not** app dependencies,
   and **not** where consumers import from. The npm-managed half of the
   toolchain: the `buf` CLI itself plus the two `protoc-gen-*` binaries needed on
@@ -57,13 +75,16 @@ codegen pipeline works and produces correct, runnable output.
 
 1. Create `proto/<service-name>/` with its own `buf.yaml` (copy an existing
    service's as a starting point) and `.proto` files under it.
-2. Add an entry to **all three** of `local.buf.gen.yaml`'s,
-   `remote.buf.gen.yaml`'s, and `hybrid.buf.gen.yaml`'s `inputs:` list pointing
-   at that directory — the existing `plugins:` list in each applies to every
-   input, so no other change is needed to generate all four languages for it
-   too.
-3. `npm run generate:local` (see [Regenerating](#regenerating)), then commit the
-   new `proto/<service-name>/` and its `gen/` output together.
+2. Decide which package set it ships in. To add it to an existing set, add an
+   entry to **all three** of that set's templates' `inputs:` list
+   (`local`/`remote`/`hybrid` `.buf.gen.yaml` for `gen/`, the `.sync.` twins for
+   `gen-sync/`) — the existing `plugins:` list in each applies to every input. A
+   new set needs its own three templates, a `gen-<set>/` directory with the four
+   manifests, its own `go_package` prefix, CI matrix entries, a tag prefix in
+   `proto-publish.yml` and a `--dir` value in
+   `scripts/check-release-manifests.ts` — copy what `gen-sync/` did (#736).
+3. `npm run generate:local:docker` (see [Regenerating](#regenerating)), then
+   commit the new `proto/<service-name>/` and its generated output together.
 
 The service itself still implements and calls its contract as before — only the
 `.proto` source and its buf module move here.
@@ -295,10 +316,12 @@ on every PR (and `main` push) that touches this package:
 - **`buf breaking`** on each module against the PR's base commit (modules new
   since the base are skipped).
 - **Drift check**: regenerate with the `Dockerfile` image (layers cached in the
-  GitHub Actions cache) and fail if `gen/` has any change, including new
-  untracked files.
-- **Build/smoke test per language**, so each language's stubs actually build and
-  run, not just parse. Run the same checks locally from the repo root:
+  GitHub Actions cache) and fail if `gen/` or `gen-sync/` has any change,
+  including new untracked files.
+- **Build/smoke test per language and set** (a matrix over `gen` and
+  `gen-sync`), so each language's stubs actually build and run, not just parse.
+  Run the same checks locally from the repo root (for `gen-sync/`, swap the
+  directory and use `test/smoke_sync_test.py` / `test/smoke-sync.ts`):
 
   ```sh
   # Go
@@ -318,14 +341,23 @@ on every PR (and `main` push) that touches this package:
   checks each package as it would be published: `cargo publish --dry-run`,
   Python's built wheel (`twine check --strict`, then the smoke test against the
   installed wheel), `deno pack --dry-run`, and
-  `scripts/check-release-manifests.ts` (see [Publishing](#publishing)).
+  `scripts/check-release-manifests.ts --dir <gen|gen-sync>` (see
+  [Publishing](#publishing)).
 
 ## Publishing
 
-All four languages release together, at one version, from one tag, in one run of
-[`proto-publish.yml`](../../.github/workflows/proto-publish.yml). Only a
-`proto-v*` tag starts it, and every publish job waits on the same manifest
-check, so one registry can't be released without the others:
+Each package set's four languages release together, at one version, from one
+tag, in one run of
+[`proto-publish.yml`](../../.github/workflows/proto-publish.yml). Only a tag
+starts it, and every publish job waits on the same manifest check, so one
+registry can't be released without the others. The tag prefix picks the set:
+
+| Tag                     | Set         | Contracts                         |
+| ----------------------- | ----------- | --------------------------------- |
+| `proto-v<version>`      | `gen/`      | Activity Gateway, Sidecar Gateway |
+| `proto-sync-v<version>` | `gen-sync/` | Sync Executor (SPEC-018)          |
+
+`gen/`'s packages:
 
 | Language   | Registry  | Package                                                  | Job                                                         |
 | ---------- | --------- | -------------------------------------------------------- | ----------------------------------------------------------- |
@@ -338,9 +370,16 @@ The npm package isn't in `npm-publish.yml` with the repo's other npm packages.
 That workflow can also be run by hand for one package, which would release npm
 out of step with the other three registries.
 
+`gen-sync/`'s packages, published by the same jobs: npm
+`@pgfsm/proto-codegen-sync`, PyPI and crates.io `pgfsm-proto-codegen-sync`, and
+Go module `github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go` (tag
+`packages/fsm-proto-codegen/gen-sync/go/vX.Y.Z`). The release steps below are
+the same for both sets; substitute `proto-sync-v`, `gen-sync/` and
+`--dir gen-sync`.
+
 Go has no registry upload. A Go module in a repo subdirectory is released by a
 tag prefixed with that subdirectory, and the Go module proxy serves it from
-there — which is also why `gen/go` has to stay committed.
+there — which is also why `gen/go` and `gen-sync/go` have to stay committed.
 
 ### Releasing a new version
 
@@ -467,9 +506,9 @@ differ, e.g. after a `protoc` bump in the `Dockerfile`.
 
 ### One-time registry setup
 
-Done before `0.1.0`, and kept here in case it needs redoing (for example a
-rotated token, or a renamed workflow file or environment, which PyPI's trusted
-publisher must match exactly):
+Done for `gen/` before its `0.1.0`, and kept here in case it needs redoing (for
+example a rotated token, or a renamed workflow file or environment, which PyPI's
+trusted publisher must match exactly):
 
 - **npm**: a trusted publisher on `@pgfsm/proto-codegen` (owner `pgfsm`,
   repository `fsm`, workflow `proto-publish.yml`, stage-only). The job stages
@@ -487,3 +526,18 @@ publisher must match exactly):
   the token.
 - **Go**: nothing. The workflow pushes the tag with the job's `GITHUB_TOKEN`,
   and the repository's rulesets only cover branches.
+
+**`gen-sync/`'s packages need the same setup before their first
+`proto-sync-v0.1.0` release** (not done yet as of #736):
+
+- **npm**: `@pgfsm/proto-codegen-sync` isn't on npm yet, so it may have no
+  settings page for the trusted publisher. Stage its first version by hand
+  (`deno pack` in `gen-sync/typescript`, add `repository` as the workflow does,
+  `npm stage publish --access public`), then add the trusted publisher (same
+  values as above) and approve — see
+  [npm releases](../../docs/tooling.md#npm-releases-trusted-publishing--staged-approval-719).
+- **PyPI**: a pending trusted publisher for project `pgfsm-proto-codegen-sync`,
+  same owner, repository, workflow and environment as above.
+- **crates.io**: none if `CARGO_REGISTRY_TOKEN` has the `publish-new` scope; the
+  first `cargo publish` creates `pgfsm-proto-codegen-sync`.
+- **Go**: nothing.

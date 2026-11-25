@@ -1,0 +1,223 @@
+syntax = "proto3";
+
+package pgfsm.syncexecutor.v1;
+
+option go_package = "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go/syncexecutor/v1";
+
+// Contract between the fsmlet engine (@pgfsm/sync-worker) and a
+// sync-operation executor (@pgfsm/sync-worker-sdk and its Python, Rust and
+// Go counterparts), SPEC-018. The engine never runs user code: every action,
+// guard, delay and invoke input mapper of an FSM version runs in the executor
+// for that version's sync language.
+//
+// Shape (SPEC-018, sections 1, 3 and 6):
+// - The executor dials the engine over a Unix socket and opens one Session
+//   stream. Its first message is Register; the engine answers RegisterAck.
+// - The engine then pushes one Call per sync operation, unsolicited, and the
+//   executor answers each with a CallResult carrying the same call_id. Calls
+//   are multiplexed: up to the fsmlet's maxConcurrency are in flight at once,
+//   and results may arrive in any order.
+// - The executor sends Heartbeat periodically, and Unregister before closing
+//   the stream on a graceful stop. The engine sends Shutdown when it stops.
+//
+// The executor is stateless and holds no database connection: a call carries
+// everything a handler gets (context, event, params, meta).
+//
+// JSON values (context, event, params, results) travel as JSON strings, not
+// google.protobuf.Struct, so every language gets the same numbers and keys
+// back (Struct turns every number into a double).
+//
+// Lint names follow STANDARD: the stream messages are SessionRequest
+// (executor → engine) and SessionResponse (engine → executor). SPEC-018
+// sketches them as ExecutorMessage / EngineMessage; RPC_REQUEST_STANDARD_NAME
+// requires these names.
+//
+// The RPC is named `Session`, not `Connect`, for the same reason as
+// sidecar_gateway.proto's: tonic-build emits an inherent `connect(dst)` on
+// the generated Rust client, and an RPC named `Connect` collides with it.
+service SyncExecutorService {
+  rpc Session(stream SessionRequest) returns (stream SessionResponse);
+}
+
+// The kind of a sync operation, as in fsm-compiler-ts's
+// SyncOperationRegistration.syncOperationType.
+enum OperationType {
+  OPERATION_TYPE_UNSPECIFIED = 0;
+  // Returns the new context, or no value to keep it.
+  OPERATION_TYPE_ACTION = 1;
+  // Returns a boolean. No value counts as false.
+  OPERATION_TYPE_GUARD = 2;
+  // Returns a delay in milliseconds. No value means the delay doesn't
+  // resolve (the event is raised without one).
+  OPERATION_TYPE_DELAY = 3;
+  // Returns the input of an invoked actor or child FSM (SPEC-013). No value
+  // is null.
+  OPERATION_TYPE_INPUT = 4;
+}
+
+// One sync operation an executor implements for an FSM version.
+message Operation {
+  OperationType type = 1;
+  string name = 2;
+}
+
+// One FSM version an executor serves. The engine serves the union of its
+// executors' FSM versions; an actor-only FSM version (no sync operations) is
+// registered with no operations by the executor of its sync language.
+message FsmVersion {
+  string fsm_name = 1;
+  string fsm_version = 2;
+  // fsmJsonDigest of the compiled fsm.json, checked against the loaded
+  // definition by the SPEC-006 startup check.
+  string fsm_json_digest = 3;
+  repeated Operation operations = 4;
+}
+
+// First message an executor sends on a new Session stream. protocol_version
+// starts at "1.0"; an engine rejects any other major version with
+// RegisterAck{accepted: false}.
+message Register {
+  string executor_id = 1;
+  // "typescript", "python", "rust" or "go": must be one of the engine's
+  // syncExecutors.
+  string language = 2;
+  string protocol_version = 3;
+  // The executor SDK's own package version, for logs and diagnostics.
+  string sdk_version = 4;
+  repeated FsmVersion fsm_versions = 5;
+}
+
+// Why a registration was rejected. The first five are the SPEC-006 check's
+// results; the rest are about the registration itself.
+enum RegistrationProblemKind {
+  REGISTRATION_PROBLEM_KIND_UNSPECIFIED = 0;
+  // The FSM version isn't loaded in the database.
+  REGISTRATION_PROBLEM_KIND_MISSING = 1;
+  // Several loaded rows with different content.
+  REGISTRATION_PROBLEM_KIND_AMBIGUOUS = 2;
+  // The loaded definition's digest differs from fsm_json_digest.
+  REGISTRATION_PROBLEM_KIND_DRIFTED = 3;
+  // No fsm_json_digest was given.
+  REGISTRATION_PROBLEM_KIND_UNDIGESTED = 4;
+  // The definition calls a guard, named delay or input mapper that isn't in
+  // operations.
+  REGISTRATION_PROBLEM_KIND_UNIMPLEMENTED = 5;
+  // Another executor already serves this FSM version.
+  REGISTRATION_PROBLEM_KIND_DUPLICATE = 6;
+  // language isn't one of the engine's syncExecutors.
+  REGISTRATION_PROBLEM_KIND_UNEXPECTED_LANGUAGE = 7;
+  // protocol_version's major version isn't the engine's.
+  REGISTRATION_PROBLEM_KIND_PROTOCOL_VERSION = 8;
+}
+
+message RegistrationProblem {
+  RegistrationProblemKind kind = 1;
+  // Empty for problems that aren't about one FSM version.
+  string fsm_name = 2;
+  string fsm_version = 3;
+  // Human-readable detail, e.g. the unimplemented operation's name.
+  string message = 4;
+}
+
+// The engine's reply to Register, sent once as the first SessionResponse.
+// A registration is accepted or rejected as a whole: with accepted = false,
+// problems lists every reason and the engine closes the stream.
+message RegisterAck {
+  bool accepted = 1;
+  string engine_protocol_version = 2;
+  repeated RegistrationProblem problems = 3;
+}
+
+// Sent periodically by the executor to keep its registration alive.
+message Heartbeat {
+  string executor_id = 1;
+}
+
+// Sent by the executor to end its registration gracefully before closing
+// the stream. Calls still in flight are answered first.
+message Unregister {
+  string executor_id = 1;
+}
+
+// Read-only facts about the call that a handler gets as `meta`, besides the
+// FSM and operation identity already in Call.
+message CallMeta {
+  string instance_id = 1;
+  // The SPEC-014 attempt number of the step this call belongs to, from 1.
+  uint32 attempt = 2;
+}
+
+// Pushed by the engine, unsolicited, once per sync operation the macrostep
+// runs, in the order it runs them.
+message Call {
+  // Unique per Session stream; CallResult echoes it.
+  string call_id = 1;
+  string fsm_name = 2;
+  string fsm_version = 3;
+  OperationType operation_type = 4;
+  string operation_name = 5;
+  // The instance's context at this point of the macrostep.
+  string context_json = 6;
+  // The event being processed.
+  string event_json = 7;
+  // The operation's params from fsm.json ("{}" when it has none).
+  string params_json = 8;
+  CallMeta meta = 9;
+  // How long the engine waits for this call's result. The executor should
+  // stop waiting on the handler after this too; a result that arrives after
+  // the deadline is ignored (the engine has already counted the attempt as
+  // failed, SPEC-014).
+  uint32 deadline_ms = 10;
+}
+
+// The handler returned no value (TypeScript undefined, Python None, ...).
+// The engine reads it per OperationType: an action keeps the context, a
+// guard is false, a delay doesn't resolve, an input is null.
+message NoValue {}
+
+// The handler raised or returned an error. The engine wraps it in a
+// SyncOperationError with the call's operation type and name, and SPEC-014's
+// retry policy applies.
+message CallError {
+  // The language's error or exception type, e.g. "KeyError", "TypeError".
+  string error_type = 1;
+  string message = 2;
+  // Stack trace or backtrace as text, when the language has one.
+  string stack = 3;
+}
+
+// Sent by the executor once per Call.
+message CallResult {
+  string call_id = 1;
+  oneof outcome {
+    // The handler's return value as JSON.
+    string value_json = 2;
+    NoValue no_value = 3;
+    CallError error = 4;
+  }
+  // Handler run time, for logs and metrics.
+  uint32 duration_ms = 5;
+}
+
+// Sent by the engine when it stops: the executor answers calls already in
+// flight, then expects the stream to close.
+message Shutdown {
+  string reason = 1;
+}
+
+message SessionRequest {
+  oneof payload {
+    Register register = 1;
+    Heartbeat heartbeat = 2;
+    CallResult call_result = 3;
+    Unregister unregister = 4;
+  }
+}
+
+message SessionResponse {
+  oneof payload {
+    RegisterAck register_ack = 1;
+    Call call = 2;
+    Shutdown shutdown = 3;
+  }
+}

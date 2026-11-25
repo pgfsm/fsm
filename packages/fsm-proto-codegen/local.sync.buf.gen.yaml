@@ -1,0 +1,61 @@
+# Sync Executor contract (SPEC-018) -> gen-sync/, published separately from
+# gen/ as the -sync packages (#736). Same plugins and pins as local.buf.gen.yaml:
+# keep the two in step; only inputs, out paths and the Go module prefix differ.
+
+version: v2
+managed:
+  enabled: true
+inputs:
+  - directory: proto/fsm-sync-worker-ts
+plugins:
+  # TypeScript — protobuf-es (message types) + Connect (client/server RPC
+  # stubs). protoc-gen-es and protoc-gen-connect-es haven't published a
+  # matching v2 pair to any registry yet, so both are pinned here to the last
+  # mutually-compatible v1 line (`npm ls` in this package) instead --
+  # remote.buf.gen.yaml pins the equivalent versions from BSR, but exact
+  # version control (not whatever BSR last published under a tag) is why this
+  # file stays the day-to-day default. See README's "TypeScript: local is
+  # preferred, but remote is pinned to match" for the full writeup, including
+  # what breaks if either plugin here is left unpinned.
+  - local: protoc-gen-es
+    out: gen-sync/typescript
+  - local: protoc-gen-connect-es
+    out: gen-sync/typescript
+
+  # Python — protoc's own built-in generators for message classes and .pyi
+  # stubs (no separate plugin binary; `protoc_builtin` shells out to `protoc
+  # --python_out=`/`--pyi_out=` directly), plus the grpc project's own
+  # protoc-gen-grpc_python plugin for service stubs. `brew install protobuf
+  # grpc` puts `protoc` and `grpc_python_plugin` on PATH -- see README.
+  - protoc_builtin: python
+    out: gen-sync/python
+  - protoc_builtin: pyi
+    out: gen-sync/python
+  - local: grpc_python_plugin
+    out: gen-sync/python
+
+  # Rust — prost (message types) + tonic (gRPC client/server stubs), the same
+  # neoeinstein/protoc-gen-prost source BSR's community/neoeinstein-{prost,
+  # tonic} remote plugins wrap. `cargo install protoc-gen-prost
+  # protoc-gen-tonic` -- pin to a version pair whose prost-build/tonic-build
+  # dependency matches this package's committed gen/rust/Cargo.toml
+  # (prost/tonic/tonic-prost `^0.14`) -- see README.
+  - local: protoc-gen-prost
+    out: gen-sync/rust
+  - local: protoc-gen-tonic
+    out: gen-sync/rust
+
+  # Go — base message types + gRPC service stubs, `go install`ed and pinned to
+  # match the versions recorded in the generated file headers under gen/go/
+  # (see README). `module=` (rather than paths=source_relative) places output
+  # at a path derived from each file's `go_package` option relative to that
+  # module prefix, so e.g. activity-gateway.proto's go_package
+  # (.../gen/go/activitygateway) lands at gen/go/activitygateway/ -- one
+  # directory per Go package, the idiomatic layout, and what keeps working
+  # once a second .proto file/package is added.
+  - local: protoc-gen-go
+    out: gen-sync/go
+    opt: module=github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go
+  - local: protoc-gen-go-grpc
+    out: gen-sync/go
+    opt: module=github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go

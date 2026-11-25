@@ -1,9 +1,14 @@
 name: proto publish
 
-# Publishes packages/fsm-proto-codegen/gen/ for TypeScript (npm), Python
-# (PyPI), Rust (crates.io) and Go (a module tag), all at one version, from a
-# `proto-v<version>` tag. Only the tag triggers it, and every publish job
-# waits on `verify`, so the four registries can't be released out of step.
+# Publishes one set of packages/fsm-proto-codegen stubs for TypeScript (npm),
+# Python (PyPI), Rust (crates.io) and Go (a module tag), all at one version:
+# - `proto-v<version>`      -> gen/      (async contracts): @pgfsm/proto-codegen,
+#                              pgfsm-proto-codegen, .../fsm-proto-codegen/gen/go
+# - `proto-sync-v<version>` -> gen-sync/ (Sync Executor, SPEC-018):
+#                              @pgfsm/proto-codegen-sync, pgfsm-proto-codegen-sync,
+#                              .../fsm-proto-codegen/gen-sync/go
+# Only a tag triggers it, and every publish job waits on `verify`, so the four
+# registries can't be released out of step.
 # See the package README's "Publishing" for the release steps and the
 # one-time registry setup.
 
@@ -11,6 +16,7 @@ on:
   push:
     tags:
       - "proto-v[0-9]*"
+      - "proto-sync-v[0-9]*"
 
 permissions:
   contents: read
@@ -21,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      dir: ${{ steps.version.outputs.dir }}
+      npm_name: ${{ steps.version.outputs.npm_name }}
+      crate: ${{ steps.version.outputs.crate }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -29,9 +38,29 @@ jobs:
         with:
           auto-install: true
 
-      - name: Version from tag
+      # Which set this tag releases, and under which names.
+      - name: Version and package set from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#proto-v}" >> "$GITHUB_OUTPUT"
+        run: |
+          case "$GITHUB_REF_NAME" in
+            proto-sync-v*)
+              {
+                echo "version=${GITHUB_REF_NAME#proto-sync-v}"
+                echo "dir=gen-sync"
+                echo "npm_name=@pgfsm/proto-codegen-sync"
+                echo "crate=pgfsm-proto-codegen-sync"
+              } >> "$GITHUB_OUTPUT" ;;
+            proto-v*)
+              {
+                echo "version=${GITHUB_REF_NAME#proto-v}"
+                echo "dir=gen"
+                echo "npm_name=@pgfsm/proto-codegen"
+                echo "crate=pgfsm-proto-codegen"
+              } >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::unexpected tag $GITHUB_REF_NAME"
+              exit 1 ;;
+          esac
 
       # All three manifests must carry the tag's version (and the protobuf
       # lower bound must match the generated code) before anything publishes.
@@ -39,12 +68,13 @@ jobs:
         run: >-
           deno run --allow-read
           packages/fsm-proto-codegen/scripts/check-release-manifests.ts
+          --dir "${{ steps.version.outputs.dir }}"
           "${{ steps.version.outputs.version }}"
 
   # Same deno pack + npm publish steps as npm-publish.yml's non-dnt path
   # (keep the two in step). deno pack works here without dnt: the generated
   # code is .js + .d.ts (nothing to transpile), there's no CLI bin, and the
-  # one runtime dependency comes from gen/typescript/deno.json's
+  # one runtime dependency comes from <dir>/typescript/deno.json's
   # `npm:@bufbuild/protobuf` import. Checked against the packed tarball:
   # package.json declares that dependency and the license, and TypeScript
   # resolves each export's sibling .d.ts under `nodenext` and `bundler`. The
@@ -52,9 +82,10 @@ jobs:
   # expected. Switch to a scripts/build-npm.ts (@deno/dnt) build if the package
   # ever needs a package.json field deno pack can't infer.
   # Staged through npm trusted publishing (#719): see npm-publish.yml's
-  # header. @pgfsm/proto-codegen's trusted publisher on npmjs.com names this
-  # file, proto-publish.yml, and the staged version needs a maintainer's
-  # approval before @pgfsm/async-worker-sdk can release against it.
+  # header. Each npm package's trusted publisher on npmjs.com
+  # (@pgfsm/proto-codegen and @pgfsm/proto-codegen-sync) names this file,
+  # proto-publish.yml, and the staged version needs a maintainer's approval
+  # before the SDKs can release against it.
   npm:
     name: Publish to npm
     needs: verify
@@ -64,7 +95,7 @@ jobs:
       id-token: write # npm trusted publishing (OIDC) + provenance
     defaults:
       run:
-        working-directory: packages/fsm-proto-codegen/gen/typescript
+        working-directory: packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/typescript
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -100,17 +131,19 @@ jobs:
         env:
           VERSION: ${{ needs.verify.outputs.version }}
           DIST_TAG: ${{ steps.dist-tag.outputs.tag }}
+          NPM_NAME: ${{ needs.verify.outputs.npm_name }}
+          PKG_DIR: packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/typescript
         run: |
           set -euo pipefail
           # Output, not exit status: some npm versions print nothing and exit
           # 0 for a version that doesn't exist.
-          if [[ -n "$(npm view "@pgfsm/proto-codegen@$VERSION" version 2>/dev/null)" ]]; then
-            echo "@pgfsm/proto-codegen@$VERSION is already on npm; skipping."
+          if [[ -n "$(npm view "$NPM_NAME@$VERSION" version 2>/dev/null)" ]]; then
+            echo "$NPM_NAME@$VERSION is already on npm; skipping."
             exit 0
           fi
           tar -xzf ./*.tgz
-          jq --arg url "git+https://github.com/$GITHUB_REPOSITORY.git" \
-            '.repository = {type: "git", url: $url, directory: "packages/fsm-proto-codegen/gen/typescript"}' \
+          jq --arg url "git+https://github.com/$GITHUB_REPOSITORY.git" --arg dir "$PKG_DIR" \
+            '.repository = {type: "git", url: $url, directory: $dir}' \
             package/package.json >package/package.json.tmp
           mv package/package.json.tmp package/package.json
           cd package
@@ -135,7 +168,7 @@ jobs:
       - name: Build sdist + wheel
         run: |
           pip install build
-          python -m build packages/fsm-proto-codegen/gen/python --outdir dist
+          python -m build packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/python --outdir dist
 
       # skip-existing so re-running a partly failed release doesn't fail
       # here on files an earlier attempt already uploaded.
@@ -150,7 +183,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: packages/fsm-proto-codegen/gen/rust
+        working-directory: packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/rust
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -164,12 +197,13 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           VERSION: ${{ needs.verify.outputs.version }}
+          CRATE: ${{ needs.verify.outputs.crate }}
         run: |
           status=$(curl -s -o /dev/null -w '%{http_code}' \
             -A "pgfsm-release (github.com/pgfsm/fsm)" \
-            "https://crates.io/api/v1/crates/pgfsm-proto-codegen/$VERSION")
+            "https://crates.io/api/v1/crates/$CRATE/$VERSION")
           if [[ "$status" == "200" ]]; then
-            echo "pgfsm-proto-codegen $VERSION is already on crates.io; skipping."
+            echo "$CRATE $VERSION is already on crates.io; skipping."
             exit 0
           fi
           cargo publish
@@ -185,11 +219,12 @@ jobs:
 
       # Go modules have no registry upload: a module in a subdirectory is
       # released by a tag prefixed with that subdirectory, and the Go module
-      # proxy serves it from there. Tagged at the same commit as proto-v*.
+      # proxy serves it from there. Tagged at the same commit as the
+      # proto-v* / proto-sync-v* tag.
       # (A future v2+ would also need a /v2 suffix on go.mod's module path.)
       - name: Push module tag
         env:
-          TAG: packages/fsm-proto-codegen/gen/go/v${{ needs.verify.outputs.version }}
+          TAG: packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/go/v${{ needs.verify.outputs.version }}
         run: |
           existing=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
           if [[ -n "$existing" ]]; then
@@ -209,6 +244,7 @@ jobs:
       - name: Warm the Go module proxy
         env:
           VERSION: v${{ needs.verify.outputs.version }}
+          GO_MODULE: github.com/pgfsm/fsm/packages/fsm-proto-codegen/${{ needs.verify.outputs.dir }}/go
         run: |
-          curl -fsS "https://proxy.golang.org/github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/@v/$VERSION.info" \
+          curl -fsS "https://proxy.golang.org/$GO_MODULE/@v/$VERSION.info" \
             || echo "::warning::proxy.golang.org hasn't picked up $VERSION yet; it will on first use."

@@ -4,9 +4,9 @@
   "description": "The buf CLI plus the protoc-gen-* binaries local.buf.gen.yaml and hybrid.buf.gen.yaml invoke as `local:` plugins for TypeScript output. Not a runtime dependency of any app -- only used to run `npm run generate:local` / `npm run generate:remote` / `npm run generate:hybrid` in this package. Generated output is exposed to TS consumers via deno.json's `exports`, not this file.",
   "scripts": {
     "buf:version": "buf --version",
-    "generate:local": "buf generate --template local.buf.gen.yaml",
-    "generate:remote": "buf generate --template remote.buf.gen.yaml",
-    "generate:hybrid": "buf generate --template hybrid.buf.gen.yaml",
+    "generate:local": "buf generate --template local.buf.gen.yaml && buf generate --template local.sync.buf.gen.yaml",
+    "generate:remote": "buf generate --template remote.buf.gen.yaml && buf generate --template remote.sync.buf.gen.yaml",
+    "generate:hybrid": "buf generate --template hybrid.buf.gen.yaml && buf generate --template hybrid.sync.buf.gen.yaml",
     "generate:local:docker": "docker build -t fsm-proto-codegen-local . && docker run --rm -v \"$PWD:/workspace\" fsm-proto-codegen-local"
   },
   "devDependencies": {

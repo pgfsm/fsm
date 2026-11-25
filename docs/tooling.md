@@ -213,14 +213,14 @@ set it.
 | Workflow file         | Packages                                                                                                                      |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `npm-publish.yml`     | `@pgfsm/compiler`, `@pgfsm/cli`, `@pgfsm/ctl`, `@pgfsm/db`, `@pgfsm/sync-worker`, `@pgfsm/async-worker-sdk`, `@pgfsm/logging` |
-| `proto-publish.yml`   | `@pgfsm/proto-codegen`                                                                                                        |
+| `proto-publish.yml`   | `@pgfsm/proto-codegen`, `@pgfsm/proto-codegen-sync`                                                                           |
 | `gateway-release.yml` | `@pgfsm/async-worker-gateway`                                                                                                 |
 | `api-release.yml`     | `@pgfsm/api`                                                                                                                  |
 
 A package that isn't on npm yet (`@pgfsm/cli`, `@pgfsm/ctl` and `@pgfsm/api` as
-of #719) may have no settings page to add the trusted publisher to. If so, stage
-its first version by hand: `npm login`,
-`deno task build:npm <version>
+of #719, `@pgfsm/proto-codegen-sync` as of #736) may have no settings page to
+add the trusted publisher to. If so, stage its first version by hand:
+`npm login`, `deno task build:npm <version>
 --copy-readme` in the package, then
 `npm stage publish --access public` from its `dist/`. That creates the package
 (npm shows a public `0.0.0-stage` placeholder until approval). Then add the

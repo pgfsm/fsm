@@ -11,6 +11,7 @@
     "packages/fsm-compiler-ts",
     "packages/fsm-proto-codegen",
     "packages/fsm-proto-codegen/gen/typescript",
+    "packages/fsm-proto-codegen/gen-sync/typescript",
     "packages/database-src",
     "packages/fsm-cli-ts",
     "packages/fsm-ctl-ts"
