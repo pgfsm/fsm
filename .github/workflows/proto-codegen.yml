@@ -1,9 +1,10 @@
 name: Proto codegen
 
 # Checks packages/fsm-proto-codegen: buf lint + breaking-change detection on
-# every proto/<service>/ module, a drift check that the committed gen/ output
-# is exactly what the codegen image regenerates, and a build/smoke test of each
-# language's stubs. CI never commits generated code — regenerating and
+# every proto/<service>/ module, a drift check that the committed gen/ and
+# gen-sync/ output is exactly what the codegen image regenerates, and a
+# build/smoke test of each language's stubs in both sets (gen/: the async
+# contracts; gen-sync/: the Sync Executor contract, published separately). CI never commits generated code — regenerating and
 # committing gen/ is the PR author's job (see the package README's
 # "Regenerating"); this workflow only fails when they didn't.
 #
@@ -96,33 +97,36 @@ jobs:
 
       # The `docker run` half of `npm run generate:local:docker`; the image is
       # already built above.
-      - name: Regenerate gen/
+      - name: Regenerate gen/ and gen-sync/
         run: docker run --rm -v "$PWD:/workspace" fsm-proto-codegen-local
 
       # `git status` rather than `git diff` so newly generated (untracked)
       # files count as drift too.
-      - name: Check gen/ matches the committed output
+      - name: Check gen/ and gen-sync/ match the committed output
         run: |
-          if [[ -n "$(git status --porcelain -- gen/)" ]]; then
-            git status --short -- gen/
-            git diff -- gen/
-            echo "::error::gen/ is out of date — run 'npm run generate:local:docker' in packages/fsm-proto-codegen and commit the result."
+          if [[ -n "$(git status --porcelain -- gen/ gen-sync/)" ]]; then
+            git status --short -- gen/ gen-sync/
+            git diff -- gen/ gen-sync/
+            echo "::error::gen/ or gen-sync/ is out of date — run 'npm run generate:local:docker' in packages/fsm-proto-codegen and commit the result."
             exit 1
           fi
 
   go:
-    name: Proto stubs (Go)
+    name: Proto stubs (Go, ${{ matrix.dir }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [gen, gen-sync]
     defaults:
       run:
-        working-directory: packages/fsm-proto-codegen/gen/go
+        working-directory: packages/fsm-proto-codegen/${{ matrix.dir }}/go
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: packages/fsm-proto-codegen/gen/go/go.mod
-          cache-dependency-path: packages/fsm-proto-codegen/gen/go/go.sum
+          go-version-file: packages/fsm-proto-codegen/${{ matrix.dir }}/go/go.mod
+          cache-dependency-path: packages/fsm-proto-codegen/${{ matrix.dir }}/go/go.sum
 
       - name: go build + vet
         run: |
@@ -130,11 +134,14 @@ jobs:
           go vet ./...
 
   rust:
-    name: Proto stubs (Rust)
+    name: Proto stubs (Rust, ${{ matrix.dir }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [gen, gen-sync]
     defaults:
       run:
-        working-directory: packages/fsm-proto-codegen/gen/rust
+        working-directory: packages/fsm-proto-codegen/${{ matrix.dir }}/rust
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -144,7 +151,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: packages/fsm-proto-codegen/gen/rust
+          workspaces: packages/fsm-proto-codegen/${{ matrix.dir }}/rust
 
       # Packages the crate exactly as crates.io would receive it (metadata,
       # file list) and builds that package — not just the checkout.
@@ -152,8 +159,15 @@ jobs:
         run: cargo publish --dry-run
 
   python:
-    name: Proto stubs (Python)
+    name: Proto stubs (Python, ${{ matrix.dir }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dir: gen
+            smoke: smoke_test.py
+          - dir: gen-sync
+            smoke: smoke_sync_test.py
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -168,14 +182,21 @@ jobs:
       - name: build + twine check + smoke test
         run: |
           pip install build twine
-          python -m build packages/fsm-proto-codegen/gen/python --outdir "$RUNNER_TEMP/dist"
+          python -m build packages/fsm-proto-codegen/${{ matrix.dir }}/python --outdir "$RUNNER_TEMP/dist"
           twine check --strict "$RUNNER_TEMP"/dist/*
           pip install "$RUNNER_TEMP"/dist/*.whl
-          python packages/fsm-proto-codegen/test/smoke_test.py
+          python packages/fsm-proto-codegen/test/${{ matrix.smoke }}
 
   typescript:
-    name: Proto stubs (TypeScript)
+    name: Proto stubs (TypeScript, ${{ matrix.dir }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dir: gen
+            smoke: smoke.ts
+          - dir: gen-sync
+            smoke: smoke-sync.ts
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -184,19 +205,19 @@ jobs:
         with:
           auto-install: true
 
-      # Resolves @pgfsm/proto-codegen through the root deno.json workspace,
-      # the same way in-repo consumers do.
+      # Resolves @pgfsm/proto-codegen(-sync) through the root deno.json
+      # workspace, the same way in-repo consumers do.
       - name: deno check + smoke test
         run: |
-          deno check packages/fsm-proto-codegen/test/smoke.ts
-          deno run --allow-env=BUF_BIGINT_DISABLE packages/fsm-proto-codegen/test/smoke.ts
+          deno check packages/fsm-proto-codegen/test/${{ matrix.smoke }}
+          deno run --allow-env=BUF_BIGINT_DISABLE packages/fsm-proto-codegen/test/${{ matrix.smoke }}
 
-      # The `deno pack` proto-publish.yml runs for @pgfsm/proto-codegen.
+      # The `deno pack` proto-publish.yml runs for this set's npm package.
       - name: deno pack --dry-run
-        working-directory: packages/fsm-proto-codegen/gen/typescript
+        working-directory: packages/fsm-proto-codegen/${{ matrix.dir }}/typescript
         run: deno pack --dry-run
 
-      # The four gen/ packages release together at one version (README's
+      # Each set's four packages release together at one version (README's
       # "Publishing"); catch drift here rather than at tag time.
       - name: Release manifests agree
-        run: deno run --allow-read packages/fsm-proto-codegen/scripts/check-release-manifests.ts
+        run: deno run --allow-read packages/fsm-proto-codegen/scripts/check-release-manifests.ts --dir ${{ matrix.dir }}

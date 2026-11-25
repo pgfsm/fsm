@@ -1,0 +1,57 @@
+# Sync Executor contract (SPEC-018) -> gen-sync/, published separately from
+# gen/ as the -sync packages (#736). Same plugins and pins as remote.buf.gen.yaml:
+# keep the two in step; only inputs, out paths and the Go module prefix differ.
+
+version: v2
+managed:
+  enabled: true
+inputs:
+  - directory: proto/fsm-sync-worker-ts
+plugins:
+  # TypeScript — protobuf-es (message types) + Connect (client/server RPC
+  # stubs), both resolved from BSR. Pinned to matching v1 releases, not
+  # `remote:`'s unversioned "latest": BSR's connectrpc/es plugin has never
+  # published past v1.6.1 (still v1's output shape), so leaving bufbuild/es
+  # unpinned resolves "latest" to v2.13.0 -- a real runtime failure, since the
+  # v1.6.1 connect stub then imports names (Empty, InvokeRequest, ...) as
+  # values that the v2 message file only exports as types (TS hides it --
+  # type imports get erased -- but Deno/Node crash on the unresolved import).
+  # Pinning bufbuild/es to v1.10.0 (BSR's newest available v1-shaped release;
+  # v1.10.1, the exact version local.buf.gen.yaml uses, isn't published to
+  # BSR) keeps both plugins on the same v1 shape and produces output
+  # equivalent to local.buf.gen.yaml's, modulo the generator-version banner
+  # comment. Still prefer local.buf.gen.yaml day to day: it pins the exact
+  # versions this repo tests against via npm, not whatever BSR happens to
+  # have last published under a given tag. See README's "TypeScript: local
+  # is preferred, but remote is pinned to match".
+  - remote: buf.build/bufbuild/es:v1.10.0
+    out: gen-sync/typescript
+  - remote: buf.build/connectrpc/es:v1.6.1
+    out: gen-sync/typescript
+
+  # Python — base message classes, .pyi type stubs, gRPC service stubs.
+  - remote: buf.build/protocolbuffers/python
+    out: gen-sync/python
+  - remote: buf.build/protocolbuffers/pyi
+    out: gen-sync/python
+  - remote: buf.build/grpc/python
+    out: gen-sync/python
+
+  # Rust — prost (message types) + tonic (gRPC client/server stubs).
+  - remote: buf.build/community/neoeinstein-prost
+    out: gen-sync/rust
+  - remote: buf.build/community/neoeinstein-tonic
+    out: gen-sync/rust
+
+  # Go — base message types + gRPC service stubs. `module=` (rather than
+  # paths=source_relative) places output at a path derived from each file's
+  # `go_package` option relative to that module prefix, so e.g.
+  # activity-gateway.proto's go_package (.../gen/go/activitygateway) lands at
+  # gen/go/activitygateway/ -- one directory per Go package, the idiomatic
+  # layout, and what keeps working once a second .proto file/package is added.
+  - remote: buf.build/protocolbuffers/go
+    out: gen-sync/go
+    opt: module=github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go
+  - remote: buf.build/grpc/go
+    out: gen-sync/go
+    opt: module=github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go

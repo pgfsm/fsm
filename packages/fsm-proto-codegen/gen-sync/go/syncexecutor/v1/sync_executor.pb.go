@@ -1365,8 +1365,8 @@ const file_pgfsm_syncexecutor_v1_sync_executor_proto_rawDesc = "" +
 	"-REGISTRATION_PROBLEM_KIND_UNEXPECTED_LANGUAGE\x10\a\x12.\n" +
 	"*REGISTRATION_PROBLEM_KIND_PROTOCOL_VERSION\x10\b2s\n" +
 	"\x13SyncExecutorService\x12\\\n" +
-	"\aSession\x12%.pgfsm.syncexecutor.v1.SessionRequest\x1a&.pgfsm.syncexecutor.v1.SessionResponse(\x010\x01B\xec\x01\n" +
-	"\x19com.pgfsm.syncexecutor.v1B\x11SyncExecutorProtoP\x01ZFgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/syncexecutor/v1\xa2\x02\x03PSX\xaa\x02\x15Pgfsm.Syncexecutor.V1\xca\x02\x15Pgfsm\\Syncexecutor\\V1\xe2\x02!Pgfsm\\Syncexecutor\\V1\\GPBMetadata\xea\x02\x17Pgfsm::Syncexecutor::V1b\x06proto3"
+	"\aSession\x12%.pgfsm.syncexecutor.v1.SessionRequest\x1a&.pgfsm.syncexecutor.v1.SessionResponse(\x010\x01B\xf1\x01\n" +
+	"\x19com.pgfsm.syncexecutor.v1B\x11SyncExecutorProtoP\x01ZKgithub.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go/syncexecutor/v1\xa2\x02\x03PSX\xaa\x02\x15Pgfsm.Syncexecutor.V1\xca\x02\x15Pgfsm\\Syncexecutor\\V1\xe2\x02!Pgfsm\\Syncexecutor\\V1\\GPBMetadata\xea\x02\x17Pgfsm::Syncexecutor::V1b\x06proto3"
 
 var (
 	file_pgfsm_syncexecutor_v1_sync_executor_proto_rawDescOnce sync.Once

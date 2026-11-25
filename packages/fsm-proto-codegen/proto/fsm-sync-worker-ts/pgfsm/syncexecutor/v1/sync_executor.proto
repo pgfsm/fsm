@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pgfsm.syncexecutor.v1;
 
-option go_package = "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/syncexecutor/v1";
+option go_package = "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen-sync/go/syncexecutor/v1";
 
 // Contract between the fsmlet engine (@pgfsm/sync-worker) and a
 // sync-operation executor (@pgfsm/sync-worker-sdk and its Python, Rust and
