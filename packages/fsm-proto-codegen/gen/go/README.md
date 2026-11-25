@@ -1,7 +1,7 @@
 # github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go
 
 Generated protobuf + gRPC stubs for [pgfsm](https://github.com/pgfsm/fsm)'s
-Activity Gateway and Sidecar Gateway contracts.
+Activity Gateway, Sidecar Gateway and Sync Executor contracts.
 
 ```sh
 go get github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go@latest
@@ -11,6 +11,7 @@ go get github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go@latest
 import (
 	activitygatewayv1 "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/activitygateway/v1"
 	sidecargatewayv1 "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/sidecargateway/v1"
+	syncexecutorv1 "github.com/pgfsm/fsm/packages/fsm-proto-codegen/gen/go/syncexecutor/v1"
 )
 ```
 

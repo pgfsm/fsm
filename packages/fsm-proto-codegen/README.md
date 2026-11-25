@@ -23,11 +23,13 @@ codegen pipeline works and produces correct, runnable output.
 ## Layout
 
 - `proto/<service>/` — one directory per service that defines `.proto`
-  contracts, e.g. `proto/fsm-async-worker-gateway-ts/` for the Activity Gateway
-  and Sidecar Gateway contracts. Each is its own independent Buf module: its own
-  `buf.yaml` (lint/breaking-change policy), scoped to that service alone.
-  Centralizing here is about _location_, not _governance_ — one service's lint
-  exceptions or breaking-change policy never leak onto another's. See
+  contracts: `proto/fsm-async-worker-gateway-ts/` for the Activity Gateway and
+  Sidecar Gateway contracts, and `proto/fsm-sync-worker-ts/` for the Sync
+  Executor contract between the fsmlet engine and its sync-operation executors
+  (SPEC-018). Each is its own independent Buf module: its own `buf.yaml`
+  (lint/breaking-change policy), scoped to that service alone. Centralizing here
+  is about _location_, not _governance_ — one service's lint exceptions or
+  breaking-change policy never leak onto another's. See
   [SPEC-002](../../docs/specs/spec-002-proto-contracts-in-codegen-package.md)
   for the full rationale and the "one shared module" alternative it rejects.
 - `local.buf.gen.yaml` / `remote.buf.gen.yaml` / `hybrid.buf.gen.yaml` (this

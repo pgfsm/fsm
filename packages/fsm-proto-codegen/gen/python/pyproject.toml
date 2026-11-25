@@ -1,5 +1,5 @@
 # Hand-written (not generated) — see this package's README. Gives the
-# buf-generated pgfsm.{activitygateway,sidecargateway}.v1 namespace packages
+# buf-generated pgfsm.{activitygateway,sidecargateway,syncexecutor}.v1 namespace packages
 # a real installable identity, so consumers `pip install -e` this directory
 # instead of a worker-sdk's sdk.py doing a runtime sys.path.insert with a
 # relative path computed by counting `../` back to this directory — see
@@ -8,8 +8,8 @@
 # languages' manifests (see the package README's "Publishing").
 [project]
 name = "pgfsm-proto-codegen"
-version = "0.3.1"
-description = "Generated protobuf + gRPC stubs for the pgfsm Activity Gateway and Sidecar Gateway contracts."
+version = "0.4.0"
+description = "Generated protobuf + gRPC stubs for the pgfsm Activity Gateway, Sidecar Gateway and Sync Executor contracts."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"

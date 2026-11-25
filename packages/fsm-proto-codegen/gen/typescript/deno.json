@@ -1,12 +1,14 @@
 {
   "name": "@pgfsm/proto-codegen",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "exports": {
     "./activitygateway/v1/connect": "./pgfsm/activitygateway/v1/activity_gateway_connect.js",
     "./activitygateway/v1/pb": "./pgfsm/activitygateway/v1/activity_gateway_pb.js",
     "./sidecargateway/v1/connect": "./pgfsm/sidecargateway/v1/sidecar_gateway_connect.js",
-    "./sidecargateway/v1/pb": "./pgfsm/sidecargateway/v1/sidecar_gateway_pb.js"
+    "./sidecargateway/v1/pb": "./pgfsm/sidecargateway/v1/sidecar_gateway_pb.js",
+    "./syncexecutor/v1/connect": "./pgfsm/syncexecutor/v1/sync_executor_connect.js",
+    "./syncexecutor/v1/pb": "./pgfsm/syncexecutor/v1/sync_executor_pb.js"
   },
   "imports": {
     "@bufbuild/protobuf": "npm:@bufbuild/protobuf@^1.10.1"
