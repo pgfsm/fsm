@@ -1,14 +1,27 @@
 # SPEC-018: Sync Operations Run in Separate Per-Language Executors
 
-| Field   | Value                                                                                                                                                                                                                           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status  | Accepted                                                                                                                                                                                                                        |
-| Date    | 2026-11-24                                                                                                                                                                                                                      |
-| Authors | Niraj, Claude                                                                                                                                                                                                                   |
-| Issue   | #734                                                                                                                                                                                                                            |
-| Affects | `packages/fsm-sync-worker-ts`, `packages/fsm-proto-codegen`, `packages/fsm-compiler-ts`, `packages/fsm-cli-ts`, new `packages/fsm-sync-worker-sdk-ts` and `packages/fsm-sync-worker-sdk-python` (`-rust`, `-go` in milestone 2) |
+| Field   | Value                                                                                                                                                                                                                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status  | Accepted                                                                                                                                                                                                                                                                                                |
+| Date    | 2026-11-24, revised 2026-11-26                                                                                                                                                                                                                                                                          |
+| Authors | Niraj, Claude                                                                                                                                                                                                                                                                                           |
+| Issue   | #734                                                                                                                                                                                                                                                                                                    |
+| Affects | new `packages/fsm-engine-ts` and `packages/fsm-sync-worker-gateway-ts`, `packages/fsm-sync-worker-ts`, `packages/fsm-proto-codegen`, `packages/fsm-compiler-ts`, `packages/fsm-cli-ts`, new `packages/fsm-sync-worker-sdk-ts` and `packages/fsm-sync-worker-sdk-python` (`-rust`, `-go` in milestone 2) |
 
 ---
+
+> **Revision 2026-11-26 (before acceptance, #745).** Implementing #742 changed
+> four things. (1) The in-process fsmlet (`@pgfsm/sync-worker`) stays,
+> unchanged: executor mode ships as a separate fsmlet package,
+> `@pgfsm/sync-worker-gateway`, so the two can run side by side and be compared.
+> There is no clean break. (2) Both run instances through one shared engine
+> package, `@pgfsm/fsm-engine` (#748), which calls sync operations through one
+> interface instead of looking up handlers. (3) The gateway registers with the
+> scheduler at once with no FSM versions and adds or removes each executor's
+> versions as it registers or leaves, instead of waiting for every language. (4)
+> The protocol section matches the merged proto (#736). Decision, sections 1, 2,
+> 4, 5, 6 and 8, Rollout, Consequences, Acceptance criteria and Implementation
+> are updated; Open questions is new.
 
 ## Problem
 
@@ -152,9 +165,12 @@ stubs.
 
 ## Decision
 
-**Option D.** The fsmlet engine is the only engine. It never runs user code.
-Every sync operation, TypeScript included, runs in a per-language executor
-process that dials the fsmlet over a Unix socket.
+**Option D, as a second fsmlet beside the in-process one.** A new fsmlet,
+`@pgfsm/sync-worker-gateway`, never runs user code: every sync operation,
+TypeScript included, runs in a per-language executor process that dials it over
+a Unix socket. The in-process fsmlet, `@pgfsm/sync-worker`, stays as it is. A
+deployment picks one per fsmlet. Both run instances through the same engine
+package, `@pgfsm/fsm-engine`, so an FSM behaves the same in either.
 
 Decision drivers:
 
@@ -166,17 +182,30 @@ Decision drivers:
   across a network round trip, which rules out Option B.
 - **Reuse.** Proto contracts, Buf generation for four languages and a proven SDK
   session design already exist.
+- **Keep the in-process fsmlet (revised).** Option C's cost was two execution
+  paths that must be kept at parity forever. Sharing one engine package removes
+  most of that: the macrostep, retries and definition check exist once, and only
+  where a sync operation runs differs (in-process handler or executor call).
+  Keeping it lets the executor path be tested against today's results on the
+  same FSMs, avoids forcing TS users off `meta.deps`, and is the rollback.
+  Whether to deprecate it is decided after the conformance suite (#744) shows
+  parity.
 
 ### 1. Topology: the executor dials the engine
 
-- The fsmlet listens on a Unix socket (`syncExecutorSocket`, file mode `0600`).
-  Executors connect to it. In Kubernetes, the executor is a sidecar container
-  that shares an `emptyDir` for the socket. Locally, it's a second process. This
-  mirrors how SDK workers dial the Activity Gateway.
-- The fsmlet is configured with the sync languages it expects
-  (`syncExecutors: ["typescript", "python"]`). It doesn't call `registerFsmlet`,
-  and so gets no dispatch, until one executor per expected language has
-  registered.
+- The gateway listens on a Unix socket (`syncExecutors.socketPath`, file mode
+  `0600`). Executors connect to it. In Kubernetes, the executor is a sidecar
+  container that shares an `emptyDir` for the socket. Locally, it's a second
+  process. This mirrors how SDK workers dial the Activity Gateway.
+- The gateway is configured with the sync languages it accepts
+  (`syncExecutors.languages: ["typescript", "python"]`). At startup it calls
+  `registerFsmlet` with **no** FSM versions, so the scheduler routes it nothing.
+  When an executor's registration is accepted (section 5), the gateway updates
+  its `fsm_workerlet` row to add that executor's FSM versions. When an executor
+  unregisters or its stream ends, it removes them again, after a short grace
+  period that lets a restarting executor come back (`registerFsmlet` upserts, so
+  each change is one call). Its row is always the union of its live executors'
+  versions.
 - TCP and remote executors are out of scope (see Non-goals).
 
 ### 2. What a sync operation receives: pure functions, no database
@@ -190,9 +219,10 @@ language.
 - Executors open **zero** pg connections, so the connection budget is unchanged.
 - I/O belongs in invoked actors, as in XState, where it is retried, cancelled
   (SPEC-012) and observed.
-- This is a **clean break** for TypeScript: `meta.deps`, `meta.queueName` and
-  `meta.msg` are removed from TS sync handlers in the same release. There is no
-  transitional in-process mode.
+- This applies to handlers run by an executor, TypeScript included. TS handlers
+  run in-process by `@pgfsm/sync-worker` keep today's signature, `meta.deps`
+  included (revised: no clean break). A TS handler that should run in both must
+  not use `meta.deps`.
 
 Results per operation type:
 
@@ -225,19 +255,21 @@ in-memory state between calls.
 
 ### 4. Failure classification against SPEC-014
 
-| Failure                                                  | Class     | Effect                                                                                                                                                                                                                                          |
-| -------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Handler raised / returned an error                       | operation | `SyncOperationError` with the remote `kind`, `name` and `message`. SPEC-014's attempts, backoff and final `error` apply unchanged.                                                                                                              |
-| Call exceeded its deadline                               | operation | Counts as an attempt (`message: "deadline exceeded after <n> ms"`). A handler that always hangs can't pin its instance forever.                                                                                                                 |
-| Executor not connected, stream dropped, or invalid reply | transport | **Not** counted. The step is abandoned without an archive call and the instance lock is released. The pgmq message is redelivered after its visibility timeout. The fsmlet stops taking work for that language until the executor re-registers. |
+| Failure                                                  | Class     | Effect                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Handler raised / returned an error                       | operation | `SyncOperationError` with the remote `kind`, `name` and `message`. SPEC-014's attempts, backoff and final `error` apply unchanged.                                                                                                                                                                                                                                        |
+| Call exceeded its deadline                               | operation | Counts as an attempt (`message: "deadline exceeded after <n> ms"`). A handler that always hangs can't pin its instance forever.                                                                                                                                                                                                                                           |
+| Executor not connected, stream dropped, or invalid reply | transport | **Not** counted. The engine treats it as a platform error: the step is retried in place with SPEC-014's backoff, without an archive call, and succeeds once the executor is back. If the executor's grace period runs out first, the gateway removes its FSM versions and aborts their running workers, which releases their locks; their messages are redelivered later. |
 
 - The deadline is per call: `syncOperationDeadlineMs` (default 10 000, with a
   per-FSM override, like `syncOperationRetry`).
-- `startFsmlet` refuses a configuration whose deadline isn't below the instance
-  queue's visibility timeout.
-- While an expected executor is absent, the fsmlet deregisters from the
-  scheduler, so no new entries are routed to it. It registers again once every
-  expected executor is back.
+- `startSyncWorkerGateway` refuses a configuration whose deadline isn't below
+  the instance queue's visibility timeout.
+- The engine's `callSyncOperation` wraps every throw in a `SyncOperationError`,
+  which counts. The gateway throws a distinct transport error that the engine
+  passes through uncounted (#743). In-process mode never throws it.
+- While an executor is absent, its FSM versions aren't in the gateway's
+  `fsm_workerlet` row, so no new entries for them are routed to it.
 
 ### 5. Registration and the SPEC-006 check move to the executor's `Register`
 
@@ -247,36 +279,49 @@ An executor's first message lists, for each FSM version it serves:
   definitions)
 - every operation it implements, as `{type, name}`
 
-The fsmlet:
+The gateway:
 
-- serves the **union** of its executors' FSM versions. An actor-only FSM version
-  is registered, with no operations, by the executor of its sync language
-  (default `typescript`).
+- serves the **union** of its live executors' FSM versions, updated as they come
+  and go (section 1). An actor-only FSM version is registered, with no
+  operations, by the executor of its sync language (default `typescript`).
 - rejects a `Register` that claims an FSM version another executor already
   serves.
 - runs `checkFsmDefinitions` against these digests and operation lists instead
   of the imported `FSM_DEFINITIONS` and `SYNC_OPERATION_REGISTRATIONS`. The
   `missing`, `ambiguous`, `drifted`, `undigested` and `unimplemented` results
   keep their meaning. A failing check rejects the registration with every
-  problem listed, so the fsmlet never registers with the scheduler.
+  problem listed, so that executor's FSM versions are never added.
+- rejects a `Register` whose language isn't in `syncExecutors.languages`, or
+  whose protocol major version isn't the gateway's.
 
 ### 6. Protocol
 
 The contract is a new proto package in `fsm-proto-codegen`
-(`proto/fsm-sync-worker-ts/pgfsm/syncexecutor/v1/sync_executor.proto`),
-generated for TS, Python, Rust and Go. The engine is the server, and the
-executor opens one bidirectional `Session` stream:
+(`proto/fsm-sync-worker-ts/pgfsm/syncexecutor/v1/sync_executor.proto`, #736),
+generated for TS, Python, Rust and Go into the separate `gen-sync/` packages
+(`@pgfsm/proto-codegen-sync` and its counterparts). The gateway is the server,
+and the executor opens one bidirectional `Session` stream:
 
 ```proto
 service SyncExecutorService {
-  rpc Session(stream ExecutorMessage) returns (stream EngineMessage);
+  rpc Session(stream SessionRequest) returns (stream SessionResponse);
 }
-// executor → engine: Register{language, sdk_version, fsm_versions[]}, Heartbeat,
-//                    CallResult{call_id, oneof {value_json, unchanged, error{kind, name, message, stack}}}
-// engine → executor: RegisterAck{accepted, problems[]}, Call{call_id, fsm_name, fsm_version,
-//                    operation_type, operation_name, context_json, event_json, params_json,
-//                    meta, deadline_ms}, Shutdown
+// executor → gateway (SessionRequest):
+//   Register{executor_id, language, protocol_version, sdk_version,
+//            fsm_versions[{fsm_name, fsm_version, fsm_json_digest, operations[{type, name}]}]}
+//   Heartbeat{executor_id}, Unregister{executor_id}
+//   CallResult{call_id, oneof outcome {value_json, no_value, error{error_type, message, stack}}, duration_ms}
+// gateway → executor (SessionResponse):
+//   RegisterAck{accepted, engine_protocol_version, problems[{kind, fsm_name, fsm_version, message}]}
+//   Call{call_id, fsm_name, fsm_version, operation_type, operation_name,
+//        context_json, event_json, params_json, meta{instance_id, attempt}, deadline_ms}
+//   Shutdown{reason}
 ```
+
+The first message on a stream must be `Register`. A rejected registration gets
+`RegisterAck{accepted: false}` listing every problem, and its stream ends. An
+executor that registers again with the same `executor_id` replaces its earlier
+session.
 
 JSON values travel as JSON strings, so every language gets the same numbers and
 keys back, not `google.protobuf.Struct`'s doubles.
@@ -289,25 +334,38 @@ keys back, not `google.protobuf.Struct`'s doubles.
 - No `fsm.json` schema or SQL change is needed.
 - For each language, the compiler generates that language's registry and
   definitions (digests) under `sync-worker/<lang>/`, plus a runnable executor
-  entry point. For TS this replaces today's role of
-  `sync-operation-registry-aggregate.generated.ts`, which the engine no longer
-  imports.
-- `@pgfsm/cli create/add` scaffolds the fsmlet entry and one executor per sync
-  language.
+  entry point. The TS registry is still generated for `@pgfsm/sync-worker`'s
+  in-process mode; the gateway imports no generated file.
+- `@pgfsm/cli create/add` scaffolds the fsmlet entry and, for executor mode, the
+  gateway entry and one executor per sync language.
 - Input mapper stubs, today TypeScript-only, are generated for every language.
 
 ### 8. Where the code lives
 
-- **Engine:** `fsm-sync-worker-ts`. The executor client, the call dispatcher,
-  the registration gate and the transport-failure handling replace the
-  in-process handler lookup in `fsmworker-helper.ts`.
+- **Engine:** `packages/fsm-engine-ts`, npm `@pgfsm/fsm-engine` (Apache-2.0,
+  #748). It runs one instance: the lock and pgmq loop, `macrostepV2`, transition
+  selection, internal events, delays, invoke input, SPEC-014 retries and the
+  SPEC-006 check. It never looks up handlers; it calls sync operations through
+  `SyncOperations`: `has(type, name)` and
+  `call({type, name, fsmName, fsmVersion, instanceId, attempt, context, event,
+  params, message})`.
+  It depends only on `@pgfsm/db`.
+- **Fsmlets**, each with its own fsmlet loop (register, LISTEN, claim,
+  heartbeat, fallback poll) on `@pgfsm/db`, and neither depending on the other:
+  - `packages/fsm-sync-worker-ts`, `@pgfsm/sync-worker`: in-process. Unchanged
+    public API; it turns its registrations into `SyncOperations` and calls
+    handlers with today's arguments.
+  - `packages/fsm-sync-worker-gateway-ts`, `@pgfsm/sync-worker-gateway`:
+    executor mode. The socket server, the executor registry, the dynamic
+    `fsm_workerlet` updates and the call dispatcher; its `SyncOperations` sends
+    each call to the executor that registered the FSM version.
 - **Executors:** in a new **sync-worker SDK** per language, separate from the
   async-worker SDKs. Each engine gets a matching SDK:
 
-  | Engine                        | SDK                                                                       |
-  | ----------------------------- | ------------------------------------------------------------------------- |
-  | `@pgfsm/sync-worker` (fsmlet) | `@pgfsm/sync-worker-sdk` and its Python, Rust and Go counterparts (below) |
-  | `@pgfsm/async-worker-gateway` | `@pgfsm/async-worker-sdk` and its Python, Rust and Go counterparts        |
+  | Engine                                | SDK                                                                       |
+  | ------------------------------------- | ------------------------------------------------------------------------- |
+  | `@pgfsm/sync-worker-gateway` (fsmlet) | `@pgfsm/sync-worker-sdk` and its Python, Rust and Go counterparts (below) |
+  | `@pgfsm/async-worker-gateway`         | `@pgfsm/async-worker-sdk` and its Python, Rust and Go counterparts        |
 
   | Language   | Package directory                     | Published as                                                                                         |
   | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -318,11 +376,11 @@ keys back, not `google.protobuf.Struct`'s doubles.
 
   Why separate packages, not a `sync` entry point in the async SDKs:
 
-  - **Every project needs a sync executor** after the clean break, including
-    TS-only projects with no async actors. They shouldn't install an
-    async-worker SDK and its actor-session code to run `assign` actions.
+  - **Every project in executor mode needs a sync executor**, including TS-only
+    projects with no async actors. They shouldn't install an async-worker SDK
+    and its actor-session code to run `assign` actions.
   - **Different servers, different compatibility.** The sync SDK speaks
-    `syncexecutor/v1` to the fsmlet engine; the async SDK speaks
+    `syncexecutor/v1` to the sync worker gateway; the async SDK speaks
     `sidecargateway/v1` to the Activity Gateway. Each SDK versions and declares
     compatibility against its own server, so a protocol change in one doesn't
     force a release of the other.
@@ -339,9 +397,10 @@ keys back, not `google.protobuf.Struct`'s doubles.
 
 ### Rollout
 
-- **Milestone 1:** protocol, engine change, compiler and CLI changes, and the
-  **TypeScript and Python** executors. Both pass one shared conformance suite.
-  This release removes in-process execution.
+- **Milestone 1:** protocol, the shared engine, the gateway, compiler and CLI
+  changes, and the **TypeScript and Python** executors. Both pass one shared
+  conformance suite, whose results also match `@pgfsm/sync-worker`'s in-process
+  results. In-process execution stays.
 - **Milestone 2:** Rust and Go executors, against the same suite.
 
 ### Non-goals
@@ -359,37 +418,39 @@ keys back, not `google.protobuf.Struct`'s doubles.
 
 What gets harder:
 
-- **Deployment:** every fsmlet pod runs at least two containers or processes.
-  Liveness covers both, and the fsmlet's readiness depends on its executors
-  being registered.
+- **Deployment (executor mode):** every gateway pod runs at least two containers
+  or processes. Liveness covers both; the gateway serves an FSM version only
+  while its executor is registered.
 - **Latency:** each operation call pays a local IPC hop and JSON serialization.
   For very large contexts, that serialization dominates.
-- **TS capabilities:** TS sync operations lose `meta.deps`. A handler that read
-  or wrote Postgres must move that I/O into an invoked actor, or into an action
-  that only sets context for a later actor.
-- **Four more packages to release:** the sync-worker SDKs add an npm, a PyPI, a
-  crates.io and a Go module release line (two in milestone 1), each with its own
-  workflow and trusted-publishing setup.
+- **TS capabilities (executor mode):** TS sync operations run by the executor
+  lose `meta.deps`. A handler that reads or writes Postgres must move that I/O
+  into an invoked actor before moving to executor mode.
+- **Two fsmlets to keep:** the in-process fsmlet and the gateway both release
+  and must both pass the engine's tests. Sharing `@pgfsm/fsm-engine` limits the
+  duplication to the fsmlet loop (about 300 lines each).
+- **More packages to release:** `@pgfsm/fsm-engine` and
+  `@pgfsm/sync-worker-gateway` on npm, and the sync-worker SDKs (an npm, a PyPI,
+  a crates.io and a Go module release line, two in milestone 1), each with its
+  own workflow and trusted-publishing setup. `@pgfsm/fsm-engine` must be
+  published before the next `@pgfsm/sync-worker` release, which depends on it.
 - **Concurrency inside executors:** Python handlers run concurrently up to
   `maxConcurrency` (asyncio, with blocking handlers sent to a thread pool), so
   user code must be safe to run concurrently.
 
-Migration (clean break, one release):
+Migration (opt-in; nothing changes for projects that don't switch):
 
-1. Upgrade `@pgfsm/sync-worker`, `@pgfsm/compiler` and `@pgfsm/cli`, and
-   regenerate. TS handlers keep their names and folders. Only the `meta`
-   argument changes. A handler that uses `meta.deps` fails type-check, which
-   shows exactly where I/O must move.
-2. Add `@pgfsm/sync-worker-sdk` to the project (the regenerated TS executor
-   entry point imports it), run that executor next to the fsmlet (sidecar or
-   second process) and set `syncExecutors`.
-3. During a rolling deploy, an old fsmlet and a new one serve the same FSMs.
-   Both write through the same archive functions, and no SQL changes, so mixed
-   fleets are safe.
+1. Upgrading `@pgfsm/sync-worker` changes nothing for its users: same API, same
+   handler signatures, same behaviour.
+2. To switch an fsmlet to executor mode: move any `meta.deps` I/O into actors,
+   regenerate with the executor entry points, replace `runFsmlet` with
+   `runSyncWorkerGateway` and run one executor per sync language next to it.
+3. In-process fsmlets and gateways can serve the same FSMs at once: both write
+   through the same archive functions and no SQL changes, so mixed fleets are
+   safe.
 
-Rollback: redeploy the previous `@pgfsm/sync-worker` and project build. No
-database migration is involved, and in-flight messages are redelivered as usual.
-A TS handler already rewritten without `meta.deps` still runs on the old engine.
+Rollback: switch the fsmlet entry back to `runFsmlet`. No database migration is
+involved, and in-flight messages are redelivered as usual.
 
 ADR follow-up: on acceptance, amend ADR-002 with a "Stage 4: user code out of
 process" section, and ADR-003's connection accounting (executors: 0
@@ -397,15 +458,20 @@ connections).
 
 ## Acceptance criteria
 
-- [ ] The fsmlet engine imports no generated project file. `fsmlet.ts` has no
-      import of `SYNC_OPERATION_REGISTRATIONS` or `FSM_DEFINITIONS`, and no code
-      path calls a sync handler in-process.
+- [ ] `@pgfsm/fsm-engine` runs instances for both fsmlets, depends only on
+      `@pgfsm/db`, and calls sync operations only through `SyncOperations`.
+- [ ] `@pgfsm/sync-worker`'s public API and handler signatures are unchanged,
+      and its tests and the `apps/fsm-core-example` journey tests pass
+      unchanged.
+- [ ] `@pgfsm/sync-worker-gateway` imports no generated project file, never
+      calls a sync handler in-process, and doesn't depend on
+      `@pgfsm/sync-worker`.
 - [ ] `sync_executor.proto` is in `fsm-proto-codegen`, and stubs are generated
       for TS, Python, Rust and Go by the existing Buf pipeline.
-- [ ] An fsmlet configured with `syncExecutors: [L…]` doesn't call
-      `registerFsmlet` until an executor for every `L` has registered and the
-      SPEC-006 check has passed on the union of their registrations. A failing
-      check names every problem and the fsmlet never registers.
+- [ ] The gateway registers in `fsm_workerlet` with no FSM versions, adds an
+      executor's versions only once its registration passes the SPEC-006 check,
+      and removes them when the executor leaves and its grace period ends. A
+      failing check names every problem, and those versions are never added.
 - [ ] A second executor that registers an FSM version already served is
       rejected, with the FSM version named.
 - [ ] A shared conformance suite runs the same FSM fixtures (covering lazy guard
@@ -413,44 +479,65 @@ connections).
       order, `after` delays, invoke input, `done.state` internal events and
       SPEC-014 failures) against the TS executor and the Python executor. Final
       state, context, error and archive arguments are identical to each other
-      and to today's in-process results.
+      and to `@pgfsm/sync-worker`'s in-process results.
 - [ ] A handler that raises fails the step as `SyncOperationError`
       `{kind, name, message}`. SPEC-014 attempts and the final `error` status
       apply unchanged.
 - [ ] A call that exceeds `syncOperationDeadlineMs` counts as a failed attempt.
-      `startFsmlet` rejects a deadline that isn't below the visibility timeout.
-- [ ] Killing the executor mid-macrostep: the step isn't archived, the attempt
-      isn't counted, the message is redelivered, and the fsmlet deregisters,
-      then re-registers once the executor reconnects. The instance then finishes
-      with the same result as an uninterrupted run.
+      `startSyncWorkerGateway` rejects a deadline that isn't below the
+      visibility timeout.
+- [ ] Killing the executor mid-macrostep: the step isn't archived and the
+      attempt isn't counted. If the executor reconnects within its grace period,
+      the step completes; otherwise its FSM versions are removed from the
+      gateway's row and its workers aborted, and the message is redelivered.
+      Either way the instance finishes with the same result as an uninterrupted
+      run.
 - [ ] No executor opens a pg connection: the sync-worker SDKs don't depend on
       `pg`, `@pgfsm/db` or a Python/Rust/Go Postgres driver.
 - [ ] `fsm-sync-worker-sdk-ts` and `fsm-sync-worker-sdk-python` exist as their
       own packages (Apache-2.0, `LICENSE`, `CLAUDE.md`, release workflow), and
       `scripts/check-licenses.ts` passes. No sync-worker SDK depends on an
       async-worker SDK, and no async-worker SDK depends on a sync-worker SDK.
-- [ ] TS sync handlers receive `meta` without `deps`, `queueName` or `msg`, and
-      generated TS stubs type-check against the new signature.
+- [ ] TS sync handlers run by the TS executor receive `meta` without `deps`,
+      `queueName` or `msg`, and generated executor stubs type-check against that
+      signature. In-process handlers keep theirs.
 - [ ] The compiler refuses to generate sync logic for one FSM version in two
       languages, and generates input mapper stubs for every language.
-- [ ] `@pgfsm/cli create` with Python sync logic produces a project whose fsmlet
-      plus Python executor runs `test-apps/debug-only`'s FSMs end to end.
+- [ ] `@pgfsm/cli create` with Python sync logic produces a project whose
+      gateway plus Python executor runs `test-apps/debug-only`'s FSMs end to
+      end.
 - [ ] Milestone 2: the Rust and Go executors pass the same conformance suite.
 
 ## Implementation
 
 Accepted in #735. Milestone 1 (TypeScript and Python):
 
-| Issue | Scope                                                                     | Depends on             |
-| ----- | ------------------------------------------------------------------------- | ---------------------- |
-| #736  | `syncexecutor/v1` proto and generated stubs                               | —                      |
-| #742  | fsmlet: executor socket server, registration gate, SPEC-006 check         | #736                   |
-| #743  | fsmlet: every sync operation through the executor, failure classification | #742                   |
-| #737  | `@pgfsm/sync-worker-sdk` (TypeScript executor)                            | #736                   |
-| #738  | `pgfsm-sync-worker-sdk` (Python executor)                                 | #736                   |
-| #739  | compiler: per-language registries and executor entry points               | #737, #738             |
-| #740  | CLI scaffolding and regenerated `test-apps`                               | #739, #743             |
-| #744  | cross-language conformance suite                                          | #743, #737, #738, #739 |
-| #741  | ADR-002 Stage 4, ADR-003 connection accounting, package and root docs     | #743                   |
+| Issue | Scope                                                                                                   | Depends on             |
+| ----- | ------------------------------------------------------------------------------------------------------- | ---------------------- |
+| #736  | `syncexecutor/v1` proto and generated stubs                                                             | —                      |
+| #742  | `@pgfsm/sync-worker-gateway`: socket server, executor registry, SPEC-006 check, dynamic `fsm_workerlet` | #736                   |
+| #748  | `@pgfsm/fsm-engine`: the shared engine, `SyncOperations`                                                | #742                   |
+| #743  | gateway: calls to executors, deadlines, transport errors, grace period, CLI entry                       | #748                   |
+| #737  | `@pgfsm/sync-worker-sdk` (TypeScript executor)                                                          | #736                   |
+| #738  | `pgfsm-sync-worker-sdk` (Python executor)                                                               | #736                   |
+| #739  | compiler: per-language registries and executor entry points                                             | #737, #738             |
+| #740  | CLI scaffolding and regenerated `test-apps`                                                             | #739, #743             |
+| #744  | cross-language conformance suite                                                                        | #743, #737, #738, #739 |
+| #741  | ADR-002 Stage 4, ADR-003 connection accounting, package and root docs                                   | #743                   |
 
 Milestone 2 (Rust and Go executors) is cut once milestone 1 lands.
+
+## Open questions
+
+- **The gateway's license.** It's Apache-2.0 for now. It's a deployable server
+  like the AGPL-3.0-only Activity Gateway, so it may belong under AGPL (SPEC-017
+  amendment, `REUSE.toml`). `@pgfsm/fsm-engine` stays Apache-2.0, since
+  `@pgfsm/sync-worker` links it.
+- **Work claimed for an FSM version nobody serves.**
+  `claim_scheduled_for_fsmlet` doesn't filter by `fsm_modules`, so the gateway
+  can claim an entry routed before an executor left. The claim deletes the
+  routing row. #743 decides how the instance is dispatched again (after checking
+  how the scheduler treats an instance with queued messages and no routing row).
+- **Grace period length** before a disconnected executor's FSM versions are
+  removed (a few seconds; configurable?).
+- **Deprecating the in-process fsmlet**, decided after #744 shows parity.
